@@ -16,6 +16,7 @@
   </div>
   <div class="muted">{{ resumo.livres }} livres · {{ resumo.ocupados }} ocupados · {{ resumo.vale }} de vale{% if base %} · referência: {{ base.tipo_servico }} {{ base.qtd_aulas or base.freq_semanal ~ 'x/sem' }} {{ base.preco_base|moeda }}{% else %} · sem preço base para este local{% endif %}</div>
 </div>
+<p class="muted" style="margin:6px 0 0"><b>Em cada horário livre:</b> número grande = preço por aula · Total = valor do {{ 'pacote' if tipo == 'Pacotes' else 'mês' }} de referência · Lucro = quanto sobra desse total (R$ e %) · x0,90 = multiplicador do horário (abaixo de 1 = vale)</p>
 <div class="rolagem mt">
 <table class="grade">
   <tr><th></th>{% for d in range(1,7) %}<th>{{ d|dia }}</th>{% endfor %}</tr>
