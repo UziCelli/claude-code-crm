@@ -54,6 +54,9 @@ PARAMETROS_INICIAIS = [
     ("metas", "cac_max", 300, None, 16),
     ("metas", "ltv_cac_min", 3, None, 17),
     ("metas", "preco_base_reajuste", 0, None, 18),
+    ("lead_parado_dias", "lead", 2, None, 1),
+    ("lead_parado_dias", "conversa", 4, None, 2),
+    ("lead_parado_dias", "avaliacao", 2, None, 3),
 ]
 LISTAS_INICIAIS = {
     "lista_canais": ["Indicação", "Parceria (síndico/academia)", "WhatsApp", "Google", "Instagram orgânico",

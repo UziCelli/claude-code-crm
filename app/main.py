@@ -121,6 +121,18 @@ def base_do_cliente(con, c):
         (c["tipo_servico"], c["local"], qtd, freq, forma)).fetchone()
 
 
+def dias_parado(con, lead, hoje: str) -> int | None:
+    """Dias que um lead ficou parado na etapa. None se ainda não atingiu o limite."""
+    limites = db.parametros(con, "lead_parado_dias")
+    datas = [d for d in [lead["data_mudanca_etapa"], lead["atualizado_em"][:10]] if d]
+    if not datas:
+        return None
+    ult_toque = max(dt.date.fromisoformat(d) for d in datas).isoformat()
+    dias = (dt.date.fromisoformat(hoje) - dt.date.fromisoformat(ult_toque)).days
+    limite = limites.get(lead["etapa"])
+    return dias if (limite and dias >= limite) else None
+
+
 # ---------- alertas (topo de todas as telas) ----------
 def alertas(con):
     hoje = dt.date.today()
@@ -366,8 +378,9 @@ def leads(request: Request, con=Depends(get_db)):
     hoje = dt.date.today().isoformat()
     for l in rows:
         atrasado = bool(l["data_proxima_acao"] and l["data_proxima_acao"] < hoje and l["etapa"] not in ("cliente", "perdido"))
-        colunas[l["etapa"]].append({**dict(l), "atrasado": atrasado})
-    return render(request, "leads.html", con, colunas=colunas)
+        parado = dias_parado(con, l, hoje)
+        colunas[l["etapa"]].append({**dict(l), "atrasado": atrasado, "dias": parado, "parado": bool(parado)})
+    return render(request, "leads.html", con, colunas=colunas, destaque=request.query_params.get("destaque"))
 
 
 @app.post("/leads")
@@ -408,8 +421,8 @@ def lead_etapa(lid: int, etapa: str = Form(...), motivo_perda: str = Form(""), c
                               (l["nome"], l["telefone"], l["canal_origem"], l["observacoes"], lid,
                                partes[0].strip() or None, partes[1].strip() if len(partes) > 1 else None))
             con.execute("UPDATE leads SET cliente_id=? WHERE id=?", (cur.lastrowid, lid))
-            return voltar(f"/clientes/{cur.lastrowid}", msg="Lead convertido em cliente. Complete o plano, valor e horários.")
-    return voltar("/leads", msg="Etapa atualizada.")
+            return voltar(f"/leads?destaque={lid}", msg=f"Novo aluno: {l['nome']}")
+    return voltar(f"/leads?destaque={lid}", msg="Etapa atualizada.")
 
 
 @app.post("/leads/{lid}/excluir")
@@ -728,7 +741,7 @@ GRUPOS_CONFIG = [("imposto", "Imposto (DAS)", "pct"), ("taxa_pagamento", "Taxas 
                  ("margem_minima", "Margem mínima por serviço", "pct"), ("taxa_cia", "Taxa da CIA por pessoa (R$) e máximo de pessoas", "num"),
                  ("grupo_multiplicador", "Multiplicador de preço por nº de pessoas", "num"),
                  ("grupo_mao_obra_extra", "Mão de obra extra por nº de pessoas", "pct"), ("metas", "Metas do painel", "num"),
-                 ("mao_obra_aula", "Mão de obra por aula (tipo|qtd)", "num")]
+                 ("mao_obra_aula", "Mão de obra por aula (tipo|qtd)", "num"), ("lead_parado_dias", "Limite de dias parado por etapa", "num")]
 
 
 @app.get("/configuracoes", response_class=HTMLResponse)

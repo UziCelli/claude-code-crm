@@ -130,6 +130,7 @@ tr.prejuizo td:first-child { border-left: 4px solid #7a1a14; }
 .coluna.cliente { background: #e2f3e8; }
 .lead { background: #fff; border-radius: 10px; padding: 10px; margin-bottom: 8px; border: 1px solid var(--borda); }
 .lead.atrasado { border-color: var(--vermelho); }
+.lead.parado { border-color: var(--vermelho); background: var(--vermelho-f); }
 .lead .nome { font-weight: 600; }
 .lead .acoes { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
 .lead .acoes button { padding: 4px 8px; font-size: 11px; }
