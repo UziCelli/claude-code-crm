@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block titulo %}Proposta #{{ prop.id }}{% endblock %}
+{% block conteudo %}
+<div class="proposta card">
+  <div class="proposta-logo">{% include "_logo.html" %}</div>
+  <h1>Proposta para {{ prop.para or '—' }}</h1>
+  <p class="muted">{{ prop.data|data }} · Válida por 7 dias</p>
+  <p><b>Serviço:</b> {{ prop.tipo_servico }}{% if prop.qtd_aulas %} · {{ prop.qtd_aulas }} aulas{% endif %}{% if prop.freq_semanal %} · {{ prop.freq_semanal }}x/sem{% endif %}</p>
+  <p><b>Local:</b> {{ prop.local or '—' }}{% if prop.dia %} · {{ prop.dia|dia }}{% if prop.hora %} {{ prop.hora }}h{% endif %}{% endif %}</p>
+  <p><b>Pagamento:</b> {{ prop.forma_pagamento or '—' }} · <b>Pessoas:</b> {{ prop.pessoas }}</p>
+  {% if prop.desconto and prop.desconto > 0 %}<p><b>Desconto:</b> {{ prop.desconto|pct }}</p>{% endif %}
+  <p><b>Valor total:</b> {{ prop.preco_total|moeda }}</p>
+  <p><b>Valor por pessoa:</b> {{ prop.preco_pessoa|moeda }}</p>
+  {% if prop.observacoes %}<p><b>Observações:</b> {{ prop.observacoes }}</p>{% endif %}
+  <p class="nao-imprimir"><button onclick="window.print()">Imprimir / salvar PDF</button> <a href="/simulador">Voltar</a></p>
+</div>
+{% endblock %}

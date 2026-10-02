@@ -61,6 +61,9 @@ PARAMETROS_INICIAIS = [
     ("lead_parado_dias", "lead", 2, None, 1),
     ("lead_parado_dias", "conversa", 4, None, 2),
     ("lead_parado_dias", "avaliacao", 2, None, 3),
+    ("funil_chance", "lead", 0.10, None, 1),
+    ("funil_chance", "conversa", 0.30, None, 2),
+    ("funil_chance", "avaliacao", 0.60, None, 3),
 ]
 LISTAS_INICIAIS = {
     "lista_canais": ["Indicação", "Parceria (síndico/academia)", "WhatsApp", "Google", "Instagram orgânico",

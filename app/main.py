@@ -436,6 +436,19 @@ def cliente_excluir(cid: int, con=Depends(get_db)):
 # =====================================================================
 # 2. LEADS (kanban)
 # =====================================================================
+def previsao_funil(con):
+    chance = db.parametros(con, "funil_chance")
+    ticket = con.execute("SELECT AVG(valor) FROM clientes WHERE status='ativo' AND excluido_em IS NULL").fetchone()[0] or 0
+    etapas = con.execute("SELECT etapa, COUNT(*) n FROM leads WHERE excluido_em IS NULL GROUP BY etapa").fetchall()
+    n = sum(r["n"] for r in etapas if r["etapa"] in chance)
+    return {"receita": sum(chance[r["etapa"]] * r["n"] for r in etapas if r["etapa"] in chance) * ticket, "leads": n, "ticket": ticket}
+
+
+def motivos_perda(con):
+    return con.execute("""SELECT COALESCE(NULLIF(LOWER(TRIM(motivo_perda)), ''), 'sem motivo') m, COUNT(*) n FROM leads
+                          WHERE etapa='perdido' AND excluido_em IS NULL GROUP BY m ORDER BY n DESC, m""").fetchall()
+
+
 @app.get("/leads", response_class=HTMLResponse)
 def leads(request: Request, con=Depends(get_db)):
     rows = con.execute("SELECT * FROM leads WHERE excluido_em IS NULL ORDER BY data_proxima_acao IS NULL, data_proxima_acao, id DESC").fetchall()
@@ -445,7 +458,8 @@ def leads(request: Request, con=Depends(get_db)):
         atrasado = bool(l["data_proxima_acao"] and l["data_proxima_acao"] < hoje and l["etapa"] not in ("cliente", "perdido"))
         parado = dias_parado(con, l, hoje)
         colunas[l["etapa"]].append({**dict(l), "atrasado": atrasado, "dias": parado, "parado": bool(parado)})
-    return render(request, "leads.html", con, colunas=colunas, destaque=request.query_params.get("destaque"))
+    return render(request, "leads.html", con, colunas=colunas, destaque=request.query_params.get("destaque"),
+                  previsao=previsao_funil(con), motivos=motivos_perda(con))
 
 
 @app.post("/leads")
@@ -600,6 +614,16 @@ def simulador(request: Request, plano: str = "", local: str = "CIA", forma: str 
     return render(request, "simulador.html", con, planos=opcoes_plano(con), f=dict(plano=plano, local=local, forma=forma, pessoas=pessoas,
                   dia=dia, hora=hora, desconto=desconto, lead_id=lead_id, cliente_id=cliente_id), r=resultado, erro_sim=erro,
                   leads=leads_, clientes=clientes_, propostas=propostas, horas=range(5, 24))
+
+
+@app.get("/propostas/{pid}", response_class=HTMLResponse)
+def proposta_ver(request: Request, pid: int, con=Depends(get_db)):
+    p = con.execute("""SELECT p.*, COALESCE(c.nome, l.nome) AS para FROM propostas p
+                       LEFT JOIN leads l ON l.id=p.lead_id LEFT JOIN clientes c ON c.id=p.cliente_id
+                       WHERE p.id=? AND p.excluido_em IS NULL""", (pid,)).fetchone()
+    if not p:
+        return voltar("/simulador", erro="Proposta não encontrada.")
+    return render(request, "proposta.html", con, prop=p)
 
 
 @app.post("/propostas")
@@ -806,7 +830,8 @@ GRUPOS_CONFIG = [("imposto", "Imposto (DAS)", "pct"), ("taxa_pagamento", "Taxas 
                  ("margem_minima", "Margem mínima por serviço", "pct"), ("taxa_cia", "Taxa da CIA por pessoa (R$) e máximo de pessoas", "num"),
                  ("grupo_multiplicador", "Multiplicador de preço por nº de pessoas", "num"),
                  ("grupo_mao_obra_extra", "Mão de obra extra por nº de pessoas", "pct"), ("metas", "Metas do painel", "num"),
-                 ("mao_obra_aula", "Mão de obra por aula (tipo|qtd)", "num"), ("lead_parado_dias", "Limite de dias parado por etapa", "num")]
+                 ("mao_obra_aula", "Mão de obra por aula (tipo|qtd)", "num"), ("lead_parado_dias", "Limite de dias parado por etapa", "num"),
+                 ("funil_chance", "Chance de fechar por etapa do funil", "pct")]
 
 
 @app.get("/configuracoes", response_class=HTMLResponse)

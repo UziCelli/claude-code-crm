@@ -48,7 +48,7 @@
     <td>{{ p.tipo_servico }} {{ p.qtd_aulas or '' }}{% if p.freq_semanal %}{{ p.freq_semanal }}x/sem{% endif %}{% if p.desconto %} · -{{ p.desconto|pct }}{% endif %}</td><td>{{ p.local }}{% if p.dia %} · {{ p.dia|dia_curto }} {{ p.hora }}h{% endif %}</td>
     <td class="num">{{ p.pessoas }}</td><td class="num">{{ p.preco_total|moeda }}</td><td class="num">{{ p.margem|pct(1) }}</td><td class="num">{{ p.lucro_hora|moeda }}</td>
     <td><form method="post" action="/propostas/{{ p.id }}/status" class="inline"><select name="status" onchange="this.form.submit()" style="width:auto;padding:3px">{% for s in ['rascunho','enviada','aceita','recusada'] %}<option {{ 'selected' if s == p.status }}>{{ s }}</option>{% endfor %}</select></form></td>
-    <td><form method="post" action="/propostas/{{ p.id }}/excluir" class="inline" data-confirmar="Enviar a proposta #{{ p.id }} para a lixeira?"><button class="claro pequeno">x</button></form></td></tr>
+    <td><a href="/propostas/{{ p.id }}">Abrir</a> <form method="post" action="/propostas/{{ p.id }}/excluir" class="inline" data-confirmar="Enviar a proposta #{{ p.id }} para a lixeira?"><button class="claro pequeno">x</button></form></td></tr>
   {% else %}<tr><td colspan="11" class="muted">Nenhuma proposta salva.</td></tr>{% endfor %}
 </table></div>
 {% endblock %}

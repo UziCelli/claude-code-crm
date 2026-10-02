@@ -4,8 +4,8 @@ Plano completo (pastas, modelo de dados, ordem dos módulos): `PLANO.md`.
 
 ## Como retomar (para uma sessão nova do Claude Code)
 1. Abrir a pasta `C:\Users\victo\VFITCOACH-CRM` no Claude Code.
-2. Ler `PLANO.md` e este arquivo. Modo ponytail **full**. Interface em pt-BR, sem emojis, cores #0B1E3D / #2C5C8F / branco, Montserrat + Inter.
-3. Rodar `.venv\Scripts\python.exe -m pytest tests` (9 testes) antes de entregar qualquer mudança.
+2. Ler `PLANO.md` e este arquivo. Modo ponytail **full**. Interface em pt-BR, sem emojis, paleta azul (tokens no topo do `style.css`), Montserrat + Inter locais.
+3. Rodar `.venv\Scripts\python.exe -m pytest tests` (todos verdes) antes de entregar qualquer mudança.
 4. Servidor de desenvolvimento: `.venv\Scripts\python.exe -m uvicorn app.main:app --port 8765 --reload`.
 
 ## Sem cota na Anthropic? Use o OmniRoute
