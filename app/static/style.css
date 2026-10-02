@@ -221,3 +221,10 @@ dialog[open]::backdrop { opacity: 1; transition-duration: var(--dur-normal); }
   body, main { background: #fff; color: #111; padding: 0; }
   .proposta { max-width: none; border: 0; box-shadow: none; }
 }
+
+/* grade: selecao de varios horarios */
+.cel.sel { box-shadow: 0 0 0 2px var(--aco); }
+button.claro.ativo { background: var(--aco); color: #fff; }
+.barra-sel { position: sticky; bottom: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; padding: 10px 14px; background: var(--branco); border: 1px solid var(--borda); border-radius: 10px; opacity: 0; visibility: hidden; transform: translateY(8px); transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out), visibility var(--dur-fast); }
+.barra-sel.on { opacity: 1; visibility: visible; transform: none; }
+@media (prefers-reduced-motion: reduce) { .barra-sel { transform: none; } }

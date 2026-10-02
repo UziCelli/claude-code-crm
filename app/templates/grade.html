@@ -8,6 +8,7 @@
     {% if refs %}<select name="ref" onchange="this.form.submit()" aria-label="Plano de referência">{% for r in refs %}<option value="{{ r|int }}" {{ 'selected' if r == ref_atual }}>{{ r|int }}{{ 'x/semana' if tipo == 'Mensalidades' else ' aulas' }}</option>{% endfor %}</select>{% endif %}
     <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" name="vale" value="1" {{ 'checked' if vale }} onchange="this.form.submit()"> Só horários de vale</label>
   </form>
+  <button type="button" class="claro" id="modo-sel" aria-pressed="false">Selecionar vários</button>
 </div>
 <div class="linha" style="justify-content:space-between">
   <div class="legenda">
@@ -44,17 +45,80 @@
   {% endfor %}
 </table>
 </div>
+<div class="barra-sel" id="barra-sel">
+  <span id="sel-txt" aria-live="polite"></span>
+  <button type="button" id="sel-editar">Editar selecionados</button>
+  <button type="button" class="claro" id="sel-limpar">Limpar</button>
+</div>
 
 <dialog id="dlg-slot">
   <h2 data-titulo>Horário</h2>
   <form method="post" action="/grade/slot">
     <input type="hidden" name="tipo" value="{{ tipo }}"><input type="hidden" name="local" value="{{ local }}"><input type="hidden" name="ref" value="{{ ref_atual|int if ref_atual else 0 }}">
     <input type="hidden" name="dia"><input type="hidden" name="hora">
-    <div class="campo"><label>Situação</label><select name="status"><option value="livre">Livre</option><option value="ocupado">Ocupado</option><option value="indisponivel">Indisponível</option></select></div>
+    <div class="campo"><label>Situação</label><select name="status"><option value="livre">Livre</option><option value="ocupado">Ocupado</option><option value="indisponivel">Indisponível</option><option value="" hidden>Não alterar</option></select></div>
     <div class="campo"><label>Cliente (se ocupado)</label><select name="cliente_id"><option value="">—</option>{% for cl in clientes %}<option value="{{ cl.id }}">{{ cl.nome }}</option>{% endfor %}</select></div>
     <div class="campo"><label>Multiplicador de preço (abaixo de 1 = vale)</label><input name="multiplicador" value="1"></div>
     <div class="campo"><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="so_este" value="1"> Aplicar só em {{ tipo }} (por padrão vale para Pacotes e Mensalidades)</label></div>
     <div class="linha"><button>Salvar</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
   </form>
 </dialog>
+<script>
+(function () {
+  var tb = document.querySelector("table.grade"), dlg = document.getElementById("dlg-slot"), f = dlg.querySelector("form");
+  var barra = document.getElementById("barra-sel"), btnModo = document.getElementById("modo-sel"), modo = false, ultima = null;
+  var cels = Array.prototype.slice.call(tb.querySelectorAll("button.cel"));
+  var nao = f.status.querySelector('option[value=""]');
+  function marcados() { return cels.filter(function (c) { return c.classList.contains("sel"); }); }
+  function marca(c, on) { c.classList.toggle("sel", on); c.setAttribute("aria-pressed", on); }
+  function atualiza() {
+    var n = marcados().length;
+    document.getElementById("sel-txt").textContent = n + (n === 1 ? " horário selecionado" : " horários selecionados");
+    barra.classList.toggle("on", n > 0);
+  }
+  function limpa() { cels.forEach(function (c) { marca(c, false); }); ultima = null; atualiza(); }
+  function grupo(fn) {
+    var g = cels.filter(fn), tudo = g.every(function (c) { return c.classList.contains("sel"); });
+    g.forEach(function (c) { marca(c, !tudo); });
+  }
+  btnModo.addEventListener("click", function () {
+    modo = !modo; btnModo.setAttribute("aria-pressed", modo); btnModo.classList.toggle("ativo", modo);
+  });
+  tb.addEventListener("click", function (e) {
+    var c = e.target.closest("button.cel"), th = e.target.closest("th"), h = e.target.closest("td.hora");
+    if (c && (modo || e.ctrlKey || e.metaKey)) {
+      e.stopPropagation(); e.preventDefault();
+      if (e.shiftKey && ultima) {
+        var d1 = +ultima.dataset.dia, d2 = +c.dataset.dia, h1 = +ultima.dataset.hora, h2 = +c.dataset.hora;
+        cels.forEach(function (x) {
+          var d = +x.dataset.dia, hr = +x.dataset.hora;
+          if (d >= Math.min(d1, d2) && d <= Math.max(d1, d2) && hr >= Math.min(h1, h2) && hr <= Math.max(h1, h2)) marca(x, true);
+        });
+      } else marca(c, !c.classList.contains("sel"));
+      ultima = c; atualiza();
+    } else if (modo && th && th.cellIndex > 0) {
+      grupo(function (x) { return +x.dataset.dia === th.cellIndex; }); atualiza();
+    } else if (modo && h) {
+      grupo(function (x) { return +x.dataset.hora === parseInt(h.textContent, 10); }); atualiza();
+    }
+  }, true);
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !dlg.open) limpa(); });
+  document.getElementById("sel-limpar").addEventListener("click", limpa);
+  document.getElementById("sel-editar").addEventListener("click", function () {
+    var m = marcados(); if (!m.length) return;
+    f.reset();
+    m.forEach(function (c) {
+      var i = document.createElement("input"); i.type = "hidden"; i.name = "celulas"; i.value = c.dataset.dia + "-" + c.dataset.hora; f.appendChild(i);
+    });
+    f.dia.value = 0; f.hora.value = 0;
+    nao.hidden = false; f.status.value = ""; f.multiplicador.value = ""; f.multiplicador.placeholder = "não alterar";
+    dlg.querySelector("[data-titulo]").textContent = m.length + " horários selecionados — " + f.local.value;
+    dlg.showModal();
+  });
+  dlg.addEventListener("close", function () {
+    f.querySelectorAll('input[name="celulas"]').forEach(function (i) { i.remove(); });
+    nao.hidden = true; f.multiplicador.placeholder = "";
+  });
+})();
+</script>
 {% endblock %}

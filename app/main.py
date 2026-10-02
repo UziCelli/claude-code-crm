@@ -550,20 +550,42 @@ def grade(request: Request, tipo: str = "Pacotes", local: str = "CIA", vale: int
 
 
 @app.post("/grade/slot")
-def grade_slot(tipo: str = Form(...), local: str = Form(...), dia: int = Form(...), hora: int = Form(...), status: str = Form(...),
-               cliente_id: str = Form(""), multiplicador: str = Form("1"), so_este: int = Form(0), ref: int = Form(0), con=Depends(get_db)):
+def grade_slot(tipo: str = Form(...), local: str = Form(...), dia: int = Form(0), hora: int = Form(0), status: str = Form(""),
+               cliente_id: str = Form(""), multiplicador: str = Form(""), so_este: int = Form(0), ref: int = Form(0),
+               celulas: list[str] = Form([]), con=Depends(get_db)):
+    lote = bool(celulas)
+    pares = []
+    for c in (celulas or [f"{dia}-{hora}"])[:300]:
+        try:
+            d, h = (int(x) for x in c.split("-"))
+        except ValueError:
+            continue
+        if 1 <= d <= 6 and 5 <= h <= 23 and (d, h) not in pares:
+            pares.append((d, h))
+    url = f"/grade?tipo={tipo}&local={local}&ref={ref}"
+    if not pares or status not in ("", "livre", "ocupado", "indisponivel"):
+        return voltar(url, erro="Nenhum horário selecionado." if not pares else "Situação inválida.")
     cid = int(cliente_id) if cliente_id else None
     nome = con.execute("SELECT nome FROM clientes WHERE id=?", (cid,)).fetchone()["nome"] if cid else None
-    mult = _num_br(multiplicador) or 1.0
+    mult_novo = _num_br(multiplicador) or 1.0 if multiplicador.strip() else None
     tipos = [tipo] if so_este else ["Pacotes", "Mensalidades"]
     with con:
         for t in tipos:
-            con.execute("""INSERT INTO grade_slots (tipo_calculo, dia, local, hora, status, cliente_id, cliente_nome, multiplicador)
-                           VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(tipo_calculo, dia, local, hora) DO UPDATE SET
-                           status=excluded.status, cliente_id=excluded.cliente_id, cliente_nome=excluded.cliente_nome,
-                           multiplicador=excluded.multiplicador""",
-                        (t, dia, local, hora, status, cid if status == "ocupado" else None, nome if status == "ocupado" else None, mult))
-    return voltar(f"/grade?tipo={tipo}&local={local}&ref={ref}", msg=f"{DIAS_CURTO[dia]} {hora:02d}h atualizado.")
+            for d, h in pares:
+                ex = con.execute("SELECT * FROM grade_slots WHERE tipo_calculo=? AND dia=? AND local=? AND hora=?",
+                                 (t, d, local, h)).fetchone()
+                st = status or (ex["status"] if ex else None) or "livre"
+                if status:
+                    c_id, c_nome = (cid, nome) if st == "ocupado" else (None, None)
+                else:
+                    c_id, c_nome = (ex["cliente_id"], ex["cliente_nome"]) if ex else (None, None)
+                mult = mult_novo if mult_novo is not None else ((ex["multiplicador"] if ex else None) or 1.0)
+                con.execute("""INSERT INTO grade_slots (tipo_calculo, dia, local, hora, status, cliente_id, cliente_nome, multiplicador)
+                               VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(tipo_calculo, dia, local, hora) DO UPDATE SET
+                               status=excluded.status, cliente_id=excluded.cliente_id, cliente_nome=excluded.cliente_nome,
+                               multiplicador=excluded.multiplicador""", (t, d, local, h, st, c_id, c_nome, mult))
+    msg = f"{len(pares)} horários atualizados." if lote else f"{DIAS_CURTO[pares[0][0]]} {pares[0][1]:02d}h atualizado."
+    return voltar(url, msg=msg)
 
 
 # =====================================================================

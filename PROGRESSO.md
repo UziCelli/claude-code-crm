@@ -31,12 +31,14 @@ Plano completo em `C:\Users\victo\.claude\plans\a-gente-vai-come-ar-functional-t
 - [x] Leads: "parado há X dias" por etapa (prazos editáveis em Configurações)
 - [x] Painel: "O que precisa de você hoje" (8 tipos de alerta, ordenados) + setas ↑↓ vs mês anterior
 - [x] WhatsApp: mensagens prontas (renovação, falta, boas-vindas, reativação), editáveis em Configurações
-- [x] Grade: preço total e lucro em letra miúda abaixo do preço por aula
-- 29 testes passando (`.venv\Scripts\python.exe -m pytest tests`)
+- [x] Grade: preço total e lucro em letra miúda abaixo do preço por aula; legenda dos números; seletor do plano de referência
+- [x] Grade: edição em lote ("Selecionar vários", Shift = bloco, clique no dia/hora = coluna/linha, Ctrl+clique; "Não alterar" preserva situação e cliente)
+- [x] Leads: previsão do funil e "Por que perco leads"; proposta para imprimir/salvar PDF (`/propostas/{id}`)
+- Teste visual sem tocar no banco real: preview `crm-teste` (porta 8766, usa cópia temporária do `crm.db`)
+- 34 testes passando (`.venv\Scripts\python.exe -m pytest tests`)
 
 ## Próximos passos
 - **Usuário:** completar telefone e data de renovação dos alunos (o painel mostra "cadastro incompleto").
-- **Grade — edição em lote (pedido do usuário):** selecionar vários horários/dias de uma vez (clique ou arrastar; Ctrl para somar) e aplicar situação, cliente e multiplicador a todos num único dialog. Hoje `/grade/slot` edita 1 célula por vez; a ideia é aceitar uma lista de `dia-hora` no mesmo POST.
 - **Rodada 2 — financeiro PF + PJ** (substitui a planilha / Microsoft 365, que vence em mais de 3 meses):
   - livro-caixa e contas a pagar recorrentes, com cartões;
   - mensalidades: previsto × recebido por aluno;

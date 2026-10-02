@@ -1,6 +1,7 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "crm", "runtimeExecutable": ".venv\\Scripts\\python.exe", "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8765"], "port": 8765 }
+    { "name": "crm", "runtimeExecutable": ".venv\\Scripts\\python.exe", "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8765"], "port": 8765 },
+    { "name": "crm-teste", "runtimeExecutable": ".venv\\Scripts\\python.exe", "runtimeArgs": ["-c", "import shutil,tempfile,pathlib,uvicorn; from app import db; p=pathlib.Path(tempfile.mkdtemp())/'crm.db'; shutil.copy('data/crm.db',p); db.DB_PATH=p; db.BACKUP_DIR=p.parent/'bk'; from app import main; uvicorn.run(main.app,host='127.0.0.1',port=8766)"], "port": 8766 }
   ]
 }
