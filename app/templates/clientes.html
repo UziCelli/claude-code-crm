@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="linha topo">
+  <h1 style="margin:0">Clientes</h1>
+  <a class="btn" href="/clientes/novo">Novo cliente</a>
+</div>
+<form class="linha" method="get">
+  {% for s, r in [('ativo','Ativos'),('pausado','Pausados'),('inativo','Inativos'),('todos','Todos')] %}
+  <a class="btn {{ 'claro' if status != s }}" href="/clientes?status={{ s }}&busca={{ busca }}">{{ r }} {% if s != 'todos' %}({{ totais.get(s, 0) }}){% endif %}</a>
+  {% endfor %}
+  <input type="hidden" name="status" value="{{ status }}">
+  <input name="busca" value="{{ busca }}" placeholder="Buscar por nome" style="width:220px">
+  <button class="claro">Buscar</button>
+</form>
+<div class="grid c3 mt">
+  {% for c in clientes %}
+  <a class="card borda-{{ c.alerta or ('verde' if c.status == 'ativo' else 'neutro') }}" href="/clientes/{{ c.id }}" style="color:inherit">
+    <div class="linha" style="justify-content:space-between">
+      <strong>{{ c.nome }}</strong>
+      <span class="tag status-{{ c.status }}">{{ c.status }}</span>
+    </div>
+    <div class="muted">{{ c.local or '—' }} · {{ c.plano or c.tipo_servico or '—' }}{% if c.pessoas and c.pessoas > 1 %} · {{ c.pessoas }} pessoas{% endif %}</div>
+    <div class="linha mt" style="margin-top:8px;justify-content:space-between">
+      <span><strong>{{ c.valor|moeda }}</strong> <span class="muted">/ mês</span></span>
+      <span class="muted">{{ c.dias_horarios or 'sem horário' }}</span>
+    </div>
+    {% if c.data_renovacao %}<div class="muted" style="margin-top:6px">Renova em {{ c.data_renovacao|data }}</div>{% endif %}
+  </a>
+  {% else %}
+  <p class="muted">Nenhum cliente aqui. Cadastre um ou importe da planilha em Configurações.</p>
+  {% endfor %}
+</div>
+{% endblock %}

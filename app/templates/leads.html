@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="linha topo">
+  <h1 style="margin:0">Funil de vendas</h1>
+  <button data-abrir="dlg-lead" data-titulo="Novo lead">Novo lead</button>
+</div>
+<div class="kanban">
+  {% for chave, nome in ETAPAS %}
+  <div class="coluna {{ chave }}">
+    <h3>{{ nome }} <span>{{ colunas[chave]|length }}</span></h3>
+    {% for l in colunas[chave] %}
+    <div class="lead {{ 'atrasado' if l.atrasado }}">
+      <div class="nome">{{ l.nome }}</div>
+      <div class="muted">{{ l.canal_origem }}{% if l.interesse %} · {{ l.interesse }}{% endif %}</div>
+      {% if l.telefone %}<div class="muted"><a href="https://wa.me/55{{ l.telefone|replace(' ','')|replace('-','')|replace('(','')|replace(')','') }}" target="_blank">{{ l.telefone }}</a></div>{% endif %}
+      {% if l.proxima_acao or l.data_proxima_acao %}<div style="margin-top:4px"><span class="tag {{ 'vermelho' if l.atrasado else 'azul' }}">{{ l.proxima_acao or 'Próxima ação' }} · {{ l.data_proxima_acao|data }}</span></div>{% endif %}
+      {% if l.motivo_perda %}<div class="muted">Motivo: {{ l.motivo_perda }}</div>{% endif %}
+      {% if l.cliente_id %}<div><a href="/clientes/{{ l.cliente_id }}">Ver cliente</a></div>{% endif %}
+      <div class="acoes">
+        {% set ordem = ['lead','conversa','avaliacao','cliente'] %}
+        {% if chave in ordem and chave != 'cliente' %}
+        {% set prox = ordem[ordem.index(chave) + 1] %}
+        <form method="post" action="/leads/{{ l.id }}/etapa" class="inline"><input type="hidden" name="etapa" value="{{ prox }}"><button class="verde">→ {{ dict(ETAPAS)[prox] }}</button></form>
+        {% endif %}
+        {% if chave not in ['cliente','perdido'] %}
+        <button class="perigo" data-abrir="dlg-perdido" data-id="{{ l.id }}" data-titulo="Perder {{ l.nome }}">Perdido</button>
+        {% endif %}
+        {% if chave == 'perdido' %}
+        <form method="post" action="/leads/{{ l.id }}/etapa" class="inline"><input type="hidden" name="etapa" value="lead"><button class="claro">Reabrir</button></form>
+        {% endif %}
+        <button class="claro" data-abrir="dlg-lead" data-titulo="Editar lead" data-id="{{ l.id }}" data-nome="{{ l.nome }}" data-telefone="{{ l.telefone or '' }}" data-canal_origem="{{ l.canal_origem }}" data-interesse="{{ l.interesse or '' }}" data-proxima_acao="{{ l.proxima_acao or '' }}" data-data_proxima_acao="{{ l.data_proxima_acao or '' }}" data-observacoes="{{ l.observacoes or '' }}">Editar</button>
+        <a class="btn claro" style="padding:4px 8px;font-size:11px" href="/simulador?lead_id={{ l.id }}">Proposta</a>
+        <form method="post" action="/leads/{{ l.id }}/excluir" class="inline" data-confirmar="Enviar este lead para a lixeira?"><button class="claro">x</button></form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+
+<dialog id="dlg-lead">
+  <h2 data-titulo>Novo lead</h2>
+  <form method="post" action="/leads" id="form-lead" onsubmit="this.action = this.elements["id"].value ? '/leads/' + this.elements["id"].value : '/leads'">
+    <input type="hidden" name="id" name="id" value="">
+    <div class="campo"><label>Nome</label><input name="nome" required></div>
+    <div class="campo"><label>Telefone / WhatsApp</label><input name="telefone"></div>
+    <div class="campo"><label>Canal de origem (obrigatório)</label><select name="canal_origem" required>{% for k in listas.lista_canais %}<option>{{ k }}</option>{% endfor %}</select></div>
+    <div class="campo"><label>Interesse (tipo / local)</label><input name="interesse" placeholder="ex.: Pacote de Aulas / CIA" list="interesses"><datalist id="interesses">{% for t in listas.lista_tipos_servico %}{% for l in listas.lista_locais %}<option>{{ t }} / {{ l }}</option>{% endfor %}{% endfor %}</datalist></div>
+    <div class="campo"><label>Próxima ação</label><input name="proxima_acao" placeholder="ex.: mandar mensagem, marcar avaliação"></div>
+    <div class="campo"><label>Data da próxima ação</label><input name="data_proxima_acao" type="date"></div>
+    <div class="campo"><label>Observações</label><textarea name="observacoes" rows="2"></textarea></div>
+    <div class="linha"><button>Salvar</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
+  </form>
+</dialog>
+<dialog id="dlg-perdido">
+  <h2 data-titulo>Marcar como perdido</h2>
+  <form method="post" onsubmit="this.action = '/leads/' + this.elements["id"].value + '/etapa'">
+    <input type="hidden" name="id" name="id" value=""><input type="hidden" name="etapa" value="perdido">
+    <div class="campo"><label>Motivo</label><select name="motivo_perda"><option>Preço</option><option>Horário</option><option>Local</option><option>Sem resposta</option><option>Escolheu outro personal</option><option>Desistiu</option><option>Outro</option></select></div>
+    <div class="linha"><button class="perigo">Confirmar</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
+  </form>
+</dialog>
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1>Rotina semanal — {{ semana }}</h1>
+<div class="grid c2">
+  <div class="card">
+    <h2>Checklist da semana (reinicia toda segunda)</h2>
+    {% for i in itens %}
+    <div class="check {{ 'feito' if i.feito }}">
+      <form method="post" action="/rotina/{{ i.chave }}/toggle" class="inline"><button class="{{ 'claro' if i.feito else 'verde' }} pequeno">{{ 'Desfazer' if i.feito else 'Feito' }}</button></form>
+      <span>{{ i.texto }}{% if i.chave == 'fim_mes' %} <span class="muted">({{ ultimo_dia|data }} — use "Fechar o mês" no Painel)</span>{% endif %}</span>
+      {% if i.data %}<span class="muted" style="margin-left:auto">{{ i.data|data }}</span>{% endif %}
+    </div>
+    {% endfor %}
+    <h3 class="mt">Semanas anteriores</h3>
+    {% for h in historico %}<span class="tag {{ 'verde' if h.feitos == h.total else ('amarelo' if h.feitos else 'neutro') }}">{{ h.semana }}: {{ h.feitos }}/{{ h.total }}</span> {% endfor %}
+  </div>
+  <div class="card">
+    <h2>Lista de espera — horários de pico ({% for h in horas_pico %}{{ h }}h{{ ', ' if not loop.last }}{% endfor %})</h2>
+    <form method="post" action="/espera" class="form-grid">
+      <div><label>Nome</label><input name="nome" required></div>
+      <div><label>Telefone</label><input name="telefone"></div>
+      <div><label>Dia</label><select name="dia"><option value="0">Qualquer</option>{% for d in range(1,7) %}<option value="{{ d }}">{{ d|dia }}</option>{% endfor %}</select></div>
+      <div><label>Horário</label><select name="hora">{% for h in horas_pico %}<option value="{{ h }}">{{ '%02d'|format(h) }}h</option>{% endfor %}</select></div>
+      <div><label>Local</label><select name="local"><option value="">—</option>{% for l in listas.lista_locais %}<option>{{ l }}</option>{% endfor %}</select></div>
+      <div><label>Observação</label><input name="observacao"></div>
+      <div class="largo"><button>Adicionar à espera</button></div>
+    </form>
+    <table class="mt"><tr><th>Nome</th><th>Quando</th><th>Local</th><th>Desde</th><th></th></tr>
+      {% for e in espera %}
+      <tr><td>{{ e.nome }}{% if e.telefone %} <span class="muted">{{ e.telefone }}</span>{% endif %}</td><td>{{ e.dia|dia if e.dia else 'Qualquer' }} {{ '%02d'|format(e.hora) }}h</td><td>{{ e.local or '—' }}</td><td>{{ e.data|data }}</td>
+        <td><form method="post" action="/espera/{{ e.id }}/excluir" class="inline"><button class="claro pequeno">x</button></form></td></tr>
+      {% else %}<tr><td colspan="5" class="muted">Ninguém na lista de espera.</td></tr>{% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

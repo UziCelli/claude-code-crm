@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block titulo %}VFITCOACH CRM{% endblock %}</title>
+<link rel="icon" type="image/png" href="/static/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Montserrat:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="menu">
+  <a class="marca" href="/">VFIT<span>COACH</span></a>
+  {% set p = request.url.path %}
+  <a href="/" class="{{ 'ativo' if p == '/' }}">Painel</a>
+  <a href="/clientes" class="{{ 'ativo' if p.startswith('/clientes') }}">Clientes</a>
+  <a href="/leads" class="{{ 'ativo' if p.startswith('/leads') }}">Leads</a>
+  <a href="/grade" class="{{ 'ativo' if p.startswith('/grade') }}">Grade</a>
+  <a href="/simulador" class="{{ 'ativo' if p.startswith('/simulador') }}">Simulador</a>
+  <a href="/explorador" class="{{ 'ativo' if p.startswith('/explorador') }}">Explorador</a>
+  <a href="/campanhas" class="{{ 'ativo' if p.startswith('/campanhas') }}">Campanhas</a>
+  <a href="/rotina" class="{{ 'ativo' if p.startswith('/rotina') }}">Rotina</a>
+  <span class="espaco"></span>
+  <a href="/configuracoes" class="{{ 'ativo' if p.startswith('/configuracoes') }}">Configurações</a>
+  <a href="/dados" class="{{ 'ativo' if p.startswith('/dados') }}">Dados</a>
+</nav>
+<main>
+  {% if msg %}<div class="aviso ok">{{ msg }}</div>{% endif %}
+  {% if erro %}<div class="aviso erro">{{ erro }}</div>{% endif %}
+  {% set n_alertas = alertas.renovacao|length + alertas.sem_aula|length + alertas.acoes|length %}
+  {% if n_alertas and p != '/' %}
+  <details class="alertas-topo">
+    <summary>{{ n_alertas }} alerta{{ 's' if n_alertas > 1 }}</summary>
+    {% include "_alertas.html" %}
+  </details>
+  {% endif %}
+  {% block conteudo %}{% endblock %}
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

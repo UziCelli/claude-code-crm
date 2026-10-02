@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1>Dados e segurança</h1>
+<div class="grid c2">
+  <div class="card">
+    <h2>Exportar</h2>
+    {% for n, r in [('clientes','Clientes'),('leads','Leads'),('propostas','Propostas'),('metricas','Métricas mensais')] %}
+    <div class="linha" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--borda)"><span>{{ r }}</span><span><a class="btn claro pequeno" href="/exportar/{{ n }}.xlsx">.xlsx</a> <a class="btn claro pequeno" href="/exportar/{{ n }}.csv">.csv</a></span></div>
+    {% endfor %}
+  </div>
+  <div class="card">
+    <h2>Backup</h2>
+    <div class="muted">Banco: {{ banco }}<br>Backups: {{ pasta_backup }} (automático 1x por dia ao abrir; mantém os 30 últimos)</div>
+    <form method="post" action="/backup" class="mt"><button>Fazer backup agora</button></form>
+    <h3 class="mt">Restaurar</h3>
+    <form method="post" action="/restaurar" data-confirmar="Restaurar substitui o banco atual pelo backup escolhido. O banco atual será guardado antes. Continuar?">
+      <div class="campo"><label>Backup</label><select name="nome">{% for b in backups %}<option value="{{ b.nome }}">{{ b.nome }} — {{ b.quando.strftime('%d/%m/%Y %H:%M') }} ({{ b.kb }} KB)</option>{% endfor %}</select></div>
+      <div class="campo"><label>Digite RESTAURAR para confirmar</label><input name="confirmar" autocomplete="off"></div>
+      <button class="perigo">Restaurar backup</button>
+    </form>
+  </div>
+</div>
+<div class="card mt">
+  <h2>Lixeira (últimos 30 dias)</h2>
+  <table><tr><th>Tipo</th><th>Registro</th><th>Excluído em</th><th></th></tr>
+    {% for l in lixo %}
+    <tr><td>{{ l.rotulo }}</td><td>{{ l.nome }}</td><td>{{ l.quando }}</td><td><form method="post" action="/lixeira/restaurar" class="inline"><input type="hidden" name="tabela" value="{{ l.tabela }}"><input type="hidden" name="rid" value="{{ l.id }}"><button class="claro pequeno">Restaurar</button></form></td></tr>
+    {% else %}<tr><td colspan="4" class="muted">Lixeira vazia.</td></tr>{% endfor %}
+  </table>
+</div>
+{% endblock %}

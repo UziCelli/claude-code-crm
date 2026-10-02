@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1>Explorador de planos</h1>
+<form method="get" class="card linha">
+  <div><label>Local</label><select name="local">{% for l in listas.lista_locais %}<option {{ 'selected' if l == f.local }}>{{ l }}</option>{% endfor %}</select></div>
+  <div><label>Tipo</label><select name="tipo_servico"><option value="">Todos</option>{% for t in tipos %}<option {{ 'selected' if t == f.tipo_servico }}>{{ t }}</option>{% endfor %}</select></div>
+  <div><label>Pagamento</label><select name="forma">{% for fp in listas.lista_formas_pagamento %}<option {{ 'selected' if fp == f.forma }}>{{ fp }}</option>{% endfor %}</select></div>
+  <div><label>Pessoas</label><select name="pessoas">{% for n in [1,2,3,4] %}<option {{ 'selected' if n == f.pessoas }}>{{ n }}</option>{% endfor %}</select></div>
+  <div><label>Dia</label><select name="dia"><option value="0">Todos</option>{% for d in range(1,7) %}<option value="{{ d }}" {{ 'selected' if d == f.dia }}>{{ d|dia }}</option>{% endfor %}</select></div>
+  <div><label>Ordenar por</label><select name="ordem">{% for k, r in [('lucro_hora','Lucro por hora'),('lucro','Lucro'),('margem','Margem'),('preco_total','Preço (menor)')] %}<option value="{{ k }}" {{ 'selected' if k == f.ordem }}>{{ r }}</option>{% endfor %}</select></div>
+  <div><label>&nbsp;</label><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="so_vale" value="1" {{ 'checked' if f.so_vale }}> Só vale</label></div>
+  <div><label>&nbsp;</label><button>Filtrar</button></div>
+</form>
+<p class="muted mt">{{ total }} combinações (mostrando até 400). Horários livres de {{ f.local }} × planos com pagamento {{ f.forma }} para {{ f.pessoas }} pessoa(s).</p>
+<div class="rolagem"><table>
+  <tr><th>Plano</th><th>Horário</th><th class="num">Mult.</th><th class="num">Preço</th><th class="num">Por pessoa</th><th class="num">Lucro</th><th class="num">Margem</th><th class="num">Lucro/h</th><th class="num">Desc. máx.</th><th></th></tr>
+  {% for l in linhas %}
+  <tr class="{{ l.margem|cor }}">
+    <td>{{ l.tipo_servico }}{% if l.qtd_aulas %} {{ l.qtd_aulas }} aulas{% endif %}{% if l.freq_semanal %} {{ l.freq_semanal }}x/sem{% endif %}</td>
+    <td>{% if l.dia %}{{ l.dia|dia_curto }} {{ '%02d'|format(l.hora) }}h{% else %}—{% endif %}</td>
+    <td class="num">{{ l.mult|num(2) }}</td><td class="num">{{ l.preco_total|moeda }}</td><td class="num">{{ l.preco_pessoa|moeda }}</td>
+    <td class="num">{{ l.lucro|moeda }}</td><td class="num">{{ l.margem|pct(1) }}</td><td class="num"><strong>{{ l.lucro_hora|moeda }}</strong></td><td class="num">{{ l.desconto_maximo|pct }}</td>
+    <td><a class="btn claro pequeno" href="/simulador?plano={{ l.tipo_servico }}|{{ l.qtd_aulas }}|{{ l.freq_semanal }}&local={{ f.local }}&forma={{ f.forma }}&pessoas={{ f.pessoas }}&dia={{ l.dia or 0 }}&hora={{ l.hora or 0 }}">Simular</a></td>
+  </tr>
+  {% else %}<tr><td colspan="10" class="muted">Nada encontrado. Verifique os preços base em Configurações e os horários livres na Grade.</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

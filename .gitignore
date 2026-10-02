@@ -1,0 +1,10 @@
+.venv/
+data/
+*.db
+__pycache__/
+.pytest_cache/
+*.stackdump
+Claude outputs/
+.claude/settings.local.json
+# contém chave de API em texto puro — nunca versionar
+continuar-com-omniroute.bat

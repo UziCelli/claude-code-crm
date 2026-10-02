@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="linha topo">
+  <h1 style="margin:0">{{ c.nome if c else 'Novo cliente' }}</h1>
+  {% if c %}
+  <div class="linha">
+    {% for s in ['ativo','pausado','inativo'] if s != c.status %}
+    <form method="post" action="/clientes/{{ c.id }}/status" class="inline"><input type="hidden" name="status" value="{{ s }}"><button class="claro pequeno">Marcar {{ s }}</button></form>
+    {% endfor %}
+    <a class="btn claro pequeno" href="/simulador?cliente_id={{ c.id }}&local={{ c.local or 'CIA' }}">Nova proposta</a>
+    <form method="post" action="/clientes/{{ c.id }}/excluir" class="inline" data-confirmar="Enviar {{ c.nome }} para a lixeira?"><button class="perigo pequeno">Excluir</button></form>
+  </div>
+  {% endif %}
+</div>
+
+<div class="grid c2">
+  <div class="card">
+    <h2>Cadastro</h2>
+    <form method="post" action="{{ '/clientes/' ~ c.id if c else '/clientes' }}" class="form-grid">
+      <div class="largo"><label>Nome</label><input name="nome" required value="{{ c.nome if c else '' }}"></div>
+      <div><label>Telefone / WhatsApp</label><input name="telefone" value="{{ c.telefone or '' if c else '' }}"></div>
+      <div><label>Local</label><select name="local"><option value="">—</option>{% for l in listas.lista_locais %}<option {{ 'selected' if c and c.local == l }}>{{ l }}</option>{% endfor %}</select></div>
+      <div><label>Tipo de serviço</label><select name="tipo_servico"><option value="">—</option>{% for t in listas.lista_tipos_servico %}<option {{ 'selected' if c and c.tipo_servico == t }}>{{ t }}</option>{% endfor %}</select></div>
+      <div><label>Plano (ex.: Pacote 8 aulas, Mensalidade 2x/semana)</label><input name="plano" value="{{ c.plano or '' if c else '' }}" list="planos"><datalist id="planos"><option>Pacote 4 aulas</option><option>Pacote 8 aulas</option><option>Pacote 12 aulas</option><option>Pacote 16 aulas</option><option>Pacote 20 aulas</option><option>Mensalidade 1x/semana</option><option>Mensalidade 2x/semana</option><option>Mensalidade 3x/semana</option><option>Mensalidade 4x/semana</option><option>Mensalidade 5x/semana</option><option>Consultoria Online</option><option>Consultoria Híbrida</option><option>Avaliação Física</option></datalist></div>
+      <div><label>Nº de pessoas no horário</label><input name="pessoas" type="number" min="1" max="4" value="{{ c.pessoas or 1 if c else 1 }}"></div>
+      <div class="largo"><label>Dias e horários fixos (ex.: Seg 07:00; Qua 07:00)</label><input name="dias_horarios" value="{{ c.dias_horarios or '' if c else '' }}"></div>
+      <div><label>Valor mensal (R$)</label><input name="valor" value="{{ c.valor if c else '' }}"></div>
+      <div><label>Forma de pagamento</label><select name="forma_pagamento"><option value="">—</option>{% for f in listas.lista_formas_pagamento %}<option {{ 'selected' if c and c.forma_pagamento == f }}>{{ f }}</option>{% endfor %}{% if c and c.forma_pagamento and c.forma_pagamento not in listas.lista_formas_pagamento %}<option selected>{{ c.forma_pagamento }}</option>{% endif %}</select></div>
+      <div><label>Status</label><select name="status">{% for s in ['ativo','pausado','inativo'] %}<option {{ 'selected' if c and c.status == s }}>{{ s }}</option>{% endfor %}</select></div>
+      <div><label>Canal de origem</label><select name="canal_origem"><option value="">—</option>{% for k in listas.lista_canais %}<option {{ 'selected' if c and c.canal_origem == k }}>{{ k }}</option>{% endfor %}</select></div>
+      <div><label>Data de início</label><input name="data_inicio" type="date" value="{{ c.data_inicio or '' if c else hoje() }}"></div>
+      <div><label>Data de renovação</label><input name="data_renovacao" type="date" value="{{ c.data_renovacao or '' if c else '' }}"></div>
+      <div class="largo"><label>Observações</label><textarea name="observacoes" rows="3">{{ c.observacoes or '' if c else '' }}</textarea></div>
+      <div class="largo"><button>Salvar</button> <a class="btn claro" href="/clientes">Voltar</a></div>
+    </form>
+  </div>
+
+  {% if c %}
+  <div>
+    {% if estimativa %}
+    <div class="card borda-{{ estimativa.margem|cor }}">
+      <h2>Rentabilidade estimada</h2>
+      <div class="linha" style="gap:24px">
+        <div><div class="muted">Lucro / mês</div><strong>{{ estimativa.lucro|moeda }}</strong></div>
+        <div><div class="muted">Margem</div><strong>{{ estimativa.margem|pct(1) }}</strong></div>
+        <div><div class="muted">Lucro / hora</div><strong>{{ estimativa.lucro_hora|moeda }}</strong></div>
+        <div><div class="muted">Preço mínimo</div><strong>{{ estimativa.preco_minimo|moeda }}</strong></div>
+      </div>
+      <div class="muted mt" style="margin-top:8px">Base: {{ estimativa.sessoes|num(0) }} sessões/mês, custos do plano equivalente na planilha.</div>
+    </div>
+    {% endif %}
+
+    <div class="card mt">
+      <h2>Registrar no histórico</h2>
+      <form method="post" action="/clientes/{{ c.id }}/evento" class="form-grid">
+        <div><label>Tipo</label><select name="tipo" id="tipo-evento"><option value="aula">Aula dada</option><option value="pagamento">Pagamento</option><option value="renovacao">Renovação</option><option value="anotacao">Anotação</option></select></div>
+        <div><label>Data</label><input name="data" type="date" value="{{ hoje() }}" required></div>
+        <div><label>Valor (R$)</label><input name="valor" placeholder="opcional"></div>
+        <div><label>Nova data de renovação</label><input name="nova_renovacao" type="date"></div>
+        <div class="largo"><label>Descrição</label><input name="descricao" placeholder="opcional"></div>
+        <div class="largo"><button>Registrar</button></div>
+      </form>
+    </div>
+
+    <div class="card mt">
+      <h2>Histórico</h2>
+      {% for e in eventos %}
+      <div class="linha" style="justify-content:space-between;border-bottom:1px solid var(--borda);padding:6px 0">
+        <span><span class="tag {{ {'aula':'azul','pagamento':'verde','renovacao':'amarelo','status':'neutro','anotacao':'neutro'}[e.tipo] }}">{{ e.tipo }}</span> {{ e.descricao or '' }}</span>
+        <span class="muted">{{ e.data|data }}{% if e.valor %} · {{ e.valor|moeda }}{% endif %}</span>
+      </div>
+      {% else %}<p class="muted">Nada registrado ainda.</p>{% endfor %}
+    </div>
+
+    {% if propostas %}
+    <div class="card mt"><h2>Propostas</h2>
+      {% for p in propostas %}<div class="linha" style="justify-content:space-between;padding:4px 0"><span>#{{ p.id }} {{ p.tipo_servico }} · {{ p.preco_total|moeda }} · margem {{ p.margem|pct }}</span><span class="tag neutro">{{ p.status }}</span></div>{% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

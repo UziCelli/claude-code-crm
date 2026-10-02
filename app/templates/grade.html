@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="linha topo">
+  <h1 style="margin:0">Grade semanal — {{ local }} ({{ tipo }})</h1>
+  <form method="get" class="linha">
+    <select name="local" onchange="this.form.submit()">{% for l in locais %}<option {{ 'selected' if l == local }}>{{ l }}</option>{% endfor %}</select>
+    <select name="tipo" onchange="this.form.submit()"><option {{ 'selected' if tipo == 'Pacotes' }}>Pacotes</option><option {{ 'selected' if tipo == 'Mensalidades' }}>Mensalidades</option></select>
+    <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" name="vale" value="1" {{ 'checked' if vale }} onchange="this.form.submit()"> Só horários de vale</label>
+  </form>
+</div>
+<div class="linha" style="justify-content:space-between">
+  <div class="legenda">
+    <span><i style="background:var(--verde-f)"></i> margem ≥ 15%</span><span><i style="background:var(--amarelo-f)"></i> 10–15%</span>
+    <span><i style="background:var(--vermelho-f)"></i> &lt; 10%</span><span><i style="background:#f5c9c5"></i> prejuízo</span>
+    <span><i style="background:var(--aco)"></i> ocupado</span><span><i style="background:#dfe3ea"></i> indisponível</span>
+  </div>
+  <div class="muted">{{ resumo.livres }} livres · {{ resumo.ocupados }} ocupados · {{ resumo.vale }} de vale{% if base %} · referência: {{ base.tipo_servico }} {{ base.qtd_aulas or base.freq_semanal ~ 'x/sem' }} {{ base.preco_base|moeda }}{% else %} · sem preço base para este local{% endif %}</div>
+</div>
+<div class="rolagem mt">
+<table class="grade">
+  <tr><th></th>{% for d in range(1,7) %}<th>{{ d|dia }}</th>{% endfor %}</tr>
+  {% for h in horas %}
+  <tr><td class="hora">{{ '%02d'|format(h) }}h</td>
+    {% for d in range(1,7) %}
+    {% set c = celulas.get((d, h)) %}
+    <td>
+      {% if c %}
+      <button class="cel {{ c.status if c.status != 'livre' else (c.margem|cor) }} {{ 'apagado' if c.apagado }} {{ 'vale' if c.status == 'livre' and c.multiplicador < 1 }}"
+        data-abrir="dlg-slot" data-titulo="{{ d|dia }} {{ '%02d'|format(h) }}h — {{ local }}" data-dia="{{ d }}" data-hora="{{ h }}" data-status="{{ c.status }}" data-cliente_id="{{ c.cliente_id or '' }}" data-multiplicador="{{ c.multiplicador }}">
+        {% if c.status == 'ocupado' %}<span class="t">{{ c.cliente_nome or 'Ocupado' }}</span>
+        {% elif c.status == 'indisponivel' %}<span class="t">Indisponível</span><br>{{ c.bloqueio or '' }}
+        {% else %}<span class="t">{{ c.preco_aula|moeda if c.preco_aula else 'Livre' }}</span><br>{{ c.margem|pct if c.margem is not none else '' }} · x{{ c.multiplicador|num(2) }}{% endif %}
+      </button>
+      {% else %}
+      <button class="cel indisponivel" data-abrir="dlg-slot" data-titulo="{{ d|dia }} {{ '%02d'|format(h) }}h — {{ local }}" data-dia="{{ d }}" data-hora="{{ h }}" data-status="livre" data-multiplicador="1">—</button>
+      {% endif %}
+    </td>
+    {% endfor %}
+  </tr>
+  {% endfor %}
+</table>
+</div>
+
+<dialog id="dlg-slot">
+  <h2 data-titulo>Horário</h2>
+  <form method="post" action="/grade/slot">
+    <input type="hidden" name="tipo" value="{{ tipo }}"><input type="hidden" name="local" value="{{ local }}">
+    <input type="hidden" name="dia"><input type="hidden" name="hora">
+    <div class="campo"><label>Situação</label><select name="status"><option value="livre">Livre</option><option value="ocupado">Ocupado</option><option value="indisponivel">Indisponível</option></select></div>
+    <div class="campo"><label>Cliente (se ocupado)</label><select name="cliente_id"><option value="">—</option>{% for cl in clientes %}<option value="{{ cl.id }}">{{ cl.nome }}</option>{% endfor %}</select></div>
+    <div class="campo"><label>Multiplicador de preço (abaixo de 1 = vale)</label><input name="multiplicador" value="1"></div>
+    <div class="campo"><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="so_este" value="1"> Aplicar só em {{ tipo }} (por padrão vale para Pacotes e Mensalidades)</label></div>
+    <div class="linha"><button>Salvar</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
+  </form>
+</dialog>
+{% endblock %}

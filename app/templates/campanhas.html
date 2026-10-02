@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1>Campanhas</h1>
+<div class="grid c3">
+  {% for f in fases %}
+  <div class="card fase {{ f.situacao }} {{ f.tipo }}">
+    <div class="linha" style="justify-content:space-between"><h2 style="margin:0">{{ f.nome }}</h2>{% if f.situacao == 'atual' %}<span class="tag azul">agora</span>{% endif %}</div>
+    <div class="muted">{{ f.inicio|data }} a {{ f.fim|data }}{% if f.itens %} · {{ f.feitos }}/{{ f.itens|length }} feitos{% endif %}</div>
+    {% if f.itens %}<div class="barra"><i style="width:{{ (100 * f.feitos / f.itens|length)|round }}%"></i></div>{% endif %}
+    <div class="mt">
+      {% for i in f.itens %}
+      <div class="check {{ 'feito' if i.feito }}">
+        <form method="post" action="/campanhas/item/{{ i.id }}/toggle" class="inline"><button class="claro pequeno">{{ 'Desfazer' if i.feito else 'Feito' }}</button></form>
+        <span>{{ i.texto }}</span>
+        <form method="post" action="/campanhas/item/{{ i.id }}/excluir"><button class="claro pequeno">x</button></form>
+      </div>
+      {% endfor %}
+    </div>
+    {% if f.tipo != 'bloqueio' %}
+    <form method="post" action="/campanhas/item" class="linha mt"><input type="hidden" name="fase_id" value="{{ f.id }}"><input name="texto" placeholder="Nova tarefa" required style="flex:1"><button class="pequeno">+</button></form>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<div class="grid c2 mt">
+  <div class="card">
+    <h2>Checkpoints</h2>
+    {% for c in checkpoints %}
+    <div class="check">
+      <span class="tag {{ 'verde' if (c.resposta if c.resposta != 'pendente' else c.auto) == 'sim' else ('vermelho' if (c.resposta if c.resposta != 'pendente' else c.auto) == 'nao' else 'amarelo') }}">{{ {'sim':'Sim','nao':'Não','pendente':'Pendente'}[c.resposta if c.resposta != 'pendente' else c.auto] }}</span>
+      <span>{{ c.pergunta }} <span class="muted">({{ c.clientes }} cliente(s) desse canal até {{ c.prazo|data }})</span></span>
+      <form method="post" action="/campanhas/checkpoint/{{ c.id }}" class="linha"><select name="resposta" onchange="this.form.submit()" style="width:auto;padding:3px">{% for v, r in [('pendente','automático'),('sim','Sim'),('nao','Não')] %}<option value="{{ v }}" {{ 'selected' if v == c.resposta }}>{{ r }}</option>{% endfor %}</select></form>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="card">
+    <div class="linha" style="justify-content:space-between"><h2 style="margin:0">Gastos por canal</h2>
+      <form method="get" class="inline"><select name="mes" onchange="this.form.submit()" style="width:auto">{% for m in meses %}<option {{ 'selected' if m == mes }}>{{ m }}</option>{% endfor %}</select></form></div>
+    <table class="mt"><tr><th>Canal</th><th class="num">Mensalidade</th><th class="num">Anúncios</th><th class="num">Comissões</th><th class="num">Total</th><th class="num">Leads</th><th class="num">Clientes</th><th></th></tr>
+      {% for g in gastos %}
+      <tr><td>{{ g.canal }}</td><td class="num">{{ g.mensalidade|moeda }}</td><td class="num">{{ g.anuncios|moeda }}</td><td class="num">{{ g.comissoes|moeda }}</td><td class="num"><strong>{{ (g.mensalidade + g.anuncios + g.comissoes + g.outros)|moeda }}</strong></td><td class="num">{{ g.leads }}</td><td class="num">{{ g.clientes }}</td>
+        <td><button class="claro pequeno" data-abrir="dlg-gasto" data-titulo="Editar gasto" data-mes="{{ g.mes }}" data-canal="{{ g.canal }}" data-mensalidade="{{ g.mensalidade }}" data-anuncios="{{ g.anuncios }}" data-comissoes="{{ g.comissoes }}" data-outros="{{ g.outros }}" data-leads="{{ g.leads }}" data-agendamentos="{{ g.agendamentos }}" data-clientes="{{ g.clientes }}" data-observacao="{{ g.observacao or '' }}">Editar</button>
+          <form method="post" action="/campanhas/gasto/{{ g.id }}/excluir" class="inline"><button class="claro pequeno">x</button></form></td></tr>
+      {% else %}<tr><td colspan="8" class="muted">Sem gastos em {{ mes }}.</td></tr>{% endfor %}
+    </table>
+    <button class="mt" data-abrir="dlg-gasto" data-titulo="Novo gasto" data-mes="{{ mes }}">Lançar gasto</button>
+  </div>
+</div>
+
+<dialog id="dlg-gasto">
+  <h2 data-titulo>Gasto</h2>
+  <form method="post" action="/campanhas/gasto" class="form-grid">
+    <div><label>Mês (AAAA-MM)</label><input name="mes" required pattern="\d{4}-\d{2}"></div>
+    <div><label>Canal</label><select name="canal">{% for k in listas.lista_canais %}<option>{{ k }}</option>{% endfor %}</select></div>
+    <div><label>Mensalidade do app (R$)</label><input name="mensalidade" type="number" step="0.01" value="0"></div>
+    <div><label>Anúncios (R$)</label><input name="anuncios" type="number" step="0.01" value="0"></div>
+    <div><label>Comissões (R$)</label><input name="comissoes" type="number" step="0.01" value="0"></div>
+    <div><label>Outros (R$)</label><input name="outros" type="number" step="0.01" value="0"></div>
+    <div><label>Leads</label><input name="leads" type="number" value="0"></div>
+    <div><label>Agendamentos</label><input name="agendamentos" type="number" value="0"></div>
+    <div><label>Clientes</label><input name="clientes" type="number" value="0"></div>
+    <div class="largo"><label>Observação</label><input name="observacao"></div>
+    <div class="largo linha"><button>Salvar</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
+  </form>
+</dialog>
+{% endblock %}

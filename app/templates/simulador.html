@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1>Simulador de ofertas</h1>
+<div class="grid c2">
+  <div class="card">
+    <form method="get" class="form-grid">
+      <div class="largo"><label>Plano</label><select name="plano" required><option value="">Escolha</option>{% for p in planos %}<option value="{{ p.valor }}" {{ 'selected' if p.valor == f.plano }}>{{ p.rotulo }}</option>{% endfor %}</select></div>
+      <div><label>Local</label><select name="local">{% for l in listas.lista_locais %}<option {{ 'selected' if l == f.local }}>{{ l }}</option>{% endfor %}</select></div>
+      <div><label>Forma de pagamento</label><select name="forma">{% for fp in listas.lista_formas_pagamento %}<option {{ 'selected' if fp == f.forma }}>{{ fp }}</option>{% endfor %}</select></div>
+      <div><label>Nº de pessoas (CIA: máx. 3)</label><select name="pessoas">{% for n in [1,2,3,4] %}<option {{ 'selected' if n == f.pessoas }}>{{ n }}</option>{% endfor %}</select></div>
+      <div><label>Dia</label><select name="dia"><option value="0">Qualquer</option>{% for d in range(1,7) %}<option value="{{ d }}" {{ 'selected' if d == f.dia }}>{{ d|dia }}</option>{% endfor %}</select></div>
+      <div><label>Horário</label><select name="hora"><option value="0">Qualquer</option>{% for h in horas %}<option value="{{ h }}" {{ 'selected' if h == f.hora }}>{{ '%02d'|format(h) }}h</option>{% endfor %}</select></div>
+      <div><label>Desconto extra (%)</label><input name="desconto" type="number" step="0.5" min="0" max="99" value="{{ f.desconto }}"></div>
+      <input type="hidden" name="lead_id" value="{{ f.lead_id }}"><input type="hidden" name="cliente_id" value="{{ f.cliente_id }}">
+      <div class="largo"><button>Calcular</button></div>
+    </form>
+  </div>
+
+  {% if erro_sim %}<div class="card"><div class="aviso erro">{{ erro_sim }}</div></div>{% endif %}
+  {% if r %}
+  <div class="card borda-{{ r.margem|cor }}">
+    <h2>Resultado {% if r.abaixo_margem %}<span class="tag vermelho">abaixo da margem mínima ({{ r.margem_minima|pct }})</span>{% else %}<span class="tag verde">dentro da margem</span>{% endif %}</h2>
+    <div class="grid c3">
+      <div class="kpi"><div class="rotulo">Preço total</div><div class="valor">{{ r.preco_total|moeda }}</div><div class="meta">cheio {{ r.preco_cheio|moeda }} · horário x{{ r.mult|num(2) }}</div></div>
+      <div class="kpi"><div class="rotulo">Por pessoa</div><div class="valor">{{ r.preco_pessoa|moeda }}</div><div class="meta">{{ f.pessoas }} pessoa(s)</div></div>
+      <div class="kpi {{ r.margem|cor }}"><div class="rotulo">Margem</div><div class="valor">{{ r.margem|pct(1) }}</div><div class="meta">lucro {{ r.lucro|moeda }}</div></div>
+      <div class="kpi"><div class="rotulo">Lucro por hora</div><div class="valor">{{ r.lucro_hora|moeda }}</div><div class="meta">{{ r.sessoes|num(0) }} sessões</div></div>
+      <div class="kpi"><div class="rotulo">Preço mínimo</div><div class="valor">{{ r.preco_minimo|moeda }}</div><div class="meta">para margem {{ r.margem_minima|pct }}</div></div>
+      <div class="kpi"><div class="rotulo">Desconto máximo</div><div class="valor">{{ r.desconto_maximo|pct(1) }}</div><div class="meta">custo {{ r.custo_total|moeda }} · taxas {{ r.impostos_taxas|moeda }}</div></div>
+    </div>
+    <form method="post" action="/propostas" class="form-grid mt">
+      {% for k in ['plano','local','forma','pessoas','dia','hora','desconto'] %}<input type="hidden" name="{{ k }}" value="{{ f[k] }}">{% endfor %}
+      <div><label>Lead</label><select name="lead_id"><option value="">—</option>{% for l in leads %}<option value="{{ l.id }}" {{ 'selected' if l.id == f.lead_id }}>{{ l.nome }}</option>{% endfor %}</select></div>
+      <div><label>Cliente</label><select name="cliente_id"><option value="">—</option>{% for cl in clientes %}<option value="{{ cl.id }}" {{ 'selected' if cl.id == f.cliente_id }}>{{ cl.nome }}</option>{% endfor %}</select></div>
+      <div class="largo"><label>Observações</label><input name="observacoes"></div>
+      {% if r.abaixo_margem %}<div class="largo"><label style="display:flex;gap:6px;align-items:center;color:#8f1d17"><input type="checkbox" name="confirmar" value="1"> Salvar mesmo assim (abaixo da margem mínima)</label></div>{% endif %}
+      <div class="largo"><button>Salvar proposta</button></div>
+    </form>
+  </div>
+  {% endif %}
+</div>
+
+<h2 class="mt">Propostas recentes</h2>
+<div class="rolagem"><table>
+  <tr><th>#</th><th>Data</th><th>Para</th><th>Plano</th><th>Local</th><th class="num">Pessoas</th><th class="num">Preço</th><th class="num">Margem</th><th class="num">Lucro/h</th><th>Status</th><th></th></tr>
+  {% for p in propostas %}
+  <tr class="{{ p.margem|cor }}"><td>{{ p.id }}</td><td>{{ p.data|data }}</td><td>{% if p.cliente_id %}<a href="/clientes/{{ p.cliente_id }}">{{ p.cliente_nome }}</a>{% else %}{{ p.lead_nome or '—' }}{% endif %}</td>
+    <td>{{ p.tipo_servico }} {{ p.qtd_aulas or '' }}{% if p.freq_semanal %}{{ p.freq_semanal }}x/sem{% endif %}{% if p.desconto %} · -{{ p.desconto|pct }}{% endif %}</td><td>{{ p.local }}{% if p.dia %} · {{ p.dia|dia_curto }} {{ p.hora }}h{% endif %}</td>
+    <td class="num">{{ p.pessoas }}</td><td class="num">{{ p.preco_total|moeda }}</td><td class="num">{{ p.margem|pct(1) }}</td><td class="num">{{ p.lucro_hora|moeda }}</td>
+    <td><form method="post" action="/propostas/{{ p.id }}/status" class="inline"><select name="status" onchange="this.form.submit()" style="width:auto;padding:3px">{% for s in ['rascunho','enviada','aceita','recusada'] %}<option {{ 'selected' if s == p.status }}>{{ s }}</option>{% endfor %}</select></form></td>
+    <td><form method="post" action="/propostas/{{ p.id }}/excluir" class="inline" data-confirmar="Enviar a proposta #{{ p.id }} para a lixeira?"><button class="claro pequeno">x</button></form></td></tr>
+  {% else %}<tr><td colspan="11" class="muted">Nenhuma proposta salva.</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

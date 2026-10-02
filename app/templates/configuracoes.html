@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block titulo %}Configurações — VFITCOACH CRM{% endblock %}
+{% block conteudo %}
+<h1>Configurações</h1>
+
+<div class="card">
+  <div class="linha topo">
+    <div>
+      <h2>Planilha Contabilidade.xlsx</h2>
+      <div class="muted">{{ planilha }} — {{ 'encontrada' if planilha_existe else 'NÃO encontrada' }}. A planilha nunca é alterada; só lida.</div>
+      {% if ultima %}<div class="muted">Última importação: {{ ultima.data }}</div>{% endif %}
+    </div>
+    <form method="post" action="/importar" data-confirmar="Importar da planilha agora? Um backup é feito antes.">
+      <button type="submit" {{ '' if planilha_existe else 'disabled' }}>Importar da planilha</button>
+    </form>
+  </div>
+</div>
+
+<form method="post" action="/configuracoes" class="mt">
+  <div class="grid c2">
+    {% for g in grupos %}
+    <div class="card">
+      <h2>{{ g.titulo }}</h2>
+      {% for it in g.itens %}
+      <div class="campo linha">
+        <label style="flex:1;margin:0">{{ it.chave }}</label>
+        <input type="hidden" name="f_{{ it.id }}" value="{{ g.fmt }}">
+        <input name="p_{{ it.id }}" style="width:120px" value="{{ ((it.valor * 100)|round(2)) if g.fmt == 'pct' else (it.valor|round(4)) }}">
+        <span class="muted" style="width:18px">{{ '%' if g.fmt == 'pct' }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+  <div class="mt"><button type="submit">Salvar parâmetros</button></div>
+</form>
+
+<h2 class="mt">Listas</h2>
+<div class="grid c4">
+  {% for grupo, titulo, itens in listas_cfg %}
+  <div class="card">
+    <h3>{{ titulo }}</h3>
+    {% for it in itens %}
+    <div class="linha" style="justify-content:space-between;padding:3px 0">
+      <span>{{ it.chave }}</span>
+      <form method="post" action="/configuracoes/lista/{{ it.id }}/remover" class="inline" data-confirmar="Remover '{{ it.chave }}' da lista?"><button class="claro pequeno">x</button></form>
+    </div>
+    {% endfor %}
+    <form method="post" action="/configuracoes/lista" class="linha mt">
+      <input type="hidden" name="grupo" value="{{ grupo }}">
+      <input name="nome" placeholder="Novo item" required style="flex:1">
+      <button class="pequeno">Adicionar</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+
+<h2 class="mt">Preços base ({{ precos|length }})</h2>
+<div class="card">
+  <form method="post" action="/configuracoes/preco" class="form-grid">
+    <div><label>Tipo de serviço</label><select name="tipo_servico">{% for t in listas.lista_tipos_servico %}<option>{{ t }}</option>{% endfor %}</select></div>
+    <div><label>Local</label><select name="local">{% for l in listas.lista_locais %}<option>{{ l }}</option>{% endfor %}</select></div>
+    <div><label>Forma de pagamento</label><select name="forma_pagamento">{% for f in listas.lista_formas_pagamento %}<option>{{ f }}</option>{% endfor %}</select></div>
+    <div><label>Qtd aulas (pacote)</label><input name="qtd_aulas" type="number" value="0"></div>
+    <div><label>Freq. semanal (mensalidade)</label><input name="freq_semanal" type="number" value="0"></div>
+    <div><label>Sessões/mês</label><input name="sessoes_mes" type="number" step="0.01" value="0"></div>
+    <div><label>Preço base (R$)</label><input name="preco_base" type="number" step="0.01" required></div>
+    <div><label>Custo operacional (R$)</label><input name="custo_operacional" type="number" step="0.01" value="0"></div>
+    <div><label>Mão de obra (R$)</label><input name="mao_obra" type="number" step="0.01" value="0"></div>
+    <div style="align-self:end"><button>Salvar preço</button></div>
+  </form>
+  <details class="mt"><summary class="muted">Ver todos os preços base</summary>
+  <div class="rolagem mt"><table>
+    <tr><th>Tipo</th><th>Local</th><th>Pagamento</th><th class="num">Aulas</th><th class="num">x/sem</th><th class="num">Sessões</th><th class="num">Preço</th><th class="num">Custo op.</th><th class="num">Mão de obra</th><th>Origem</th></tr>
+    {% for p in precos %}
+    <tr><td>{{ p.tipo_servico }}</td><td>{{ p.local }}</td><td>{{ p.forma_pagamento }}</td><td class="num">{{ p.qtd_aulas or '' }}</td><td class="num">{{ p.freq_semanal or '' }}</td>
+      <td class="num">{{ p.sessoes_mes|num(0) }}</td><td class="num">{{ p.preco_base|moeda }}</td><td class="num">{{ p.custo_operacional|moeda }}</td><td class="num">{{ p.mao_obra|moeda }}</td><td class="muted">{{ p.origem }}</td></tr>
+    {% endfor %}
+  </table></div></details>
+</div>
+{% endblock %}
