@@ -1,0 +1,9 @@
+# Fim de linha LF no repositório, mesmo editando no Windows (evita diffs inflados)
+*.py   text eol=lf
+*.html text eol=lf
+*.css  text eol=lf
+*.js   text eol=lf
+*.sql  text eol=lf
+*.md   text eol=lf
+*.json text eol=lf
+*.bat  text eol=crlf
