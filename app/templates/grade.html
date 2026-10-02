@@ -4,7 +4,8 @@
   <h1 style="margin:0">Grade semanal — {{ local }} ({{ tipo }})</h1>
   <form method="get" class="linha">
     <select name="local" onchange="this.form.submit()">{% for l in locais %}<option {{ 'selected' if l == local }}>{{ l }}</option>{% endfor %}</select>
-    <select name="tipo" onchange="this.form.submit()"><option {{ 'selected' if tipo == 'Pacotes' }}>Pacotes</option><option {{ 'selected' if tipo == 'Mensalidades' }}>Mensalidades</option></select>
+    <select name="tipo" onchange="if (this.form.ref) this.form.ref.disabled = true; this.form.submit()"><option {{ 'selected' if tipo == 'Pacotes' }}>Pacotes</option><option {{ 'selected' if tipo == 'Mensalidades' }}>Mensalidades</option></select>
+    {% if refs %}<select name="ref" onchange="this.form.submit()" aria-label="Plano de referência">{% for r in refs %}<option value="{{ r|int }}" {{ 'selected' if r == ref_atual }}>{{ r|int }}{{ 'x/semana' if tipo == 'Mensalidades' else ' aulas' }}</option>{% endfor %}</select>{% endif %}
     <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" name="vale" value="1" {{ 'checked' if vale }} onchange="this.form.submit()"> Só horários de vale</label>
   </form>
 </div>
@@ -47,7 +48,7 @@
 <dialog id="dlg-slot">
   <h2 data-titulo>Horário</h2>
   <form method="post" action="/grade/slot">
-    <input type="hidden" name="tipo" value="{{ tipo }}"><input type="hidden" name="local" value="{{ local }}">
+    <input type="hidden" name="tipo" value="{{ tipo }}"><input type="hidden" name="local" value="{{ local }}"><input type="hidden" name="ref" value="{{ ref_atual|int if ref_atual else 0 }}">
     <input type="hidden" name="dia"><input type="hidden" name="hora">
     <div class="campo"><label>Situação</label><select name="status"><option value="livre">Livre</option><option value="ocupado">Ocupado</option><option value="indisponivel">Indisponível</option></select></div>
     <div class="campo"><label>Cliente (se ocupado)</label><select name="cliente_id"><option value="">—</option>{% for cl in clientes %}<option value="{{ cl.id }}">{{ cl.nome }}</option>{% endfor %}</select></div>

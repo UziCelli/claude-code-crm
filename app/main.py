@@ -514,17 +514,20 @@ def lead_excluir(lid: int, con=Depends(get_db)):
 # =====================================================================
 # 3. GRADE DE HORÁRIOS
 # =====================================================================
-def plano_referencia(con, tipo_calculo, local):
+def plano_referencia(con, tipo_calculo, local, ref=0):
+    # ref = vezes por semana (Mensalidades) ou nº de aulas (Pacotes); 0 = padrão 2x/sem ou 8 aulas
     if tipo_calculo == "Mensalidades":
-        return con.execute("SELECT * FROM precos_base WHERE tipo_servico='Mensalidade' AND local=? AND forma_pagamento='PIX' ORDER BY abs(freq_semanal-2) LIMIT 1", (local,)).fetchone()
-    return con.execute("SELECT * FROM precos_base WHERE tipo_servico='Pacote de Aulas' AND local=? AND forma_pagamento='PIX' ORDER BY abs(qtd_aulas-8) LIMIT 1", (local,)).fetchone()
+        return con.execute("SELECT * FROM precos_base WHERE tipo_servico='Mensalidade' AND local=? AND forma_pagamento='PIX' ORDER BY abs(freq_semanal-?) LIMIT 1", (local, ref or 2)).fetchone()
+    return con.execute("SELECT * FROM precos_base WHERE tipo_servico='Pacote de Aulas' AND local=? AND forma_pagamento='PIX' ORDER BY abs(qtd_aulas-?) LIMIT 1", (local, ref or 8)).fetchone()
 
 
 @app.get("/grade", response_class=HTMLResponse)
-def grade(request: Request, tipo: str = "Pacotes", local: str = "CIA", vale: int = 0, con=Depends(get_db)):
+def grade(request: Request, tipo: str = "Pacotes", local: str = "CIA", vale: int = 0, ref: int = 0, con=Depends(get_db)):
     slots = con.execute("SELECT * FROM grade_slots WHERE tipo_calculo=? AND local=? AND dia BETWEEN 1 AND 6", (tipo, local)).fetchall()
     p = precos.carregar_parametros(con)
-    base = plano_referencia(con, tipo, local)
+    base = plano_referencia(con, tipo, local, ref)
+    col, servico = ("freq_semanal", "Mensalidade") if tipo == "Mensalidades" else ("qtd_aulas", "Pacote de Aulas")
+    refs = [r[0] for r in con.execute(f"SELECT DISTINCT {col} FROM precos_base WHERE tipo_servico=? AND local=? AND forma_pagamento='PIX' AND {col} IS NOT NULL ORDER BY 1", (servico, local))]
     celulas = {}
     for s in slots:
         cel = dict(s)
@@ -543,12 +546,12 @@ def grade(request: Request, tipo: str = "Pacotes", local: str = "CIA", vale: int
               "ocupados": sum(1 for c in celulas.values() if c["status"] == "ocupado"),
               "vale": sum(1 for c in celulas.values() if c["status"] == "livre" and (c["multiplicador"] or 1) < 1)}
     return render(request, "grade.html", con, celulas=celulas, tipo=tipo, local=local, vale=vale, locais=locais,
-                  horas=range(5, 24), clientes=clientes_, base=base, resumo=resumo)
+                  horas=range(5, 24), clientes=clientes_, base=base, resumo=resumo, refs=refs, ref_atual=base[col] if base else None)
 
 
 @app.post("/grade/slot")
 def grade_slot(tipo: str = Form(...), local: str = Form(...), dia: int = Form(...), hora: int = Form(...), status: str = Form(...),
-               cliente_id: str = Form(""), multiplicador: str = Form("1"), so_este: int = Form(0), con=Depends(get_db)):
+               cliente_id: str = Form(""), multiplicador: str = Form("1"), so_este: int = Form(0), ref: int = Form(0), con=Depends(get_db)):
     cid = int(cliente_id) if cliente_id else None
     nome = con.execute("SELECT nome FROM clientes WHERE id=?", (cid,)).fetchone()["nome"] if cid else None
     mult = _num_br(multiplicador) or 1.0
@@ -560,7 +563,7 @@ def grade_slot(tipo: str = Form(...), local: str = Form(...), dia: int = Form(..
                            status=excluded.status, cliente_id=excluded.cliente_id, cliente_nome=excluded.cliente_nome,
                            multiplicador=excluded.multiplicador""",
                         (t, dia, local, hora, status, cid if status == "ocupado" else None, nome if status == "ocupado" else None, mult))
-    return voltar(f"/grade?tipo={tipo}&local={local}", msg=f"{DIAS_CURTO[dia]} {hora:02d}h atualizado.")
+    return voltar(f"/grade?tipo={tipo}&local={local}&ref={ref}", msg=f"{DIAS_CURTO[dia]} {hora:02d}h atualizado.")
 
 
 # =====================================================================
