@@ -514,12 +514,12 @@ def grade(request: Request, tipo: str = "Pacotes", local: str = "CIA", vale: int
     celulas = {}
     for s in slots:
         cel = dict(s)
-        cel["preco_aula"] = cel["margem"] = None
+        cel["preco_aula"] = cel["margem"] = cel["preco_total"] = cel["lucro"] = None
         cel["apagado"] = False
         if s["status"] == "livre" and base:
             r = precos.calcular(dict(base), p, mult_horario=s["multiplicador"] or 1)
             cel["preco_aula"] = r["preco_total"] / (base["sessoes_mes"] or 1)
-            cel["margem"] = r["margem"]
+            cel["margem"], cel["preco_total"], cel["lucro"] = r["margem"], r["preco_total"], r["lucro"]
         if vale and not (s["status"] == "livre" and (s["multiplicador"] or 1) < 1):
             cel["apagado"] = True
         celulas[(s["dia"], s["hora"])] = cel

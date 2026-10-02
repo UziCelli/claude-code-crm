@@ -29,7 +29,9 @@
         data-abrir="dlg-slot" data-titulo="{{ d|dia }} {{ '%02d'|format(h) }}h — {{ local }}" data-dia="{{ d }}" data-hora="{{ h }}" data-status="{{ c.status }}" data-cliente_id="{{ c.cliente_id or '' }}" data-multiplicador="{{ c.multiplicador }}">
         {% if c.status == 'ocupado' %}<span class="t">{{ c.cliente_nome or 'Ocupado' }}</span>
         {% elif c.status == 'indisponivel' %}<span class="t">Indisponível</span><br>{{ c.bloqueio or '' }}
-        {% else %}<span class="t">{{ c.preco_aula|moeda if c.preco_aula else 'Livre' }}</span><br>{{ c.margem|pct if c.margem is not none else '' }} · x{{ c.multiplicador|num(2) }}{% endif %}
+        {% elif c.preco_aula %}<span class="t">{{ c.preco_aula|moeda }}</span>
+        <small class="miudo">Total {{ c.preco_total|moeda }}<br>Lucro {{ c.lucro|moeda }} · {{ c.margem|pct }}{% if c.multiplicador != 1 %} · x{{ c.multiplicador|num(2) }}{% endif %}</small>
+        {% else %}<span class="t">Livre</span>{% endif %}
       </button>
       {% else %}
       <button class="cel indisponivel" data-abrir="dlg-slot" data-titulo="{{ d|dia }} {{ '%02d'|format(h) }}h — {{ local }}" data-dia="{{ d }}" data-hora="{{ h }}" data-status="livre" data-multiplicador="1">—</button>

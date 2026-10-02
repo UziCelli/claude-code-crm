@@ -208,3 +208,6 @@ dialog[open]::backdrop { opacity: 1; transition-duration: var(--dur-normal); }
 .seta { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .seta.verde { color: #14663a; }
 .seta.vermelho { color: var(--vermelho); }
+
+/* grade: preco total e lucro em letra miuda abaixo do preco por aula */
+.cel .miudo { display: block; font-size: .6875rem; line-height: 1.25; opacity: .85; margin-top: 2px; }
