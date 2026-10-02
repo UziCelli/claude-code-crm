@@ -13,6 +13,10 @@ MANTER_BACKUPS = 30
 
 # (grupo, chave, valor, valor_texto, ordem) — semeado só se ainda não existir (INSERT OR IGNORE)
 PARAMETROS_INICIAIS = [
+    ("msg_whatsapp", "renovacao", None, "Oi, {nome}! Sua renovação está marcada para {data}. Vamos combinar a continuação dos treinos? Victor | VFITCOACH", 1),
+    ("msg_whatsapp", "falta", None, "Oi, {nome}! Senti sua falta nos treinos (última aula em {data}). Está tudo bem? Vamos remarcar? Victor | VFITCOACH", 2),
+    ("msg_whatsapp", "boas_vindas", None, "Oi, {nome}! Seja bem-vindo(a) à VFITCOACH! Fico feliz em começar essa jornada com você. Victor | VFITCOACH", 3),
+    ("msg_whatsapp", "reativacao", None, "Oi, {nome}! Faz tempo que não nos falamos. Que tal retomarmos os treinos? Tenho novidades para você. Victor | VFITCOACH", 4),
     ("imposto", "DAS", 0.06, None, 1),
     ("taxa_pagamento", "PIX", 0.0, None, 1),
     ("taxa_pagamento", "Cartão 1x", 0.0581, None, 2),

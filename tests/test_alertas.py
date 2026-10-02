@@ -119,3 +119,14 @@ def test_alertas_ordem_e_agregacao(con_temp):
     assert sum("cadastro incompleto" in t for t in textos) == 1
     assert next(a for a in lista if "incompleto" in a["texto"])["texto"].startswith("3 alunos")
     assert [a["grav"] for a in lista] == sorted(a["grav"] for a in lista)
+
+
+def test_whatsapp(con_temp):
+    assert main.wa("(11) 98765-4321") == "https://wa.me/5511987654321?text="
+    assert main.wa("+55 11 98765-4321", "oi") == "https://wa.me/5511987654321?text=oi"
+    assert main.wa("5511987654321").startswith("https://wa.me/5511987654321?")
+    assert main.wa("", "oi") == "https://wa.me/?text=oi"
+    assert main.wa(None, "Olá & tchau").endswith("?text=Ol%C3%A1%20%26%20tchau")
+    modelos = db.parametros(con_temp, "msg_whatsapp")
+    assert set(modelos) == {"renovacao", "falta", "boas_vindas", "reativacao"}
+    assert main.preencher(modelos["falta"], "Ana", "01/01/2026").startswith("Oi, Ana!")

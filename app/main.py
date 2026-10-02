@@ -66,7 +66,20 @@ def num(v, casas=1):
 
 templates.env.filters.update(moeda=moeda, data=data_br, pct=pct, num=num, dia=lambda d: DIAS.get(d, ""),
                              dia_curto=lambda d: DIAS_CURTO.get(d, ""), cor=precos.cor_margem)
-templates.env.globals.update(ETAPAS=ETAPAS, DIAS=DIAS, hoje=lambda: dt.date.today().isoformat())
+def wa(tel, texto=""):
+    """Link do WhatsApp; sem telefone o WhatsApp pede para escolher o contato."""
+    n = "".join(ch for ch in str(tel or "") if ch.isdigit())
+    if len(n) in (10, 11):
+        n = "55" + n
+    return f"https://wa.me/{n}?text={quote(texto or '', safe='')}"
+
+
+def preencher(texto, nome="", data=""):
+    return (texto or "").replace("{nome}", nome or "").replace("{data}", data or "")
+
+
+templates.env.filters["preencher"] = preencher
+templates.env.globals.update(ETAPAS=ETAPAS, DIAS=DIAS, hoje=lambda: dt.date.today().isoformat(), wa=wa)
 
 
 def get_db():
@@ -79,7 +92,8 @@ def get_db():
 
 def render(request, nome, con, **ctx):
     ctx.update(request=request, msg=request.query_params.get("msg"), erro=request.query_params.get("erro"),
-               listas={k: db.lista(con, k) for k in db.LISTAS_INICIAIS}, alertas=alertas(con))
+               listas={k: db.lista(con, k) for k in db.LISTAS_INICIAIS}, alertas=alertas(con),
+               modelos=db.parametros(con, "msg_whatsapp"))
     return templates.TemplateResponse(request, nome, ctx)
 
 
@@ -145,8 +159,8 @@ def alertas(con):
     lim7 = (hoje + dt.timedelta(days=7)).isoformat()
     out = []
 
-    def add(cor, texto, url, tel=None, modelo=None):
-        out.append(dict(grav=GRAV[cor], cor=cor, texto=texto, url=url, tel=tel, modelo=modelo))
+    def add(cor, texto, url, tel=None, modelo=None, nome=None, data=None):
+        out.append(dict(grav=GRAV[cor], cor=cor, texto=texto, url=url, tel=tel, modelo=modelo, nome=nome, data=data))
 
     def s(n):
         return "s" if n > 1 else ""
@@ -156,7 +170,7 @@ def alertas(con):
         venceu = c["data_renovacao"] < h
         add("vermelho" if venceu else "amarelo",
             f"{c['nome']} — renovação {'venceu em' if venceu else 'em'} {data_br(c['data_renovacao'])}",
-            f"/clientes/{c['id']}", c["telefone"], "renovacao")
+            f"/clientes/{c['id']}", c["telefone"], "renovacao", c["nome"], data_br(c["data_renovacao"]))
     nunca = 0
     for c in con.execute("""SELECT c.id, c.nome, c.telefone, c.tipo_servico, MAX(e.data) AS ultima FROM clientes c
                             LEFT JOIN cliente_eventos e ON e.cliente_id=c.id AND e.tipo='aula' AND e.excluido_em IS NULL
@@ -166,7 +180,7 @@ def alertas(con):
         if c["ultima"] is None:
             nunca += 1
         elif c["ultima"] < corte:
-            add("vermelho", f"{c['nome']} — sem aula desde {data_br(c['ultima'])}", f"/clientes/{c['id']}", c["telefone"], "falta")
+            add("vermelho", f"{c['nome']} — sem aula desde {data_br(c['ultima'])}", f"/clientes/{c['id']}", c["telefone"], "falta", c["nome"], data_br(c["ultima"]))
     if nunca:
         add("amarelo", f"{nunca} aluno{s(nunca)} sem nenhuma aula registrada", "/clientes")
     for l in con.execute("""SELECT * FROM leads WHERE excluido_em IS NULL AND etapa NOT IN ('cliente','perdido')
@@ -806,7 +820,8 @@ def configuracoes(request: Request, con=Depends(get_db)):
                for k in db.LISTAS_INICIAIS]
     precos_ = con.execute("SELECT * FROM precos_base ORDER BY tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal").fetchall()
     ultima = con.execute("SELECT * FROM importacoes ORDER BY id DESC LIMIT 1").fetchone()
-    return render(request, "configuracoes.html", con, grupos=grupos, listas_cfg=listas_, precos=precos_, ultima=ultima,
+    msgs = con.execute("SELECT id, chave, valor_texto FROM parametros WHERE grupo='msg_whatsapp' ORDER BY ordem").fetchall()
+    return render(request, "configuracoes.html", con, grupos=grupos, msgs=msgs, listas_cfg=listas_, precos=precos_, ultima=ultima,
                   planilha=str(db.PLANILHA), planilha_existe=db.PLANILHA.exists())
 
 
@@ -820,6 +835,8 @@ async def configuracoes_salvar(request: Request, con=Depends(get_db)):
                 fmt = form.get(f"f_{pid}", "num")
                 val = _num_br(v)
                 con.execute("UPDATE parametros SET valor=? WHERE id=?", (val / 100 if fmt == "pct" else val, pid))
+            elif k.startswith("t_"):
+                con.execute("UPDATE parametros SET valor_texto=? WHERE id=? AND grupo='msg_whatsapp'", (v, int(k[2:])))
     return voltar("/configuracoes", msg="Parâmetros salvos.")
 
 

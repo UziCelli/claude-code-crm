@@ -32,6 +32,13 @@
     </div>
     {% endfor %}
   </div>
+  <div class="card mt">
+    <h2>Mensagens de WhatsApp</h2>
+    <div class="muted">Use {nome} e {data}.</div>
+    {% for m in msgs %}
+    <div class="campo"><label>{{ m.chave }}</label><textarea name="t_{{ m.id }}" rows="3">{{ m.valor_texto }}</textarea></div>
+    {% endfor %}
+  </div>
   <div class="mt"><button type="submit">Salvar parâmetros</button></div>
 </form>
 

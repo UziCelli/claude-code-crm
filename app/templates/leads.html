@@ -12,7 +12,7 @@
     <div class="lead {{ 'atrasado' if l.atrasado }} {{ 'parado' if l.parado }} {{ 'chegou' if destaque|string == l.id|string }} {{ 'cliente' if chave == 'cliente' and destaque|string == l.id|string }}">
       <div class="nome">{{ l.nome }}</div>
       <div class="muted">{{ l.canal_origem }}{% if l.interesse %} · {{ l.interesse }}{% endif %}</div>
-      {% if l.telefone %}<div class="muted"><a href="https://wa.me/55{{ l.telefone|replace(' ','')|replace('-','')|replace('(','')|replace(')','') }}" target="_blank">{{ l.telefone }}</a></div>{% endif %}
+      {% if l.telefone %}<div class="muted"><a href="{{ wa(l.telefone, (modelos.reativacao|preencher(l.nome)) if chave == 'perdido' else '') }}" target="_blank" rel="noopener">{{ l.telefone }}</a></div>{% endif %}
       {% if l.proxima_acao or l.data_proxima_acao %}<div style="margin-top:4px"><span class="tag {{ 'vermelho' if l.atrasado else 'azul' }}">{{ l.proxima_acao or 'Próxima ação' }} · {{ l.data_proxima_acao|data }}</span></div>{% endif %}
       {% if l.parado %}<div style="margin-top:4px"><span class="tag vermelho">parado há {{ l.dias }} dias</span></div>{% endif %}
       {% if l.motivo_perda %}<div class="muted">Motivo: {{ l.motivo_perda }}</div>{% endif %}

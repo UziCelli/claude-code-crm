@@ -1,5 +1,5 @@
 <ul class="lista-alertas">
   {% for a in alertas %}
-  <li class="{{ a.cor }}"><a href="{{ a.url }}">{{ a.texto }}</a></li>
+  <li class="{{ a.cor }}"><a href="{{ a.url }}">{{ a.texto }}</a>{% if a.modelo %} <a class="btn claro pequeno" href="{{ wa(a.tel, modelos[a.modelo]|preencher(a.nome, a.data)) }}" target="_blank" rel="noopener">WhatsApp</a>{% endif %}</li>
   {% endfor %}
 </ul>

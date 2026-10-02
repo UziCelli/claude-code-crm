@@ -7,6 +7,9 @@
     {% for s in ['ativo','pausado','inativo'] if s != c.status %}
     <form method="post" action="/clientes/{{ c.id }}/status" class="inline"><input type="hidden" name="status" value="{{ s }}"><button class="claro pequeno">Marcar {{ s }}</button></form>
     {% endfor %}
+    {% for k, t in [('renovacao','Renovação'),('falta','Falta'),('boas_vindas','Boas-vindas'),('reativacao','Reativação')] %}
+    <a class="btn claro pequeno" href="{{ wa(c.telefone, modelos[k]|preencher(c.nome, c.data_renovacao|data)) }}" target="_blank" rel="noopener">WhatsApp: {{ t }}</a>
+    {% endfor %}
     <a class="btn claro pequeno" href="/simulador?cliente_id={{ c.id }}&local={{ c.local or 'CIA' }}">Nova proposta</a>
     <form method="post" action="/clientes/{{ c.id }}/excluir" class="inline" data-confirmar="Enviar {{ c.nome }} para a lixeira?"><button class="perigo pequeno">Excluir</button></form>
   </div>
