@@ -22,11 +22,28 @@ Plano completo (pastas, modelo de dados, ordem dos módulos): `PLANO.md`.
 - [x] 7. Rotina semanal + lista de espera
 - [x] 8. Exportar xlsx/csv, backup/restaurar, lixeira, README
 
-## Pendências / próximos passos possíveis
-- Usuário ainda não viu as telas: pedir feedback visual (TDAH: cores, tamanho, texto).
-- OneDrive\Documentos recusa gravação nesta máquina; backups estão indo para `C:\Users\victo\OneDrive\VFITCOACH-CRM-backups`.
+## Reforma — Rodada 1 (concluída em 01/10/2026; git, tag `base` = antes da reforma)
+Plano completo em `C:\Users\victo\.claude\plans\a-gente-vai-come-ar-functional-thunder.md`. Mapas de referência em `docs/mapa-rodada1.md` e `docs/mapa-financeiro.md`.
+- [x] Git no projeto + `.gitignore`/`.gitattributes` (LF) + teste de fumaça de todas as telas (`tests/test_rotas.py`)
+- [x] Backup só local em `data\backups`; o CRM abre mesmo se o backup falhar; a restauração recusa arquivo corrompido ou vazio
+- [x] Visual: logo e favicon do site, fontes locais (funciona offline), paleta azul, padrão Impeccable (foco visível, estados, textos de lista vazia)
+- [x] Motion em CSS/JS puro: transição entre telas, botão "salvando…" (sem duplo envio), avisos, dialogs, destaque do card movido, momento lead→aluno; respeita "reduzir movimento"
+- [x] Leads: "parado há X dias" por etapa (prazos editáveis em Configurações)
+- [x] Painel: "O que precisa de você hoje" (8 tipos de alerta, ordenados) + setas ↑↓ vs mês anterior
+- [x] WhatsApp: mensagens prontas (renovação, falta, boas-vindas, reativação), editáveis em Configurações
+- [x] Grade: preço total e lucro em letra miúda abaixo do preço por aula
+- 29 testes passando (`.venv\Scripts\python.exe -m pytest tests`)
+
+## Próximos passos
+- **Usuário:** completar telefone e data de renovação dos alunos (o painel mostra "cadastro incompleto").
+- **Rodada 2 — financeiro PF + PJ** (substitui a planilha / Microsoft 365, que vence em mais de 3 meses):
+  - livro-caixa e contas a pagar recorrentes, com cartões;
+  - mensalidades: previsto × recebido por aluno;
+  - painel financeiro: receita real, custos, lucro, ponto de equilíbrio, DAS, pró-labore e INSS;
+  - migração única de todo o histórico da planilha, mostrando antes uma simulação para o usuário aprovar.
+- **Depois:** repositório privado no GitHub; publicar em `crm.vfitcoachapp.com` (Cloudflare Tunnel + Access); agente de IA (Sonnet 5.5) adiado.
 - Forma de pagamento dos clientes importados vem como "Mensal"/"Parcelado" (texto da planilha); o motor usa PIX como padrão nesses casos.
-- Gráfico do painel só ganha histórico após "Fechar o mês".
+- Multiagente: tarefas simples em Haiku, implementação em Sonnet 5.5, modelo principal só para revisão.
 
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.
