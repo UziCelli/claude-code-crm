@@ -27,7 +27,10 @@ SEMANAS_MES = 4.33
 @asynccontextmanager
 async def lifespan(app):
     db.iniciar_banco()
-    db.backup_diario()
+    try:
+        db.backup_diario()
+    except Exception as e:  # o CRM abre mesmo se o backup falhar
+        print(f"AVISO: backup diário falhou ({e}). Faça um backup manual em Dados.")
     yield
 
 
@@ -815,12 +818,21 @@ def dados(request: Request, con=Depends(get_db)):
         for r in con.execute(f"SELECT id, {campo} AS nome, excluido_em FROM {tabela} WHERE excluido_em >= ? ORDER BY excluido_em DESC", (lim,)):
             lixo.append({"tabela": tabela, "rotulo": rotulo, "id": r["id"], "nome": r["nome"], "quando": r["excluido_em"]})
     lixo.sort(key=lambda x: x["quando"], reverse=True)
-    return render(request, "dados.html", con, backups=db.listar_backups(), lixo=lixo, pasta_backup=str(db.BACKUP_DIR), banco=str(db.DB_PATH))
+    backups, erro_backup = [], None
+    try:
+        backups = db.listar_backups()
+    except OSError as e:  # sem redirect para /dados (viraria laço): mostra o erro na própria tela
+        erro_backup = f"Não foi possível ler a pasta de backups: {e}"
+    return render(request, "dados.html", con, backups=backups, lixo=lixo, pasta_backup=str(db.BACKUP_DIR),
+                  banco=str(db.DB_PATH), erro_backup=erro_backup)
 
 
 @app.post("/backup")
 def backup_agora():
-    f = db.fazer_backup()
+    try:
+        f = db.fazer_backup()
+    except Exception as e:
+        return voltar("/dados", erro=f"O backup falhou: {e}")
     return voltar("/dados", msg=f"Backup criado: {f.name}")
 
 
@@ -832,6 +844,8 @@ def restaurar(nome: str = Form(...), confirmar: str = Form("")):
         seg = db.restaurar_backup(nome)
     except FileNotFoundError:
         return voltar("/dados", erro="Backup não encontrado.")
+    except ValueError as e:
+        return voltar("/dados", erro=str(e))
     return voltar("/dados", msg=f"Banco restaurado de {nome}. O banco anterior foi guardado como {seg.name}.")
 
 

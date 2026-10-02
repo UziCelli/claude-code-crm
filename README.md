@@ -19,14 +19,15 @@ Pode importar de novo sempre que atualizar a planilha: nada duplica e os campos 
 
 ## Onde ficam os dados
 - Banco: `C:\Users\victo\VFITCOACH-CRM\data\crm.db` (fora do OneDrive, de propósito).
-- Backups: `C:\Users\victo\OneDrive\Documentos\VFITCOACH-CRM-backups\`. Se o OneDrive recusar essa pasta
-  (acontece quando "Documentos" está como somente leitura), o CRM usa `C:\Users\victo\OneDrive\VFITCOACH-CRM-backups\`.
-  A tela **Dados** mostra a pasta em uso.
-- Um backup automático é feito ao abrir o CRM (1 por dia) e antes de cada importação; ficam os 30 mais recentes.
+- Backups: `C:\Users\victo\VFITCOACH-CRM\data\backups\` (só neste computador, fora do OneDrive e do git).
+  A tela **Dados** mostra a pasta em uso. Os backups antigos em `OneDrive\Documentos\VFITCOACH-CRM-backups\`
+  continuam lá; para restaurar um deles, copie o `.db` para `data\backups\`.
+- Um backup automático é feito ao abrir o CRM (1 por dia) e antes de cada importação; ficam os 30 mais recentes de cada tipo.
+  Se o backup falhar, o CRM abre mesmo assim e mostra um aviso na janela do servidor.
 
 ## Backup e restauração
 - **Dados › Fazer backup agora**: cria uma cópia imediata.
-- **Dados › Restaurar backup**: escolha o arquivo, digite RESTAURAR e confirme. O banco atual é guardado antes como `antes-restaurar-*.db`.
+- **Dados › Restaurar backup**: escolha o arquivo, digite RESTAURAR e confirme. O banco atual é guardado antes como `antes-restaurar-*.db`. Arquivo corrompido é recusado e nada muda.
 - **Lixeira**: nada é apagado de verdade. Registros excluídos ficam na lixeira e podem ser restaurados em Dados.
 
 ## Telas

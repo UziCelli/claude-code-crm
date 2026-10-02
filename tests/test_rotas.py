@@ -11,8 +11,7 @@ TELAS = ["/", "/clientes", "/clientes/novo", "/leads", "/grade", "/simulador", "
 @pytest.fixture
 def cliente_http(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "crm.db")
-    for nome in ("BACKUP_DIR", "BACKUP_DIR_RESERVA"):  # nunca tocar nos backups reais
-        monkeypatch.setattr(db, nome, tmp_path / "backups", raising=False)
+    monkeypatch.setattr(db, "BACKUP_DIR", tmp_path / "backups")  # nunca tocar nos backups reais
     db.iniciar_banco()
     con = db.conectar()
     with con:

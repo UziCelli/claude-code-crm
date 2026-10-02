@@ -7,8 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = ROOT / "data" / "crm.db"
 SCHEMA = ROOT / "app" / "schema.sql"
-BACKUP_DIR = Path(r"C:\Users\victo\OneDrive\Documentos\VFITCOACH-CRM-backups")
-BACKUP_DIR_RESERVA = Path(r"C:\Users\victo\OneDrive\VFITCOACH-CRM-backups")   # usada se Documentos recusar gravação
+BACKUP_DIR = ROOT / "data" / "backups"   # local e fora do git (data/ é ignorado)
 PLANILHA = Path(r"C:\Users\victo\OneDrive\Documentos\Contabilidade.xlsx")
 MANTER_BACKUPS = 30
 
@@ -128,16 +127,9 @@ def lista(con: sqlite3.Connection, nome: str) -> list[str]:
 
 # ---------- backup ----------
 def pasta_backup() -> Path:
-    """Pasta de backups: a do OneDrive\\Documentos; se o OneDrive recusar (pasta somente leitura), a reserva."""
-    global BACKUP_DIR
-    for pasta in (BACKUP_DIR, BACKUP_DIR_RESERVA):
-        try:
-            pasta.mkdir(parents=True, exist_ok=True)
-            BACKUP_DIR = pasta
-            return pasta
-        except OSError:
-            continue
-    raise OSError("Não foi possível criar a pasta de backups no OneDrive")
+    """Pasta local de backups (criada se não existir)."""
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    return BACKUP_DIR
 
 
 def fazer_backup(prefixo: str = "crm") -> Path:
@@ -150,7 +142,7 @@ def fazer_backup(prefixo: str = "crm") -> Path:
         origem.backup(copia)
     copia.close()
     origem.close()
-    for antigo in sorted(pasta.glob("crm-*.db"))[:-MANTER_BACKUPS]:
+    for antigo in sorted(pasta.glob(f"{prefixo}-*.db"))[:-MANTER_BACKUPS]:
         antigo.unlink()
     return destino
 
@@ -176,6 +168,15 @@ def restaurar_backup(nome: str) -> Path:
     origem = pasta_backup() / Path(nome).name
     if not origem.exists() or origem.suffix != ".db":
         raise FileNotFoundError(nome)
+    teste = sqlite3.connect(origem.as_uri() + "?mode=ro", uri=True)
+    try:
+        ok = teste.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    except sqlite3.DatabaseError:
+        ok = False
+    finally:
+        teste.close()   # fecha antes do copy2 (Windows trava arquivo aberto)
+    if not ok:
+        raise ValueError(f"O arquivo {origem.name} está corrompido ou não é um banco do CRM. Nada foi alterado.")
     seguranca = fazer_backup("antes-restaurar")
     shutil.copy2(origem, DB_PATH)
     return seguranca
