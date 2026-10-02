@@ -203,3 +203,8 @@ dialog[open]::backdrop { opacity: 1; transition-duration: var(--dur-normal); }
   @keyframes aviso-aparece { from { opacity: 0; } }
   .chegou, .chegou.cliente { animation-duration: var(--dur-fast); }
 }
+/* painel "Hoje" e setas vs mês anterior */
+.card-hoje { border-color: var(--azul-f); background: var(--azul-f); }
+.seta { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.seta.verde { color: var(--verde); }
+.seta.vermelho { color: var(--vermelho); }

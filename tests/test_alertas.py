@@ -100,3 +100,22 @@ def test_post_etapa_cliente_redireciona_com_destaque(cliente_http):
     assert r.status_code == 303
     assert f"destaque={lid}" in r.headers["location"]
     assert "/leads" in r.headers["location"]
+
+
+def test_alertas_ordem_e_agregacao(con_temp):
+    """Renovação vencida vem antes da próxima; 3 alunos sem telefone = 1 linha agregada."""
+    hoje = dt.date.today()
+    with con_temp:
+        for nome, dias in [("Proxima", 3), ("Vencida", -2)]:
+            con_temp.execute("INSERT INTO clientes (nome, telefone, status, tipo_servico, data_renovacao) VALUES (?,?,?,?,?)",
+                             (nome, "11999990000", "ativo", "Consultoria Online", (hoje + dt.timedelta(days=dias)).isoformat()))
+        for i in range(3):
+            con_temp.execute("INSERT INTO clientes (nome, status, tipo_servico, data_renovacao) VALUES (?,?,?,?)",
+                             (f"Sem tel {i}", "ativo", "Consultoria Online", (hoje + dt.timedelta(days=60)).isoformat()))
+    lista = main.alertas(con_temp)
+    textos = [a["texto"] for a in lista]
+    assert textos.index(next(t for t in textos if "Vencida" in t)) < textos.index(next(t for t in textos if "Proxima" in t))
+    assert [a["cor"] for a in lista if "Vencida" in a["texto"]] == ["vermelho"]
+    assert sum("cadastro incompleto" in t for t in textos) == 1
+    assert next(a for a in lista if "incompleto" in a["texto"])["texto"].startswith("3 alunos")
+    assert [a["grav"] for a in lista] == sorted(a["grav"] for a in lista)

@@ -1,9 +1,12 @@
 {% extends "base.html" %}
 {% block conteudo %}
-{% macro kpi(rotulo, valor, meta1, meta2, cor, sufixo='') %}
+{% macro kpi(rotulo, valor, meta1, meta2, cor, sufixo='', atual=none, ant=none, menor_melhor=false) %}
 <div class="kpi {{ cor }}">
   <div class="rotulo">{{ rotulo }}</div>
   <div class="valor">{{ valor }}{{ sufixo }}</div>
+  {% if atual is not none and ant is not none and atual != ant %}
+  <div class="seta {{ 'verde' if (atual < ant) == menor_melhor else 'vermelho' }}">{{ '↑' if atual > ant else '↓' }} vs mês anterior</div>
+  {% endif %}
   <div class="meta">Meta dez/26: {{ meta1 }} · mar/27: {{ meta2 }}</div>
 </div>
 {% endmacro %}
@@ -15,24 +18,24 @@
   </div>
 </div>
 
-{% if alertas.renovacao or alertas.sem_aula or alertas.acoes %}
-<div class="card mt" style="border-color:#f1d98a;background:var(--amarelo-f)"><h3>Atenção hoje</h3>{% include "_alertas.html" %}</div>
+{% if alertas %}
+<div class="card mt card-hoje"><h3>O que precisa de você hoje</h3>{% include "_alertas.html" %}</div>
 {% endif %}
 
 <div class="grid c4 mt">
   {{ kpi('Clientes ativos', m.clientes_ativos, metas.clientes_dez26|int, metas.clientes_mar27|int,
-         'verde' if m.clientes_ativos >= metas.clientes_dez26 else ('amarelo' if m.clientes_ativos >= metas.clientes_dez26 * 0.7 else 'vermelho')) }}
+         'verde' if m.clientes_ativos >= metas.clientes_dez26 else ('amarelo' if m.clientes_ativos >= metas.clientes_dez26 * 0.7 else 'vermelho'), atual=m.clientes_ativos, ant=ant.clientes_ativos) }}
   {{ kpi('Horas ocupadas / mês', m.horas_ocupadas|num(0), metas.horas_dez26|int, metas.horas_mar27|int,
-         'verde' if m.horas_ocupadas >= metas.horas_dez26 else ('amarelo' if m.horas_ocupadas >= metas.horas_dez26 * 0.7 else 'vermelho'), ' de ' ~ metas.horas_vendaveis|int) }}
+         'verde' if m.horas_ocupadas >= metas.horas_dez26 else ('amarelo' if m.horas_ocupadas >= metas.horas_dez26 * 0.7 else 'vermelho'), ' de ' ~ metas.horas_vendaveis|int, atual=m.horas_ocupadas, ant=ant.horas_ocupadas) }}
   {{ kpi('Lucro médio por hora de aula', m.lucro_hora|moeda, metas.lucro_hora_dez26|moeda, metas.lucro_hora_mar27|moeda,
-         'verde' if m.lucro_hora >= metas.lucro_hora_dez26 else ('amarelo' if m.lucro_hora >= metas.lucro_hora_dez26 * 0.7 else 'vermelho')) }}
+         'verde' if m.lucro_hora >= metas.lucro_hora_dez26 else ('amarelo' if m.lucro_hora >= metas.lucro_hora_dez26 * 0.7 else 'vermelho'), atual=m.lucro_hora, ant=ant.lucro_hora) }}
   {{ kpi('Receita vinda de grupos', m.pct_receita_grupos|pct, metas.pct_grupos_dez26|pct, metas.pct_grupos_mar27|pct,
-         'verde' if m.pct_receita_grupos >= metas.pct_grupos_dez26 else ('amarelo' if m.pct_receita_grupos > 0 else 'vermelho')) }}
+         'verde' if m.pct_receita_grupos >= metas.pct_grupos_dez26 else ('amarelo' if m.pct_receita_grupos > 0 else 'vermelho'), atual=m.pct_receita_grupos, ant=ant.pct_receita_grupos) }}
   {{ kpi('Faturamento recorrente', m.faturamento_recorrente|moeda, metas.recorrente_dez26|moeda, metas.recorrente_mar27|moeda,
-         'verde' if m.faturamento_recorrente >= metas.recorrente_dez26 else ('amarelo' if m.faturamento_recorrente >= metas.recorrente_dez26 * 0.7 else 'vermelho')) }}
+         'verde' if m.faturamento_recorrente >= metas.recorrente_dez26 else ('amarelo' if m.faturamento_recorrente >= metas.recorrente_dez26 * 0.7 else 'vermelho'), atual=m.faturamento_recorrente, ant=ant.faturamento_recorrente) }}
   {{ kpi('Clientes perdidos no mês', m.clientes_perdidos, '≤ ' ~ metas.perdidos_max|int, '≤ ' ~ metas.perdidos_max|int,
-         'verde' if m.clientes_perdidos <= metas.perdidos_max else 'vermelho') }}
-  {{ kpi('Vendas com margem < 10%', m.vendas_abaixo_10, 0, 0, 'verde' if m.vendas_abaixo_10 == 0 else 'vermelho') }}
+         'verde' if m.clientes_perdidos <= metas.perdidos_max else 'vermelho', atual=m.clientes_perdidos, ant=ant.clientes_perdidos, menor_melhor=true) }}
+  {{ kpi('Vendas com margem < 10%', m.vendas_abaixo_10, 0, 0, 'verde' if m.vendas_abaixo_10 == 0 else 'vermelho', atual=m.vendas_abaixo_10, ant=ant.vendas_abaixo_10, menor_melhor=true) }}
   <div class="kpi">
     <div class="rotulo">Nível atual</div>
     <div class="nivel mt" style="margin-top:8px">

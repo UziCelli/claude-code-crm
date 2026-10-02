@@ -134,20 +134,61 @@ def dias_parado(con, lead, hoje: str) -> int | None:
 
 
 # ---------- alertas (topo de todas as telas) ----------
+GRAV = {"vermelho": 1, "amarelo": 2, "azul": 3}
+ROTINA_DIA = {0: "segunda_grade", 2: "quarta_leads", 4: "sexta_propostas"}
+
+
 def alertas(con):
+    """Lista única de {grav, cor, texto, url, tel, modelo}, mais grave primeiro."""
     hoje = dt.date.today()
-    lim7, lim14 = (hoje + dt.timedelta(days=7)).isoformat(), (hoje - dt.timedelta(days=14)).isoformat()
-    renov = con.execute("""SELECT id, nome, data_renovacao FROM clientes WHERE excluido_em IS NULL AND status='ativo'
-                           AND data_renovacao IS NOT NULL AND data_renovacao <= ? ORDER BY data_renovacao""", (lim7,)).fetchall()
-    sem_aula = con.execute("""SELECT c.id, c.nome, MAX(e.data) AS ultima FROM clientes c
-                              LEFT JOIN cliente_eventos e ON e.cliente_id=c.id AND e.tipo='aula' AND e.excluido_em IS NULL
-                              WHERE c.excluido_em IS NULL AND c.status='ativo' AND c.tipo_servico != 'Consultoria Online'
-                              AND COALESCE(c.data_inicio, substr(c.criado_em,1,10)) < ?
-                              GROUP BY c.id HAVING ultima IS NULL OR ultima < ? ORDER BY ultima""", (lim14, lim14)).fetchall()
-    acoes = con.execute("""SELECT id, nome, proxima_acao, data_proxima_acao FROM leads WHERE excluido_em IS NULL
-                           AND etapa NOT IN ('cliente','perdido') AND data_proxima_acao <= ? ORDER BY data_proxima_acao""",
-                        (hoje.isoformat(),)).fetchall()
-    return {"renovacao": renov, "sem_aula": sem_aula, "acoes": acoes}
+    h = hoje.isoformat()
+    lim7 = (hoje + dt.timedelta(days=7)).isoformat()
+    out = []
+
+    def add(cor, texto, url, tel=None, modelo=None):
+        out.append(dict(grav=GRAV[cor], cor=cor, texto=texto, url=url, tel=tel, modelo=modelo))
+
+    def s(n):
+        return "s" if n > 1 else ""
+
+    for c in con.execute("""SELECT id, nome, telefone, data_renovacao FROM clientes WHERE excluido_em IS NULL AND status='ativo'
+                            AND data_renovacao IS NOT NULL AND data_renovacao <= ? ORDER BY data_renovacao""", (lim7,)):
+        venceu = c["data_renovacao"] < h
+        add("vermelho" if venceu else "amarelo",
+            f"{c['nome']} — renovação {'venceu em' if venceu else 'em'} {data_br(c['data_renovacao'])}",
+            f"/clientes/{c['id']}", c["telefone"], "renovacao")
+    nunca = 0
+    for c in con.execute("""SELECT c.id, c.nome, c.telefone, c.tipo_servico, MAX(e.data) AS ultima FROM clientes c
+                            LEFT JOIN cliente_eventos e ON e.cliente_id=c.id AND e.tipo='aula' AND e.excluido_em IS NULL
+                            WHERE c.excluido_em IS NULL AND c.status='ativo' AND c.tipo_servico != 'Consultoria Online'
+                            GROUP BY c.id ORDER BY ultima"""):
+        corte = (hoje - dt.timedelta(days=35 if c["tipo_servico"] == "Consultoria Híbrida" else 14)).isoformat()
+        if c["ultima"] is None:
+            nunca += 1
+        elif c["ultima"] < corte:
+            add("vermelho", f"{c['nome']} — sem aula desde {data_br(c['ultima'])}", f"/clientes/{c['id']}", c["telefone"], "falta")
+    if nunca:
+        add("amarelo", f"{nunca} aluno{s(nunca)} sem nenhuma aula registrada", "/clientes")
+    for l in con.execute("""SELECT * FROM leads WHERE excluido_em IS NULL AND etapa NOT IN ('cliente','perdido')
+                            ORDER BY data_proxima_acao IS NULL, data_proxima_acao"""):
+        if l["data_proxima_acao"] and l["data_proxima_acao"] <= h:
+            add("vermelho" if l["data_proxima_acao"] < h else "azul",
+                f"{l['nome']} — {l['proxima_acao'] or 'próxima ação'} ({data_br(l['data_proxima_acao'])})", "/leads", l["telefone"])
+        elif d := dias_parado(con, l, h):
+            add("amarelo", f"{l['nome']} — lead parado há {d} dias", "/leads", l["telefone"])
+    item = "fim_mes" if (hoje + dt.timedelta(days=1)).day == 1 else ROTINA_DIA.get(hoje.weekday())
+    if item and not con.execute("SELECT 1 FROM rotina_itens WHERE semana=? AND item=? AND feito=1", (semana_atual(), item)).fetchone():
+        add("azul", "Rotina de hoje: " + dict(ROTINA)[item], "/rotina")
+    for c in con.execute("SELECT pergunta, prazo FROM campanha_checkpoints WHERE resposta='pendente' AND prazo <= ? ORDER BY prazo", (lim7,)):
+        add("vermelho" if c["prazo"] < h else "amarelo", f"Checkpoint de campanha ({data_br(c['prazo'])}): {c['pergunta']}", "/campanhas")
+    n = con.execute("SELECT COUNT(*) FROM propostas WHERE excluido_em IS NULL AND status='enviada'").fetchone()[0]
+    if n:
+        add("azul", f"{n} proposta{s(n)} enviada{s(n)} esperando resposta", "/propostas")
+    n = con.execute("""SELECT COUNT(*) FROM clientes WHERE excluido_em IS NULL AND status='ativo'
+                       AND (telefone IS NULL OR telefone='' OR data_renovacao IS NULL)""").fetchone()[0]
+    if n:
+        add("azul", f"{n} aluno{s(n)} ativo{s(n)} com cadastro incompleto (telefone ou renovação)", "/clientes")
+    return sorted(out, key=lambda a: a["grav"])  # estável: mantém a ordem das fontes dentro da gravidade
 
 
 # =====================================================================
@@ -222,19 +263,7 @@ def metricas_por_canal(con, mes):
     return out
 
 
-@app.get("/", response_class=HTMLResponse)
-def painel(request: Request, con=Depends(get_db)):
-    m = calcular_metricas(con)
-    metas = db.parametros(con, "metas")
-    historico = [dict(r) for r in con.execute("SELECT * FROM metricas_mensais ORDER BY mes")]
-    historico = [h for h in historico if h["mes"] != m["mes"]] + [m]
-    return render(request, "painel.html", con, m=m, metas=metas, canais=metricas_por_canal(con, m["mes"]),
-                  historico=historico[-12:], fases=fase_atual(con))
-
-
-@app.post("/painel/fechar-mes")
-def fechar_mes(con=Depends(get_db)):
-    m = calcular_metricas(con)
+def gravar_mes(con, m):
     with con:
         con.execute("""INSERT INTO metricas_mensais (mes, clientes_ativos, horas_ocupadas, lucro_hora, pct_receita_grupos,
                        faturamento_recorrente, clientes_perdidos, vendas_abaixo_10, nivel) VALUES
@@ -244,6 +273,28 @@ def fechar_mes(con=Depends(get_db)):
                        lucro_hora=excluded.lucro_hora, pct_receita_grupos=excluded.pct_receita_grupos,
                        faturamento_recorrente=excluded.faturamento_recorrente, clientes_perdidos=excluded.clientes_perdidos,
                        vendas_abaixo_10=excluded.vendas_abaixo_10, nivel=excluded.nivel, fechado_em=datetime('now','localtime')""", m)
+
+
+@app.get("/", response_class=HTMLResponse)
+def painel(request: Request, con=Depends(get_db)):
+    m = calcular_metricas(con)
+    metas = db.parametros(con, "metas")
+    ant_mes = (dt.date.fromisoformat(m["mes"] + "-01") - dt.timedelta(days=1)).strftime("%Y-%m")
+    if not con.execute("SELECT 1 FROM metricas_mensais WHERE mes=?", (ant_mes,)).fetchone():
+        # ponytail: foto do primeiro acesso no mês; use Fechar o mês para histórico exato
+        gravar_mes(con, calcular_metricas(con, ant_mes))
+    ant = con.execute("SELECT * FROM metricas_mensais WHERE mes=?", (ant_mes,)).fetchone()
+    historico = [dict(r) for r in con.execute("SELECT * FROM metricas_mensais ORDER BY mes")]
+    historico = [h for h in historico if h["mes"] != m["mes"]] + [m]
+    return render(request, "painel.html", con, m=m, ant=ant, metas=metas, canais=metricas_por_canal(con, m["mes"]),
+                  historico=historico[-12:], fases=fase_atual(con))
+
+
+@app.post("/painel/fechar-mes")
+def fechar_mes(con=Depends(get_db)):
+    m = calcular_metricas(con)
+    gravar_mes(con, m)
+    with con:
         con.execute("INSERT OR IGNORE INTO rotina_itens (semana, item) VALUES (?, 'fim_mes')", (semana_atual(),))
         con.execute("UPDATE rotina_itens SET feito=1, data_feito=date('now','localtime') WHERE semana=? AND item='fim_mes'", (semana_atual(),))
     return voltar("/", msg=f"Mês {m['mes'][5:]}/{m['mes'][:4]} fechado e guardado no histórico.")

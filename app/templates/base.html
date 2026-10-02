@@ -64,7 +64,7 @@
 <main>
   {% if msg %}<div class="aviso ok">{{ msg }}</div>{% endif %}
   {% if erro %}<div class="aviso erro">{{ erro }}</div>{% endif %}
-  {% set n_alertas = alertas.renovacao|length + alertas.sem_aula|length + alertas.acoes|length %}
+  {% set n_alertas = alertas|length %}
   {% if n_alertas and p != '/' %}
   <details class="alertas-topo">
     <summary>{{ n_alertas }} alerta{{ 's' if n_alertas > 1 }}</summary>

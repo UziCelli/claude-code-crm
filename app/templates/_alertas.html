@@ -1,11 +1,5 @@
 <ul class="lista-alertas">
-  {% for a in alertas.renovacao %}
-  <li class="amarelo"><a href="/clientes/{{ a.id }}">{{ a.nome }}</a> — renovação em {{ a.data_renovacao|data }}</li>
-  {% endfor %}
-  {% for a in alertas.sem_aula %}
-  <li class="vermelho"><a href="/clientes/{{ a.id }}">{{ a.nome }}</a> — sem aula registrada {% if a.ultima %}desde {{ a.ultima|data }}{% else %}(nenhuma aula lançada){% endif %}</li>
-  {% endfor %}
-  {% for a in alertas.acoes %}
-  <li class="azul"><a href="/leads">{{ a.nome }}</a> — {{ a.proxima_acao or 'próxima ação' }} ({{ a.data_proxima_acao|data }})</li>
+  {% for a in alertas %}
+  <li class="{{ a.cor }}"><a href="{{ a.url }}">{{ a.texto }}</a></li>
   {% endfor %}
 </ul>
