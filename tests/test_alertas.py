@@ -130,3 +130,15 @@ def test_whatsapp(con_temp):
     modelos = db.parametros(con_temp, "msg_whatsapp")
     assert set(modelos) == {"renovacao", "falta", "boas_vindas", "reativacao"}
     assert main.preencher(modelos["falta"], "Ana", "01/01/2026").startswith("Oi, Ana!")
+
+
+def test_alerta_contas_vencidas(con_temp):
+    """Conta pendente vencida gera um alerta vermelho para /financeiro; paga, não."""
+    ontem = (dt.date.today() - dt.timedelta(days=1)).isoformat()
+    with con_temp:
+        con_temp.execute("INSERT INTO lancamentos (escopo, tipo, data, valor, categoria) VALUES ('PJ','saida',?,100,'Outros')", (ontem,))
+    a = [x for x in main.alertas(con_temp) if x["url"] == "/financeiro"]
+    assert len(a) == 1 and a[0]["cor"] == "vermelho" and a[0]["texto"].startswith("1 conta vencida")
+    with con_temp:
+        con_temp.execute("UPDATE lancamentos SET pago_em=?", (ontem,))
+    assert not [x for x in main.alertas(con_temp) if x["url"] == "/financeiro"]

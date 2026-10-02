@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block titulo %}Mensalidades · VFITCOACH CRM{% endblock %}
+{% block conteudo %}
+<div class="linha topo">
+  <h1 style="margin:0">Mensalidades</h1>
+  <div class="linha"><a class="btn claro" href="/financeiro">Livro-caixa</a><a class="btn claro" href="/financeiro/painel?mes={{ mes }}">Painel financeiro</a></div>
+</div>
+<form class="linha" method="get">
+  <input type="month" name="mes" value="{{ mes }}" aria-label="Mês" style="width:auto" required>
+  <button class="claro">Ver mês</button>
+</form>
+
+<div class="grid c3 mt">
+  <div class="kpi"><div class="rotulo">Previsto</div><div class="valor">{{ previsto|moeda }}</div><div class="meta">Valor mensal dos alunos ativos</div></div>
+  <div class="kpi verde"><div class="rotulo">Recebido</div><div class="valor">{{ recebido|moeda }}</div><div class="meta">Entradas PJ já pagas no mês</div></div>
+  <div class="kpi {{ 'verde' if recebido >= previsto else 'amarelo' }}"><div class="rotulo">Falta receber</div><div class="valor">{{ [previsto - recebido, 0]|max|moeda }}</div></div>
+</div>
+
+<div class="card mt">
+  <table>
+    <thead><tr><th>Aluno</th><th class="num">Previsto</th><th class="num">Recebido</th><th>Situação</th><th></th></tr></thead>
+    <tbody>
+    {% for i in itens %}
+    <tr>
+      <td><a href="/clientes/{{ i.id }}">{{ i.nome }}</a></td>
+      <td class="num">{{ i.previsto|moeda }}</td>
+      <td class="num">{{ i.recebido|moeda }}</td>
+      <td><span class="tag {{ {'recebido': 'verde', 'parcial': 'amarelo', 'em aberto': 'vermelho'}[i.situacao] }}">{{ i.situacao }}</span></td>
+      <td>{% if i.situacao != 'recebido' %}<button class="verde pequeno" data-abrir="dlg-pgto" data-titulo="Registrar pagamento de {{ i.nome }}" data-cliente_id="{{ i.id }}" data-valor="{{ ('%.2f'|format([i.previsto - i.recebido, 0]|max))|replace('.', ',') }}" data-descricao="Mensalidade {{ mes[5:] }}/{{ mes[:4] }}" data-data="{{ hoje() if hoje()[:7] == mes else mes ~ '-01' }}">Registrar pagamento</button>{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">Nenhum aluno ativo com valor mensal. Preencha o valor mensal na ficha do aluno e ele aparece aqui.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<dialog id="dlg-pgto">
+  <h2 data-titulo>Registrar pagamento</h2>
+  <form method="post" action="/financeiro/lancamento">
+    <input type="hidden" name="escopo" value="PJ"><input type="hidden" name="tipo" value="entrada"><input type="hidden" name="cliente_id" value=""><input type="hidden" name="volta" value="{{ volta }}">
+    <div class="form-grid">
+      <div class="campo"><label>Data</label><input name="data" type="date" value="{{ hoje() }}" required></div>
+      <div class="campo"><label>Valor (R$)</label><input name="valor" inputmode="decimal" required></div>
+      <div class="campo largo"><label>Categoria</label><select name="categoria" required>{% for k in listas.lista_categorias_pj %}<option {{ 'selected' if k == 'Mensalidade (Aulas Presenciais)' }}>{{ k }}</option>{% endfor %}</select></div>
+      <div class="campo largo"><label>Descrição</label><input name="descricao"></div>
+      <div class="campo"><label>Conta</label><select name="conta"><option value="">—</option>{% for k in listas.lista_contas %}<option>{{ k }}</option>{% endfor %}</select></div>
+      <div class="campo"><label>Forma</label><select name="forma"><option value="">—</option>{% for k in listas.lista_formas_lancamento %}<option>{{ k }}</option>{% endfor %}</select></div>
+      <div class="campo largo"><label>Pago em (deixe vazio se ainda não caiu)</label><input name="pago_em" type="date" value="{{ hoje() }}"></div>
+    </div>
+    <div class="linha"><button class="verde">Salvar</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
+  </form>
+</dialog>
+{% endblock %}

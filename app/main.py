@@ -2,7 +2,9 @@
 import csv
 import datetime as dt
 import io
+import math
 import re
+import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote
@@ -12,7 +14,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import db, exportar, importar, precos
+from . import db, exportar, financeiro, importar, precos
 
 ROOT = Path(__file__).resolve().parent
 DIAS = {1: "Segunda", 2: "Terça", 3: "Quarta", 4: "Quinta", 5: "Sexta", 6: "Sábado", 7: "Domingo"}
@@ -195,6 +197,12 @@ def alertas(con):
         add("azul", "Rotina de hoje: " + dict(ROTINA)[item], "/rotina")
     for c in con.execute("SELECT pergunta, prazo FROM campanha_checkpoints WHERE resposta='pendente' AND prazo <= ? ORDER BY prazo", (lim7,)):
         add("vermelho" if c["prazo"] < h else "amarelo", f"Checkpoint de campanha ({data_br(c['prazo'])}): {c['pergunta']}", "/campanhas")
+    # ponytail: só o mês corrente; recorrência do mês seguinte entra no dia 1
+    lim3 = (hoje + dt.timedelta(days=3)).isoformat()
+    venc = [p for p in financeiro.pendencias(con, h[:7], h) if p["tipo"] == "saida" and p["data"] <= lim3]
+    if venc:
+        add("vermelho" if any(p["status"] == "atrasado" for p in venc) else "amarelo",
+            f"{len(venc)} conta{s(len(venc))} vencida{s(len(venc))} ou vencendo em 3 dias", "/financeiro")
     n = con.execute("SELECT COUNT(*) FROM propostas WHERE excluido_em IS NULL AND status='enviada'").fetchone()[0]
     if n:
         add("azul", f"{n} proposta{s(n)} enviada{s(n)} esperando resposta", "/propostas")
@@ -325,6 +333,8 @@ def _num_br(v) -> float:
     s = str(v or "0").strip().replace("R$", "").replace(" ", "")
     if "," in s:
         s = s.replace(".", "").replace(",", ".")
+    elif re.fullmatch(r"\d{1,3}(\.\d{3})+", s):   # "1.500" = mil e quinhentos
+        s = s.replace(".", "")
     return float(s or 0)
 
 
@@ -390,7 +400,8 @@ def cliente_ficha(request: Request, cid: int, con=Depends(get_db)):
         except ValueError:
             estimativa = None
     propostas = con.execute("SELECT * FROM propostas WHERE cliente_id=? AND excluido_em IS NULL ORDER BY id DESC", (cid,)).fetchall()
-    return render(request, "cliente.html", con, c=c, eventos=eventos, estimativa=estimativa, propostas=propostas)
+    pagamentos = con.execute("SELECT * FROM lancamentos WHERE cliente_id=? AND excluido_em IS NULL ORDER BY data DESC, id DESC LIMIT 8", (cid,)).fetchall()
+    return render(request, "cliente.html", con, c=c, eventos=eventos, estimativa=estimativa, propostas=propostas, pagamentos=pagamentos)
 
 
 @app.post("/clientes/{cid}")
@@ -849,6 +860,172 @@ def espera_excluir(eid: int, con=Depends(get_db)):
 
 
 # =====================================================================
+# FINANCEIRO (livro-caixa, contas a pagar, recorrências)
+# =====================================================================
+RE_MES = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+
+
+def _fin_voltar(volta, msg=None, erro=None):
+    volta = volta.replace("\n", "").replace("\r", "")
+    # volta que começa com "/financeiro/" já é um caminho completo (ex.: mensalidades); senão é a query do livro-caixa
+    return voltar(volta if volta.startswith("/financeiro/") else "/financeiro?" + volta, msg, erro)
+
+
+@app.get("/financeiro", response_class=HTMLResponse)
+def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", con=Depends(get_db)):
+    h = dt.date.today().isoformat()
+    mes = mes if RE_MES.match(mes) else mes_atual()
+    escopo = escopo if escopo in ("PJ", "PF") else "todos"
+    lista = ("PJ", "PF") if escopo == "todos" else (escopo,)
+    qs = ",".join("?" * len(lista))
+    lancs = [dict(r, status=financeiro.status(r, h)) for r in con.execute(
+        f"SELECT * FROM lancamentos WHERE excluido_em IS NULL AND substr(data,1,7)=? AND escopo IN ({qs}) ORDER BY data, id", (mes, *lista))]
+    entradas = round(sum(l["valor"] for l in lancs if l["tipo"] == "entrada"), 2)
+    saidas = round(sum(l["valor"] for l in lancs if l["tipo"] == "saida"), 2)
+    pend = [p for p in financeiro.pendencias(con, mes, h) if p["escopo"] in lista]
+    for p in pend:
+        p["dias"] = (dt.date.fromisoformat(h) - dt.date.fromisoformat(p["data"])).days if p["status"] == "atrasado" else 0
+    recs = con.execute(f"SELECT * FROM recorrencias WHERE excluido_em IS NULL AND escopo IN ({qs}) ORDER BY escopo, dia_vencimento, descricao", lista).fetchall()
+    clientes_ = con.execute("SELECT id, nome FROM clientes WHERE excluido_em IS NULL ORDER BY nome").fetchall()
+    return render(request, "financeiro.html", con, mes=mes, escopo=escopo, lancs=lancs, entradas=entradas, saidas=saidas,
+                  saldo=round(entradas - saidas, 2), pend=pend, recs=recs, clientes_=clientes_, volta=f"mes={mes}&escopo={escopo}")
+
+
+def _fin_valor(f):
+    """Valor positivo com 2 casas, ou ValueError em português."""
+    if f.get("escopo") not in ("PF", "PJ"):
+        raise ValueError("Escolha PF ou PJ.")
+    try:
+        valor = round(_num_br(f.get("valor")), 2)
+    except ValueError:
+        raise ValueError("Valor inválido.") from None
+    if not math.isfinite(valor) or valor <= 0:
+        raise ValueError("O valor precisa ser maior que zero.")
+    return valor
+
+
+@app.post("/financeiro/lancamento")
+async def financeiro_lancamento(request: Request, con=Depends(get_db)):
+    f = dict((await request.form()).items())
+    volta = f.get("volta", "")
+    try:
+        valor = _fin_valor(f)
+        if f.get("tipo") not in ("entrada", "saida") or not f.get("categoria"):
+            raise ValueError("Escolha o tipo e a categoria.")
+        pago_em = f.get("pago_em") or None
+        try:
+            dt.date.fromisoformat(f.get("data", ""))
+            if pago_em:
+                dt.date.fromisoformat(pago_em)
+            cliente_id, parcela_num, parcela_total, lid = (int(f[k]) if f.get(k) else None for k in ("cliente_id", "parcela_num", "parcela_total", "id"))
+        except ValueError:
+            raise ValueError("Confira as datas e os números.") from None
+    except ValueError as e:
+        return _fin_voltar(volta, erro=str(e))
+    campos = [f["escopo"], f["tipo"], f["data"], pago_em, valor, f["categoria"], f.get("descricao") or None, f.get("contraparte") or None,
+              cliente_id, f.get("conta") or None, f.get("forma") or None, parcela_num, parcela_total]
+    try:
+        with con:
+            if lid:
+                con.execute("""UPDATE lancamentos SET escopo=?, tipo=?, data=?, pago_em=?, valor=?, categoria=?, descricao=?, contraparte=?,
+                               cliente_id=?, conta=?, forma=?, parcela_num=?, parcela_total=? WHERE id=?""", (*campos, lid))
+            else:
+                con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao, contraparte, cliente_id,
+                               conta, forma, parcela_num, parcela_total) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""", campos)
+    except sqlite3.IntegrityError:
+        return _fin_voltar(volta, erro="Não foi possível salvar: confira o aluno e os campos.")
+    return _fin_voltar(volta, msg="Lançamento salvo.")
+
+
+@app.post("/financeiro/lancamento/{lid}/baixa")
+def financeiro_baixa(lid: int, volta: str = Form(""), con=Depends(get_db)):
+    with con:
+        con.execute("UPDATE lancamentos SET pago_em=? WHERE id=? AND pago_em IS NULL", (dt.date.today().isoformat(), lid))
+    return _fin_voltar(volta, msg="Baixa registrada.")
+
+
+@app.post("/financeiro/lancamento/{lid}/excluir")
+def financeiro_lancamento_excluir(lid: int, volta: str = Form(""), con=Depends(get_db)):
+    with con:
+        con.execute("UPDATE lancamentos SET excluido_em=datetime('now','localtime') WHERE id=?", (lid,))
+    return _fin_voltar(volta, msg="Lançamento enviado para a lixeira (restaurável em Dados).")
+
+
+@app.post("/financeiro/recorrencia")
+async def financeiro_recorrencia(request: Request, con=Depends(get_db)):
+    f = dict((await request.form()).items())
+    volta = f.get("volta", "")
+    fim = f.get("fim") or None
+    try:
+        valor = _fin_valor(f)
+        if not f.get("descricao", "").strip() or not f.get("categoria"):
+            raise ValueError("Informe a descrição e a categoria.")
+        if not (RE_MES.match(f.get("inicio", "")) and (fim is None or RE_MES.match(fim))):
+            raise ValueError("Confira o início e o fim (mês/ano).")
+        if not 1 <= int(f.get("dia_vencimento") or 0) <= 31:
+            raise ValueError("O dia de vencimento vai de 1 a 31.")
+        rid = int(f["id"]) if f.get("id") else None
+    except ValueError as e:
+        return _fin_voltar(volta, erro=str(e))
+    campos = [f["escopo"], f["descricao"].strip(), f["categoria"], valor, int(f["dia_vencimento"]), 1 if f.get("fixo") == "1" else 0,
+              f.get("conta") or None, f["inicio"], fim]
+    try:
+        with con:
+            if rid:
+                con.execute("""UPDATE recorrencias SET escopo=?, descricao=?, categoria=?, valor=?, dia_vencimento=?, fixo=?, conta=?, inicio=?,
+                               fim=? WHERE id=?""", (*campos, rid))
+            else:
+                con.execute("""INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, fixo, conta, inicio, fim)
+                               VALUES (?,?,?,?,?,?,?,?,?)""", campos)
+    except sqlite3.IntegrityError:
+        return _fin_voltar(volta, erro="Não foi possível salvar: confira os campos.")
+    return _fin_voltar(volta, msg="Conta recorrente salva.")
+
+
+@app.post("/financeiro/recorrencia/{rid}/excluir")
+def financeiro_recorrencia_excluir(rid: int, volta: str = Form(""), con=Depends(get_db)):
+    with con:
+        con.execute("UPDATE recorrencias SET excluido_em=datetime('now','localtime') WHERE id=?", (rid,))
+    return _fin_voltar(volta, msg="Conta recorrente enviada para a lixeira (restaurável em Dados).")
+
+
+@app.post("/financeiro/recorrencia/baixa")
+def financeiro_recorrencia_baixa(rid: int = Form(...), competencia: str = Form(...), valor: str = Form(...), pago_em: str = Form(...),
+                                 volta: str = Form(""), con=Depends(get_db)):
+    try:
+        dt.date.fromisoformat(pago_em)
+        if not RE_MES.match(competencia):
+            raise ValueError("Competência inválida.")
+        financeiro.baixar_recorrencia(con, rid, competencia, _num_br(valor), pago_em)
+    except ValueError as e:
+        return _fin_voltar(volta, erro=str(e))
+    return _fin_voltar(volta, msg="Conta paga.")
+
+
+def _fin_mes(mes):
+    return mes if RE_MES.match(mes) else mes_atual()
+
+
+@app.get("/financeiro/mensalidades", response_class=HTMLResponse)
+def financeiro_mensalidades(request: Request, mes: str = "", con=Depends(get_db)):
+    mes = _fin_mes(mes)
+    itens = financeiro.mensalidades(con, mes)
+    previsto, recebido = (round(sum(i[k] for i in itens), 2) for k in ("previsto", "recebido"))
+    return render(request, "financeiro_mensalidades.html", con, mes=mes, itens=itens, previsto=previsto, recebido=recebido,
+                  volta=f"/financeiro/mensalidades?mes={mes}")
+
+
+@app.get("/financeiro/painel", response_class=HTMLResponse)
+def financeiro_painel(request: Request, mes: str = "", con=Depends(get_db)):
+    mes = _fin_mes(mes)
+    n = int(mes[:4]) * 12 + int(mes[5:]) - 1
+    meses = [f"{(n - i) // 12}-{(n - i) % 12 + 1:02d}" for i in range(11, -1, -1)]
+    serie = [financeiro.resumo_mes(con, x) for x in meses]
+    maximo = max([s["receita"] for s in serie] + [s["custos_fixos"] + s["custos_variaveis"] for s in serie] + [1])
+    return render(request, "financeiro_painel.html", con, mes=mes, r=serie[-1], serie=serie, maximo=maximo)
+
+
+# =====================================================================
 # CONFIGURAÇÕES + IMPORTAR
 # =====================================================================
 GRUPOS_CONFIG = [("imposto", "Imposto (DAS)", "pct"), ("taxa_pagamento", "Taxas por forma de pagamento", "pct"),
@@ -856,7 +1033,8 @@ GRUPOS_CONFIG = [("imposto", "Imposto (DAS)", "pct"), ("taxa_pagamento", "Taxas 
                  ("grupo_multiplicador", "Multiplicador de preço por nº de pessoas", "num"),
                  ("grupo_mao_obra_extra", "Mão de obra extra por nº de pessoas", "pct"), ("metas", "Metas do painel", "num"),
                  ("mao_obra_aula", "Mão de obra por aula (tipo|qtd)", "num"), ("lead_parado_dias", "Limite de dias parado por etapa", "num"),
-                 ("funil_chance", "Chance de fechar por etapa do funil", "pct")]
+                 ("funil_chance", "Chance de fechar por etapa do funil", "pct"),
+                 ("fiscal", "Fiscal: salário mínimo (R$), pró-labore e INSS (frações, ex.: 0,28 = 28%)", "num")]
 
 
 @app.get("/configuracoes", response_class=HTMLResponse)
@@ -938,7 +1116,8 @@ def importar_planilha(con=Depends(get_db)):
 # =====================================================================
 LIXEIRA = [("clientes", "Cliente", "nome"), ("leads", "Lead", "nome"), ("propostas", "Proposta", "tipo_servico"),
            ("cliente_eventos", "Evento de cliente", "descricao"), ("lista_espera", "Lista de espera", "nome"),
-           ("gastos_marketing", "Gasto de marketing", "canal"), ("campanha_itens", "Item de campanha", "texto")]
+           ("gastos_marketing", "Gasto de marketing", "canal"), ("campanha_itens", "Item de campanha", "texto"),
+           ("lancamentos", "Lançamento", "COALESCE(descricao, categoria)"), ("recorrencias", "Conta recorrente", "descricao")]
 
 
 @app.get("/dados", response_class=HTMLResponse)

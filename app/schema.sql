@@ -216,3 +216,46 @@ CREATE TABLE IF NOT EXISTS importacoes (
     arquivo TEXT,
     resumo TEXT
 );
+
+-- Financeiro PF + PJ. valor > 0 sempre; o sentido vem de tipo. Contas e cartões são texto (lista_contas).
+CREATE TABLE IF NOT EXISTS recorrencias (
+    id INTEGER PRIMARY KEY,
+    escopo TEXT NOT NULL CHECK (escopo IN ('PF','PJ')),
+    descricao TEXT NOT NULL,
+    categoria TEXT NOT NULL,
+    valor REAL NOT NULL CHECK (valor > 0),            -- previsto; a baixa grava o real
+    dia_vencimento INTEGER NOT NULL CHECK (dia_vencimento BETWEEN 1 AND 31),
+    fixo INTEGER NOT NULL DEFAULT 1,                  -- 1 fixo, 0 variável (ponto de equilíbrio)
+    conta TEXT,
+    inicio TEXT NOT NULL,                             -- AAAA-MM
+    fim TEXT,                                         -- AAAA-MM; NULL = sem fim
+    origem TEXT UNIQUE,                               -- ID da planilha: CEF-001, CPV-002...
+    excluido_em TEXT
+);
+
+CREATE TABLE IF NOT EXISTS lancamentos (
+    id INTEGER PRIMARY KEY,
+    escopo TEXT NOT NULL CHECK (escopo IN ('PF','PJ')),
+    tipo TEXT NOT NULL CHECK (tipo IN ('entrada','saida')),
+    data TEXT NOT NULL,                               -- data do movimento / vencimento
+    pago_em TEXT,                                     -- NULL = em aberto
+    valor REAL NOT NULL CHECK (valor > 0),
+    categoria TEXT NOT NULL,
+    descricao TEXT,
+    contraparte TEXT,
+    cliente_id INTEGER REFERENCES clientes(id),
+    conta TEXT,
+    forma TEXT,
+    parcela_num INTEGER,
+    parcela_total INTEGER,
+    recorrencia_id INTEGER REFERENCES recorrencias(id),
+    competencia TEXT,                                 -- AAAA-MM, só junto com recorrencia_id
+    nfse INTEGER,                                     -- 1 emitida, 0 não, NULL não se aplica
+    observacao TEXT,
+    origem TEXT UNIQUE,                               -- 'PJ:17', 'PF:8', 'CC:11', 'EP:11'
+    criado_em TEXT DEFAULT (datetime('now','localtime')),
+    excluido_em TEXT,
+    UNIQUE (recorrencia_id, competencia)
+);
+CREATE INDEX IF NOT EXISTS idx_lancamentos_data ON lancamentos (data);
+CREATE INDEX IF NOT EXISTS idx_lancamentos_competencia ON lancamentos (competencia);

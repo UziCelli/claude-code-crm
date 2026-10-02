@@ -228,3 +228,14 @@ button.claro.ativo { background: var(--aco); color: #fff; }
 .barra-sel { position: sticky; bottom: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; padding: 10px 14px; background: var(--branco); border: 1px solid var(--borda); border-radius: 10px; opacity: 0; visibility: hidden; transform: translateY(8px); transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out), visibility var(--dur-fast); }
 .barra-sel.on { opacity: 1; visibility: visible; transform: none; }
 @media (prefers-reduced-motion: reduce) { .barra-sel { transform: none; } }
+
+/* financeiro: sinal do valor (cor + sinal escrito) */
+.v-entrada { color: #14663a; }
+.v-saida { color: #8f1d17; }
+
+/* painel financeiro: 3 barras por mês dentro do .grafico */
+.grafico .barras { display: flex; align-items: flex-end; gap: 2px; flex: 1; width: 100%; }
+.grafico .barras i { flex: 1; width: auto; }
+.grafico .barras .b-receita { background: var(--verde); }
+.grafico .barras .b-custos { background: var(--vermelho); }
+.grafico .barras .b-lucro { background: var(--aco); }

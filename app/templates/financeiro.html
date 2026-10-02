@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block titulo %}Financeiro · VFITCOACH CRM{% endblock %}
+{% macro categorias() %}
+<optgroup label="PJ">{% for k in listas.lista_categorias_pj %}<option>{{ k }}</option>{% endfor %}</optgroup>
+<optgroup label="PF">{% for k in listas.lista_categorias_pf %}<option>{{ k }}</option>{% endfor %}</optgroup>
+{% endmacro %}
+{% macro valor_txt(v) %}{{ '%.2f'|format(v)|replace('.', ',') }}{% endmacro %}
+{% block conteudo %}
+<div class="linha topo">
+  <h1 style="margin:0">Financeiro</h1>
+  <div class="linha">
+    <a class="btn claro" href="/financeiro/mensalidades?mes={{ mes }}">Mensalidades</a>
+    <a class="btn claro" href="/financeiro/painel?mes={{ mes }}">Painel financeiro</a>
+    <button data-abrir="dlg-lanc" data-titulo="Novo lançamento">Novo lançamento</button>
+  </div>
+</div>
+<form class="linha" method="get">
+  <input type="month" name="mes" value="{{ mes }}" aria-label="Mês" style="width:auto" required>
+  <select name="escopo" aria-label="Escopo" style="width:auto">
+    {% for k, r in [('todos', 'PJ e PF'), ('PJ', 'Só PJ'), ('PF', 'Só PF')] %}<option value="{{ k }}" {{ 'selected' if escopo == k }}>{{ r }}</option>{% endfor %}
+  </select>
+  <button class="claro">Filtrar</button>
+</form>
+
+<div class="grid c3 mt">
+  <div class="kpi verde"><div class="rotulo">Entradas</div><div class="valor">{{ entradas|moeda }}</div></div>
+  <div class="kpi vermelho"><div class="rotulo">Saídas</div><div class="valor">{{ saidas|moeda }}</div></div>
+  <div class="kpi {{ 'verde' if saldo >= 0 else 'vermelho' }}"><div class="rotulo">Saldo do mês</div><div class="valor">{{ saldo|moeda }}</div><div class="meta">Inclui o que ainda está pendente</div></div>
+</div>
+
+<div class="card mt">
+  <h3>A pagar e a receber</h3>
+  <table>
+    <thead><tr><th>Vence</th><th>Conta</th><th>Categoria</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead>
+    <tbody>
+    {% for i in pend %}
+    <tr>
+      <td>{{ i.data|data }}</td>
+      <td>{{ i.descricao }} <span class="tag neutro">{{ i.escopo }}</span></td>
+      <td>{{ i.categoria }}</td>
+      <td class="num v-{{ i.tipo }}">{{ '+' if i.tipo == 'entrada' else '−' }} {{ i.valor|moeda }}</td>
+      <td>{% if i.status == 'atrasado' %}<span class="tag vermelho">atrasado há {{ i.dias }} dia{{ 's' if i.dias > 1 }}</span>{% else %}<span class="tag amarelo">pendente</span>{% endif %}</td>
+      <td>
+        {% if i.origem == 'recorrencia' %}
+        <button class="verde pequeno" data-abrir="dlg-pagar" data-titulo="Pagar {{ i.descricao }}" data-rid="{{ i.id }}" data-competencia="{{ i.competencia }}" data-valor="{{ valor_txt(i.valor) }}">Pagar</button>
+        {% else %}
+        <form method="post" action="/financeiro/lancamento/{{ i.id }}/baixa" class="inline"><input type="hidden" name="volta" value="{{ volta }}"><button class="verde pequeno">Dar baixa</button></form>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">Nada a pagar neste mês. Cadastre as contas fixas em Contas recorrentes (abaixo) para elas aparecerem aqui todo mês.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card mt">
+  <h3>Livro-caixa</h3>
+  <table>
+    <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Contraparte</th><th>Conta</th><th>Forma</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead>
+    <tbody>
+    {% for l in lancs %}
+    <tr>
+      <td>{{ l.data|data }}</td>
+      <td>{{ l.descricao or '—' }}{% if l.parcela_total %} <span class="muted">{{ l.parcela_num or '?' }}/{{ l.parcela_total }}</span>{% endif %} <span class="tag neutro">{{ l.escopo }}</span></td>
+      <td>{{ l.categoria }}</td>
+      <td>{{ l.contraparte or '—' }}</td>
+      <td>{{ l.conta or '—' }}</td>
+      <td>{{ l.forma or '—' }}</td>
+      <td class="num v-{{ l.tipo }}">{{ '+' if l.tipo == 'entrada' else '−' }} {{ l.valor|moeda }}</td>
+      <td><span class="tag {{ {'pago': 'verde', 'atrasado': 'vermelho', 'pendente': 'amarelo'}[l.status] }}">{{ l.status }}</span></td>
+      <td class="linha" style="flex-wrap:nowrap">
+        {% if not l.pago_em %}<form method="post" action="/financeiro/lancamento/{{ l.id }}/baixa" class="inline"><input type="hidden" name="volta" value="{{ volta }}"><button class="verde pequeno">Dar baixa</button></form>{% endif %}
+        <button class="claro pequeno" data-abrir="dlg-lanc" data-titulo="Editar lançamento" data-id="{{ l.id }}" data-escopo="{{ l.escopo }}" data-tipo="{{ l.tipo }}" data-data="{{ l.data }}" data-valor="{{ valor_txt(l.valor) }}" data-categoria="{{ l.categoria }}" data-descricao="{{ l.descricao or '' }}" data-contraparte="{{ l.contraparte or '' }}" data-cliente_id="{{ l.cliente_id or '' }}" data-conta="{{ l.conta or '' }}" data-forma="{{ l.forma or '' }}" data-parcela_num="{{ l.parcela_num or '' }}" data-parcela_total="{{ l.parcela_total or '' }}" data-pago_em="{{ l.pago_em or '' }}">Editar</button>
+        <form method="post" action="/financeiro/lancamento/{{ l.id }}/excluir" class="inline" data-confirmar="Enviar este lançamento para a lixeira?"><input type="hidden" name="volta" value="{{ volta }}"><button class="claro pequeno" aria-label="Excluir lançamento">x</button></form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="9" class="muted">Nenhum lançamento neste mês. Use Novo lançamento para registrar uma entrada ou uma saída.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card mt">
+  <div class="linha topo" style="margin-bottom:8px">
+    <h3 style="margin:0">Contas recorrentes</h3>
+    <button class="claro pequeno" data-abrir="dlg-rec" data-titulo="Nova conta recorrente">Nova conta recorrente</button>
+  </div>
+  <table>
+    <thead><tr><th>Dia</th><th>Descrição</th><th>Categoria</th><th>Conta</th><th class="num">Valor previsto</th><th>Período</th><th></th></tr></thead>
+    <tbody>
+    {% for r in recs %}
+    <tr>
+      <td class="num">{{ r.dia_vencimento }}</td>
+      <td>{{ r.descricao }} <span class="tag neutro">{{ r.escopo }}</span> {% if r.fixo %}<span class="tag azul">fixa</span>{% endif %}</td>
+      <td>{{ r.categoria }}</td>
+      <td>{{ r.conta or '—' }}</td>
+      <td class="num">{{ r.valor|moeda }}</td>
+      <td>{{ r.inicio }}{{ ' a ' ~ r.fim if r.fim else ' em diante' }}</td>
+      <td class="linha" style="flex-wrap:nowrap">
+        <button class="claro pequeno" data-abrir="dlg-rec" data-titulo="Editar conta recorrente" data-id="{{ r.id }}" data-escopo="{{ r.escopo }}" data-descricao="{{ r.descricao }}" data-categoria="{{ r.categoria }}" data-valor="{{ valor_txt(r.valor) }}" data-dia_vencimento="{{ r.dia_vencimento }}" data-fixo="{{ r.fixo }}" data-conta="{{ r.conta or '' }}" data-inicio="{{ r.inicio }}" data-fim="{{ r.fim or '' }}">Editar</button>
+        <form method="post" action="/financeiro/recorrencia/{{ r.id }}/excluir" class="inline" data-confirmar="Enviar esta conta recorrente para a lixeira?"><input type="hidden" name="volta" value="{{ volta }}"><button class="claro pequeno" aria-label="Excluir conta recorrente">x</button></form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">Nenhuma conta recorrente. Cadastre aluguel, assinaturas e faturas de cartão uma vez e elas aparecem em A pagar e a receber todo mês.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<dialog id="dlg-lanc">
+  <h2 data-titulo>Novo lançamento</h2>
+  <form method="post" action="/financeiro/lancamento">
+    <input type="hidden" name="id" value=""><input type="hidden" name="volta" value="{{ volta }}">
+    <div class="form-grid">
+      <div class="campo"><label>Escopo</label><select name="escopo" required>{% for k in ['PJ', 'PF'] %}<option {{ 'selected' if escopo == k }}>{{ k }}</option>{% endfor %}</select></div>
+      <div class="campo"><label>Tipo</label><select name="tipo" required><option value="entrada">Entrada</option><option value="saida">Saída</option></select></div>
+      <div class="campo"><label>Data</label><input name="data" type="date" value="{{ hoje() }}" required></div>
+      <div class="campo"><label>Valor (R$)</label><input name="valor" inputmode="decimal" placeholder="0,00" required></div>
+      <div class="campo largo"><label>Categoria</label><select name="categoria" required>{{ categorias() }}</select></div>
+      <div class="campo largo"><label>Descrição</label><input name="descricao"></div>
+      <div class="campo"><label>Contraparte</label><input name="contraparte" placeholder="quem pagou ou recebeu"></div>
+      <div class="campo"><label>Cliente (opcional)</label><select name="cliente_id"><option value="">—</option>{% for c in clientes_ %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}</select></div>
+      <div class="campo"><label>Conta</label><select name="conta"><option value="">—</option>{% for k in listas.lista_contas %}<option>{{ k }}</option>{% endfor %}</select></div>
+      <div class="campo"><label>Forma</label><select name="forma"><option value="">—</option>{% for k in listas.lista_formas_lancamento %}<option>{{ k }}</option>{% endfor %}</select></div>
+      <div class="campo"><label>Parcela nº (opcional)</label><input name="parcela_num" type="number" min="1"></div>
+      <div class="campo"><label>De quantas</label><input name="parcela_total" type="number" min="1"></div>
+      <div class="campo largo"><label>Pago em (deixe vazio se ainda não foi pago)</label><input name="pago_em" type="date"></div>
+    </div>
+    <div class="linha"><button>Salvar</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-pagar">
+  <h2 data-titulo>Pagar conta</h2>
+  <form method="post" action="/financeiro/recorrencia/baixa">
+    <input type="hidden" name="rid" value=""><input type="hidden" name="competencia" value=""><input type="hidden" name="volta" value="{{ volta }}">
+    <div class="campo"><label>Valor pago (R$)</label><input name="valor" inputmode="decimal" required></div>
+    <div class="campo"><label>Pago em</label><input name="pago_em" type="date" value="{{ hoje() }}" required></div>
+    <div class="linha"><button class="verde">Confirmar pagamento</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-rec">
+  <h2 data-titulo>Nova conta recorrente</h2>
+  <form method="post" action="/financeiro/recorrencia">
+    <input type="hidden" name="id" value=""><input type="hidden" name="volta" value="{{ volta }}">
+    <div class="form-grid">
+      <div class="campo"><label>Escopo</label><select name="escopo" required>{% for k in ['PJ', 'PF'] %}<option {{ 'selected' if escopo == k }}>{{ k }}</option>{% endfor %}</select></div>
+      <div class="campo"><label>Valor previsto (R$)</label><input name="valor" inputmode="decimal" placeholder="0,00" required></div>
+      <div class="campo largo"><label>Descrição</label><input name="descricao" placeholder="ex.: Aluguel, Fatura Cartão Inter" required></div>
+      <div class="campo largo"><label>Categoria</label><select name="categoria" required>{{ categorias() }}</select></div>
+      <div class="campo"><label>Dia do vencimento</label><input name="dia_vencimento" type="number" min="1" max="31" required></div>
+      <div class="campo"><label>Custo fixo?</label><select name="fixo"><option value="1">Sim, fixo</option><option value="0">Não, varia</option></select></div>
+      <div class="campo largo"><label>Conta ou cartão</label><select name="conta"><option value="">—</option>{% for k in listas.lista_contas %}<option>{{ k }}</option>{% endfor %}</select></div>
+      <div class="campo"><label>Começa em</label><input name="inicio" type="month" value="{{ mes }}" required></div>
+      <div class="campo"><label>Termina em (opcional)</label><input name="fim" type="month"></div>
+    </div>
+    <div class="linha"><button>Salvar</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
+  </form>
+</dialog>
+{% endblock %}

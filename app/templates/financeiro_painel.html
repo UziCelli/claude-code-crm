@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block titulo %}Painel financeiro · VFITCOACH CRM{% endblock %}
+{% block conteudo %}
+<div class="linha topo">
+  <h1 style="margin:0">Painel financeiro — {{ mes[5:] }}/{{ mes[:4] }}</h1>
+  <div class="linha"><a class="btn claro" href="/financeiro?mes={{ mes }}">Livro-caixa</a><a class="btn claro" href="/financeiro/mensalidades?mes={{ mes }}">Mensalidades</a></div>
+</div>
+<form class="linha" method="get">
+  <input type="month" name="mes" value="{{ mes }}" aria-label="Mês" style="width:auto" required>
+  <button class="claro">Ver mês</button>
+</form>
+<p class="muted">Conta só o que já foi pago, no mês da data do lançamento. Dados da empresa (PJ).</p>
+
+<div class="grid c4 mt">
+  <div class="kpi verde"><div class="rotulo">Receita real</div><div class="valor">{{ r.receita|moeda }}</div></div>
+  <div class="kpi"><div class="rotulo">Custos fixos</div><div class="valor">{{ r.custos_fixos|moeda }}</div><div class="meta">Contas recorrentes marcadas como fixas</div></div>
+  <div class="kpi"><div class="rotulo">Custos variáveis</div><div class="valor">{{ r.custos_variaveis|moeda }}</div></div>
+  <div class="kpi {{ 'verde' if r.lucro >= 0 else 'vermelho' }}"><div class="rotulo">Lucro</div><div class="valor">{{ r.lucro|moeda }}</div><div class="meta">Receita menos custos fixos e variáveis</div></div>
+  <div class="kpi"><div class="rotulo">Ponto de equilíbrio</div><div class="valor">{{ r.ponto_equilibrio|moeda }}</div><div class="meta">{% if r.ponto_equilibrio is none %}Aparece quando há receita e custos fixos pagos no mês (meses anteriores à migração não separam fixo de variável){% else %}Receita para cobrir os custos fixos{% endif %}</div></div>
+  <div class="kpi"><div class="rotulo">DAS estimado</div><div class="valor">{{ r.das|moeda }}</div><div class="meta">Estimativa: 6% da receita do mês. O DAS já pago entra em custos.</div></div>
+  <div class="kpi"><div class="rotulo">Pró-labore</div><div class="valor">{{ r.pro_labore|moeda }}</div><div class="meta">Fora do lucro</div></div>
+  <div class="kpi"><div class="rotulo">INSS do pró-labore</div><div class="valor">{{ r.inss|moeda }}</div><div class="meta">Fora do lucro</div></div>
+</div>
+
+<div class="grid c2 mt">
+  <div class="card">
+    <h2>Pessoal (PF) — {{ mes[5:] }}/{{ mes[:4] }}</h2>
+    {% if r.pf.entradas or r.pf.saidas %}
+    <div class="linha" style="gap:24px">
+      <div><div class="muted">Entradas</div><strong class="v-entrada">{{ r.pf.entradas|moeda }}</strong></div>
+      <div><div class="muted">Saídas</div><strong class="v-saida">{{ r.pf.saidas|moeda }}</strong></div>
+      <div><div class="muted">Saldo</div><strong>{{ r.pf.saldo|moeda }}</strong></div>
+    </div>
+    {% else %}<p class="muted">Nada pago no pessoal neste mês. Lance entradas e saídas com escopo PF no <a href="/financeiro?mes={{ mes }}&escopo=PF">livro-caixa</a>.</p>{% endif %}
+  </div>
+  <div class="card">
+    <h2>Últimos 12 meses — receita, custos e lucro</h2>
+    <div class="linha muted" style="font-size:12px"><span><span class="tag verde">&nbsp;</span> Receita</span><span><span class="tag vermelho">&nbsp;</span> Custos</span><span><span class="tag azul">&nbsp;</span> Lucro</span></div>
+    <div class="grafico">
+      {% for s in serie %}
+      {% set custos = s.custos_fixos + s.custos_variaveis %}
+      <div class="col {{ 'atual' if s.mes == mes }}" title="Receita {{ s.receita|moeda }} · Custos {{ custos|moeda }} · Lucro {{ s.lucro|moeda }}">
+        <div class="barras">
+          <i class="b-receita" style="height:{{ (100 * s.receita / maximo)|round }}%"></i>
+          <i class="b-custos" style="height:{{ (100 * custos / maximo)|round }}%"></i>
+          <i class="b-lucro" style="height:{{ (100 * [s.lucro, 0]|max / maximo)|round }}%"></i>
+        </div>
+        <span>{{ s.mes[5:] }}/{{ s.mes[2:4] }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <table class="mt"><tr><th>Mês</th><th class="num">Receita</th><th class="num">Custos</th><th class="num">Lucro</th></tr>
+      {% for s in serie|reverse %}
+      <tr><td>{{ s.mes[5:] }}/{{ s.mes[:4] }}</td><td class="num">{{ s.receita|moeda }}</td><td class="num">{{ (s.custos_fixos + s.custos_variaveis)|moeda }}</td><td class="num">{{ s.lucro|moeda }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

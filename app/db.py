@@ -64,6 +64,9 @@ PARAMETROS_INICIAIS = [
     ("funil_chance", "lead", 0.10, None, 1),
     ("funil_chance", "conversa", 0.30, None, 2),
     ("funil_chance", "avaliacao", 0.60, None, 3),
+    ("fiscal", "salario_minimo", 1518, None, 1),   # R$; pró-labore nunca fica abaixo disto
+    ("fiscal", "pro_labore_pct", 0.28, None, 2),   # fração da receita (0,28 = 28%)
+    ("fiscal", "inss_pct", 0.11, None, 3),         # fração do pró-labore
 ]
 LISTAS_INICIAIS = {
     "lista_canais": ["Indicação", "Parceria (síndico/academia)", "WhatsApp", "Google", "Instagram orgânico",
@@ -72,6 +75,16 @@ LISTAS_INICIAIS = {
     "lista_tipos_servico": ["Pacote de Aulas", "Mensalidade", "Consultoria Online", "Consultoria Híbrida",
                             "Avaliação Física"],
     "lista_formas_pagamento": ["PIX", "Cartão 1x", "Cartão 3x", "Cartão 6x", "Cartão 12x"],
+    # financeiro (lista_formas_pagamento acima é de preço; não reaproveitar)
+    "lista_categorias_pj": ["Pacotes de Aulas", "Mensalidade (Aulas Presenciais)", "Consultoria Online",
+                            "Consultoria Híbrida", "Aluguel", "Internet/Telefone", "Material de Trabalho",
+                            "Transporte", "Marketing/Divulgação", "Impostos/Taxas", "Alimentação",
+                            "Software/Assinaturas", "Manutenção", "Outros"],
+    "lista_categorias_pf": ["Alimentação", "Moradia", "Transporte", "Pessoal", "Lazer", "Educação", "Vestuário",
+                            "Saúde", "Salário", "Dívidas", "Fatura", "Outros"],
+    "lista_formas_lancamento": ["PIX", "Transferência", "Boleto", "Dinheiro", "Cartão Crédito", "Cartão Débito",
+                                "Débito Auto"],
+    "lista_contas": ["Contabilizei Bank", "Inter", "Itaú", "Caixa", "Mercado Pago", "Cartão Inter", "Cartão Itaú"],
 }
 FASES_INICIAIS = [
     ("Fase 0 — Ajustar a planilha", "2026-09-17", "2026-09-20", "fase"),
@@ -191,4 +204,5 @@ def restaurar_backup(nome: str) -> Path:
         raise ValueError(f"O arquivo {origem.name} está corrompido ou não é um banco do CRM. Nada foi alterado.")
     seguranca = fazer_backup("antes-restaurar")
     shutil.copy2(origem, DB_PATH)
+    iniciar_banco()   # backup antigo pode não ter tabelas novas; idempotente
     return seguranca

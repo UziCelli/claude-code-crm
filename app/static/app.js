@@ -5,6 +5,8 @@ document.addEventListener("click", function (e) {
   var d = document.getElementById(b.dataset.abrir);
   if (!d) return;
   var frm = d.querySelector("form"); if (frm) frm.reset();
+  // o reset volta ao atributo value: sem isto o id de uma edição anterior vazaria para o "Novo"
+  d.querySelectorAll("input[type=hidden][name=id]").forEach(function (i) { i.value = ""; });
   Object.keys(b.dataset).forEach(function (k) {
     if (k === "abrir") return;
     var campo = d.querySelector("[name='" + k + "']");

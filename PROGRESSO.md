@@ -39,11 +39,12 @@ Plano completo em `C:\Users\victo\.claude\plans\a-gente-vai-come-ar-functional-t
 
 ## Próximos passos
 - **Usuário:** completar telefone e data de renovação dos alunos (o painel mostra "cadastro incompleto").
-- **Rodada 2 — financeiro PF + PJ** (substitui a planilha / Microsoft 365, que vence em mais de 3 meses):
-  - livro-caixa e contas a pagar recorrentes, com cartões;
-  - mensalidades: previsto × recebido por aluno;
-  - painel financeiro: receita real, custos, lucro, ponto de equilíbrio, DAS, pró-labore e INSS;
-  - migração única de todo o histórico da planilha, mostrando antes uma simulação para o usuário aprovar.
+- **Rodada 2 — financeiro PF + PJ: código pronto em 02/10/2026** (60 testes):
+  - `/financeiro` (livro-caixa + "A pagar e a receber" + contas recorrentes/cartões), `/financeiro/mensalidades` (previsto × recebido), `/financeiro/painel` (receita, custos, lucro, ponto de equilíbrio, DAS, pró-labore, INSS, bloco PF, 12 meses); pagamentos na ficha do aluno; alerta de contas vencidas.
+  - Lógica em `app/financeiro.py`; migração em `python -m app.migrar_financeiro` (sem `--gravar` só simula; com `--gravar` faz backup `antes-financeiro` e é idempotente).
+  - **Pendente: usuário aprovar a simulação** (363 lançamentos + 6 recorrências; totais por mês batem com a planilha) e então rodar `.venv\Scripts\python.exe -m app.migrar_financeiro --gravar` com o Excel e o CRM fechados.
+  - Preview `crm-teste-fin` (porta 8767): cópia temporária do banco já com a migração gravada, para conferir as telas.
+  - Saldos de contas (`tblSaldosContas`) não migrados: decidir depois.
 - **Depois:** repositório privado no GitHub; publicar em `crm.vfitcoachapp.com` (Cloudflare Tunnel + Access); agente de IA (Sonnet 5.5) adiado.
 - Forma de pagamento dos clientes importados vem como "Mensal"/"Parcelado" (texto da planilha); o motor usa PIX como padrão nesses casos.
 - Multiagente: tarefas simples em Haiku, implementação em Sonnet 5.5, modelo principal só para revisão.
