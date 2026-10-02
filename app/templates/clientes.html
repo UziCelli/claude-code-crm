@@ -27,7 +27,10 @@
     {% if c.data_renovacao %}<div class="muted" style="margin-top:6px">Renova em {{ c.data_renovacao|data }}</div>{% endif %}
   </a>
   {% else %}
-  <p class="muted">Nenhum cliente aqui. Cadastre um ou importe da planilha em Configurações.</p>
+  <div>
+    <p class="muted">{% if busca %}Nenhum cliente com “{{ busca }}”. Confira o nome ou veja Todos.{% else %}Nenhum cliente aqui. Cadastre um ou importe da planilha em Configurações.{% endif %}</p>
+    <a class="btn" href="/clientes/novo">Novo cliente</a> <a class="btn claro" href="/configuracoes">Importar planilha</a>
+  </div>
   {% endfor %}
 </div>
 {% endblock %}

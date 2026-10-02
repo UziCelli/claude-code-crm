@@ -33,6 +33,13 @@
         <form method="post" action="/leads/{{ l.id }}/excluir" class="inline" data-confirmar="Enviar este lead para a lixeira?"><button class="claro">x</button></form>
       </div>
     </div>
+    {% else %}
+    {% if chave == 'lead' %}
+    <p class="muted">Nenhum lead novo. Cadastre quem chamou no WhatsApp ou Instagram para acompanhar até virar cliente.</p>
+    <button class="claro pequeno" data-abrir="dlg-lead" data-titulo="Novo lead">Novo lead</button>
+    {% else %}
+    <p class="muted">Ninguém nesta etapa{{ '. Avance um lead com o botão → do card' if chave != 'perdido' }}.</p>
+    {% endif %}
     {% endfor %}
   </div>
   {% endfor %}
