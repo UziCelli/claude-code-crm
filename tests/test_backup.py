@@ -31,3 +31,13 @@ def test_restaurar_corrompido_e_recusado(banco_tmp):
         db.restaurar_backup("crm-ruim.db")
     assert db.DB_PATH.read_bytes() == antes
     assert not list(pasta.glob("antes-restaurar-*.db"))  # recusou antes de mexer em qualquer coisa
+
+
+def test_restaurar_arquivo_vazio_e_recusado(banco_tmp):
+    pasta = db.pasta_backup()
+    (pasta / "vazio.db").write_bytes(b"")
+    antes = db.DB_PATH.read_bytes()
+    with pytest.raises(ValueError):
+        db.restaurar_backup("vazio.db")
+    assert db.DB_PATH.read_bytes() == antes
+    assert not list(pasta.glob("antes-restaurar-*.db"))  # recusou antes de mexer em qualquer coisa

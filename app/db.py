@@ -178,6 +178,8 @@ def restaurar_backup(nome: str) -> Path:
     teste = sqlite3.connect(origem.as_uri() + "?mode=ro", uri=True)
     try:
         ok = teste.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+        has_clientes = teste.execute("SELECT 1 FROM sqlite_master WHERE name='clientes'").fetchone() is not None
+        ok = ok and has_clientes
     except sqlite3.DatabaseError:
         ok = False
     finally:

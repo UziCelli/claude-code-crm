@@ -187,8 +187,8 @@ dialog[open]::backdrop { opacity: 1; transition-duration: var(--dur-normal); }
 ::view-transition-new(menu), ::view-transition-group(menu) { animation: none; }
 
 /* card que acabou de mudar (onda B): pulso de fundo que volta à cor do card */
-.chegou { animation: chegou 600ms var(--ease-out); }
-.chegou.cliente { animation: chegou-cliente 500ms var(--ease-out); }
+.chegou { animation: chegou var(--dur-slow) var(--ease-out); }
+.chegou.cliente { animation: chegou-cliente var(--dur-slow) var(--ease-out); }
 @keyframes chegou { from { background-color: var(--azul-f); } }
 @keyframes chegou-cliente { from { background-color: var(--verde-f); } }
 
@@ -206,5 +206,5 @@ dialog[open]::backdrop { opacity: 1; transition-duration: var(--dur-normal); }
 /* painel "Hoje" e setas vs mês anterior */
 .card-hoje { border-color: var(--azul-f); background: var(--azul-f); }
 .seta { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.seta.verde { color: var(--verde); }
+.seta.verde { color: #14663a; }
 .seta.vermelho { color: var(--vermelho); }
