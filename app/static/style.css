@@ -239,3 +239,7 @@ button.claro.ativo { background: var(--aco); color: #fff; }
 .grafico .barras .b-receita { background: var(--verde); }
 .grafico .barras .b-custos { background: var(--vermelho); }
 .grafico .barras .b-lucro { background: var(--aco); }
+
+/* menu: encerrar o servidor pelo site (o CRM roda sem janela) */
+.menu .sair { background: none; color: #cdd8ea; padding: 8px 12px; border-radius: 8px; font-weight: 500; white-space: nowrap; }
+.menu .sair:hover { background: rgba(255,255,255,.08); color: #fff; }

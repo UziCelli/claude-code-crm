@@ -26,6 +26,7 @@
   <span class="espaco"></span>
   <a href="/configuracoes" class="{{ 'ativo' if p.startswith('/configuracoes') }}">Configurações</a>
   <a href="/dados" class="{{ 'ativo' if p.startswith('/dados') }}">Dados</a>
+  <form method="post" action="/encerrar" class="inline" data-confirmar="Encerrar o CRM? Para abrir de novo, use o atalho da Área de Trabalho."><button class="sair">Encerrar</button></form>
 </nav>
 <main>
   {% if msg %}<div class="aviso ok">{{ msg }}</div>{% endif %}

@@ -3,9 +3,11 @@
 CRM local para o VFITCOACH (personal trainer, São Paulo). Roda no seu computador, sem internet, em `http://localhost:8765`.
 
 ## Como iniciar
-1. Dê dois cliques em **VFITCOACH CRM** na Área de Trabalho (ou em `iniciar-crm.bat` nesta pasta).
-2. Na primeira vez ele prepara o ambiente (1–2 minutos) e cria o atalho. Depois abre o navegador sozinho.
-3. Para fechar o CRM, feche a janela preta do servidor.
+1. Dê dois cliques no atalho do CRM na Área de Trabalho (ou em `iniciar-crm.bat` nesta pasta).
+2. Na primeira vez ele prepara o ambiente (1–2 minutos) e, se nenhum atalho da Área de Trabalho abrir o CRM, cria um.
+   O servidor roda sem janela; a janela preta some sozinha quando o navegador abre.
+3. Para fechar o CRM, clique em **Encerrar** no menu (canto direito). Abrir de novo com o CRM já rodando só abre o navegador.
+   Mensagens do servidor ficam em `data\crm.log` e `data\crm-erro.log`.
 
 Precisa do Python 3 instalado (https://www.python.org/downloads/, marque "Add python.exe to PATH").
 
@@ -23,7 +25,7 @@ Pode importar de novo sempre que atualizar a planilha: nada duplica e os campos 
   A tela **Dados** mostra a pasta em uso. Os backups antigos em `OneDrive\Documentos\VFITCOACH-CRM-backups\`
   continuam lá; para restaurar um deles, copie o `.db` para `data\backups\`.
 - Um backup automático é feito ao abrir o CRM (1 por dia) e antes de cada importação; ficam os 30 mais recentes de cada tipo.
-  Se o backup falhar, o CRM abre mesmo assim e mostra um aviso na janela do servidor.
+  Se o backup falhar, o CRM abre mesmo assim e registra um aviso em `data\crm.log`.
 
 ## Backup e restauração
 - **Dados › Fazer backup agora**: cria uma cópia imediata.

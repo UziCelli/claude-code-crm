@@ -4,7 +4,9 @@ import datetime as dt
 import io
 import math
 import re
+import signal
 import sqlite3
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote
@@ -1118,6 +1120,15 @@ LIXEIRA = [("clientes", "Cliente", "nome"), ("leads", "Lead", "nome"), ("propost
            ("cliente_eventos", "Evento de cliente", "descricao"), ("lista_espera", "Lista de espera", "nome"),
            ("gastos_marketing", "Gasto de marketing", "canal"), ("campanha_itens", "Item de campanha", "texto"),
            ("lancamentos", "Lançamento", "COALESCE(descricao, categoria)"), ("recorrencias", "Conta recorrente", "descricao")]
+
+
+@app.post("/encerrar", response_class=HTMLResponse)
+def encerrar():
+    # o servidor roda sem janela (iniciar-crm.bat); SIGINT faz o uvicorn desligar com calma, depois de responder
+    threading.Timer(0.5, signal.raise_signal, (signal.SIGINT,)).start()
+    return HTMLResponse("<!doctype html><meta charset='utf-8'><title>CRM encerrado</title>"
+                        "<body style='font-family:system-ui;padding:40px;background:#E8F0FA;color:#0F2A52'>"
+                        "<h1>CRM encerrado.</h1><p>Pode fechar esta aba. Para abrir de novo, use o atalho da Área de Trabalho.</p>")
 
 
 @app.get("/dados", response_class=HTMLResponse)
