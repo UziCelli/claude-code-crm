@@ -16,8 +16,9 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Envia o crm.db local para o Turso.")
     ap.add_argument("--substituir", action="store_true", help="apaga o que já estiver no Turso antes de enviar")
     args = ap.parse_args(argv)
-    if not (nuvem.URL and nuvem.TOKEN):
-        print("Falta TURSO_DATABASE_URL e/ou TURSO_AUTH_TOKEN no arquivo .env (veja o README).")
+    if not (nuvem.preenchido(nuvem.URL) and nuvem.preenchido(nuvem.TOKEN)):
+        print("O .env não foi encontrado ou ainda está com os textos de exemplo.\n"
+              "Abra com: notepad .env  e troque a URL e o token pelos do Turso (veja o README).")
         return 1
     if not db.DB_LOCAL.exists():
         print(f"Banco local não encontrado: {db.DB_LOCAL}")

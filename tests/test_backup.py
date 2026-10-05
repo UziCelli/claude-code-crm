@@ -67,3 +67,15 @@ def test_parametros_nomeados_viram_posicionais():
     from app import nuvem
     sql, p = nuvem._posicional("UPDATE t SET a=:a, b=':nao' WHERE c=:c AND d=:a", {"a": 1, "c": 3, "x": 9})
     assert sql == "UPDATE t SET a=?, b=':nao' WHERE c=? AND d=?" and p == (1, 3, 1)
+
+
+def test_env_com_bom_e_textos_de_exemplo(tmp_path, monkeypatch):
+    from app import nuvem
+    monkeypatch.delenv("TURSO_DATABASE_URL", raising=False)
+    env = tmp_path / ".env"
+    env.write_text("﻿TURSO_DATABASE_URL=libsql://crm-teste.turso.io\n", encoding="utf-8")   # BOM do Bloco de Notas
+    nuvem.carregar_env(env)
+    assert nuvem.os.environ["TURSO_DATABASE_URL"] == "libsql://crm-teste.turso.io"
+    assert nuvem.preenchido("libsql://crm-teste.turso.io")
+    assert not nuvem.preenchido("libsql://NOME-DO-BANCO-SEU-USUARIO.turso.io")
+    assert not nuvem.preenchido("cole-o-token-aqui") and not nuvem.preenchido("")
