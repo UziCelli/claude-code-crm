@@ -46,7 +46,7 @@ Plano completo em `C:\Users\victo\.claude\plans\a-gente-vai-come-ar-functional-t
   - Pendente: usuário aprovar a simulação (363 lançamentos + 6 recorrências; totais por mês batem com a planilha) e então rodar `.venv\Scripts\python.exe -m app.migrar_financeiro --gravar` com o Excel e o CRM fechados.
   - Preview `crm-teste-fin` (porta 8767): cópia temporária do banco já com a migração gravada, para conferir as telas.
   - Saldos de contas (`tblSaldosContas`) não migrados: decidir depois.
-- **Banco na nuvem (Turso): código pronto em 05/10/2026** (`app/nuvem.py`, `python -m app.subir_nuvem`; testes rodam também com `CRM_BANCO=libsql`). Pendente: usuário criar a conta, preencher o `.env` e subir os dados.
+- **Banco na nuvem (Turso): código pronto em 05/10/2026** (`app/nuvem.py`, `python -m app.subir_nuvem`; testes rodam também com `CRM_BANCO=libsql`). **No ar desde 05/10/2026**: 1601 linhas enviadas, tela Dados mostra o Turso ligado. A `.venv` do PC agora usa Python 3.13 (o libsql não tem pacote para o 3.14 no Windows). O `crm.db` antigo ficou como cópia de segurança.
 - **Depois:** repositório privado no GitHub (feito: UziCelli/claude-code-crm); publicar em `crm.vfitcoachapp.com` (Cloudflare Tunnel + Access); agente de IA (Sonnet 5.5) adiado.
 - Forma de pagamento dos clientes importados vem como "Mensal"/"Parcelado" (texto da planilha); o motor usa PIX como padrão nesses casos.
 - Multiagente: tarefas simples em Haiku, implementação em Sonnet 5.5, modelo principal só para revisão.
