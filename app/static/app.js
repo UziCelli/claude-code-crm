@@ -53,17 +53,49 @@ document.querySelectorAll("main table:not(.grade)").forEach(function (t) {
   Array.prototype.forEach.call(cab.cells, function (th) {
     for (var i = 0; i < (th.colSpan || 1); i++) rotulos.push(th.textContent.trim());
   });
+  // classes do cabeçalho que valem para a coluna inteira: dest = o que importa (destaque), sec = detalhe (discreto)
+  var tipos = [];
+  Array.prototype.forEach.call(cab.cells, function (th) {
+    var c = ["dest", "sec"].filter(function (k) { return th.classList.contains(k); });
+    for (var i = 0; i < (th.colSpan || 1); i++) tipos.push(c);
+  });
   cab.classList.add("cab");
+  var n = 0;
   Array.prototype.forEach.call(t.rows, function (tr) {
     if (tr === cab) return;
-    var col = 0;
+    if (n++ % 2) tr.classList.add("par");   // linhas alternadas: o olho não pula de linha
+    var col = 0, temSec = false;
     Array.prototype.forEach.call(tr.cells, function (td) {
       if (td.colSpan > 1) td.classList.add("larga");
-      else td.setAttribute("data-rot", rotulos[col] || "");
+      else {
+        td.setAttribute("data-rot", rotulos[col] || "");
+        (tipos[col] || []).forEach(function (k) { td.classList.add(k); });
+        if ((tipos[col] || []).indexOf("sec") >= 0 && td.textContent.trim()) temSec = true;
+      }
       col += td.colSpan || 1;
     });
+    if (temSec) {   // celular: detalhes ficam guardados atrás de "+ detalhes"
+      var mais = document.createElement("td");
+      mais.className = "mais";
+      mais.innerHTML = '<button type="button" class="claro pequeno" aria-expanded="false">+ detalhes</button>';
+      tr.appendChild(mais);
+    }
   });
   t.classList.add("cartoes");
+});
+
+// "+ detalhes" (celular) e régua de leitura: tocar/clicar numa linha a deixa marcada até tocar de novo
+document.addEventListener("click", function (e) {
+  var bt = e.target.closest("td.mais button");
+  if (bt) {
+    var aberto = bt.closest("tr").classList.toggle("aberto");
+    bt.setAttribute("aria-expanded", aberto);
+    bt.textContent = aberto ? "– menos" : "+ detalhes";
+    return;
+  }
+  if (e.target.closest("a, button, input, select, textarea, label, summary, form")) return;
+  var tr = e.target.closest("table.cartoes tr:not(.cab)");
+  if (tr) tr.classList.toggle("foco");
 });
 
 // Grade: no celular mostra um dia por vez (abre no dia de hoje; domingo abre na segunda).

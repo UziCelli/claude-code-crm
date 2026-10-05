@@ -78,7 +78,7 @@
   </form>
   <details class="mt"><summary class="muted">Ver todos os preços base</summary>
   <div class="rolagem mt"><table>
-    <tr><th>Tipo</th><th>Local</th><th>Pagamento</th><th class="num">Aulas</th><th class="num">x/sem</th><th class="num">Sessões</th><th class="num">Preço</th><th class="num">Custo op.</th><th class="num">Mão de obra</th><th>Origem</th></tr>
+    <tr><th>Tipo</th><th>Local</th><th>Pagamento</th><th class="num">Aulas</th><th class="num">x/sem</th><th class="num sec">Sessões</th><th class="num dest">Preço</th><th class="num sec">Custo op.</th><th class="num sec">Mão de obra</th><th class="sec">Origem</th></tr>
     {% for p in precos %}
     <tr><td>{{ p.tipo_servico }}</td><td>{{ p.local }}</td><td>{{ p.forma_pagamento }}</td><td class="num">{{ p.qtd_aulas or '' }}</td><td class="num">{{ p.freq_semanal or '' }}</td>
       <td class="num">{{ p.sessoes_mes|num(0) }}</td><td class="num">{{ p.preco_base|moeda }}</td><td class="num">{{ p.custo_operacional|moeda }}</td><td class="num">{{ p.mao_obra|moeda }}</td><td class="muted">{{ p.origem }}</td></tr>

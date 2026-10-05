@@ -31,7 +31,7 @@
 <div class="card mt">
   <h3>A pagar e a receber</h3>
   <table>
-    <thead><tr><th>Vence</th><th>Conta</th><th>Categoria</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead>
+    <thead><tr><th>Vence</th><th>Conta</th><th class="sec">Categoria</th><th class="num dest">Valor</th><th>Situação</th><th></th></tr></thead>
     <tbody>
     {% for i in pend %}
     <tr>
@@ -58,7 +58,7 @@
 <div class="card mt">
   <h3>Livro-caixa</h3>
   <table>
-    <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Contraparte</th><th>Conta</th><th>Forma</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead>
+    <thead><tr><th>Data</th><th>Descrição</th><th class="sec">Categoria</th><th class="sec">Contraparte</th><th class="sec">Conta</th><th class="sec">Forma</th><th class="num dest">Valor</th><th>Situação</th><th></th></tr></thead>
     <tbody>
     {% for l in lancs %}
     <tr>
@@ -89,7 +89,7 @@
     <button class="claro pequeno" data-abrir="dlg-rec" data-titulo="Nova conta recorrente">Nova conta recorrente</button>
   </div>
   <table>
-    <thead><tr><th>Dia</th><th>Descrição</th><th>Categoria</th><th>Conta</th><th class="num">Valor previsto</th><th>Período</th><th></th></tr></thead>
+    <thead><tr><th>Dia</th><th>Descrição</th><th class="sec">Categoria</th><th class="sec">Conta</th><th class="num dest">Valor previsto</th><th class="sec">Período</th><th></th></tr></thead>
     <tbody>
     {% for r in recs %}
     <tr>

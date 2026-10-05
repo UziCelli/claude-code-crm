@@ -64,7 +64,7 @@
       </div>
       {% endfor %}
     </div>
-    <table class="mt"><tr><th>Mês</th><th class="num">Clientes</th><th class="num">Horas</th><th class="num">Lucro/h</th><th class="num">Grupos</th><th class="num">Recorrente</th><th class="num">Perdidos</th><th class="num">Nível</th></tr>
+    <table class="mt"><tr><th>Mês</th><th class="num">Clientes</th><th class="num sec">Horas</th><th class="num">Lucro/h</th><th class="num sec">Grupos</th><th class="num dest">Recorrente</th><th class="num sec">Perdidos</th><th class="num">Nível</th></tr>
       {% for h in historico|reverse %}
       <tr><td>{{ h.mes[5:] }}/{{ h.mes[:4] }}</td><td class="num">{{ h.clientes_ativos }}</td><td class="num">{{ h.horas_ocupadas|num(0) }}</td><td class="num">{{ h.lucro_hora|moeda }}</td>
         <td class="num">{{ h.pct_receita_grupos|pct }}</td><td class="num">{{ h.faturamento_recorrente|moeda }}</td><td class="num">{{ h.clientes_perdidos }}</td><td class="num">{{ h.nivel }}</td></tr>
@@ -76,7 +76,7 @@
     <div class="muted">Metas: conversa {{ metas.conv_conversa|pct }} · avaliação {{ metas.conv_avaliacao|pct }} · fechamento {{ metas.conv_fechamento|pct }} · CAC ≤ {{ metas.cac_max|moeda }} · LTV/CAC > {{ metas.ltv_cac_min|int }}x</div>
     {% if canais %}
     <div class="rolagem mt"><table>
-      <tr><th>Canal</th><th class="num">Leads</th><th class="num">Conversa</th><th class="num">Avaliação</th><th class="num">Fechamento</th><th class="num">Clientes</th><th class="num">Gasto</th><th class="num">CPL</th><th class="num">CAC</th><th class="num">LTV/CAC</th></tr>
+      <tr><th>Canal</th><th class="num">Leads</th><th class="num sec">Conversa</th><th class="num sec">Avaliação</th><th class="num sec">Fechamento</th><th class="num dest">Clientes</th><th class="num sec">Gasto</th><th class="num sec">CPL</th><th class="num">CAC</th><th class="num sec">LTV/CAC</th></tr>
       {% for c in canais %}
       <tr>
         <td>{{ c.canal }}</td><td class="num">{{ c.leads }}</td>

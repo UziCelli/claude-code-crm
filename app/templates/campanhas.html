@@ -39,7 +39,7 @@
   <div class="card">
     <div class="linha" style="justify-content:space-between"><h2 style="margin:0">Gastos por canal</h2>
       <form method="get" class="inline"><select name="mes" onchange="this.form.submit()" style="width:auto">{% for m in meses %}<option {{ 'selected' if m == mes }}>{{ m }}</option>{% endfor %}</select></form></div>
-    <table class="mt"><tr><th>Canal</th><th class="num">Mensalidade</th><th class="num">Anúncios</th><th class="num">Comissões</th><th class="num">Total</th><th class="num">Leads</th><th class="num">Clientes</th><th></th></tr>
+    <table class="mt"><tr><th>Canal</th><th class="num sec">Mensalidade</th><th class="num sec">Anúncios</th><th class="num sec">Comissões</th><th class="num dest">Total</th><th class="num">Leads</th><th class="num dest">Clientes</th><th></th></tr>
       {% for g in gastos %}
       <tr><td>{{ g.canal }}</td><td class="num">{{ g.mensalidade|moeda }}</td><td class="num">{{ g.anuncios|moeda }}</td><td class="num">{{ g.comissoes|moeda }}</td><td class="num"><strong>{{ (g.mensalidade + g.anuncios + g.comissoes + g.outros)|moeda }}</strong></td><td class="num">{{ g.leads }}</td><td class="num">{{ g.clientes }}</td>
         <td><button class="claro pequeno" data-abrir="dlg-gasto" data-titulo="Editar gasto" data-mes="{{ g.mes }}" data-canal="{{ g.canal }}" data-mensalidade="{{ g.mensalidade }}" data-anuncios="{{ g.anuncios }}" data-comissoes="{{ g.comissoes }}" data-outros="{{ g.outros }}" data-leads="{{ g.leads }}" data-agendamentos="{{ g.agendamentos }}" data-clientes="{{ g.clientes }}" data-observacao="{{ g.observacao or '' }}">Editar</button>

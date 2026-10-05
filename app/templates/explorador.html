@@ -13,7 +13,7 @@
 </form>
 <p class="muted mt">{{ total }} combinações (mostrando até 400). Horários livres de {{ f.local }} × planos com pagamento {{ f.forma }} para {{ f.pessoas }} pessoa(s).</p>
 <div class="rolagem"><table>
-  <tr><th>Plano</th><th>Horário</th><th class="num">Mult.</th><th class="num">Preço</th><th class="num">Por pessoa</th><th class="num">Lucro</th><th class="num">Margem</th><th class="num">Lucro/h</th><th class="num">Desc. máx.</th><th></th></tr>
+  <tr><th>Plano</th><th>Horário</th><th class="num sec">Mult.</th><th class="num dest">Preço</th><th class="num sec">Por pessoa</th><th class="num">Lucro</th><th class="num dest">Margem</th><th class="num sec">Lucro/h</th><th class="num sec">Desc. máx.</th><th></th></tr>
   {% for l in linhas %}
   <tr class="{{ l.margem|cor }}">
     <td>{{ l.tipo_servico }}{% if l.qtd_aulas %} {{ l.qtd_aulas }} aulas{% endif %}{% if l.freq_semanal %} {{ l.freq_semanal }}x/sem{% endif %}</td>

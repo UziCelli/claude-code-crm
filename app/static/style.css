@@ -244,6 +244,24 @@ button.claro.ativo { background: var(--aco); color: #fff; }
 .menu .sair { background: none; color: #cdd8ea; padding: 8px 12px; border-radius: 8px; font-weight: 500; white-space: nowrap; }
 .menu .sair:hover { background: rgba(255,255,255,.08); color: #fff; }
 
+/* ===== tabelas fáceis de ler (TDAH): destaque no que importa, detalhes discretos, linhas alternadas, régua de leitura ===== */
+table.cartoes td { padding: 10px 12px; line-height: 1.4; }
+table.cartoes tr.par td { background: #F5F8FC; }
+table.cartoes td.dest { font-weight: 700; font-size: 15px; color: var(--marinho); }
+table.cartoes td.dest .v-entrada, table.cartoes td.dest.v-entrada { color: #14663a; }
+table.cartoes td.dest .v-saida, table.cartoes td.dest.v-saida { color: #8f1d17; }
+table.cartoes td.sec { color: var(--cinza); font-size: 13px; }
+table.cartoes th.sec { color: var(--cinza); font-weight: 600; }
+table.cartoes th.dest { color: var(--marinho); }
+table.cartoes td.mais { display: none; }
+table.cartoes td.num { white-space: nowrap; }   /* valor numa linha só: "– R$ 1.000,52" não quebra */
+/* célula de botões: continua célula de tabela (estica até a altura da linha), botões lado a lado */
+table.cartoes td.linha { display: table-cell; white-space: nowrap; }
+table.cartoes td.linha > * + * { margin-left: 6px; }
+@media (hover: hover) { table.cartoes tr:not(.cab):hover td { background: var(--azul-f); } }
+table.cartoes tr.foco td, table.cartoes tr.foco:hover td { background: #FFF0B8; }
+table.cartoes tr.foco td:first-child { box-shadow: inset 4px 0 0 var(--amarelo); }
+
 /* ===== celular (até 760 px). No PC nada abaixo se aplica. ===== */
 .dias-celular { display: none; }
 @media (max-width: 760px) {
@@ -253,7 +271,21 @@ button.claro.ativo { background: var(--aco); color: #fff; }
   .kpi .valor { font-size: 24px; }
 
   /* tabelas viram cartões: título = 1ª coluna; demais linhas = "rótulo   valor" */
-  table.cartoes, table.cartoes tbody, table.cartoes tr, table.cartoes td { display: block; width: 100%; }
+  table.cartoes, table.cartoes tbody, table.cartoes td { display: block; width: 100%; }
+  table.cartoes tr { display: flex; flex-direction: column; width: 100%; }
+  /* ordem no cartão: título, destaque, o resto, "+ detalhes", botões */
+  table.cartoes td:first-child { order: -2; }
+  table.cartoes td.dest { order: -1; }
+  table.cartoes td.mais { order: 1; display: block; padding-top: 6px; }
+  table.cartoes td[data-rot=""] { order: 2; }
+  table.cartoes tr:not(.aberto) td.sec { display: none; }
+  table.cartoes tr.par td, table.cartoes tr:not(.cab):hover td { background: transparent; }
+  table.cartoes td .tag { flex-shrink: 0; white-space: nowrap; }
+  table.cartoes tr.foco { background: #FFF0B8; border-color: var(--amarelo); }
+  table.cartoes tr.foco td { background: transparent; }
+  table.cartoes tr.foco td:first-child { box-shadow: none; }
+  table.cartoes td.dest { font-size: 18px; }
+  table.cartoes td.dest::before { align-self: center; }
   table.cartoes { background: transparent; border-radius: 0; overflow: visible; }
   table.cartoes thead, table.cartoes tr.cab { display: none; }
   table.cartoes tr { background: #fff; border: 1px solid var(--borda); border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; }
