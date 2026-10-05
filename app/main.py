@@ -12,11 +12,12 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import db, exportar, financeiro, importar, precos
+from . import acesso, db, exportar, financeiro, importar, precos
 
 ROOT = Path(__file__).resolve().parent
 DIAS = {1: "Segunda", 2: "Terça", 3: "Quarta", 4: "Quinta", 5: "Sexta", 6: "Sábado", 7: "Domingo"}
@@ -43,6 +44,22 @@ async def lifespan(app):
 
 
 app = FastAPI(title="VFITCOACH CRM", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def portaria(request: Request, call_next):
+    """Na internet (CRM_NUVEM=1), só passa quem entrou pelo Cloudflare Access. No PC não faz nada."""
+    motivo = await run_in_threadpool(acesso.motivo_bloqueio, request.method, request.url.path, request.headers, request.cookies)
+    if motivo:
+        return HTMLResponse("<!doctype html><meta charset='utf-8'><meta name='viewport' content='width=device-width'>"
+                            "<title>VFITCOACH CRM</title><body style='font-family:system-ui;padding:24px;background:#E8F0FA;color:#0F2A52'>"
+                            f"<h1>Acesso restrito</h1><p>{acesso.MENSAGENS[motivo]}</p>", status_code=403)
+    return await call_next(request)
+
+
+@app.get("/saude", response_class=PlainTextResponse)
+def saude():
+    return "ok"   # checagem do Render; não abre o banco nem mostra dados
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 templates = Jinja2Templates(directory=ROOT / "templates")
 
@@ -87,10 +104,12 @@ def preencher(texto, nome="", data=""):
 
 
 templates.env.filters["preencher"] = preencher
-templates.env.globals.update(ETAPAS=ETAPAS, DIAS=DIAS, hoje=lambda: dt.date.today().isoformat(), wa=wa)
+templates.env.globals.update(ETAPAS=ETAPAS, DIAS=DIAS, hoje=lambda: dt.date.today().isoformat(), wa=wa, acesso=acesso)
 
 
 def get_db():
+    if db.nuvem.ativo():
+        db.nuvem.sincronizar_se_velho(db.DB_PATH)   # traz o que foi lançado no outro aparelho (PC ou celular)
     con = db.conectar()
     try:
         yield con
@@ -1130,6 +1149,8 @@ LIXEIRA = [("clientes", "Cliente", "nome"), ("leads", "Lead", "nome"), ("propost
 
 @app.post("/encerrar", response_class=HTMLResponse)
 def encerrar():
+    if acesso.LIGADO:   # na internet o servidor é do Render: desligar só faria o CRM sumir para todos
+        return HTMLResponse("Indisponível no CRM publicado.", status_code=404)
     # o servidor roda sem janela (iniciar-crm.bat); SIGINT faz o uvicorn desligar com calma, depois de responder
     threading.Timer(0.5, signal.raise_signal, (signal.SIGINT,)).start()
     return HTMLResponse("<!doctype html><meta charset='utf-8'><title>CRM encerrado</title>"
