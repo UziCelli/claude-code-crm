@@ -31,7 +31,7 @@
 </div>
 <div class="card mt">
   <h2>Lixeira (últimos 30 dias)</h2>
-  <table><tr><th>Tipo</th><th>Registro</th><th>Excluído em</th><th></th></tr>
+  <table><tr><th>Tipo</th><th class="dest">Registro</th><th class="sec">Excluído em</th><th></th></tr>
     {% for l in lixo %}
     <tr><td>{{ l.rotulo }}</td><td>{{ l.nome }}</td><td>{{ l.quando }}</td><td><form method="post" action="/lixeira/restaurar" class="inline"><input type="hidden" name="tabela" value="{{ l.tabela }}"><input type="hidden" name="rid" value="{{ l.id }}"><button class="claro pequeno">Restaurar</button></form></td></tr>
     {% else %}<tr><td colspan="4" class="muted vazio">Lixeira vazia. Quando você excluir um cliente, lead ou proposta, ele fica aqui por 30 dias e pode voltar com <b>Restaurar</b>.</td></tr>{% endfor %}

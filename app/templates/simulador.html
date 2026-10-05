@@ -42,7 +42,7 @@
 
 <h2 class="mt">Propostas recentes</h2>
 <div class="rolagem"><table>
-  <tr><th>#</th><th>Data</th><th>Para</th><th>Plano</th><th>Local</th><th class="num">Pessoas</th><th class="num">Preço</th><th class="num">Margem</th><th class="num">Lucro/h</th><th>Status</th><th></th></tr>
+  <tr><th>#</th><th class="sec">Data</th><th>Para</th><th>Plano</th><th class="sec">Local</th><th class="num sec">Pessoas</th><th class="num dest">Preço</th><th class="num">Margem</th><th class="num sec">Lucro/h</th><th>Status</th><th></th></tr>
   {% for p in propostas %}
   <tr class="{{ p.margem|cor }}"><td>{{ p.id }}</td><td>{{ p.data|data }}</td><td>{% if p.cliente_id %}<a href="/clientes/{{ p.cliente_id }}">{{ p.cliente_nome }}</a>{% else %}{{ p.lead_nome or '—' }}{% endif %}</td>
     <td>{{ p.tipo_servico }} {{ p.qtd_aulas or '' }}{% if p.freq_semanal %}{{ p.freq_semanal }}x/sem{% endif %}{% if p.desconto %} · -{{ p.desconto|pct }}{% endif %}</td><td>{{ p.local }}{% if p.dia %} · {{ p.dia|dia_curto }} {{ p.hora }}h{% endif %}</td>

@@ -25,7 +25,7 @@
       <div><label>Observação</label><input name="observacao"></div>
       <div class="largo"><button>Adicionar à espera</button></div>
     </form>
-    <table class="mt"><tr><th>Nome</th><th>Quando</th><th>Local</th><th>Desde</th><th></th></tr>
+    <table class="mt"><tr><th>Nome</th><th>Quando</th><th>Local</th><th class="sec">Desde</th><th></th></tr>
       {% for e in espera %}
       <tr><td>{{ e.nome }}{% if e.telefone %} <span class="muted">{{ e.telefone }}</span>{% endif %}</td><td>{{ e.dia|dia if e.dia else 'Qualquer' }} {{ '%02d'|format(e.hora) }}h</td><td>{{ e.local or '—' }}</td><td>{{ e.data|data }}</td>
         <td><form method="post" action="/espera/{{ e.id }}/excluir" class="inline"><button class="claro pequeno">x</button></form></td></tr>

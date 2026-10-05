@@ -49,7 +49,7 @@
       </div>
       {% endfor %}
     </div>
-    <table class="mt"><tr><th>Mês</th><th class="num">Receita</th><th class="num">Custos</th><th class="num">Lucro</th></tr>
+    <table class="mt"><tr><th>Mês</th><th class="num">Receita</th><th class="num">Custos</th><th class="num dest">Lucro</th></tr>
       {% for s in serie|reverse %}
       <tr><td>{{ s.mes[5:] }}/{{ s.mes[:4] }}</td><td class="num">{{ s.receita|moeda }}</td><td class="num">{{ (s.custos_fixos + s.custos_variaveis)|moeda }}</td><td class="num">{{ s.lucro|moeda }}</td></tr>
       {% endfor %}
