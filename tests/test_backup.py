@@ -41,3 +41,29 @@ def test_restaurar_arquivo_vazio_e_recusado(banco_tmp):
         db.restaurar_backup("vazio.db")
     assert db.DB_PATH.read_bytes() == antes
     assert not list(pasta.glob("antes-restaurar-*.db"))  # recusou antes de mexer em qualquer coisa
+
+
+def test_copiar_dados_deixa_destino_igual_a_origem(banco_tmp):
+    """Usado para subir o crm.db ao Turso e para restaurar backup no modo nuvem."""
+    from app import nuvem
+    con = db.conectar()
+    with con:
+        cid = con.execute("INSERT INTO clientes (nome, status) VALUES ('Ana', 'ativo')").lastrowid
+        con.execute("INSERT INTO cliente_eventos (cliente_id, data, tipo, descricao) VALUES (?, '2026-10-01', 'aula', 'x')", (cid,))
+    con.close()
+    copia = db.fazer_backup()
+    con = db.conectar()
+    with con:
+        con.execute("DELETE FROM cliente_eventos")
+        con.execute("UPDATE clientes SET nome='Outra'")
+        con.execute("INSERT INTO clientes (nome, status) VALUES ('Sobra', 'ativo')")
+    contagem = nuvem.copiar_dados(copia, con)
+    assert contagem["clientes"] == 1 and contagem["cliente_eventos"] == 1
+    assert [r["nome"] for r in con.execute("SELECT nome FROM clientes")] == ["Ana"]
+    con.close()
+
+
+def test_parametros_nomeados_viram_posicionais():
+    from app import nuvem
+    sql, p = nuvem._posicional("UPDATE t SET a=:a, b=':nao' WHERE c=:c AND d=:a", {"a": 1, "c": 3, "x": 9})
+    assert sql == "UPDATE t SET a=?, b=':nao' WHERE c=? AND d=?" and p == (1, 3, 1)

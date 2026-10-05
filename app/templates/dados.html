@@ -10,6 +10,10 @@
   </div>
   <div class="card">
     <h2>Backup</h2>
+    {% if nuvem.ativo() and not nuvem.SO_ADAPTADOR %}
+    {% if nuvem.status.erro %}<div class="aviso erro">Banco na nuvem (Turso) sem conexão: {{ nuvem.status.erro }}</div>
+    {% else %}<div class="aviso">Banco na nuvem (Turso) ligado.{% if nuvem.status.ultima_sync %} Última sincronização: {{ nuvem.status.ultima_sync.strftime('%d/%m/%Y %H:%M') }}.{% endif %}</div>{% endif %}
+    {% endif %}
     <div class="muted">Banco: {{ banco }}<br>Backups (neste computador): {{ pasta_backup }}<br>Automático 1x por dia ao abrir; mantém os 30 últimos.</div>
     {% if erro_backup %}<div class="aviso erro mt">{{ erro_backup }}</div>{% endif %}
     <form method="post" action="/backup" class="mt"><button>Fazer backup agora</button></form>

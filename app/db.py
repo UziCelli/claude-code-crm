@@ -4,8 +4,12 @@ import shutil
 import sqlite3
 from pathlib import Path
 
+from . import nuvem
+
 ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = ROOT / "data" / "crm.db"
+DB_LOCAL = ROOT / "data" / "crm.db"
+# com Turso, a réplica local é outro arquivo: o crm.db antigo fica intacto como fonte do envio (python -m app.subir_nuvem)
+DB_PATH = ROOT / "data" / "crm-nuvem.db" if nuvem.ativo() and not nuvem.SO_ADAPTADOR else DB_LOCAL
 SCHEMA = ROOT / "app" / "schema.sql"
 BACKUP_DIR = ROOT / "data" / "backups"   # local e fora do git (data/ é ignorado)
 PLANILHA = Path(r"C:\Users\victo\OneDrive\Documentos\Contabilidade.xlsx")
@@ -101,6 +105,8 @@ CHECKPOINTS_INICIAIS = [
 
 
 def conectar(caminho: Path = None) -> sqlite3.Connection:
+    if nuvem.ativo():
+        return nuvem.conectar(caminho or DB_PATH)
     con = sqlite3.connect(caminho or DB_PATH, check_same_thread=False)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
@@ -155,11 +161,11 @@ def pasta_backup() -> Path:
     return BACKUP_DIR
 
 
-def fazer_backup(prefixo: str = "crm") -> Path:
+def fazer_backup(prefixo: str = "crm", arquivo: Path = None) -> Path:
     """Cópia consistente do banco (API de backup do SQLite). Mantém os últimos MANTER_BACKUPS."""
     pasta = pasta_backup()
     destino = pasta / f"{prefixo}-{dt.datetime.now():%Y-%m-%d_%H%M%S}.db"
-    origem = sqlite3.connect(DB_PATH)
+    origem = sqlite3.connect(arquivo or DB_PATH)   # a réplica do Turso também é um arquivo SQLite comum
     copia = sqlite3.connect(destino)
     with copia:
         origem.backup(copia)
@@ -203,6 +209,13 @@ def restaurar_backup(nome: str) -> Path:
     if not ok:
         raise ValueError(f"O arquivo {origem.name} está corrompido ou não é um banco do CRM. Nada foi alterado.")
     seguranca = fazer_backup("antes-restaurar")
-    shutil.copy2(origem, DB_PATH)
+    if nuvem.ativo():   # trocar o arquivo da réplica quebraria a sincronização: regrava os dados pela conexão
+        con = conectar()
+        try:
+            nuvem.copiar_dados(origem, con)
+        finally:
+            con.close()
+    else:
+        shutil.copy2(origem, DB_PATH)
     iniciar_banco()   # backup antigo pode não ter tabelas novas; idempotente
     return seguranca

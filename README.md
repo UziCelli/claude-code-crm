@@ -27,6 +27,14 @@ Pode importar de novo sempre que atualizar a planilha: nada duplica e os campos 
 - Um backup automático é feito ao abrir o CRM (1 por dia) e antes de cada importação; ficam os 30 mais recentes de cada tipo.
   Se o backup falhar, o CRM abre mesmo assim e registra um aviso em `data\crm.log`.
 
+## Banco na nuvem (Turso, opcional)
+Com o Turso ligado, os dados ficam no banco da nuvem (plano grátis) e o CRM trabalha numa réplica local, `data\crm-nuvem.db`.
+- **Ligar:** copie `.env.example` como `.env`, preencha `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN` e rode uma vez, com o CRM fechado,
+  `.venv\Scripts\python.exe -m app.subir_nuvem`. Isso envia o `crm.db` atual, que fica intacto como cópia de segurança.
+- **Sem internet:** dá para consultar tudo (réplica local), mas gravar precisa de conexão. O painel avisa quando a conexão cai.
+- **Desligar:** apague ou renomeie o `.env`. O CRM volta a usar o `crm.db`, que não recebe o que foi lançado no Turso nesse período.
+- O `.env` contém a chave do banco e nunca vai para o GitHub (está no `.gitignore`).
+
 ## Backup e restauração
 - **Dados › Fazer backup agora**: cria uma cópia imediata.
 - **Dados › Restaurar backup**: escolha o arquivo, digite RESTAURAR e confirme. O banco atual é guardado antes como `antes-restaurar-*.db`. Arquivo corrompido é recusado e nada muda.

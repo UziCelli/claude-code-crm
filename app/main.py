@@ -30,7 +30,11 @@ SEMANAS_MES = 4.33
 
 @asynccontextmanager
 async def lifespan(app):
+    if db.nuvem.ativo():
+        db.nuvem.sincronizar(db.DB_PATH)   # sem internet segue com a réplica local; o alerta avisa
     db.iniciar_banco()
+    if db.nuvem.ativo():
+        db.nuvem.iniciar_sync_periodico(db.DB_PATH)
     try:
         db.backup_diario()
     except Exception as e:  # o CRM abre mesmo se o backup falhar
@@ -212,6 +216,8 @@ def alertas(con):
                        AND (telefone IS NULL OR telefone='' OR data_renovacao IS NULL)""").fetchone()[0]
     if n:
         add("azul", f"{n} aluno{s(n)} ativo{s(n)} com cadastro incompleto (telefone ou renovação)", "/clientes")
+    if db.nuvem.ativo() and db.nuvem.status["erro"]:
+        add("vermelho", "Sem conexão com o banco na nuvem (Turso): confira a internet antes de lançar algo", "/dados")
     return sorted(out, key=lambda a: a["grav"])  # estável: mantém a ordem das fontes dentro da gravidade
 
 
@@ -1145,7 +1151,7 @@ def dados(request: Request, con=Depends(get_db)):
     except OSError as e:  # sem redirect para /dados (viraria laço): mostra o erro na própria tela
         erro_backup = f"Não foi possível ler a pasta de backups: {e}"
     return render(request, "dados.html", con, backups=backups, lixo=lixo, pasta_backup=str(db.BACKUP_DIR),
-                  banco=str(db.DB_PATH), erro_backup=erro_backup)
+                  banco=str(db.DB_PATH), erro_backup=erro_backup, nuvem=db.nuvem)
 
 
 @app.post("/backup")
