@@ -41,8 +41,10 @@ def test_sem_login_e_barrado(na_internet):
     assert na_internet.get("/static/style.css").status_code == 403
 
 
-def test_saude_responde_sem_login(na_internet):
-    assert na_internet.get("/saude").text == "ok"
+@pytest.mark.parametrize("caminho", ["/saude", "/health", "/healthz"])
+def test_saude_responde_sem_login(na_internet, caminho):
+    assert na_internet.get(caminho).text == "ok"
+    assert na_internet.head(caminho).status_code == 200
 
 
 def test_login_valido_entra_e_esconde_encerrar(na_internet):

@@ -14,7 +14,7 @@ import jwt
 LIGADO = os.environ.get("CRM_NUVEM") == "1"
 EQUIPE = os.environ.get("CF_ACCESS_TEAM_DOMAIN", "").strip().removeprefix("https://").strip("/")
 AUD = os.environ.get("CF_ACCESS_AUD", "").strip()
-LIVRES = {"/saude"}   # checagem de saúde do Render: não mostra dado nenhum
+LIVRES = {"/saude", "/health", "/healthz"}   # checagem de saúde do Render (qualquer nome): não mostra dado nenhum
 _jwks = None
 
 MENSAGENS = {
