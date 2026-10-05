@@ -29,6 +29,9 @@ Pode importar de novo sempre que atualizar a planilha: nada duplica e os campos 
 
 ## Banco na nuvem (Turso, opcional)
 Com o Turso ligado, os dados ficam no banco da nuvem (plano grátis) e o CRM trabalha numa réplica local, `data\crm-nuvem.db`.
+- **Python:** a biblioteca do Turso ainda não tem versão para o Python 3.14 no Windows. Instale o Python 3.13
+  (`winget install -e --id Python.Python.3.13`), feche o CRM, apague a pasta `.venv` e rode `py -3.13 -m venv .venv`
+  e `.venv\Scripts\python.exe -m pip install -r requirements.txt`. O Python 3.14 do computador continua instalado.
 - **Ligar:** copie `.env.example` como `.env`, preencha `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN` e rode uma vez, com o CRM fechado,
   `.venv\Scripts\python.exe -m app.subir_nuvem`. Isso envia o `crm.db` atual, que fica intacto como cópia de segurança.
 - **Sem internet:** dá para consultar tudo (réplica local), mas gravar precisa de conexão. O painel avisa quando a conexão cai.
