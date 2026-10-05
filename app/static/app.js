@@ -44,3 +44,46 @@ document.querySelectorAll(".aviso.ok").forEach(function (a) {
     setTimeout(function () { a.remove(); }, 150); // = --dur-fast
   }, 4000);
 });
+// Celular: as regras de layout ficam no style.css (@media max-width: 760px); aqui só se marcam as tabelas e a grade.
+// Tabelas comuns viram cartões: cada célula ganha o rótulo da coluna (data-rot), mostrado antes do valor.
+document.querySelectorAll("main table:not(.grade)").forEach(function (t) {
+  var cab = t.querySelector("thead tr") || t.rows[0];
+  if (!cab || cab.querySelector("td")) return;   // sem linha de cabeçalho: fica como está
+  var rotulos = [];
+  Array.prototype.forEach.call(cab.cells, function (th) {
+    for (var i = 0; i < (th.colSpan || 1); i++) rotulos.push(th.textContent.trim());
+  });
+  cab.classList.add("cab");
+  Array.prototype.forEach.call(t.rows, function (tr) {
+    if (tr === cab) return;
+    var col = 0;
+    Array.prototype.forEach.call(tr.cells, function (td) {
+      if (td.colSpan > 1) td.classList.add("larga");
+      else td.setAttribute("data-rot", rotulos[col] || "");
+      col += td.colSpan || 1;
+    });
+  });
+  t.classList.add("cartoes");
+});
+
+// Grade: no celular mostra um dia por vez (abre no dia de hoje; domingo abre na segunda).
+document.querySelectorAll("table.grade").forEach(function (g) {
+  var nomes = Array.prototype.map.call(g.rows[0].cells, function (th) { return th.textContent.trim().slice(0, 3); }).slice(1);
+  var hoje = new Date().getDay();
+  var escolher = function (d) {
+    g.setAttribute("data-dia", d);
+    abas.querySelectorAll("button").forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.d == d); });
+  };
+  var abas = document.createElement("div");
+  abas.className = "dias-celular";
+  abas.setAttribute("role", "group");
+  abas.setAttribute("aria-label", "Dia da grade");
+  nomes.forEach(function (n, i) {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "claro pequeno"; b.dataset.d = i + 1; b.textContent = n;
+    b.addEventListener("click", function () { escolher(i + 1); });
+    abas.appendChild(b);
+  });
+  (g.closest(".rolagem") || g).before(abas);
+  escolher(hoje >= 1 && hoje <= nomes.length ? hoje : 1);
+});
