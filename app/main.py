@@ -106,7 +106,15 @@ def preencher(texto, nome="", data=""):
 
 
 templates.env.filters["preencher"] = preencher
-templates.env.globals.update(ETAPAS=ETAPAS, DIAS=DIAS, hoje=lambda: dt.date.today().isoformat(), wa=wa, acesso=acesso)
+def versao(arquivo):
+    """Etiqueta ?v= nos arquivos de /static: muda a cada atualização, então o navegador (celular) não usa o visual antigo do cache."""
+    try:
+        return int((ROOT / "static" / arquivo).stat().st_mtime)
+    except OSError:
+        return 0
+
+
+templates.env.globals.update(ETAPAS=ETAPAS, DIAS=DIAS, hoje=lambda: dt.date.today().isoformat(), wa=wa, acesso=acesso, versao=versao)
 
 
 def get_db():
