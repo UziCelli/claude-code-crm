@@ -33,7 +33,7 @@ URL = os.environ.get("TURSO_DATABASE_URL", "")
 TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "")
 # CRM_BANCO=libsql: usa o cliente libsql sem sincronizar (só para rodar os testes com o adaptador)
 SO_ADAPTADOR = os.environ.get("CRM_BANCO") == "libsql"
-status = {"ultima_sync": None, "erro": None}   # mostrado em Dados e nos alertas
+status = {"ultima_sync": None, "ultima_tentativa": None, "erro": None}   # mostrado em Dados e nos alertas
 
 
 EXEMPLOS = ("NOME-DO-BANCO", "cole-o-token-aqui")   # textos do .env.example que ainda não foram trocados
@@ -258,6 +258,17 @@ def sincronizar(caminho: Path) -> bool:
             return False
     status.update(ultima_sync=dt.datetime.now(), erro=None)
     return True
+
+
+def sincronizar_se_velho(caminho: Path, segundos: int = 30) -> None:
+    """Antes de cada tela: sincroniza se a última tentativa tem mais de `segundos` (sem internet, não insiste a cada clique)."""
+    if SO_ADAPTADOR:
+        return
+    ultima = status.get("ultima_tentativa")
+    if ultima and (dt.datetime.now() - ultima).total_seconds() < segundos:
+        return
+    status["ultima_tentativa"] = dt.datetime.now()
+    sincronizar(caminho)
 
 
 def iniciar_sync_periodico(caminho: Path) -> None:

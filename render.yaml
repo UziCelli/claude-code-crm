@@ -1,0 +1,22 @@
+# Blueprint do Render: New > Blueprint > escolher este repositório. Passo a passo no README ("CRM no celular").
+services:
+  - type: web
+    name: vfitcoach-crm
+    runtime: python
+    plan: free            # dorme após 15 min sem uso; para ficar sempre ligado, mude o plano no painel do Render
+    region: virginia
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /saude
+    autoDeploy: true      # cada mudança na main do GitHub publica sozinha
+    envVars:
+      - key: CRM_NUVEM    # liga a portaria do Cloudflare Access e esconde o botão Encerrar
+        value: "1"
+      - key: TURSO_DATABASE_URL
+        sync: false       # o Render pede o valor na criação (o mesmo do .env do PC)
+      - key: TURSO_AUTH_TOKEN
+        sync: false
+      - key: CF_ACCESS_TEAM_DOMAIN
+        sync: false       # ex.: vfitcoach.cloudflareaccess.com
+      - key: CF_ACCESS_AUD
+        sync: false       # "Application Audience (AUD) Tag" do app no Cloudflare Zero Trust

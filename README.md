@@ -38,6 +38,16 @@ Com o Turso ligado, os dados ficam no banco da nuvem (plano grátis) e o CRM tra
 - **Desligar:** apague ou renomeie o `.env`. O CRM volta a usar o `crm.db`, que não recebe o que foi lançado no Turso nesse período.
 - O `.env` contém a chave do banco e nunca vai para o GitHub (está no `.gitignore`).
 
+## CRM no celular (Render + Cloudflare Access)
+O mesmo CRM roda no Render (plano grátis), em `https://crm.vfitcoachapp.com`, usando o banco do Turso. O PC pode ficar desligado.
+- **Portaria:** o Cloudflare Access pede o seu e-mail e manda um código. O CRM confere o token do Cloudflare em cada pedido
+  (`app/acesso.py`), então entrar direto pelo endereço `*.onrender.com` não funciona. Sem a portaria configurada, nada aparece.
+- **Configuração no Render:** `render.yaml` (Blueprint). Pede 4 valores: `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN` (os mesmos do `.env`),
+  `CF_ACCESS_TEAM_DOMAIN` (ex.: `vfitcoach.cloudflareaccess.com`) e `CF_ACCESS_AUD` (o "Application Audience (AUD) Tag" do app no Cloudflare Zero Trust).
+- **Plano grátis:** depois de 15 minutos sem uso o servidor dorme, e o primeiro acesso leva cerca de 1 minuto. Para ficar sempre ligado, mude o plano no painel do Render.
+- Cada mudança juntada na `main` do GitHub é publicada sozinha. Na versão publicada, o botão Encerrar não aparece.
+- PC e celular usam o mesmo banco. O que é lançado num aparelho aparece no outro em até 30 segundos.
+
 ## Backup e restauração
 - **Dados › Fazer backup agora**: cria uma cópia imediata.
 - **Dados › Restaurar backup**: escolha o arquivo, digite RESTAURAR e confirme. O banco atual é guardado antes como `antes-restaurar-*.db`. Arquivo corrompido é recusado e nada muda.
