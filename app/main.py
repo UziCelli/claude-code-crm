@@ -57,7 +57,9 @@ async def portaria(request: Request, call_next):
     return await call_next(request)
 
 
-@app.get("/saude", response_class=PlainTextResponse)
+@app.api_route("/saude", methods=["GET", "HEAD"], response_class=PlainTextResponse)
+@app.api_route("/health", methods=["GET", "HEAD"], response_class=PlainTextResponse)
+@app.api_route("/healthz", methods=["GET", "HEAD"], response_class=PlainTextResponse)
 def saude():
     return "ok"   # checagem do Render; não abre o banco nem mostra dados
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
