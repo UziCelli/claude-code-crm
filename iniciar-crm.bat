@@ -5,13 +5,15 @@ cd /d "%~dp0"
 
 if not exist ".venv\Scripts\python.exe" (
     echo Primeira execucao: preparando o ambiente ^(1-2 minutos^)...
-    python -m venv .venv || (echo ERRO: Python 3 nao encontrado. Instale em https://www.python.org/downloads/ e marque "Add to PATH". & pause & exit /b 1)
+    py -3.13 -m venv .venv 2>nul || python -m venv .venv || (echo ERRO: Python 3 nao encontrado. Instale em https://www.python.org/downloads/ e marque "Add to PATH". & pause & exit /b 1)
     ".venv\Scripts\python.exe" -m pip install --quiet --upgrade pip
     ".venv\Scripts\python.exe" -m pip install --quiet -r requirements.txt || (echo ERRO ao instalar dependencias. & pause & exit /b 1)
     echo Ambiente pronto.
 )
-rem Dependencia nova (ex.: libsql do Turso) depois de um git pull: instala o que faltar.
-".venv\Scripts\python.exe" -c "import libsql" 2>nul || ".venv\Scripts\python.exe" -m pip install --quiet -r requirements.txt
+rem Turso ligado (.env) e biblioteca faltando (ex.: depois de um git pull): instala o que faltar.
+if exist ".env" (
+    ".venv\Scripts\python.exe" -c "import libsql" 2>nul || ".venv\Scripts\python.exe" -m pip install --quiet -r requirements.txt
+)
 if not exist "data" mkdir "data"
 
 rem Cria o atalho so se nenhum atalho da Area de Trabalho (com qualquer nome) ja abrir este arquivo.

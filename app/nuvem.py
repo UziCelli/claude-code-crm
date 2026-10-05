@@ -8,6 +8,7 @@ import datetime as dt
 import os
 import re
 import sqlite3
+import sys
 import threading
 from pathlib import Path
 
@@ -204,6 +205,9 @@ def _bruta(caminho: Path):
     try:
         import libsql   # só importado quando o modo nuvem está ligado
     except ImportError:
+        if sys.version_info >= (3, 14) and sys.platform == "win32":
+            raise RuntimeError("a biblioteca do Turso ainda não funciona no Python 3.14 do Windows: recrie a pasta .venv "
+                               "com o Python 3.13 (README, seção Banco na nuvem) ou apague o .env para usar o banco local") from None
         raise RuntimeError("falta a biblioteca do Turso: rode .venv\\Scripts\\python.exe -m pip install -r requirements.txt") from None
     chave = str(caminho)
     with _guarda:
