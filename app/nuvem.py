@@ -20,7 +20,8 @@ def carregar_env(arquivo: Path = ROOT / ".env") -> None:
     """Lê KEY=VALOR do .env para os.environ (sem sobrescrever o que já existe). Sem dependência extra."""
     if not arquivo.exists():
         return
-    for linha in arquivo.read_text(encoding="utf-8").splitlines():
+    # utf-8-sig: o Bloco de Notas pode gravar a marca BOM no início, que grudaria no nome da 1ª chave
+    for linha in arquivo.read_text(encoding="utf-8-sig", errors="replace").splitlines():
         linha = linha.strip()
         if linha and not linha.startswith("#") and "=" in linha:
             chave, valor = linha.split("=", 1)
@@ -35,8 +36,16 @@ SO_ADAPTADOR = os.environ.get("CRM_BANCO") == "libsql"
 status = {"ultima_sync": None, "erro": None}   # mostrado em Dados e nos alertas
 
 
+EXEMPLOS = ("NOME-DO-BANCO", "cole-o-token-aqui")   # textos do .env.example que ainda não foram trocados
+
+
+def preenchido(valor: str) -> bool:
+    return bool(valor) and not any(e in valor for e in EXEMPLOS)
+
+
 def ativo() -> bool:
-    return bool(URL and TOKEN) or SO_ADAPTADOR
+    """.env copiado mas ainda com os textos de exemplo conta como desligado: o CRM segue no banco local."""
+    return (preenchido(URL) and preenchido(TOKEN)) or SO_ADAPTADOR
 
 
 # ---------- imitação de sqlite3.Row / Cursor / Connection ----------
