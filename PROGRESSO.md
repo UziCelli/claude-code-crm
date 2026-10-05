@@ -42,10 +42,12 @@ Plano completo em `C:\Users\victo\.claude\plans\a-gente-vai-come-ar-functional-t
 - **Rodada 2 — financeiro PF + PJ: código pronto em 02/10/2026** (60 testes):
   - `/financeiro` (livro-caixa + "A pagar e a receber" + contas recorrentes/cartões), `/financeiro/mensalidades` (previsto × recebido), `/financeiro/painel` (receita, custos, lucro, ponto de equilíbrio, DAS, pró-labore, INSS, bloco PF, 12 meses); pagamentos na ficha do aluno; alerta de contas vencidas.
   - Lógica em `app/financeiro.py`; migração em `python -m app.migrar_financeiro` (sem `--gravar` só simula; com `--gravar` faz backup `antes-financeiro` e é idempotente).
-  - **Pendente: usuário aprovar a simulação** (363 lançamentos + 6 recorrências; totais por mês batem com a planilha) e então rodar `.venv\Scripts\python.exe -m app.migrar_financeiro --gravar` com o Excel e o CRM fechados.
+  - **Migração gravada** (conferido em 05/10/2026: simulação mostra 363 lançamentos e 6 recorrências já no CRM). Planilha aposentada. Antes:
+  - Pendente: usuário aprovar a simulação (363 lançamentos + 6 recorrências; totais por mês batem com a planilha) e então rodar `.venv\Scripts\python.exe -m app.migrar_financeiro --gravar` com o Excel e o CRM fechados.
   - Preview `crm-teste-fin` (porta 8767): cópia temporária do banco já com a migração gravada, para conferir as telas.
   - Saldos de contas (`tblSaldosContas`) não migrados: decidir depois.
-- **Depois:** repositório privado no GitHub; publicar em `crm.vfitcoachapp.com` (Cloudflare Tunnel + Access); agente de IA (Sonnet 5.5) adiado.
+- **Banco na nuvem (Turso): código pronto em 05/10/2026** (`app/nuvem.py`, `python -m app.subir_nuvem`; testes rodam também com `CRM_BANCO=libsql`). Pendente: usuário criar a conta, preencher o `.env` e subir os dados.
+- **Depois:** repositório privado no GitHub (feito: UziCelli/claude-code-crm); publicar em `crm.vfitcoachapp.com` (Cloudflare Tunnel + Access); agente de IA (Sonnet 5.5) adiado.
 - Forma de pagamento dos clientes importados vem como "Mensal"/"Parcelado" (texto da planilha); o motor usa PIX como padrão nesses casos.
 - Multiagente: tarefas simples em Haiku, implementação em Sonnet 5.5, modelo principal só para revisão.
 

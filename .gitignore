@@ -1,4 +1,6 @@
 .venv/
+# chaves do Turso — nunca versionar
+.env
 data/
 *.db
 __pycache__/

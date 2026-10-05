@@ -118,7 +118,7 @@ def test_restaurar_backup_antigo_recria_tabelas_novas(cliente_http):
     http, _ = cliente_http
     antigo = db.pasta_backup() / "crm-antigo.db"
     con = sqlite3.connect(antigo)   # banco anterior à Rodada 2: sem lancamentos/recorrencias
-    db.conectar().backup(con)
+    sqlite3.connect(db.DB_PATH).backup(con)   # API do sqlite3: vale também com o banco do Turso
     con.execute("DROP TABLE lancamentos")
     con.execute("DROP TABLE recorrencias")
     con.commit()
