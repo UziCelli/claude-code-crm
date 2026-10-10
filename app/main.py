@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse,
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import acesso, db, exportar, financeiro, importar, precos
+from . import acesso, atualizar, db, exportar, financeiro, importar, precos
 
 ROOT = Path(__file__).resolve().parent
 DIAS = {1: "Segunda", 2: "Terça", 3: "Quarta", 4: "Quinta", 5: "Sexta", 6: "Sábado", 7: "Domingo"}
@@ -39,6 +39,7 @@ async def lifespan(app):
         db.backup_diario()
     except Exception as e:  # o CRM abre mesmo se o backup falhar
         print(f"AVISO: backup diário falhou ({e}). Faça um backup manual em Dados.")
+    atualizar.iniciar()   # só no PC com Windows: baixa versão nova do GitHub e reinicia quando ninguém está usando
     yield
 
 
@@ -48,6 +49,7 @@ app = FastAPI(title="VFITCOACH CRM", lifespan=lifespan)
 @app.middleware("http")
 async def portaria(request: Request, call_next):
     """Na internet (Render ou túnel até o PC), só passa quem entrou pelo Cloudflare Access. No próprio PC (localhost) não faz nada."""
+    atualizar.registrar_uso()   # alguém usando: a atualização automática não reinicia agora
     motivo = await run_in_threadpool(acesso.motivo_bloqueio, request.method, request.url.path, request.headers, request.cookies)
     if motivo:
         return HTMLResponse("<!doctype html><meta charset='utf-8'><meta name='viewport' content='width=device-width'>"
@@ -1240,7 +1242,7 @@ def dados(request: Request, con=Depends(get_db)):
     except OSError as e:  # sem redirect para /dados (viraria laço): mostra o erro na própria tela
         erro_backup = f"Não foi possível ler a pasta de backups: {e}"
     return render(request, "dados.html", con, backups=backups, lixo=lixo, pasta_backup=str(db.BACKUP_DIR),
-                  banco=str(db.DB_PATH), erro_backup=erro_backup, nuvem=db.nuvem)
+                  banco=str(db.DB_PATH), erro_backup=erro_backup, nuvem=db.nuvem, atualizacao=atualizar.status)
 
 
 @app.post("/backup")
