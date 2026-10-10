@@ -116,9 +116,10 @@ def test_no_pc_a_portaria_fica_desligada(banco, monkeypatch):
 
 
 # ---------- PC + Cloudflare Tunnel ----------
-@pytest.mark.parametrize("endereco", ["http://localhost", "http://localhost:8765", "http://127.0.0.1:8765", "http://[::1]:8765"])
-def test_no_pc_local_entra_sem_login_e_ve_encerrar(no_pc, endereco):
-    r = TestClient(main.app, base_url=endereco).get("/")
+@pytest.mark.parametrize("host", ["localhost", "localhost:8765", "127.0.0.1:8765", "[::1]:8765"])
+def test_no_pc_local_entra_sem_login_e_ve_encerrar(no_pc, host):
+    # Host no cabeçalho: o TestClient de algumas versões do Starlette não aceita IPv6 no base_url
+    r = TestClient(main.app, base_url="http://localhost").get("/", headers={"host": host})
     assert r.status_code == 200 and "/encerrar" in r.text
 
 

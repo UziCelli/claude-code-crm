@@ -38,15 +38,74 @@ Com o Turso ligado, os dados ficam no banco da nuvem (plano grátis) e o CRM tra
 - **Desligar:** apague ou renomeie o `.env`. O CRM volta a usar o `crm.db`, que não recebe o que foi lançado no Turso nesse período.
 - O `.env` contém a chave do banco e nunca vai para o GitHub (está no `.gitignore`).
 
-## CRM no celular (Render + Cloudflare Access)
-O mesmo CRM roda no Render (plano grátis), em `https://crm.vfitcoachapp.com`, usando o banco do Turso. O PC pode ficar desligado.
-- **Portaria:** o Cloudflare Access pede o seu e-mail e manda um código. O CRM confere o token do Cloudflare em cada pedido
-  (`app/acesso.py`), então entrar direto pelo endereço `*.onrender.com` não funciona. Sem a portaria configurada, nada aparece.
-- **Configuração no Render:** `render.yaml` (Blueprint). Pede 4 valores: `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN` (os mesmos do `.env`),
-  `CF_ACCESS_TEAM_DOMAIN` (ex.: `vfitcoach.cloudflareaccess.com`) e `CF_ACCESS_AUD` (o "Application Audience (AUD) Tag" do app no Cloudflare Zero Trust).
-- **Plano grátis:** depois de 15 minutos sem uso o servidor dorme, e o primeiro acesso leva cerca de 1 minuto. Para ficar sempre ligado, mude o plano no painel do Render.
-- Cada mudança juntada na `main` do GitHub é publicada sozinha. Na versão publicada, o botão Encerrar não aparece.
-- PC e celular usam o mesmo banco. O que é lançado num aparelho aparece no outro em até 30 segundos.
+## CRM no celular (túnel no PC + reserva no Render)
+- **Principal: o próprio PC.** O Cloudflare Tunnel (grátis) leva `https://crm.vfitcoachapp.com` até o CRM deste PC. Abre rápido.
+  O PC precisa ficar ligado, na tomada e com a sua conta do Windows aberta (pode bloquear a tela com Windows+L).
+- **Reserva: Render grátis**, em `https://crm-reserva.vfitcoachapp.com`. Funciona com o PC desligado, mas é lenta:
+  depois de 15 minutos sem uso o servidor dorme e o primeiro acesso leva cerca de 1 minuto.
+- **Portaria:** nos dois endereços o Cloudflare Access pede o seu e-mail e manda um código. O CRM confere o token do Cloudflare
+  em cada pedido que vem da internet (`app/acesso.py`). Sem `CF_ACCESS_TEAM_DOMAIN` e `CF_ACCESS_AUD`, nada aparece pela internet.
+  No próprio PC, `http://localhost:8765` entra direto, como sempre.
+- PC, celular e reserva usam o mesmo banco (Turso). O que é lançado num aparelho aparece no outro em até 30 segundos.
+- **Encerrar** só aparece no PC e desliga também o acesso pelo celular. Para religar, abra o CRM pelo atalho.
+
+### Configurar (uma vez só)
+Os nomes dos botões no Cloudflare e no Render podem mudar um pouco.
+
+**1. Liberar o nome `crm` (Cloudflare › DNS)**
+1. Em dash.cloudflare.com, abra `vfitcoachapp.com` › **DNS** › **Records**.
+2. Apague o CNAME `crm` (aponta para `claude-code-crm.onrender.com`). O túnel precisa desse nome.
+
+**2. Criar o túnel (Cloudflare Zero Trust)**
+1. **Networks** › **Tunnels** › **Create a tunnel** › **Cloudflared**. Nome: `pc-crm`. Salve.
+2. Escolha **Windows** e baixe o instalador do cloudflared (64-bit, `.msi`). Instale no PC.
+3. Copie o comando que aparece: `cloudflared.exe service install <token>`.
+4. No PC, abra o PowerShell **como Administrador** (botão direito no Iniciar › Terminal (Administrador)). Cole o comando e aperte Enter.
+   Abra o PowerShell só depois de instalar (se já estava aberto, feche e abra de novo).
+   Se disser que não acha o `cloudflared.exe`, use o caminho completo:
+   `& 'C:\Program Files (x86)\cloudflared\cloudflared.exe' service install <token>` (ou `C:\Program Files\cloudflared\`).
+5. Volte ao painel: o conector aparece como conectado. Clique em **Next**.
+6. Em **Public Hostname**: subdomínio `crm`, domínio `vfitcoachapp.com`, tipo `HTTP`, URL `localhost:8765`. **Save**.
+
+**3. Ajustar a portaria (Zero Trust › Access › Applications › CRM › Configure)**
+1. Acrescente o domínio `crm-reserva.vfitcoachapp.com` no mesmo app. Assim o AUD não muda.
+2. **Session Duration**: `1 month`. Assim o celular não pede o código todo dia.
+3. Salve.
+
+**4. Render vira a reserva**
+1. Render › serviço `claude-code-crm` › **Settings** › **Custom Domains**: remova `crm.vfitcoachapp.com` e adicione `crm-reserva.vfitcoachapp.com`.
+2. Cloudflare › DNS › **Add record**: tipo `CNAME`, nome `crm-reserva`, destino `claude-code-crm.onrender.com`, **DNS only** (nuvem cinza).
+3. No Render, clique em **Verify**. Depois de verificado, volte ao Cloudflare e mude o registro para **Proxied** (nuvem laranja).
+4. As variáveis do Render (Environment) continuam as mesmas. A configuração do serviço está em `render.yaml` (Blueprint).
+
+**5. Preparar o PC**
+1. Na pasta do CRM: `git pull`.
+2. Abra o `.env` no Bloco de Notas e acrescente as duas linhas (copie os valores de Render › Environment):
+   ```
+   CF_ACCESS_TEAM_DOMAIN=summer-scene-f0e8.cloudflareaccess.com
+   CF_ACCESS_AUD=cole-aqui-o-AUD
+   ```
+   O AUD é o "Application Audience (AUD) Tag" do app CRM no Zero Trust.
+3. No PowerShell (normal), na pasta do CRM, rode uma vez:
+   ```
+   powershell -ExecutionPolicy Bypass -File .\configurar-pc-servidor.ps1
+   ```
+   Ele faz o CRM ligar sozinho ao entrar no Windows (sem abrir o navegador), tira a suspensão na tomada,
+   confere o `.env` e o túnel e reinicia o CRM. Em notebook, ele mostra como deixar "Ao fechar a tampa: Não fazer nada" na tomada.
+   Para desfazer: o mesmo comando com `-Desfazer` no fim.
+
+**6. iPhone**
+1. Abra `crm.vfitcoachapp.com` no Safari e entre com o código do e-mail.
+2. Toque em **Compartilhar** › **Adicionar à Tela de Início**. Vira um ícone de app.
+
+### Se o celular não abrir
+- **Erro 1033 ou erro de "tunnel"**: o PC está desligado ou o cloudflared parou. Use `https://crm-reserva.vfitcoachapp.com`.
+  No PC, confira no PowerShell: `Get-Service cloudflared` (deve dizer `Running`). Se não, no PowerShell como Administrador: `Start-Service cloudflared`.
+- **Erro 502 (Bad gateway)**: o PC está ligado, mas o CRM não. Abra o CRM pelo atalho.
+  Acontece se o Windows reiniciou e ninguém entrou na conta, ou se alguém clicou em Encerrar.
+- **"A portaria do Cloudflare Access ainda não foi configurada"**: faltam as linhas `CF_ACCESS_*` no `.env`.
+  Preencha e rode `configurar-pc-servidor.ps1` de novo.
+- Cada mudança juntada na `main` do GitHub vai sozinha para a reserva. No PC: `git pull` e rode `configurar-pc-servidor.ps1` de novo (ele reinicia o CRM).
 
 ## Backup e restauração
 - **Dados › Fazer backup agora**: cria uma cópia imediata.

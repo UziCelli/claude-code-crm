@@ -47,8 +47,12 @@ Plano completo em `C:\Users\victo\.claude\plans\a-gente-vai-come-ar-functional-t
   - Preview `crm-teste-fin` (porta 8767): cópia temporária do banco já com a migração gravada, para conferir as telas.
   - Saldos de contas (`tblSaldosContas`) não migrados: decidir depois.
 - **Banco na nuvem (Turso): código pronto em 05/10/2026** (`app/nuvem.py`, `python -m app.subir_nuvem`; testes rodam também com `CRM_BANCO=libsql`). **No ar desde 05/10/2026**: 1601 linhas enviadas, tela Dados mostra o Turso ligado. A `.venv` do PC agora usa Python 3.13 (o libsql não tem pacote para o 3.14 no Windows). O `crm.db` antigo ficou como cópia de segurança.
-- **CRM no celular: código pronto em 05/10/2026** (Render grátis + Cloudflare Access; `render.yaml`, `app/acesso.py`). Pendente: usuário configurar o Zero Trust, o Render e o DNS `crm`.
-- **Depois:** repositório privado no GitHub (feito: UziCelli/claude-code-crm); publicar em `crm.vfitcoachapp.com` (Cloudflare Tunnel + Access); agente de IA (Sonnet 5.5) adiado.
+- **CRM no celular: código pronto em 05/10/2026** (Render grátis + Cloudflare Access; `render.yaml`, `app/acesso.py`). Configurado pelo usuário; agora vira a reserva (linha abaixo).
+- **CRM no celular via Cloudflare Tunnel no PC (código pronto em 10/10/2026); Render vira reserva em `crm-reserva.vfitcoachapp.com`.**
+  `iniciar-crm.bat /servidor` (liga sem navegador, para o início automático) e `configurar-pc-servidor.ps1` (início automático, energia, confere `.env` e túnel).
+  Pendente (usuário, passo a passo no README, "CRM no celular"): apagar o DNS `crm` antigo; criar o túnel `pc-crm` (cloudflared como serviço, `crm` → `localhost:8765`);
+  no app CRM do Access, acrescentar `crm-reserva` e sessão de 1 mês; trocar o domínio no Render para `crm-reserva`; pôr `CF_ACCESS_TEAM_DOMAIN`/`CF_ACCESS_AUD` no `.env` do PC; rodar `configurar-pc-servidor.ps1`.
+- **Depois:** repositório privado no GitHub (feito: UziCelli/claude-code-crm); agente de IA (Sonnet 5.5) adiado.
 - Forma de pagamento dos clientes importados vem como "Mensal"/"Parcelado" (texto da planilha); o motor usa PIX como padrão nesses casos.
 - Multiagente: tarefas simples em Haiku, implementação em Sonnet 5.5, modelo principal só para revisão.
 
