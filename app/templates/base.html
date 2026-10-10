@@ -29,6 +29,8 @@
   <a href="/configuracoes" class="{{ 'ativo' if p.startswith('/configuracoes') }}">Configurações</a>
   <a href="/dados" class="{{ 'ativo' if p.startswith('/dados') }}">Dados</a>
   {% if acesso.pode_encerrar(request) %}<form method="post" action="/encerrar" class="inline" data-confirmar="Encerrar o CRM? Para abrir de novo, use o atalho da Área de Trabalho."><button class="sair">Encerrar</button></form>{% endif %}
+  {# pela internet (celular): sai do login do Cloudflare Access neste aparelho; na próxima vez pede o código do e-mail #}
+  {% if not acesso.local(request) %}<a href="/cdn-cgi/access/logout" class="sair" onclick="return confirm('Sair do CRM neste aparelho? Para entrar de novo, vai pedir o código do e-mail.')">Sair</a>{% endif %}
 </nav>
 <main>
   {% if msg %}<div class="aviso ok">{{ msg }}</div>{% endif %}
