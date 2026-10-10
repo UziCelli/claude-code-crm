@@ -13,12 +13,11 @@ if not exist ".venv\Scripts\python.exe" (
     py -3.13 -m venv .venv 2>nul || python -m venv .venv || (echo ERRO: Python 3 nao encontrado. Instale em https://www.python.org/downloads/ e marque "Add to PATH". & call :pausa & exit /b 1)
     ".venv\Scripts\python.exe" -m pip install --quiet --upgrade pip
     ".venv\Scripts\python.exe" -m pip install --quiet -r requirements.txt || (echo ERRO ao instalar dependencias. & call :pausa & exit /b 1)
+    copy /y "requirements.txt" ".venv\requisitos.txt" >nul
     echo Ambiente pronto.
 )
-rem Turso ligado (.env) e biblioteca faltando (ex.: depois de um git pull): instala o que faltar.
-if exist ".env" (
-    ".venv\Scripts\python.exe" -c "import libsql" 2>nul || ".venv\Scripts\python.exe" -m pip install --quiet -r requirements.txt
-)
+rem requirements.txt mudou desde a ultima instalacao (ex.: git pull trouxe biblioteca nova): instala o que faltar.
+fc /b "requirements.txt" ".venv\requisitos.txt" >nul 2>&1 || (".venv\Scripts\python.exe" -m pip install --quiet -r requirements.txt && copy /y "requirements.txt" ".venv\requisitos.txt" >nul)
 if not exist "data" mkdir "data"
 
 rem Cria o atalho so se nenhum atalho da Area de Trabalho (com qualquer nome) ja abrir este arquivo. No modo servidor, pula.
