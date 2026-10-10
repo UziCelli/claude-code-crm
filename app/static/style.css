@@ -159,6 +159,11 @@ tr.prejuizo td:first-child { border-left: 4px solid #7a1a14; }
 .check.feito { opacity: .6; text-decoration-color: currentColor; }
 .check form { margin-left: auto; }
 .check form:first-child { margin-left: 0; }   /* botão na frente (Rotina): fica à esquerda, colado no texto */
+.check form + form { margin-left: 0; }        /* x de excluir colado no seletor (Checkpoints) */
+.check .texto { flex: 1; }
+/* checkpoint (Campanhas): pergunta na linha de cima, inteira; etiqueta, seletor e x embaixo (o card é estreito no PC também) */
+.check.checkpoint { flex-wrap: wrap; }
+.check.checkpoint > .texto { order: -1; flex-basis: 100%; }
 .fase.atual { outline: 3px solid var(--aco); }
 .fase.bloqueio { background: var(--vermelho-f); }
 .fase.passada { opacity: .7; }
@@ -271,9 +276,6 @@ table.cartoes tr.foco td:first-child { box-shadow: inset 4px 0 0 var(--amarelo);
   .card { padding: 12px; overflow-wrap: anywhere; }   /* caminhos e textos sem espaço quebram em vez de vazar */
   /* ...mas etiqueta, botão e seletor não: senão "Pendente"/"Feito" encolhem e viram uma letra por linha */
   .card .tag, .card button, .card .btn, .card select { overflow-wrap: normal; }
-  /* checkpoint (Campanhas): pergunta na linha de cima, inteira; etiqueta e seletor embaixo */
-  .check.checkpoint { flex-wrap: wrap; }
-  .check.checkpoint > span:not(.tag) { order: -1; flex-basis: 100%; }
   .kpi .valor { font-size: 24px; }
 
   /* tabelas viram cartões: título = 1ª coluna; demais linhas = "rótulo   valor" */

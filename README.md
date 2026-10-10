@@ -116,7 +116,7 @@ Os nomes dos botões no Cloudflare e no Render podem mudar um pouco.
 Painel (metas e nível) · Clientes (cards, ficha, histórico, alertas de renovação em 7 dias e 14 dias sem aula) ·
 Leads (kanban; virar "Cliente" cria o cadastro) · Grade (segunda a sábado, 05h–23h, cores por margem, filtro de vale) ·
 Simulador (preço, margem, lucro/hora, preço mínimo, desconto máximo; bloqueio abaixo da margem) · Explorador (todas as combinações) ·
-Campanhas (fases, checklists, gastos por canal, checkpoints) · Rotina (checklist semanal e lista de espera) · Configurações · Dados.
+Campanhas (fases, checklists, gastos por canal, checkpoints que você inclui e exclui) · Rotina (checklist semanal editável e lista de espera) · Configurações · Dados.
 
 ## Como atualizar o CRM
 Substitua a pasta `app\` pela nova versão e abra o CRM normalmente. O banco e os backups não são tocados.

@@ -102,6 +102,12 @@ CHECKPOINTS_INICIAIS = [
     ("Conecta Fitness trouxe cliente até 24/10?", "Conecta Fitness", "2026-10-24"),
     ("Stadami trouxe cliente até 31/10?", "Stadami", "2026-10-31"),
 ]
+ROTINA_INICIAL = [   # (chave, texto, dia: 1=segunda ... 7=domingo; None = sem dia)
+    ("segunda_grade", "atualizar a grade", 1),
+    ("quarta_leads", "lançar os leads por canal", 3),
+    ("sexta_propostas", "revisar as propostas", 5),
+    ("fim_mes", "Último dia do mês: fechar o histórico e comparar com as metas", None),
+]
 
 
 def conectar(caminho: Path = None) -> sqlite3.Connection:
@@ -134,11 +140,29 @@ def iniciar_banco(caminho: Path = None) -> None:
                 "INSERT INTO campanha_fases (nome, inicio, fim, tipo, ordem) VALUES (?,?,?,?,?)",
                 [(n, i, f, t, k) for k, (n, i, f, t) in enumerate(FASES_INICIAIS, 1)],
             )
+        _garantir_coluna(con, "campanha_checkpoints", "excluido_em", "TEXT")   # banco de antes de dar para excluir
         if con.execute("SELECT COUNT(*) FROM campanha_checkpoints").fetchone()[0] == 0:
             con.executemany(
                 "INSERT INTO campanha_checkpoints (pergunta, canal, prazo) VALUES (?,?,?)", CHECKPOINTS_INICIAIS
             )
+        # excluídos continuam na tabela (lixeira): a contagem só é 0 na primeira vez
+        if con.execute("SELECT COUNT(*) FROM rotina_tarefas").fetchone()[0] == 0:
+            con.executemany(   # OR IGNORE: PC e Render podem criar ao mesmo tempo no Turso
+                "INSERT OR IGNORE INTO rotina_tarefas (chave, texto, dia, ordem) VALUES (?,?,?,?)",
+                [(c, txt, d, k) for k, (c, txt, d) in enumerate(ROTINA_INICIAL, 1)],
+            )
     con.close()
+
+
+def _garantir_coluna(con, tabela: str, coluna: str, tipo: str) -> None:
+    """Acrescenta a coluna se o banco for de uma versão anterior (CREATE TABLE IF NOT EXISTS não mexe em tabela existente)."""
+    if coluna in {r[1] for r in con.execute(f"PRAGMA table_info({tabela})").fetchall()}:
+        return
+    try:
+        con.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {tipo}")
+    except sqlite3.OperationalError as e:
+        if "duplicate column" not in str(e).lower():   # PC e Render acrescentando ao mesmo tempo no Turso
+            raise
 
 
 # ---------- parâmetros ----------

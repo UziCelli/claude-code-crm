@@ -4,6 +4,7 @@ import datetime as dt
 import io
 import math
 import re
+import secrets
 import signal
 import sqlite3
 import threading
@@ -23,8 +24,6 @@ ROOT = Path(__file__).resolve().parent
 DIAS = {1: "Segunda", 2: "Terça", 3: "Quarta", 4: "Quinta", 5: "Sexta", 6: "Sábado", 7: "Domingo"}
 DIAS_CURTO = {1: "Seg", 2: "Ter", 3: "Qua", 4: "Qui", 5: "Sex", 6: "Sáb", 7: "Dom"}
 ETAPAS = [("lead", "Lead"), ("conversa", "Conversa"), ("avaliacao", "Avaliação marcada"), ("cliente", "Cliente"), ("perdido", "Perdido")]
-ROTINA = [("segunda_grade", "Segunda: atualizar a grade"), ("quarta_leads", "Quarta: lançar os leads por canal"),
-          ("sexta_propostas", "Sexta: revisar as propostas"), ("fim_mes", "Último dia do mês: fechar o histórico e comparar com as metas")]
 HORAS_PICO = [7, 9, 18, 19]
 SEMANAS_MES = 4.33
 
@@ -186,7 +185,6 @@ def dias_parado(con, lead, hoje: str) -> int | None:
 
 # ---------- alertas (topo de todas as telas) ----------
 GRAV = {"vermelho": 1, "amarelo": 2, "azul": 3}
-ROTINA_DIA = {0: "segunda_grade", 2: "quarta_leads", 4: "sexta_propostas"}
 
 
 def alertas(con):
@@ -227,10 +225,13 @@ def alertas(con):
                 f"{l['nome']} — {l['proxima_acao'] or 'próxima ação'} ({data_br(l['data_proxima_acao'])})", "/leads", l["telefone"])
         elif d := dias_parado(con, l, h):
             add("amarelo", f"{l['nome']} — lead parado há {d} dias", "/leads", l["telefone"])
-    item = "fim_mes" if (hoje + dt.timedelta(days=1)).day == 1 else ROTINA_DIA.get(hoje.weekday())
-    if item and not con.execute("SELECT 1 FROM rotina_itens WHERE semana=? AND item=? AND feito=1", (semana_atual(), item)).fetchone():
-        add("azul", "Rotina de hoje: " + dict(ROTINA)[item], "/rotina")
-    for c in con.execute("SELECT pergunta, prazo FROM campanha_checkpoints WHERE resposta='pendente' AND prazo <= ? ORDER BY prazo", (lim7,)):
+    ultimo_dia = (hoje + dt.timedelta(days=1)).day == 1
+    feitos = {r[0] for r in con.execute("SELECT item FROM rotina_itens WHERE semana=? AND feito=1", (semana_atual(),))}
+    for t in tarefas_rotina(con):
+        if (t["dia"] == hoje.isoweekday() or (t["chave"] == "fim_mes" and ultimo_dia)) and t["chave"] not in feitos:
+            add("azul", "Rotina de hoje: " + rotina_texto(t), "/rotina")
+    for c in con.execute("""SELECT pergunta, prazo FROM campanha_checkpoints WHERE excluido_em IS NULL AND resposta='pendente'
+                            AND prazo <= ? ORDER BY prazo""", (lim7,)):
         add("vermelho" if c["prazo"] < h else "amarelo", f"Checkpoint de campanha ({data_br(c['prazo'])}): {c['pergunta']}", "/campanhas")
     # ponytail: só o mês corrente; recorrência do mês seguinte entra no dia 1
     lim3 = (hoje + dt.timedelta(days=3)).isoformat()
@@ -354,7 +355,9 @@ def fechar_mes(con=Depends(get_db)):
     m = calcular_metricas(con)
     gravar_mes(con, m)
     with con:
-        con.execute("INSERT OR IGNORE INTO rotina_itens (semana, item) VALUES (?, 'fim_mes')", (semana_atual(),))
+        # só marca na rotina se a tarefa "fim_mes" não foi excluída
+        con.execute("""INSERT OR IGNORE INTO rotina_itens (semana, item) SELECT ?, 'fim_mes'
+                       WHERE EXISTS (SELECT 1 FROM rotina_tarefas WHERE chave='fim_mes' AND excluido_em IS NULL)""", (semana_atual(),))
         con.execute("UPDATE rotina_itens SET feito=1, data_feito=date('now','localtime') WHERE semana=? AND item='fim_mes'", (semana_atual(),))
     return voltar("/", msg=f"Mês {m['mes'][5:]}/{m['mes'][:4]} fechado e guardado no histórico.")
 
@@ -788,10 +791,12 @@ def campanhas(request: Request, mes: str = "", con=Depends(get_db)):
         f["situacao"] = "atual" if f["inicio"] <= hoje <= f["fim"] else ("passada" if f["fim"] < hoje else "futura")
         f["feitos"] = sum(1 for i in f["itens"] if i["feito"])
     checkpoints = []
-    for c in con.execute("SELECT * FROM campanha_checkpoints ORDER BY prazo"):
-        n = con.execute("SELECT COUNT(*) FROM clientes WHERE excluido_em IS NULL AND canal_origem=? AND COALESCE(data_inicio, substr(criado_em,1,10)) <= ?",
-                        (c["canal"], c["prazo"])).fetchone()[0]
-        auto = "sim" if n > 0 else ("nao" if hoje > c["prazo"] else "pendente")
+    for c in con.execute("SELECT * FROM campanha_checkpoints WHERE excluido_em IS NULL ORDER BY prazo, id"):
+        n, auto = None, "pendente"   # sem canal: só a resposta na mão
+        if c["canal"]:
+            n = con.execute("SELECT COUNT(*) FROM clientes WHERE excluido_em IS NULL AND canal_origem=? AND COALESCE(data_inicio, substr(criado_em,1,10)) <= ?",
+                            (c["canal"], c["prazo"])).fetchone()[0]
+            auto = "sim" if n > 0 else ("nao" if hoje > c["prazo"] else "pendente")
         checkpoints.append({**dict(c), "clientes": n, "auto": auto})
     gastos = con.execute("SELECT * FROM gastos_marketing WHERE excluido_em IS NULL AND mes=? ORDER BY canal", (mes,)).fetchall()
     meses = [r[0] for r in con.execute("SELECT DISTINCT mes FROM gastos_marketing WHERE excluido_em IS NULL ORDER BY mes DESC")]
@@ -849,6 +854,26 @@ def campanha_checkpoint(cid: int, resposta: str = Form(...), con=Depends(get_db)
     return voltar("/campanhas")
 
 
+@app.post("/campanhas/checkpoint")
+def campanha_checkpoint_add(pergunta: str = Form(...), prazo: str = Form(...), canal: str = Form(""), con=Depends(get_db)):
+    try:
+        prazo = dt.date.fromisoformat(prazo).isoformat()
+    except ValueError:
+        return voltar("/campanhas", erro="Prazo inválido. Escolha a data no calendário.")
+    if not pergunta.strip():
+        return voltar("/campanhas", erro="Escreva a pergunta do checkpoint.")
+    with con:
+        con.execute("INSERT INTO campanha_checkpoints (pergunta, canal, prazo) VALUES (?,?,?)", (pergunta.strip(), canal.strip(), prazo))
+    return voltar("/campanhas", msg="Checkpoint incluído.")
+
+
+@app.post("/campanhas/checkpoint/{cid}/excluir")
+def campanha_checkpoint_excluir(cid: int, con=Depends(get_db)):
+    with con:
+        con.execute("UPDATE campanha_checkpoints SET excluido_em=datetime('now','localtime') WHERE id=?", (cid,))
+    return voltar("/campanhas", msg="Checkpoint enviado para a lixeira (dá para restaurar em Dados).")
+
+
 # =====================================================================
 # 7. ROTINA SEMANAL + LISTA DE ESPERA
 # =====================================================================
@@ -857,14 +882,25 @@ def semana_atual():
     return f"{y}-W{w:02d}"
 
 
+def tarefas_rotina(con):
+    return con.execute("SELECT * FROM rotina_tarefas WHERE excluido_em IS NULL ORDER BY ordem, id").fetchall()
+
+
+def rotina_texto(t):
+    return f"{DIAS[t['dia']]}: {t['texto']}" if t["dia"] else t["texto"]
+
+
 @app.get("/rotina", response_class=HTMLResponse)
 def rotina(request: Request, con=Depends(get_db)):
     sem = semana_atual()
     hoje = dt.date.today()
-    with con:
-        con.executemany("INSERT OR IGNORE INTO rotina_itens (semana, item) VALUES (?, ?)", [(sem, k) for k, _ in ROTINA])
+    tarefas = tarefas_rotina(con)
+    if tarefas:
+        with con:
+            con.executemany("INSERT OR IGNORE INTO rotina_itens (semana, item) VALUES (?, ?)", [(sem, t["chave"]) for t in tarefas])
     feitos = {r["item"]: r for r in con.execute("SELECT * FROM rotina_itens WHERE semana=?", (sem,))}
-    itens = [{"chave": k, "texto": t, "feito": feitos[k]["feito"], "data": feitos[k]["data_feito"]} for k, t in ROTINA]
+    itens = [{"id": t["id"], "chave": t["chave"], "texto": rotina_texto(t), "feito": feitos[t["chave"]]["feito"],
+              "data": feitos[t["chave"]]["data_feito"]} for t in tarefas]
     ultimo_dia = (hoje.replace(day=28) + dt.timedelta(days=4)).replace(day=1) - dt.timedelta(days=1)
     espera = con.execute("SELECT * FROM lista_espera WHERE excluido_em IS NULL ORDER BY hora, dia, data").fetchall()
     historico = con.execute("SELECT semana, SUM(feito) AS feitos, COUNT(*) AS total FROM rotina_itens GROUP BY semana ORDER BY semana DESC LIMIT 8").fetchall()
@@ -878,6 +914,26 @@ def rotina_toggle(item: str, con=Depends(get_db)):
         con.execute("UPDATE rotina_itens SET feito=1-feito, data_feito=CASE WHEN feito=0 THEN date('now','localtime') ELSE NULL END WHERE semana=? AND item=?",
                     (semana_atual(), item))
     return voltar("/rotina")
+
+
+@app.post("/rotina/tarefa")
+def rotina_tarefa_add(texto: str = Form(...), dia: int = Form(0), con=Depends(get_db)):
+    if not texto.strip():
+        return voltar("/rotina", erro="Escreva a tarefa.")
+    with con:
+        con.execute("INSERT INTO rotina_tarefas (chave, texto, dia, ordem) VALUES (?,?,?, (SELECT COALESCE(MAX(ordem),0)+1 FROM rotina_tarefas))",
+                    ("t" + secrets.token_hex(4), texto.strip(), dia if 1 <= dia <= 7 else None))
+    return voltar("/rotina", msg="Tarefa incluída no checklist.")
+
+
+@app.post("/rotina/tarefa/{tid}/excluir")
+def rotina_tarefa_excluir(tid: int, con=Depends(get_db)):
+    with con:
+        t = con.execute("SELECT chave FROM rotina_tarefas WHERE id=?", (tid,)).fetchone()
+        con.execute("UPDATE rotina_tarefas SET excluido_em=datetime('now','localtime') WHERE id=?", (tid,))
+        if t:   # sai da semana atual; as semanas anteriores ficam como foram
+            con.execute("DELETE FROM rotina_itens WHERE semana=? AND item=?", (semana_atual(), t["chave"]))
+    return voltar("/rotina", msg="Tarefa enviada para a lixeira (dá para restaurar em Dados).")
 
 
 @app.post("/espera")
@@ -1154,6 +1210,7 @@ def importar_planilha(con=Depends(get_db)):
 LIXEIRA = [("clientes", "Cliente", "nome"), ("leads", "Lead", "nome"), ("propostas", "Proposta", "tipo_servico"),
            ("cliente_eventos", "Evento de cliente", "descricao"), ("lista_espera", "Lista de espera", "nome"),
            ("gastos_marketing", "Gasto de marketing", "canal"), ("campanha_itens", "Item de campanha", "texto"),
+           ("campanha_checkpoints", "Checkpoint", "pergunta"), ("rotina_tarefas", "Tarefa da rotina", "texto"),
            ("lancamentos", "Lançamento", "COALESCE(descricao, categoria)"), ("recorrencias", "Conta recorrente", "descricao")]
 
 
