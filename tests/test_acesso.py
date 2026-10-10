@@ -74,6 +74,7 @@ def test_saude_responde_sem_login(na_internet, caminho):
 def test_login_valido_entra_e_esconde_encerrar(na_internet):
     r = na_internet.get("/", headers={"Cf-Access-Jwt-Assertion": token()})
     assert r.status_code == 200 and "/encerrar" not in r.text
+    assert "/cdn-cgi/access/logout" in r.text   # botão Sair
     r = na_internet.get("/clientes", cookies={"CF_Authorization": token()})
     assert r.status_code == 200
 
@@ -121,6 +122,7 @@ def test_no_pc_local_entra_sem_login_e_ve_encerrar(no_pc, host):
     # Host no cabeçalho: o TestClient de algumas versões do Starlette não aceita IPv6 no base_url
     r = TestClient(main.app, base_url="http://localhost").get("/", headers={"host": host})
     assert r.status_code == 200 and "/encerrar" in r.text
+    assert "/cdn-cgi/access/logout" not in r.text   # no PC não há login do Cloudflare para sair
 
 
 def test_no_pc_tunel_sem_login_e_barrado(no_pc):
@@ -139,6 +141,7 @@ def test_no_pc_outro_endereco_sem_cloudflare_tambem_e_barrado(no_pc, host):
 def test_no_pc_tunel_com_login_entra_sem_encerrar(no_pc):
     r = no_pc.get("/", headers={**TUNEL, "Cf-Access-Jwt-Assertion": token()})
     assert r.status_code == 200 and "/encerrar" not in r.text
+    assert "/cdn-cgi/access/logout" in r.text
     r = no_pc.get("/clientes", headers=TUNEL, cookies={"CF_Authorization": token()})
     assert r.status_code == 200
 
