@@ -48,7 +48,7 @@ app = FastAPI(title="VFITCOACH CRM", lifespan=lifespan)
 
 @app.middleware("http")
 async def portaria(request: Request, call_next):
-    """Na internet (CRM_NUVEM=1), só passa quem entrou pelo Cloudflare Access. No PC não faz nada."""
+    """Na internet (Render ou túnel até o PC), só passa quem entrou pelo Cloudflare Access. No próprio PC (localhost) não faz nada."""
     motivo = await run_in_threadpool(acesso.motivo_bloqueio, request.method, request.url.path, request.headers, request.cookies)
     if motivo:
         return HTMLResponse("<!doctype html><meta charset='utf-8'><meta name='viewport' content='width=device-width'>"
@@ -1158,9 +1158,10 @@ LIXEIRA = [("clientes", "Cliente", "nome"), ("leads", "Lead", "nome"), ("propost
 
 
 @app.post("/encerrar", response_class=HTMLResponse)
-def encerrar():
-    if acesso.LIGADO:   # na internet o servidor é do Render: desligar só faria o CRM sumir para todos
-        return HTMLResponse("Indisponível no CRM publicado.", status_code=404)
+def encerrar(request: Request):
+    # no Render, desligar só faria o CRM sumir para todos; pelo túnel, o celular derrubaria o PC sem ninguém lá para religar
+    if not acesso.pode_encerrar(request):
+        return HTMLResponse("Indisponível pela internet: o CRM só pode ser encerrado no próprio PC.", status_code=404)
     # o servidor roda sem janela (iniciar-crm.bat); SIGINT faz o uvicorn desligar com calma, depois de responder
     threading.Timer(0.5, signal.raise_signal, (signal.SIGINT,)).start()
     return HTMLResponse("<!doctype html><meta charset='utf-8'><title>CRM encerrado</title>"

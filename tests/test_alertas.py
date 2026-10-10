@@ -69,7 +69,7 @@ def cliente_http(tmp_path, monkeypatch):
         lid = con.execute("INSERT INTO leads (nome, etapa, canal_origem) VALUES (?, ?, ?)",
                          ("Lead Teste", "lead", "Instagram")).lastrowid
     con.close()
-    return TestClient(main.app), lid  # sem "with": o lifespan não roda
+    return TestClient(main.app, base_url="http://localhost"), lid  # sem "with": o lifespan não roda
 
 
 def test_post_etapa_redireciona_com_destaque(cliente_http):

@@ -17,7 +17,8 @@ def cliente_http(tmp_path, monkeypatch):
     with con:
         cid = con.execute("INSERT INTO clientes (nome) VALUES ('Aluno Teste')").lastrowid
     con.close()
-    return TestClient(main.app), cid  # sem "with": o lifespan (backup diário) não roda
+    # sem "with": o lifespan (backup diário) não roda; localhost: no PC, outro endereço passa pela portaria
+    return TestClient(main.app, base_url="http://localhost"), cid
 
 
 @pytest.mark.parametrize("url", TELAS)
