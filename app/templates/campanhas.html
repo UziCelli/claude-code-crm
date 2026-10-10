@@ -29,7 +29,7 @@
   <div class="card">
     <h2>Checkpoints</h2>
     {% for c in checkpoints %}
-    <div class="check">
+    <div class="check checkpoint">
       <span class="tag {{ 'verde' if (c.resposta if c.resposta != 'pendente' else c.auto) == 'sim' else ('vermelho' if (c.resposta if c.resposta != 'pendente' else c.auto) == 'nao' else 'amarelo') }}">{{ {'sim':'Sim','nao':'Não','pendente':'Pendente'}[c.resposta if c.resposta != 'pendente' else c.auto] }}</span>
       <span>{{ c.pergunta }} <span class="muted">({{ c.clientes }} cliente(s) desse canal até {{ c.prazo|data }})</span></span>
       <form method="post" action="/campanhas/checkpoint/{{ c.id }}" class="linha"><select name="resposta" onchange="this.form.submit()" style="width:auto;padding:3px">{% for v, r in [('pendente','automático'),('sim','Sim'),('nao','Não')] %}<option value="{{ v }}" {{ 'selected' if v == c.resposta }}>{{ r }}</option>{% endfor %}</select></form>

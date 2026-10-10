@@ -158,6 +158,7 @@ tr.prejuizo td:first-child { border-left: 4px solid #7a1a14; }
   transition: opacity var(--dur-fast) var(--ease-std), text-decoration-color var(--dur-fast) var(--ease-std); text-decoration: line-through transparent; }
 .check.feito { opacity: .6; text-decoration-color: currentColor; }
 .check form { margin-left: auto; }
+.check form:first-child { margin-left: 0; }   /* botão na frente (Rotina): fica à esquerda, colado no texto */
 .fase.atual { outline: 3px solid var(--aco); }
 .fase.bloqueio { background: var(--vermelho-f); }
 .fase.passada { opacity: .7; }
@@ -268,6 +269,11 @@ table.cartoes tr.foco td:first-child { box-shadow: inset 4px 0 0 var(--amarelo);
   main { padding: 14px 12px 48px; }
   h1 { font-size: 1.2rem; }
   .card { padding: 12px; overflow-wrap: anywhere; }   /* caminhos e textos sem espaço quebram em vez de vazar */
+  /* ...mas etiqueta, botão e seletor não: senão "Pendente"/"Feito" encolhem e viram uma letra por linha */
+  .card .tag, .card button, .card .btn, .card select { overflow-wrap: normal; }
+  /* checkpoint (Campanhas): pergunta na linha de cima, inteira; etiqueta e seletor embaixo */
+  .check.checkpoint { flex-wrap: wrap; }
+  .check.checkpoint > span:not(.tag) { order: -1; flex-basis: 100%; }
   .kpi .valor { font-size: 24px; }
 
   /* tabelas viram cartões: título = 1ª coluna; demais linhas = "rótulo   valor" */
