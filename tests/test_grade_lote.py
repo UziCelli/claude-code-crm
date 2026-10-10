@@ -23,7 +23,7 @@ def _slot(con, t, d, h):
 
 def _post(**dados):
     base = {"tipo": "Pacotes", "local": "CIA", "so_este": 1}
-    return TestClient(main.app).post("/grade/slot", data={**base, **dados}, follow_redirects=False)
+    return TestClient(main.app, base_url="http://localhost").post("/grade/slot", data={**base, **dados}, follow_redirects=False)
 
 
 def test_lote_mantem_status_e_cliente(con_temp):

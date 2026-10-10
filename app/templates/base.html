@@ -6,6 +6,8 @@
 <title>{% block titulo %}VFITCOACH CRM{% endblock %}</title>
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="alternate icon" type="image/png" href="/static/favicon.png">
+<link rel="apple-touch-icon" href="/static/favicon.png">
+<meta name="apple-mobile-web-app-title" content="VFIT CRM">
 <link rel="stylesheet" href="/static/style.css?v={{ versao('style.css') }}">
 </head>
 <body>
@@ -26,7 +28,7 @@
   <span class="espaco"></span>
   <a href="/configuracoes" class="{{ 'ativo' if p.startswith('/configuracoes') }}">Configurações</a>
   <a href="/dados" class="{{ 'ativo' if p.startswith('/dados') }}">Dados</a>
-  {% if not acesso.LIGADO %}<form method="post" action="/encerrar" class="inline" data-confirmar="Encerrar o CRM? Para abrir de novo, use o atalho da Área de Trabalho."><button class="sair">Encerrar</button></form>{% endif %}
+  {% if acesso.pode_encerrar(request) %}<form method="post" action="/encerrar" class="inline" data-confirmar="Encerrar o CRM? Para abrir de novo, use o atalho da Área de Trabalho."><button class="sair">Encerrar</button></form>{% endif %}
 </nav>
 <main>
   {% if msg %}<div class="aviso ok">{{ msg }}</div>{% endif %}

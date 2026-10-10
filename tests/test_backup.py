@@ -19,7 +19,7 @@ def test_crm_abre_com_backup_falhando(banco_tmp, monkeypatch):
     def falha():
         raise OSError("disco cheio")
     monkeypatch.setattr(db, "backup_diario", falha)
-    with TestClient(main.app) as c:  # com "with": roda o lifespan
+    with TestClient(main.app, base_url="http://localhost") as c:  # com "with": roda o lifespan
         assert c.get("/").status_code == 200
 
 
