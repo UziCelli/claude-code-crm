@@ -154,9 +154,10 @@ CREATE TABLE IF NOT EXISTS campanha_itens (
 CREATE TABLE IF NOT EXISTS campanha_checkpoints (
     id INTEGER PRIMARY KEY,
     pergunta TEXT NOT NULL,
-    canal TEXT NOT NULL,
+    canal TEXT NOT NULL,             -- '' = sem canal: resposta só na mão
     prazo TEXT NOT NULL,
-    resposta TEXT DEFAULT 'pendente'  -- pendente | sim | nao
+    resposta TEXT DEFAULT 'pendente', -- pendente | sim | nao
+    excluido_em TEXT
 );
 
 CREATE TABLE IF NOT EXISTS gastos_marketing (
@@ -189,10 +190,19 @@ CREATE TABLE IF NOT EXISTS metricas_mensais (
     fechado_em TEXT DEFAULT (datetime('now','localtime'))
 );
 
+CREATE TABLE IF NOT EXISTS rotina_tarefas (   -- itens do checklist da semana (o usuário inclui e exclui)
+    id INTEGER PRIMARY KEY,
+    chave TEXT NOT NULL UNIQUE,      -- liga com rotina_itens.item; 'fim_mes' = último dia do mês (Fechar o mês no Painel)
+    texto TEXT NOT NULL,
+    dia INTEGER,                     -- 1=segunda ... 7=domingo: dia do aviso "Rotina de hoje"; NULL = sem dia
+    ordem INTEGER DEFAULT 0,
+    excluido_em TEXT
+);
+
 CREATE TABLE IF NOT EXISTS rotina_itens (
     id INTEGER PRIMARY KEY,
     semana TEXT NOT NULL,            -- AAAA-Wss
-    item TEXT NOT NULL,              -- segunda_grade | quarta_leads | sexta_propostas | fim_mes
+    item TEXT NOT NULL,              -- rotina_tarefas.chave
     feito INTEGER DEFAULT 0,
     data_feito TEXT,
     UNIQUE (semana, item)

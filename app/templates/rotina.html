@@ -7,10 +7,18 @@
     {% for i in itens %}
     <div class="check {{ 'feito' if i.feito }}">
       <form method="post" action="/rotina/{{ i.chave }}/toggle" class="inline"><button class="{{ 'claro' if i.feito else 'verde' }} pequeno">{{ 'Desfazer' if i.feito else 'Feito' }}</button></form>
-      <span>{{ i.texto }}{% if i.chave == 'fim_mes' %} <span class="muted">({{ ultimo_dia|data }} — use "Fechar o mês" no Painel)</span>{% endif %}</span>
-      {% if i.data %}<span class="muted" style="margin-left:auto">{{ i.data|data }}</span>{% endif %}
+      <span class="texto">{{ i.texto }}{% if i.chave == 'fim_mes' %} <span class="muted">({{ ultimo_dia|data }} — use "Fechar o mês" no Painel)</span>{% endif %}</span>
+      {% if i.data %}<span class="muted">{{ i.data|data }}</span>{% endif %}
+      <form method="post" action="/rotina/tarefa/{{ i.id }}/excluir" data-confirmar="Tirar esta tarefa do checklist? Dá para restaurar em Dados."><button class="claro pequeno" aria-label="Excluir tarefa">x</button></form>
     </div>
+    {% else %}
+    <p class="muted">Checklist vazio. Inclua uma tarefa abaixo.</p>
     {% endfor %}
+    <form method="post" action="/rotina/tarefa" class="linha mt">
+      <input name="texto" placeholder="Nova tarefa da semana" aria-label="Nova tarefa" required style="flex:1 1 100%">
+      <select name="dia" aria-label="Dia do aviso" style="width:auto"><option value="0">Qualquer dia</option>{% for d in range(1,8) %}<option value="{{ d }}">{{ d|dia }}</option>{% endfor %}</select>
+      <button class="pequeno">Incluir</button>
+    </form>
     <h3 class="mt">Semanas anteriores</h3>
     {% for h in historico %}<span class="tag {{ 'verde' if h.feitos == h.total else ('amarelo' if h.feitos else 'neutro') }}">{{ h.semana }}: {{ h.feitos }}/{{ h.total }}</span> {% endfor %}
   </div>

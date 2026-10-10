@@ -31,10 +31,20 @@
     {% for c in checkpoints %}
     <div class="check checkpoint">
       <span class="tag {{ 'verde' if (c.resposta if c.resposta != 'pendente' else c.auto) == 'sim' else ('vermelho' if (c.resposta if c.resposta != 'pendente' else c.auto) == 'nao' else 'amarelo') }}">{{ {'sim':'Sim','nao':'Não','pendente':'Pendente'}[c.resposta if c.resposta != 'pendente' else c.auto] }}</span>
-      <span>{{ c.pergunta }} <span class="muted">({{ c.clientes }} cliente(s) desse canal até {{ c.prazo|data }})</span></span>
-      <form method="post" action="/campanhas/checkpoint/{{ c.id }}" class="linha"><select name="resposta" onchange="this.form.submit()" style="width:auto;padding:3px">{% for v, r in [('pendente','automático'),('sim','Sim'),('nao','Não')] %}<option value="{{ v }}" {{ 'selected' if v == c.resposta }}>{{ r }}</option>{% endfor %}</select></form>
+      <span class="texto">{{ c.pergunta }} <span class="muted">({% if c.canal %}{{ c.clientes }} cliente(s) de {{ c.canal }} até {{ c.prazo|data }}{% else %}até {{ c.prazo|data }}{% endif %})</span></span>
+      <form method="post" action="/campanhas/checkpoint/{{ c.id }}" class="linha"><select name="resposta" onchange="this.form.submit()" aria-label="Resposta" style="width:auto;padding:3px">{% for v, r in [('pendente','automático' if c.canal else 'pendente'),('sim','Sim'),('nao','Não')] %}<option value="{{ v }}" {{ 'selected' if v == c.resposta }}>{{ r }}</option>{% endfor %}</select></form>
+      <form method="post" action="/campanhas/checkpoint/{{ c.id }}/excluir" data-confirmar="Excluir este checkpoint? Dá para restaurar em Dados."><button class="claro pequeno" aria-label="Excluir checkpoint">x</button></form>
     </div>
+    {% else %}
+    <p class="muted">Nenhum checkpoint. Inclua um abaixo: uma pergunta com prazo para conferir se a campanha deu resultado.</p>
     {% endfor %}
+    <h3 class="mt">Novo checkpoint</h3>
+    <form method="post" action="/campanhas/checkpoint" class="form-grid">
+      <div class="largo"><label>Pergunta</label><input name="pergunta" required placeholder="Ex.: Instagram trouxe cliente até 30/11?"></div>
+      <div><label>Canal (conta sozinho)</label><select name="canal"><option value="">Nenhum (respondo na mão)</option>{% for k in listas.lista_canais %}<option>{{ k }}</option>{% endfor %}</select></div>
+      <div><label>Prazo</label><input name="prazo" type="date" required></div>
+      <div class="largo"><button>Incluir checkpoint</button></div>
+    </form>
   </div>
   <div class="card">
     <div class="linha" style="justify-content:space-between"><h2 style="margin:0">Gastos por canal</h2>
