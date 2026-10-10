@@ -155,7 +155,22 @@ if (-not $servico) {
     Ok 'Servico cloudflared rodando.'
 }
 
-Titulo '5. Ligar o CRM agora'
+Titulo '5. Atualizacao automatica'
+if ($valores['CRM_AUTOATUALIZAR'] -eq '0') {
+    Aviso 'Desligada no .env (CRM_AUTOATUALIZAR=0). Para atualizar: git pull e rode este arquivo de novo.'
+} elseif (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Aviso 'O git nao esta instalado: o CRM nao vai se atualizar sozinho.'
+} else {
+    $ramo = (& git -C $pasta rev-parse --abbrev-ref HEAD 2>$null)
+    if ($ramo -ne 'main') {
+        Aviso "A pasta do CRM esta no ramo '$ramo'. Para se atualizar sozinho, ela precisa estar na main: git checkout main"
+    } else {
+        Ok 'O CRM confere o GitHub a cada 15 minutos e se atualiza sozinho.'
+        Linha 'Ele espera ficar 5 minutos sem ninguem usando. Nao precisa mais de git pull.'
+    }
+}
+
+Titulo '6. Ligar o CRM agora'
 if (CrmRodando) {
     # reinicia para ler o .env e a versao nova (depois de um git pull); /encerrar so funciona pelo proprio PC
     Linha 'O CRM ja estava aberto. Reiniciando para ele ler o .env e a versao nova...'

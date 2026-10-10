@@ -105,7 +105,7 @@ Os nomes dos botões no Cloudflare e no Render podem mudar um pouco.
   Acontece se o Windows reiniciou e ninguém entrou na conta, ou se alguém clicou em Encerrar.
 - **"A portaria do Cloudflare Access ainda não foi configurada"**: faltam as linhas `CF_ACCESS_*` no `.env`.
   Preencha e rode `configurar-pc-servidor.ps1` de novo.
-- Cada mudança juntada na `main` do GitHub vai sozinha para a reserva. No PC: `git pull` e rode `configurar-pc-servidor.ps1` de novo (ele reinicia o CRM).
+- Cada mudança juntada na `main` do GitHub vai sozinha para a reserva e para o PC (veja "Como atualizar o CRM").
 
 ## Backup e restauração
 - **Dados › Fazer backup agora**: cria uma cópia imediata.
@@ -119,8 +119,12 @@ Simulador (preço, margem, lucro/hora, preço mínimo, desconto máximo; bloquei
 Campanhas (fases, checklists, gastos por canal, checkpoints que você inclui e exclui) · Rotina (checklist semanal editável e lista de espera) · Configurações · Dados.
 
 ## Como atualizar o CRM
-Substitua a pasta `app\` pela nova versão e abra o CRM normalmente. O banco e os backups não são tocados.
-Se `requirements.txt` mudar, apague a pasta `.venv` e abra o CRM: ele reinstala tudo.
+**Sozinho.** O CRM do PC confere o GitHub a cada 15 minutos. Se tiver versão nova, espera ficar 5 minutos sem ninguém usando,
+baixa e reinicia (cerca de 10 segundos fora do ar). Bibliotecas novas são instaladas na hora. O banco e os backups não são tocados.
+- A tela **Dados** mostra a versão e se deu algum problema. Histórico em `data\atualizacao.log`.
+- Se a versão nova não abrir, o CRM volta sozinho para a anterior e espera a próxima.
+- Precisa: Windows, o `git` instalado e a pasta baixada com `git clone` (ramo `main`).
+- Desligar: acrescente `CRM_AUTOATUALIZAR=0` no `.env` e reinicie o CRM. Aí, para atualizar: `git pull` e `configurar-pc-servidor.ps1`.
 
 ## Testes (para quem programa)
 ```

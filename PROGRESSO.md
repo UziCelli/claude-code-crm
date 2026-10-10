@@ -52,6 +52,12 @@ Plano completo em `C:\Users\victo\.claude\plans\a-gente-vai-come-ar-functional-t
   `iniciar-crm.bat /servidor` (liga sem navegador, para o início automático) e `configurar-pc-servidor.ps1` (início automático, energia, confere `.env` e túnel).
   Pendente (usuário, passo a passo no README, "CRM no celular"): apagar o DNS `crm` antigo; criar o túnel `pc-crm` (cloudflared como serviço, `crm` → `localhost:8765`);
   no app CRM do Access, acrescentar `crm-reserva` e sessão de 1 mês; trocar o domínio no Render para `crm-reserva`; pôr `CF_ACCESS_TEAM_DOMAIN`/`CF_ACCESS_AUD` no `.env` do PC; rodar `configurar-pc-servidor.ps1`.
+  Túnel funcionando em 10/10/2026 (celular abre rápido). Falta: reserva no Render (`crm-reserva`) e sessão de 1 mês no Access.
+- **Checkpoints e checklist da Rotina editáveis (10/10/2026):** incluir e excluir (lixeira); tarefas da rotina na tabela `rotina_tarefas`.
+- **PC se atualiza sozinho (10/10/2026, `app/atualizar.py`):** confere a `main` a cada 15 min; com versão nova, espera 5 min sem uso,
+  faz `git merge --ff-only` e reinicia pelo `iniciar-crm.bat /servidor`. Versão que não abre volta para a anterior (`data/atualizacao-recusada.txt`).
+  Log em `data/atualizacao.log`; situação na tela Dados. Desligar: `CRM_AUTOATUALIZAR=0` no `.env`.
+  Atenção ao programar no PC: commit local na `main` ou outro ramo param a atualização automática (de propósito).
 - **Depois:** repositório privado no GitHub (feito: UziCelli/claude-code-crm); agente de IA (Sonnet 5.5) adiado.
 - Forma de pagamento dos clientes importados vem como "Mensal"/"Parcelado" (texto da planilha); o motor usa PIX como padrão nesses casos.
 - Multiagente: tarefas simples em Haiku, implementação em Sonnet 5.5, modelo principal só para revisão.
