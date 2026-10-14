@@ -38,12 +38,13 @@ CREATE TABLE IF NOT EXISTS clientes (
 CREATE TABLE IF NOT EXISTS cliente_eventos (
     id INTEGER PRIMARY KEY,
     cliente_id INTEGER NOT NULL REFERENCES clientes(id),
-    tipo TEXT NOT NULL,              -- pagamento | renovacao | anotacao | aula
+    tipo TEXT NOT NULL,              -- pagamento | renovacao | anotacao | status | aula | falta | desmarcou
     data TEXT NOT NULL,
     valor REAL,
     descricao TEXT,
     criado_em TEXT DEFAULT (datetime('now','localtime')),
-    excluido_em TEXT
+    excluido_em TEXT,
+    hora INTEGER                     -- aula marcada pela Agenda (5..23); NULL = lançada pela ficha
 );
 
 CREATE TABLE IF NOT EXISTS leads (
@@ -206,6 +207,16 @@ CREATE TABLE IF NOT EXISTS rotina_itens (
     feito INTEGER DEFAULT 0,
     data_feito TEXT,
     UNIQUE (semana, item)
+);
+
+CREATE TABLE IF NOT EXISTS agenda_avulsas (   -- aula só num dia (reposição, extra); o horário fixo vem da grade_slots
+    id INTEGER PRIMARY KEY,
+    cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+    data TEXT NOT NULL,
+    hora INTEGER NOT NULL,           -- 5..23
+    local TEXT NOT NULL,
+    criado_em TEXT DEFAULT (datetime('now','localtime')),
+    excluido_em TEXT
 );
 
 CREATE TABLE IF NOT EXISTS lista_espera (
