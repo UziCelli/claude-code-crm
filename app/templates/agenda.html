@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block titulo %}Agenda · VFITCOACH CRM{% endblock %}
+{% block conteudo %}
+{% set ROT = {'feita': 'feita', 'faltou': 'faltou', 'desmarcou': 'desmarcou', 'pendente': 'sem marcar', 'futura': ''} %}
+{% set COR = {'feita': 'verde', 'faltou': 'vermelho', 'desmarcou': 'amarelo'} %}
+{% set mais_todas = '&todas=1' if todas else '' %}
+<div class="linha topo">
+  <h1 style="margin:0">Agenda</h1>
+  <button type="button" data-abrir="dlg-incluir" data-titulo="Incluir aula">+ Incluir aula</button>
+</div>
+<div class="agenda-nav">
+  <a class="btn claro" href="/agenda?semana={{ anterior }}{{ mais_todas }}">← Semana anterior</a>
+  <a class="btn {{ '' if atual else 'claro' }}" href="/agenda{{ '?todas=1' if todas }}">Esta semana</a>
+  <a class="btn claro" href="/agenda?semana={{ proxima }}{{ mais_todas }}">Próxima →</a>
+</div>
+<div class="linha" style="justify-content:space-between;margin-top:10px">
+  <strong>{{ semana_txt }}</strong>
+  <a href="/agenda?semana={{ segunda }}{{ '' if todas else '&todas=1' }}">{{ 'Só horários com aula' if todas else 'Ver todos os horários' }}</a>
+</div>
+{% if n_ligar %}
+<form method="post" action="/agenda/vincular-todos" class="mt"
+  data-confirmar="Ligar {{ n_ligar }} {{ 'horário' if n_ligar == 1 else 'horários' }} da Grade {{ 'ao aluno' if n_ligar == 1 else 'aos alunos' }} com o mesmo nome? Dá para conferir e tirar depois.">
+  <input type="hidden" name="semana" value="{{ segunda }}"><input type="hidden" name="todas" value="{{ todas }}">
+  <button class="claro">{{ 'Ligar 1 nome da Grade ao aluno' if n_ligar == 1 else 'Ligar ' ~ n_ligar ~ ' nomes da Grade aos alunos' }}</button>
+</form>
+{% endif %}
+
+{% if atual %}
+<div class="card card-hoje mt">
+  <h2>Hoje — {{ hoje_d.isoweekday()|dia }} {{ hoje_d.strftime('%d/%m') }}</h2>
+  {% for a in hoje_aulas %}
+  <div class="aula-hoje {{ a.estado or '' }}">
+    <div class="quem">
+      <span class="hora">{{ '%02d'|format(a.hora) }}h</span><strong>{{ a.nome }}</strong>
+      <div class="muted">{{ a.local }}{% if a.avulsa %} <span class="tag azul">avulsa</span>{% endif %}</div>
+    </div>
+    <form method="post" action="/agenda/marcar">
+      <input type="hidden" name="cliente_id" value="{{ a.cliente_id }}"><input type="hidden" name="data" value="{{ a.data }}"><input type="hidden" name="hora" value="{{ a.hora }}">
+      <input type="hidden" name="local" value="{{ a.local }}"><input type="hidden" name="avulsa" value="{{ 1 if a.avulsa else 0 }}">
+      <input type="hidden" name="semana" value="{{ segunda }}"><input type="hidden" name="todas" value="{{ todas }}">
+      {% if a.estado %}
+      <span class="tag {{ COR[a.estado] }}">{{ ROT[a.estado] }}</span>
+      <button name="estado" value="" class="claro btn-estado">Desfazer</button>
+      {% else %}
+      <button name="estado" value="feita" class="btn-estado feita">Feita</button>
+      <button name="estado" value="faltou" class="btn-estado faltou">Faltou</button>
+      <button name="estado" value="desmarcou" class="btn-estado desmarcou">Desmarcou</button>
+      {% endif %}
+    </form>
+  </div>
+  {% else %}
+  <p class="muted" style="margin:0">{{ 'Domingo: sem aulas na agenda.' if hoje_d.isoweekday() == 7 else 'Nenhuma aula hoje.' }}</p>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="legenda mt">
+  <span><i class="l-feita"></i> feita</span><span><i class="l-faltou"></i> faltou</span><span><i class="l-desmarcou"></i> desmarcou</span>
+  <span><i class="l-pendente"></i> passou sem marcar</span><span><i class="l-futura"></i> ainda vai acontecer</span>
+</div>
+{% if not tem_aulas %}<p class="muted" style="margin:6px 0 0">Nenhuma aula nesta semana. Use <b>+ Incluir aula</b> ou marque alunos como ocupado na Grade.</p>{% endif %}
+<div class="rolagem mt">
+<table class="grade agenda">
+  <tr><th></th>{% for d in dias %}<th class="{{ 'hoje' if d.hoje }} {{ 'bloq' if d.bloqueio }}">{{ d.n|dia_curto }}<small>{{ d.data.strftime('%d/%m') }}</small>{% if d.bloqueio %}<small class="rot-bloq">bloqueio</small>{% endif %}</th>{% endfor %}</tr>
+  {% for h in horas %}
+  <tr><td class="hora">{{ '%02d'|format(h) }}h</td>
+    {% for d in dias %}
+    <td class="{{ 'hoje' if d.hoje }} {{ 'bloq' if d.bloqueio }}">
+      {% for a in celulas.get((d.n, h), []) %}
+      {% if a.sem_vinculo %}
+      <button type="button" class="cel aula sem-vinculo" data-abrir="dlg-vincular" data-titulo="{{ a.nome }} — {{ d.n|dia_curto }} {{ '%02d'|format(h) }}h · {{ a.local }}"
+        data-dia="{{ d.n }}" data-hora="{{ h }}" data-local="{{ a.local }}" data-cliente_id="{{ a.sugestao or '' }}">
+        <span class="t">{{ a.nome }}</span><small class="miudo">? ligar ao aluno{% if multi_local %} · {{ a.local }}{% endif %}</small>
+      </button>
+      {% else %}
+      {% set rot = '' if (a.bloqueio and not a.estado) else ROT[a.situacao] %}
+      <button type="button" class="cel aula {{ 'bloq' if a.bloqueio and not a.estado else a.situacao }}" data-abrir="dlg-aula"
+        data-titulo="{{ a.nome }} — {{ d.n|dia_curto }} {{ d.data.strftime('%d/%m') }} {{ '%02d'|format(h) }}h · {{ a.local }}"
+        data-cliente_id="{{ a.cliente_id }}" data-data="{{ a.data }}" data-dia="{{ d.n }}" data-hora="{{ h }}" data-local="{{ a.local }}"
+        data-avulsa="{{ 1 if a.avulsa else 0 }}" data-avulsa_id="{{ a.avulsa_id or '' }}" data-situacao="{{ a.situacao }}">
+        <span class="t">{{ (a.nome.split() or [a.nome])[0] }}</span>{% if a.avulsa %} <span class="av">avulsa</span>{% endif %}
+        {% if rot or multi_local %}<small class="miudo">{{ rot }}{% if rot and multi_local %} · {% endif %}{{ a.local if multi_local }}</small>{% endif %}
+      </button>
+      {% endif %}
+      {% else %}
+      <button type="button" class="cel vazio" data-abrir="dlg-incluir" data-titulo="Incluir aula — {{ d.n|dia_curto }} {{ d.data.strftime('%d/%m') }} {{ '%02d'|format(h) }}h"
+        data-dia="{{ d.n }}" data-hora="{{ h }}" data-data="{{ d.iso }}" aria-label="Incluir aula em {{ d.n|dia }} às {{ '%02d'|format(h) }}h">+</button>
+      {% endfor %}
+    </td>
+    {% endfor %}
+  </tr>
+  {% endfor %}
+</table>
+</div>
+
+<dialog id="dlg-aula">
+  <h2 data-titulo>Aula</h2>
+  <p class="muted estado-atual" id="aula-estado"></p>
+  <form method="post" action="/agenda/marcar" class="botoes-estado">
+    <input type="hidden" name="cliente_id"><input type="hidden" name="data"><input type="hidden" name="hora"><input type="hidden" name="local"><input type="hidden" name="avulsa">
+    <input type="hidden" name="semana" value="{{ segunda }}"><input type="hidden" name="todas" value="{{ todas }}">
+    <button name="estado" value="feita" class="btn-estado feita">Feita</button>
+    <button name="estado" value="faltou" class="btn-estado faltou">Faltou</button>
+    <button name="estado" value="desmarcou" class="btn-estado desmarcou">Desmarcou</button>
+    <button name="estado" value="" class="claro btn-estado" id="b-desfazer">Desfazer</button>
+  </form>
+  <div class="linha mt">
+    <a class="btn claro" id="a-ficha" href="#">Abrir ficha</a>
+    <form method="post" action="/agenda/fixo/excluir" id="f-fixo" data-confirmar="Tirar o aluno deste horário fixo? A Grade fica livre; o que já foi marcado continua no histórico.">
+      <input type="hidden" name="cliente_id"><input type="hidden" name="local"><input type="hidden" name="dia"><input type="hidden" name="hora">
+      <input type="hidden" name="semana" value="{{ segunda }}"><input type="hidden" name="todas" value="{{ todas }}">
+      <button class="perigo">Tirar do horário fixo</button>
+    </form>
+    <form method="post" action="/agenda/avulsa/0/excluir" id="f-avulsa" data-confirmar="Excluir esta aula avulsa?">
+      <input type="hidden" name="semana" value="{{ segunda }}"><input type="hidden" name="todas" value="{{ todas }}">
+      <button class="perigo">Excluir aula avulsa</button>
+    </form>
+    <button type="button" class="claro" data-fechar>Fechar</button>
+  </div>
+</dialog>
+
+<dialog id="dlg-incluir">
+  <h2 data-titulo>Incluir aula</h2>
+  <form method="post" action="/agenda/incluir">
+    <input type="hidden" name="semana" value="{{ segunda }}"><input type="hidden" name="todas" value="{{ todas }}">
+    <div class="campo"><label>Aluno</label>
+      <select name="cliente_id" required><option value="">—</option>{% for c in clientes %}<option value="{{ c.id }}" data-local="{{ c.local or '' }}">{{ c.nome }}</option>{% endfor %}</select></div>
+    <div class="campo opcoes">
+      <label><input type="radio" name="repetir" value="1" checked> Toda semana (horário fixo, vai para a Grade)</label>
+      <label><input type="radio" name="repetir" value="0"> Só neste dia (aula avulsa)</label>
+    </div>
+    <div class="duas">
+      <div class="campo" id="campo-dia"><label>Dia</label>
+        <select name="dia" required><option value="">—</option>{% for n in range(1, 7) %}<option value="{{ n }}">{{ n|dia }}</option>{% endfor %}</select></div>
+      <div class="campo" id="campo-data" hidden><label>Data</label><input type="date" name="data" value="{{ data_padrao }}"></div>
+      <div class="campo"><label>Hora</label>
+        <select name="hora" required><option value="">—</option>{% for n in range(5, 24) %}<option value="{{ n }}">{{ '%02d'|format(n) }}h</option>{% endfor %}</select></div>
+    </div>
+    <div class="campo"><label>Local</label>
+      <select name="local" required>{% for l in locais %}<option>{{ l }}</option>{% endfor %}</select></div>
+    <div class="linha"><button>Incluir</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-vincular">
+  <h2 data-titulo>Ligar ao aluno</h2>
+  <p class="muted">Esse nome foi escrito à mão na Grade. Escolha o aluno do CRM: ele passa a aparecer aqui com os botões Feita, Faltou e Desmarcou.</p>
+  <form method="post" action="/agenda/incluir">
+    <input type="hidden" name="dia"><input type="hidden" name="hora"><input type="hidden" name="local"><input type="hidden" name="repetir" value="1">
+    <input type="hidden" name="semana" value="{{ segunda }}"><input type="hidden" name="todas" value="{{ todas }}">
+    <div class="campo"><label>Aluno</label>
+      <select name="cliente_id" required><option value="">—</option>{% for c in clientes %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}</select></div>
+    <div class="linha"><button>Ligar ao aluno</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
+  </form>
+  <p class="muted" style="margin:12px 0 0">Não é aluno? <a id="a-grade" href="/grade">Ajuste na Grade</a></p>
+</dialog>
+
+<script>
+(function () {
+  // janelinha da aula: os formulários de baixo não são preenchidos pelo app.js (só o primeiro), então preenche aqui
+  var fixo = document.getElementById("f-fixo"), avulsa = document.getElementById("f-avulsa"), ficha = document.getElementById("a-ficha");
+  var estadoLinha = document.getElementById("aula-estado"), desfazer = document.getElementById("b-desfazer");
+  var COR = {feita: "verde", faltou: "vermelho", desmarcou: "amarelo"};
+  document.addEventListener("click", function (e) {
+    var g = e.target.closest('[data-abrir="dlg-vincular"]');
+    if (g) document.getElementById("a-grade").href = "/grade?local=" + encodeURIComponent(g.dataset.local);
+    var b = e.target.closest('[data-abrir="dlg-aula"]');
+    if (!b) return;
+    var d = b.dataset, av = d.avulsa === "1", marcada = d.situacao in COR;
+    estadoLinha.textContent = "";
+    if (marcada) {
+      var tag = document.createElement("span");
+      tag.className = "tag " + COR[d.situacao]; tag.textContent = d.situacao;
+      estadoLinha.append("Marcada como: ", tag);
+    } else estadoLinha.textContent = "Ainda não marcada";
+    desfazer.hidden = !marcada;
+    desfazer.closest("form").classList.toggle("sem-desfazer", !marcada);
+    ficha.href = "/clientes/" + d.cliente_id;
+    fixo.hidden = av; avulsa.hidden = !av;
+    ["cliente_id", "local", "dia", "hora"].forEach(function (k) { fixo.elements[k].value = d[k]; });
+    avulsa.action = "/agenda/avulsa/" + d.avulsa_id + "/excluir";
+  });
+
+  // incluir aula: fixo mostra o dia da semana; avulsa mostra a data. O local do aluno já vem escolhido.
+  var f = document.querySelector("#dlg-incluir form");
+  function modo() {
+    var repete = f.elements.repetir.value === "1";
+    document.getElementById("campo-dia").hidden = !repete;
+    document.getElementById("campo-data").hidden = repete;
+    f.elements.dia.required = repete; f.elements.data.required = !repete;
+  }
+  f.addEventListener("change", function (e) { if (e.target.name === "repetir") modo(); });
+  f.addEventListener("reset", function () { setTimeout(modo, 0); });   // o app.js reseta e preenche; depois disso acerta os campos
+  f.elements.cliente_id.addEventListener("change", function () {
+    var o = this.selectedOptions[0], l = o && o.dataset.local;
+    if (l && Array.prototype.some.call(f.elements.local.options, function (x) { return x.value === l; })) f.elements.local.value = l;
+  });
+  modo();
+})();
+</script>
+{% endblock %}

@@ -326,3 +326,73 @@ table.cartoes tr.foco td:first-child { box-shadow: inset 4px 0 0 var(--amarelo);
   .kanban { grid-template-columns: 1fr; overflow: visible; }
   .coluna { min-height: 0; }
 }
+
+/* ===== agenda: aulas da semana + "Hoje" ===== */
+dialog [hidden] { display: none !important; }
+.agenda-nav { display: flex; gap: 8px; max-width: 560px; }
+.agenda-nav .btn { flex: 1; text-align: center; padding: 10px 8px; white-space: nowrap; }
+.duas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.opcoes label { display: flex; gap: 8px; align-items: flex-start; min-height: 36px; padding: 4px 0; font-size: 14px; font-weight: 500; color: var(--texto); }
+.opcoes input[type=radio] { width: auto; margin-top: 3px; }
+
+/* botões grandes de marcar a aula (Hoje e janelinha) */
+.btn-estado { min-height: 44px; padding: 8px 16px; }
+.btn-estado.feita { background: var(--verde); color: #fff; }
+.btn-estado.feita:hover { background: #17824a; }
+.btn-estado.faltou { background: var(--vermelho-f); color: #8f1d17; }
+.btn-estado.faltou:hover { background: #f9d2cf; }
+.btn-estado.desmarcou { background: var(--amarelo-f); color: #7a5300; }
+.btn-estado.desmarcou:hover { background: #ffecb0; }
+.botoes-estado { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.botoes-estado .btn-estado { min-height: 52px; }
+.botoes-estado.sem-desfazer .desmarcou { grid-column: 1 / -1; }   /* sem o Desfazer, o Desmarcou ocupa a linha toda */
+.estado-atual { margin: -4px 0 12px; }
+
+/* card "Hoje": uma linha por aula, estado na borda da esquerda */
+.aula-hoje { background: #fff; border: 1px solid var(--borda); border-left: 5px solid var(--borda); border-radius: 10px; padding: 10px 12px; margin-top: 8px;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+.aula-hoje.feita { border-left-color: var(--verde); }
+.aula-hoje.faltou { border-left-color: var(--vermelho); }
+.aula-hoje.desmarcou { border-left-color: var(--amarelo); }
+.aula-hoje .quem { flex: 1 1 180px; min-width: 0; }
+.aula-hoje .hora { font-weight: 700; color: var(--aco); font-variant-numeric: tabular-nums; margin-right: 8px; }
+.aula-hoje form { display: flex; gap: 6px; align-items: center; }
+
+/* semana: cada aula é um botão colorido pelo estado */
+.grade.agenda { table-layout: fixed; }   /* colunas do mesmo tamanho; nome comprido quebra em vez de alargar o dia */
+.grade.agenda td.hora, .grade.agenda th:first-child { width: 44px; }
+.grade.agenda .cel .t { overflow-wrap: anywhere; }
+.grade th small { display: block; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--cinza); }
+.grade th.hoje { background: var(--aco); color: #fff; border-radius: 8px; }
+.grade th.hoje small { color: #dbe7f7; }
+.grade th.bloq { background: #dfe3ea; border-radius: 8px; color: var(--cinza); }
+.grade th .rot-bloq { font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: .04em; }
+.grade td.hoje { background: var(--neutro-f); border-radius: 10px; padding: 3px; }
+.grade td.bloq { background: #dfe3ea; border-radius: 10px; padding: 3px; }
+.grade td .cel + .cel { margin-top: 3px; }
+.cel.aula { font-weight: 500; }
+.cel.aula .av { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--aco); letter-spacing: .03em; }
+.cel.aula.futura { background: #f4f7fc; box-shadow: inset 0 0 0 1px var(--borda); }
+.cel.aula.pendente { background: #fff; box-shadow: inset 0 0 0 2px var(--aco); }
+.cel.aula.pendente .miudo { font-weight: 700; color: var(--aco); opacity: 1; }
+.cel.aula.feita { background: var(--verde-f); color: #14663a; box-shadow: inset 5px 0 0 var(--verde); }
+.cel.aula.faltou { background: var(--vermelho-f); color: #8f1d17; box-shadow: inset 5px 0 0 var(--vermelho); }
+.cel.aula.desmarcou { background: var(--amarelo-f); color: #7a5300; box-shadow: inset 5px 0 0 var(--amarelo); }
+.cel.aula.feita, .cel.aula.faltou, .cel.aula.desmarcou { padding-left: 12px; }
+.cel.aula.feita .av, .cel.aula.faltou .av, .cel.aula.desmarcou .av { color: inherit; }
+.cel.aula.bloq { background: #eef0f4; color: var(--cinza); }
+.cel.aula.sem-vinculo { background: #eceff3; color: var(--cinza); box-shadow: inset 0 0 0 1px #b9c1cf; }
+.cel.vazio { background: transparent; color: #a3aec2; text-align: center; font-size: 18px; font-weight: 400; box-shadow: inset 0 0 0 1px #e3eaf4; }
+.cel.vazio:hover { background: var(--azul-f); color: var(--aco); }
+.legenda .l-feita { background: var(--verde-f); box-shadow: inset 4px 0 0 var(--verde); }
+.legenda .l-faltou { background: var(--vermelho-f); box-shadow: inset 4px 0 0 var(--vermelho); }
+.legenda .l-desmarcou { background: var(--amarelo-f); box-shadow: inset 4px 0 0 var(--amarelo); }
+.legenda .l-pendente { background: #fff; box-shadow: inset 0 0 0 2px var(--aco); }
+.legenda .l-futura { background: #f4f7fc; box-shadow: inset 0 0 0 1px var(--borda); }
+@media (max-width: 760px) {
+  .agenda-nav .btn { font-size: 13px; padding: 10px 4px; }
+  .aula-hoje form { flex: 1 1 100%; }
+  .aula-hoje form .btn-estado { flex: 1; padding-left: 6px; padding-right: 6px; }
+  .aula-hoje form .tag { flex: 0 0 auto; }
+  .grade td.hora { width: 38px; }
+}
