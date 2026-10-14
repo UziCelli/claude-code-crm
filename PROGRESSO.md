@@ -59,6 +59,7 @@ Plano completo em `C:\Users\victo\.claude\plans\a-gente-vai-come-ar-functional-t
   Log em `data/atualizacao.log`; situação na tela Dados. Desligar: `CRM_AUTOATUALIZAR=0` no `.env`.
   Atenção ao programar no PC: commit local na `main` ou outro ramo param a atualização automática (de propósito).
 - **Agenda (14/10/2026):** aba nova com os horários fixos da Grade e aulas avulsas; marcar aula feita/faltou/desmarcou com 1 toque (vai para o histórico do aluno); aviso de aulas da semana sem marcar.
+- **Agenda com seletor (14/10/2026):** 1 card por horário (até 2 alunos), escolhe aluno e local; Copiar da Grade em uma gravação só.
 - **Depois:** repositório privado no GitHub (feito: UziCelli/claude-code-crm); agente de IA (Sonnet 5.5) adiado.
 - Forma de pagamento dos clientes importados vem como "Mensal"/"Parcelado" (texto da planilha); o motor usa PIX como padrão nesses casos.
 - Multiagente: tarefas simples em Haiku, implementação em Sonnet 5.5, modelo principal só para revisão.

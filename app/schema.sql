@@ -209,10 +209,20 @@ CREATE TABLE IF NOT EXISTS rotina_itens (
     UNIQUE (semana, item)
 );
 
-CREATE TABLE IF NOT EXISTS agenda_avulsas (   -- aula só num dia (reposição, extra); o horário fixo vem da grade_slots
+CREATE TABLE IF NOT EXISTS agenda_avulsas (   -- aula só num dia (reposição, extra); o horário fixo vem da agenda_fixos
     id INTEGER PRIMARY KEY,
     cliente_id INTEGER NOT NULL REFERENCES clientes(id),
     data TEXT NOT NULL,
+    hora INTEGER NOT NULL,           -- 5..23
+    local TEXT NOT NULL,
+    criado_em TEXT DEFAULT (datetime('now','localtime')),
+    excluido_em TEXT
+);
+
+CREATE TABLE IF NOT EXISTS agenda_fixos (   -- horário fixo da Agenda: até 2 alunos ativos por (dia, hora), controlado no app; a Agenda avisa a Grade, nunca o contrário
+    id INTEGER PRIMARY KEY,
+    cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+    dia INTEGER NOT NULL,            -- 1..6 (segunda a sábado)
     hora INTEGER NOT NULL,           -- 5..23
     local TEXT NOT NULL,
     criado_em TEXT DEFAULT (datetime('now','localtime')),
