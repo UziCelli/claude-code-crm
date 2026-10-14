@@ -8,6 +8,7 @@ import secrets
 import signal
 import sqlite3
 import threading
+import unicodedata
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote
@@ -220,6 +221,9 @@ def alertas(con):
             add("vermelho", f"{c['nome']} — sem aula desde {data_br(c['ultima'])}", f"/clientes/{c['id']}", c["telefone"], "falta", c["nome"], data_br(c["ultima"]))
     if nunca:
         add("amarelo", f"{nunca} aluno{s(nunca)} sem nenhuma aula registrada", "/clientes")
+    n = aulas_sem_marcar(con, hoje)
+    if n:
+        add("azul", f"{n} aula{s(n)} da agenda sem marcar nesta semana", "/agenda")
     for l in con.execute("""SELECT * FROM leads WHERE excluido_em IS NULL AND etapa NOT IN ('cliente','perdido')
                             ORDER BY data_proxima_acao IS NULL, data_proxima_acao"""):
         if l["data_proxima_acao"] and l["data_proxima_acao"] <= h:
@@ -602,6 +606,14 @@ def grade(request: Request, tipo: str = "Pacotes", local: str = "CIA", vale: int
                   horas=range(5, 24), clientes=clientes_, base=base, resumo=resumo, refs=refs, ref_atual=base[col] if base else None)
 
 
+def salvar_slot(con, tipo, dia, local, hora, status, cliente_id, cliente_nome, multiplicador):
+    """Grava uma célula da grade (cria ou atualiza). Usada pela Grade e pela Agenda; quem chama abre a transação."""
+    con.execute("""INSERT INTO grade_slots (tipo_calculo, dia, local, hora, status, cliente_id, cliente_nome, multiplicador)
+                   VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(tipo_calculo, dia, local, hora) DO UPDATE SET
+                   status=excluded.status, cliente_id=excluded.cliente_id, cliente_nome=excluded.cliente_nome,
+                   multiplicador=excluded.multiplicador""", (tipo, dia, local, hora, status, cliente_id, cliente_nome, multiplicador))
+
+
 @app.post("/grade/slot")
 def grade_slot(tipo: str = Form(...), local: str = Form(...), dia: int = Form(0), hora: int = Form(0), status: str = Form(""),
                cliente_id: str = Form(""), multiplicador: str = Form(""), so_este: int = Form(0), ref: int = Form(0),
@@ -633,12 +645,261 @@ def grade_slot(tipo: str = Form(...), local: str = Form(...), dia: int = Form(0)
                 else:
                     c_id, c_nome = (ex["cliente_id"], ex["cliente_nome"]) if ex else (None, None)
                 mult = mult_novo if mult_novo is not None else ((ex["multiplicador"] if ex else None) or 1.0)
-                con.execute("""INSERT INTO grade_slots (tipo_calculo, dia, local, hora, status, cliente_id, cliente_nome, multiplicador)
-                               VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(tipo_calculo, dia, local, hora) DO UPDATE SET
-                               status=excluded.status, cliente_id=excluded.cliente_id, cliente_nome=excluded.cliente_nome,
-                               multiplicador=excluded.multiplicador""", (t, d, local, h, st, c_id, c_nome, mult))
+                salvar_slot(con, t, d, local, h, st, c_id, c_nome, mult)
     msg = f"{len(pares)} horários atualizados." if lote else f"{DIAS_CURTO[pares[0][0]]} {pares[0][1]:02d}h atualizado."
     return voltar(url, msg=msg)
+
+
+# =====================================================================
+# 3b. AGENDA (horários fixos da Grade + aulas avulsas; marcar a aula com 1 toque)
+# =====================================================================
+ESTADO_TIPO = {"feita": "aula", "faltou": "falta", "desmarcou": "desmarcou"}   # estado na tela -> tipo em cliente_eventos
+TIPO_ESTADO = {t: e for e, t in ESTADO_TIPO.items()}
+ESTADO_MSG = {"feita": "aula feita", "faltou": "faltou", "desmarcou": "desmarcou"}
+ISO_DATA = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def inicio_semana(texto="") -> dt.date:
+    """Segunda-feira da semana de qualquer data ISO (vazia ou inválida: semana atual)."""
+    try:
+        d = dt.date.fromisoformat(str(texto or "").strip()[:10])
+    except ValueError:
+        d = dt.date.today()
+    return d - dt.timedelta(days=d.weekday())
+
+
+def fases_bloqueio(con) -> list:
+    """(início, fim) das fases de bloqueio das Campanhas (ex.: casamento 25/10 a 02/11)."""
+    return [(f["inicio"], f["fim"]) for f in con.execute(
+        "SELECT inicio, fim FROM campanha_fases WHERE tipo='bloqueio' AND inicio IS NOT NULL AND fim IS NOT NULL")]
+
+
+def em_bloqueio(fases, iso) -> bool:
+    return any(i <= iso <= f for i, f in fases)
+
+
+def aulas_da_semana(con, segunda, hoje=None) -> list:
+    """Aulas de segunda a sábado: horários fixos da Grade (aluno ativo, a partir da data de início) + avulsas, com o estado marcado.
+    situacao: feita | faltou | desmarcou | pendente (dia passou sem marcar) | futura (hoje ou depois, sem marcar)."""
+    h = (hoje or dt.date.today()).isoformat()
+    datas = {n: (segunda + dt.timedelta(days=n - 1)).isoformat() for n in range(1, 7)}
+    aulas = []
+    for r in con.execute("""SELECT DISTINCT s.dia, s.hora, s.local, c.id AS cliente_id, c.nome, c.telefone, c.data_inicio
+                            FROM grade_slots s JOIN clientes c ON c.id=s.cliente_id
+                            WHERE s.status='ocupado' AND s.dia BETWEEN 1 AND 6 AND s.hora BETWEEN 5 AND 23
+                            AND c.status='ativo' AND c.excluido_em IS NULL"""):   # DISTINCT: Pacotes e Mensalidades repetem a mesma célula
+        ini = str(r["data_inicio"] or "").strip()[:10]
+        if ISO_DATA.fullmatch(ini) and datas[r["dia"]] < ini:
+            continue
+        aulas.append(dict(data=datas[r["dia"]], dia=r["dia"], hora=r["hora"], local=r["local"], cliente_id=r["cliente_id"],
+                          nome=r["nome"], telefone=r["telefone"], avulsa=False, avulsa_id=None))
+    dia_de = {d: n for n, d in datas.items()}
+    for r in con.execute("""SELECT a.id, a.data, a.hora, a.local, c.id AS cliente_id, c.nome, c.telefone
+                            FROM agenda_avulsas a JOIN clientes c ON c.id=a.cliente_id
+                            WHERE a.excluido_em IS NULL AND a.data BETWEEN ? AND ? AND c.status='ativo' AND c.excluido_em IS NULL""",
+                         (datas[1], datas[6])):
+        if r["data"] in dia_de:   # domingo (ou data torta) não entra
+            aulas.append(dict(data=r["data"], dia=dia_de[r["data"]], hora=r["hora"], local=r["local"], cliente_id=r["cliente_id"],
+                              nome=r["nome"], telefone=r["telefone"], avulsa=True, avulsa_id=r["id"]))
+    marcas = {}   # (aluno, data) -> [(hora, estado)] do mais antigo ao mais novo
+    for e in con.execute("""SELECT cliente_id, data, hora, tipo FROM cliente_eventos WHERE excluido_em IS NULL
+                            AND tipo IN ('aula','falta','desmarcou') AND data BETWEEN ? AND ? ORDER BY id""", (datas[1], datas[6])):
+        marcas.setdefault((e["cliente_id"], e["data"]), []).append((e["hora"], TIPO_ESTADO[e["tipo"]]))
+    fases = fases_bloqueio(con)
+    for a in aulas:
+        # vale a marca mais nova do aluno no dia com a mesma hora, ou sem hora (aula lançada pela ficha)
+        a["estado"] = next((est for hr, est in reversed(marcas.get((a["cliente_id"], a["data"]), [])) if hr is None or hr == a["hora"]), None)
+        a["situacao"] = a["estado"] or ("pendente" if a["data"] < h else "futura")
+        a["bloqueio"] = em_bloqueio(fases, a["data"])
+    return sorted(aulas, key=lambda a: (a["data"], a["hora"], a["nome"].lower()))
+
+
+def grade_sem_vinculo(con) -> list:
+    """Nomes escritos à mão na Grade (vindos da planilha) que ainda não estão ligados a um aluno do CRM."""
+    return [dict(r) for r in con.execute("""SELECT dia, hora, local, TRIM(cliente_nome) AS nome FROM grade_slots
+                                            WHERE status='ocupado' AND cliente_id IS NULL AND TRIM(COALESCE(cliente_nome, '')) != ''
+                                            AND dia BETWEEN 1 AND 6 AND hora BETWEEN 5 AND 23
+                                            GROUP BY dia, hora, local, TRIM(cliente_nome) ORDER BY dia, hora, local, nome""")]
+
+
+def aulas_sem_marcar(con, hoje) -> int:
+    """Aulas desta semana (de segunda até ontem) sem Feita/Faltou/Desmarcou, fora dos dias de bloqueio."""
+    if isinstance(hoje, str):
+        hoje = dt.date.fromisoformat(hoje)
+    h = hoje.isoformat()
+    return sum(1 for a in aulas_da_semana(con, inicio_semana(h), hoje) if a["data"] < h and not a["estado"] and not a["bloqueio"])
+
+
+def _norm(texto) -> str:
+    """Minúsculas, sem acento e com espaços simples: "  JOSÉ  Álvares " vira "jose alvares"."""
+    s = unicodedata.normalize("NFKD", str(texto or "").lower())
+    return " ".join("".join(ch for ch in s if not unicodedata.combining(ch)).split())
+
+
+def sugerir_cliente(nome, clientes):
+    """Id do aluno ativo que bate com um nome escrito à mão na Grade: nome completo igual (sem acento/maiúscula), ou o único aluno
+    cujo nome começa com o que foi digitado ("Ana" -> "Ana Silva"). None se não achar ou se houver mais de um."""
+    n = _norm(nome)
+    if not n:
+        return None
+    cands = []
+    for c in clientes:
+        try:
+            if c["status"] != "ativo":
+                continue
+        except (KeyError, IndexError):   # lista já só com alunos ativos
+            pass
+        cands.append((c["id"], _norm(c["nome"])))
+    for bate in (lambda x: x == n, lambda x: x.startswith(n + " ")):
+        achou = [i for i, x in cands if bate(x)]
+        if len(achou) == 1:
+            return achou[0]
+    return None
+
+
+def ocupar_fixo(con, cid, nome, dia, local, hora):
+    """Põe o aluno no horário fixo da Grade (Pacotes e Mensalidades, mantendo o multiplicador de cada um).
+    Devolve o texto do erro (horário de outro aluno ou indisponível) ou None se gravou. Quem chama abre a transação."""
+    rows = con.execute("SELECT * FROM grade_slots WHERE dia=? AND local=? AND hora=?", (dia, local, hora)).fetchall()
+    dono = next((r for r in rows if r["status"] == "ocupado" and r["cliente_id"] and r["cliente_id"] != cid), None)
+    if dono:   # nome escrito à mão (sem cliente_id) pode ser trocado: é o "ligar ao aluno"
+        outro = con.execute("SELECT nome FROM clientes WHERE id=?", (dono["cliente_id"],)).fetchone()
+        return f"Esse horário já é de {outro['nome'] if outro else dono['cliente_nome']} na Grade. Tire ele de lá antes."
+    if any(r["status"] == "indisponivel" for r in rows):
+        return f"{DIAS_CURTO[dia]} {hora:02d}h em {local} está indisponível na Grade. Libere o horário lá antes."
+    mult = {r["tipo_calculo"]: r["multiplicador"] or 1.0 for r in rows}
+    for t in ("Pacotes", "Mensalidades"):
+        salvar_slot(con, t, dia, local, hora, "ocupado", cid, nome, mult.get(t, 1.0))
+    return None
+
+
+def url_agenda(semana, todas=0) -> str:
+    return f"/agenda?semana={inicio_semana(semana).isoformat()}" + ("&todas=1" if todas else "")
+
+
+@app.get("/agenda", response_class=HTMLResponse)
+def agenda(request: Request, semana: str = "", todas: int = 0, con=Depends(get_db)):
+    hoje = dt.date.today()
+    segunda = inicio_semana(semana)
+    atual = segunda == inicio_semana(hoje.isoformat())
+    fases = fases_bloqueio(con)
+    dias = [{"n": n, "data": segunda + dt.timedelta(days=n - 1)} for n in range(1, 7)]
+    for d in dias:
+        d["iso"] = d["data"].isoformat()
+        d["hoje"] = d["data"] == hoje
+        d["bloqueio"] = em_bloqueio(fases, d["iso"])
+    aulas = aulas_da_semana(con, segunda, hoje)
+    celulas = {}
+    for a in aulas:
+        celulas.setdefault((a["dia"], a["hora"]), []).append(a)
+    clientes_ = con.execute("SELECT id, nome, local FROM clientes WHERE excluido_em IS NULL AND status='ativo' ORDER BY nome").fetchall()
+    n_ligar = 0
+    for v in grade_sem_vinculo(con):
+        sug = sugerir_cliente(v["nome"], clientes_)
+        n_ligar += sug is not None
+        celulas.setdefault((v["dia"], v["hora"]), []).append({**v, "sem_vinculo": True, "sugestao": sug})
+    horas = range(5, 24) if todas or not celulas else sorted({h for _, h in celulas})
+    locais = db.lista(con, "lista_locais")
+    locais += [r[0] for r in con.execute("SELECT DISTINCT local FROM grade_slots ORDER BY local") if r[0] not in locais]
+    return render(request, "agenda.html", con, dias=dias, horas=horas, celulas=celulas, todas=1 if todas else 0, atual=atual, hoje_d=hoje,
+                  segunda=segunda.isoformat(), anterior=(segunda - dt.timedelta(days=7)).isoformat(), proxima=(segunda + dt.timedelta(days=7)).isoformat(),
+                  semana_txt=f"{segunda:%d/%m} a {segunda + dt.timedelta(days=5):%d/%m}", tem_aulas=bool(celulas), n_ligar=n_ligar,
+                  hoje_aulas=[a for a in aulas if a["data"] == hoje.isoformat()] if atual else [],
+                  multi_local=len({x["local"] for l in celulas.values() for x in l}) > 1,
+                  locais=locais, clientes=clientes_, data_padrao=(hoje if atual else segunda).isoformat())
+
+
+@app.post("/agenda/marcar")
+def agenda_marcar(cliente_id: int = Form(0), data: str = Form(""), hora: int = Form(0), local: str = Form(""), estado: str = Form(""),
+                  avulsa: int = Form(0), semana: str = Form(""), todas: int = Form(0), con=Depends(get_db)):
+    url = url_agenda(semana or data, todas)
+    try:
+        d = dt.date.fromisoformat(data.strip())
+    except ValueError:
+        return voltar(url, erro="Data inválida.")
+    if estado and estado not in ESTADO_TIPO:
+        return voltar(url, erro="Situação inválida.")
+    if not 5 <= hora <= 23:
+        return voltar(url, erro="Hora inválida.")
+    c = con.execute("SELECT nome FROM clientes WHERE id=? AND excluido_em IS NULL", (cliente_id,)).fetchone()
+    if not c:
+        return voltar(url, erro="Aluno não encontrado.")
+    desc = " ".join(p for p in (f"Agenda — {DIAS_CURTO[d.isoweekday()]} {hora:02d}h", local.strip(), "(avulsa)" if avulsa else "") if p)
+    with con:
+        # a marcação nova substitui as anteriores da mesma aula (e a aula lançada pela ficha, sem hora)
+        con.execute("""UPDATE cliente_eventos SET excluido_em=datetime('now','localtime') WHERE cliente_id=? AND data=? AND excluido_em IS NULL
+                       AND tipo IN ('aula','falta','desmarcou') AND (hora=? OR hora IS NULL)""", (cliente_id, d.isoformat(), hora))
+        if estado:
+            con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, descricao, hora) VALUES (?,?,?,?,?)",
+                        (cliente_id, ESTADO_TIPO[estado], d.isoformat(), desc, hora))
+    primeiro = (c["nome"].split() or [c["nome"]])[0]
+    return voltar(url, msg=f"{primeiro}: {ESTADO_MSG[estado]}." if estado else f"{primeiro}: marcação desfeita.")
+
+
+@app.post("/agenda/incluir")
+def agenda_incluir(cliente_id: int = Form(0), local: str = Form(""), dia: int = Form(0), hora: int = Form(0), repetir: int = Form(1),
+                   data: str = Form(""), semana: str = Form(""), todas: int = Form(0), con=Depends(get_db)):
+    url = url_agenda(semana, todas)
+    local = local.strip()
+    c = con.execute("SELECT nome FROM clientes WHERE id=? AND excluido_em IS NULL AND status='ativo'", (cliente_id,)).fetchone()
+    if not c:
+        return voltar(url, erro="Escolha um aluno ativo.")
+    if not local:
+        return voltar(url, erro="Escolha o local.")
+    if not 5 <= hora <= 23:
+        return voltar(url, erro="Escolha a hora (05h a 23h).")
+    if repetir:   # horário fixo: vai para a Grade (Pacotes e Mensalidades)
+        if not 1 <= dia <= 6:
+            return voltar(url, erro="Escolha o dia (segunda a sábado).")
+        with con:
+            falha = ocupar_fixo(con, cliente_id, c["nome"], dia, local, hora)
+        if falha:
+            return voltar(url, erro=falha)
+        return voltar(url, msg=f"{c['nome']} entrou no horário fixo de {DIAS_CURTO[dia]} {hora:02d}h ({local}). A Grade também foi atualizada.")
+    try:
+        d = dt.date.fromisoformat(data.strip())
+    except ValueError:
+        return voltar(url, erro="Escolha a data da aula avulsa.")
+    if d.isoweekday() == 7:
+        return voltar(url, erro="Domingo não aparece na agenda.")
+    with con:
+        con.execute("INSERT INTO agenda_avulsas (cliente_id, data, hora, local) VALUES (?,?,?,?)", (cliente_id, d.isoformat(), hora, local))
+    return voltar(url_agenda(d.isoformat(), todas), msg=f"Aula avulsa de {c['nome']} em {d:%d/%m} às {hora:02d}h.")
+
+
+@app.post("/agenda/vincular-todos")
+def agenda_vincular_todos(semana: str = Form(""), todas: int = Form(0), con=Depends(get_db)):
+    """Liga à Grade, de uma vez, todo nome escrito à mão que bate com um só aluno ativo. Quem conflita fica para a mão."""
+    url = url_agenda(semana, todas)
+    alunos = con.execute("SELECT id, nome FROM clientes WHERE excluido_em IS NULL AND status='ativo'").fetchall()
+    nomes = {a["id"]: a["nome"] for a in alunos}
+    ligados, sobra = set(), 0
+    with con:
+        for v in grade_sem_vinculo(con):
+            cid = sugerir_cliente(v["nome"], alunos)
+            if cid is None or ocupar_fixo(con, cid, nomes[cid], v["dia"], v["local"], v["hora"]):
+                sobra += 1
+            else:
+                ligados.add((v["dia"], v["hora"], v["local"]))
+    n = len(ligados)
+    texto = f"{n} horário ligado ao aluno." if n == 1 else f"{n} horários ligados aos alunos."
+    return voltar(url, msg=texto + ((" 1 ficou para ligar à mão." if sobra == 1 else f" {sobra} ficaram para ligar à mão.") if sobra else ""))
+
+
+@app.post("/agenda/fixo/excluir")
+def agenda_fixo_excluir(cliente_id: int = Form(0), local: str = Form(""), dia: int = Form(0), hora: int = Form(0),
+                        semana: str = Form(""), todas: int = Form(0), con=Depends(get_db)):
+    with con:   # a Grade volta a ficar livre nos dois tipos; o que já foi marcado fica no histórico do aluno
+        con.execute("""UPDATE grade_slots SET status='livre', cliente_id=NULL, cliente_nome=NULL
+                       WHERE cliente_id=? AND dia=? AND local=? AND hora=?""", (cliente_id, dia, local, hora))
+    return voltar(url_agenda(semana, todas), msg="Aluno saiu do horário fixo; a Grade ficou livre.")
+
+
+@app.post("/agenda/avulsa/{aid}/excluir")
+def agenda_avulsa_excluir(aid: int, semana: str = Form(""), todas: int = Form(0), con=Depends(get_db)):
+    with con:
+        con.execute("UPDATE agenda_avulsas SET excluido_em=datetime('now','localtime') WHERE id=?", (aid,))
+    return voltar(url_agenda(semana, todas), msg="Aula avulsa enviada para a lixeira (dá para restaurar em Dados).")
 
 
 # =====================================================================
@@ -1213,7 +1474,8 @@ LIXEIRA = [("clientes", "Cliente", "nome"), ("leads", "Lead", "nome"), ("propost
            ("cliente_eventos", "Evento de cliente", "descricao"), ("lista_espera", "Lista de espera", "nome"),
            ("gastos_marketing", "Gasto de marketing", "canal"), ("campanha_itens", "Item de campanha", "texto"),
            ("campanha_checkpoints", "Checkpoint", "pergunta"), ("rotina_tarefas", "Tarefa da rotina", "texto"),
-           ("lancamentos", "Lançamento", "COALESCE(descricao, categoria)"), ("recorrencias", "Conta recorrente", "descricao")]
+           ("lancamentos", "Lançamento", "COALESCE(descricao, categoria)"), ("recorrencias", "Conta recorrente", "descricao"),
+           ("agenda_avulsas", "Aula avulsa", "(SELECT nome FROM clientes WHERE clientes.id=agenda_avulsas.cliente_id) || ' ' || data")]
 
 
 @app.post("/encerrar", response_class=HTMLResponse)

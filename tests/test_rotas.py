@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from app import db, main
 
-TELAS = ["/", "/clientes", "/clientes/novo", "/leads", "/grade", "/simulador", "/explorador",
+TELAS = ["/", "/clientes", "/clientes/novo", "/leads", "/grade", "/agenda", "/simulador", "/explorador",
          "/campanhas", "/rotina", "/configuracoes", "/dados", "/financeiro", "/financeiro/painel", "/financeiro/mensalidades"]
 
 

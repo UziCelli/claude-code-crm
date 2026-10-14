@@ -59,7 +59,7 @@
     <div class="card mt">
       <h2>Registrar no histórico</h2>
       <form method="post" action="/clientes/{{ c.id }}/evento" class="form-grid">
-        <div><label>Tipo</label><select name="tipo" id="tipo-evento"><option value="aula">Aula dada</option><option value="pagamento">Pagamento</option><option value="renovacao">Renovação</option><option value="anotacao">Anotação</option></select></div>
+        <div><label>Tipo</label><select name="tipo" id="tipo-evento"><option value="aula">Aula dada</option><option value="falta">Faltou</option><option value="desmarcou">Desmarcou</option><option value="pagamento">Pagamento</option><option value="renovacao">Renovação</option><option value="anotacao">Anotação</option></select></div>
         <div><label>Data</label><input name="data" type="date" value="{{ hoje() }}" required></div>
         <div><label>Valor (R$)</label><input name="valor" placeholder="opcional"></div>
         <div><label>Nova data de renovação</label><input name="nova_renovacao" type="date"></div>
@@ -72,7 +72,7 @@
       <h2>Histórico</h2>
       {% for e in eventos %}
       <div class="linha" style="justify-content:space-between;border-bottom:1px solid var(--borda);padding:6px 0">
-        <span><span class="tag {{ {'aula':'azul','pagamento':'verde','renovacao':'amarelo','status':'neutro','anotacao':'neutro'}[e.tipo] }}">{{ e.tipo }}</span> {{ e.descricao or '' }}</span>
+        <span><span class="tag {{ {'aula':'azul','falta':'vermelho','desmarcou':'amarelo','pagamento':'verde','renovacao':'amarelo','status':'neutro','anotacao':'neutro'}[e.tipo] }}">{{ {'aula':'aula dada','falta':'faltou'}.get(e.tipo, e.tipo) }}</span> {{ e.descricao or '' }}</span>
         <span class="muted">{{ e.data|data }}{% if e.valor %} · {{ e.valor|moeda }}{% endif %}</span>
       </div>
       {% else %}<p class="muted">Nada registrado ainda.</p>{% endfor %}
