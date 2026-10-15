@@ -435,7 +435,7 @@ dialog [hidden] { display: none !important; }
   font-family: Montserrat, "Segoe UI", Arial, sans-serif; font-size: 36px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
 .saldo.deve .saldo-n { background: var(--amarelo-f); color: #7a5300; box-shadow: inset 5px 0 0 var(--amarelo); }
 .mes-nav { margin: 14px 0 10px; justify-content: space-between; }
-.mes-nav strong { text-transform: capitalize; }
+.mes-nav strong::first-letter { text-transform: uppercase; }   /* "Outubro de 2026", não "Outubro De 2026" */
 .contadores { display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 8px; }
 .contador { padding: 8px 6px; border-radius: 8px; background: var(--neutro-f); text-align: center; min-width: 0; }
 .contador b { display: block; font-size: 22px; line-height: 1.2; color: var(--marinho); font-variant-numeric: tabular-nums; }
