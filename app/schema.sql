@@ -215,6 +215,7 @@ CREATE TABLE IF NOT EXISTS agenda_avulsas (   -- aula só num dia (reposição, 
     data TEXT NOT NULL,
     hora INTEGER NOT NULL,           -- 5..23
     local TEXT NOT NULL,
+    reposicao INTEGER DEFAULT 0,     -- 1 = reposição de uma aula desmarcada (conta no saldo do aluno quando fica Feita ou Faltou)
     criado_em TEXT DEFAULT (datetime('now','localtime')),
     excluido_em TEXT
 );

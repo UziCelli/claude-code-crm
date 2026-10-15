@@ -925,6 +925,560 @@ def _con():
     return db.conectar()
 
 
+# ---------- 6b. marcar várias (lote), reposições, controle do aluno, vários horários ----------
+SEG, QUI, SEX = "2026-10-12", "2026-10-15", "2026-10-16"
+
+
+def lote(http, itens, **extra):
+    corpo = itens if isinstance(itens, str) else json.dumps(itens)
+    return http.post("/agenda/marcar-lote", data={"itens": corpo, "semana": SEMANA, **extra}, follow_redirects=False)
+
+
+def item(cid, data=TER, hora=7, estado="feita", local="CIA", **extra):
+    return {"cliente_id": cid, "data": data, "hora": hora, "local": local, "avulsa": 0, "estado": estado, **extra}
+
+
+def repor(cid, data, hora=7, local="CIA", reposicao=1, excluida=False):
+    """Aula avulsa direto na tabela (reposição por padrão)."""
+    return grava("INSERT INTO agenda_avulsas (cliente_id, data, hora, local, reposicao, excluido_em) VALUES (?,?,?,?,?,?)",
+                 cid, data, hora, local, reposicao, "2026-10-01 10:00:00" if excluida else None)
+
+
+def saldo(cid, hoje=dt.date(2026, 10, 15)):
+    con = db.conectar()
+    try:
+        return main.saldos_reposicao(con, [cid], hoje)[cid]
+    finally:
+        con.close()
+
+
+def desmarcou(http, cid, data=TER, hora=7):
+    marcar(http, cid, data, hora, "desmarcou")
+
+
+def painel(http, **params):
+    r = http.get("/agenda", params={"semana": SEMANA, **params})
+    assert r.status_code == 200
+    return r.text
+
+
+def contador(pagina, classe):
+    return int(re.search(rf'<div class="contador {classe}"><b>(\d+)</b>', pagina).group(1))
+
+
+def test_marcar_lote_5_itens_gravam_em_2_comandos(http, espiar):
+    ids = [aluno(f"Aluno {k}") for k in range(5)]
+    marcar(http, ids[0], TER, 7, "faltou")   # já tinha uma marca: o lote substitui
+    with espiar() as vistos:
+        r = lote(http, [item(c, TER, 7 + k, ["feita", "feita", "faltou", "desmarcou", "feita"][k]) for k, c in enumerate(ids)])
+    assert erro(r) is None and msg(r) == "5 aulas marcadas: 3 feitas, 1 faltou, 1 desmarcou."
+    escritas = gravacoes(vistos)
+    assert len(escritas) == 2 and escritas[0].startswith("UPDATE cliente_eventos SET excluido_em") and escritas[1].startswith("INSERT INTO cliente_eventos")
+    assert escritas[1].count("(?,?,?,?,?)") == 5
+    assert ativos(ids[0], TER) == [("aula", 7, "Agenda — Ter 07h CIA")]
+    assert ativos(ids[3], TER) == [("desmarcou", 10, "Agenda — Ter 10h CIA")]
+
+
+def test_marcar_lote_volta_para_a_semana_e_mantem_todas_aluno_e_mes(http):
+    ana = aluno("Ana Silva")
+    r = lote(http, [item(ana)], todas=1, aluno=ana, mes="2026-10")
+    assert r.headers["location"].startswith(f"/agenda?semana={SEMANA}&todas=1&aluno={ana}&mes=2026-10&msg=")
+    r = lote(http, [item(ana)], aluno="abc", mes="lixo")   # lixo some do endereço
+    assert r.headers["location"].startswith(f"/agenda?semana={SEMANA}&msg=")
+
+
+def test_marcar_lote_limpar_remove_a_marca_e_so_limpar_nao_insere(http, espiar):
+    ana = aluno("Ana Silva")
+    marcar(http, ana, TER, 7, "feita")
+    with espiar() as vistos:
+        r = lote(http, [item(ana, estado="")])
+    assert msg(r) == "1 marcação desfeita." and ativos(ana, TER) == []
+    assert len(gravacoes(vistos)) == 1   # só o UPDATE
+    marcar(http, ana, TER, 7, "feita")
+    r = lote(http, [item(ana, estado=""), item(ana, QUA, 8, "faltou")])
+    assert msg(r) == "1 aula marcada: 1 faltou, 1 desfeita." and ativos(ana, TER) == [] and [t for t, *_ in ativos(ana, QUA)] == ["falta"]
+
+
+def test_marcar_lote_item_repetido_vale_o_ultimo(http):
+    ana = aluno("Ana Silva")
+    r = lote(http, [item(ana, estado="feita"), item(ana, estado="faltou"), item(ana, estado="desmarcou")])
+    assert msg(r) == "1 aula marcada: 1 desmarcou."
+    assert [t for t, *_ in ativos(ana, TER)] == ["desmarcou"]
+
+
+def test_marcar_lote_substitui_a_aula_lancada_pela_ficha_e_mantem_outras_horas(http):
+    ana = aluno("Ana Silva")
+    grava("INSERT INTO cliente_eventos (cliente_id, tipo, data) VALUES (?, 'aula', ?)", ana, TER)   # sem hora
+    marcar(http, ana, TER, 9, "feita")
+    lote(http, [item(ana, TER, 7, "faltou")])
+    assert [(t, h) for t, h, _ in ativos(ana, TER)] == [("aula", 9), ("falta", 7)]
+
+
+@pytest.mark.parametrize("itens", ["", "nao e json", "{}", "[]", "[1]", json.dumps([item(1, estado="talvez")]), json.dumps([item(1, data="2026-13-45")]),
+                                   json.dumps([item(1, data="")]), json.dumps([item(1, hora=4)]), json.dumps([item(1, hora=24)]),
+                                   json.dumps([item(1, hora="x")]), json.dumps([{"data": TER, "hora": 7, "estado": "feita"}]),
+                                   json.dumps([item(1), item(1, estado="feita", hora=99)]), json.dumps([item(999)])])
+def test_marcar_lote_invalido_nao_grava_nada(http, espiar, itens):
+    aluno("Ana Silva")
+    with espiar() as vistos:
+        r = lote(http, itens)
+    assert r.status_code == 303 and erro(r)
+    assert gravacoes(vistos) == [] and consulta("SELECT COUNT(*) FROM cliente_eventos") == [(0,)]
+
+
+def test_marcar_lote_aluno_inexistente_ou_excluido_recusa_tudo(http):
+    ana, bia = aluno("Ana Silva"), aluno("Bia Costa")
+    grava("UPDATE clientes SET excluido_em=datetime('now') WHERE id=?", bia)
+    assert erro(lote(http, [item(ana), item(bia)])) == "Aluno não encontrado."
+    assert erro(lote(http, [item(ana), item(999)])) == "Aluno não encontrado."
+    assert consulta("SELECT COUNT(*) FROM cliente_eventos") == [(0,)]
+
+
+def test_marcar_lote_aceita_300_e_recusa_301(http, espiar):
+    ana = aluno("Ana Silva")
+    muitos = [item(ana, dt.date(2026, 1, 1).replace(day=1 + k % 28, month=1 + k // 28).isoformat(), 7) for k in range(300)]
+    with espiar() as vistos:
+        r = lote(http, muitos)
+    assert erro(r) is None and msg(r) == "300 aulas marcadas: 300 feitas."
+    assert len(gravacoes(vistos)) == 3   # 1 UPDATE (300 aulas cabem num) + 2 INSERTs de 150 linhas
+    assert erro(lote(http, muitos + [item(ana, TER, 8)])) == "Muitas aulas de uma vez (máximo 300)."
+    assert consulta("SELECT COUNT(*) FROM cliente_eventos WHERE excluido_em IS NULL") == [(300,)]
+
+
+def test_marcar_lote_descricao_traz_avulsa_e_reposicao(http):
+    ana = aluno("Ana Silva")
+    lote(http, [item(ana, TER, 7, avulsa=1), item(ana, QUA, 8, avulsa=1, reposicao=1), item(ana, QUI, 9, local="")])
+    assert ativos(ana, TER) == [("aula", 7, "Agenda — Ter 07h CIA (avulsa)")]
+    assert ativos(ana, QUA) == [("aula", 8, "Agenda — Qua 08h CIA (reposição)")]
+    assert ativos(ana, QUI) == [("aula", 9, "Agenda — Qui 09h")]
+
+
+def test_marcar_simples_usa_o_helper_com_2_gravacoes_e_desfazer_com_1(http, espiar):
+    ana = aluno("Ana Silva")
+    with espiar() as vistos:
+        r = marcar(http, ana, TER, 7, "feita")
+    assert msg(r) == "Ana: aula feita." and len(gravacoes(vistos)) == 2
+    with espiar() as vistos:
+        r = marcar(http, ana, TER, 7, "")
+    assert msg(r) == "Ana: marcação desfeita." and len(gravacoes(vistos)) == 1 and ativos(ana, TER) == []
+
+
+def test_marcar_simples_com_reposicao_e_com_aluno_e_mes_no_endereco(http):
+    ana = aluno("Ana Silva")
+    r = http.post("/agenda/marcar", data={"cliente_id": ana, "data": TER, "hora": 7, "local": "CIA", "estado": "feita", "avulsa": 1, "reposicao": 1,
+                                         "semana": SEMANA, "aluno": ana, "mes": "2026-10"}, follow_redirects=False)
+    assert ativos(ana, TER) == [("aula", 7, "Agenda — Ter 07h CIA (reposição)")]
+    assert r.headers["location"].startswith(f"/agenda?semana={SEMANA}&aluno={ana}&mes=2026-10&msg=")
+
+
+def test_gravar_marcas_em_blocos(http, espiar):
+    ana = aluno("Ana Silva")
+    itens = [(ana, f"2026-{1 + k // 28:02d}-{1 + k % 28:02d}", 7, "feita", "x") for k in range(320)]
+    con = db.conectar()
+    try:
+        vistos = []
+        with con:
+            main.gravar_marcas(Espia(con, vistos), itens, bloco_exclusao=100, bloco_insercao=150)
+    finally:
+        con.close()
+    sql = gravacoes(vistos)
+    assert [x.split()[0] for x in sql] == ["UPDATE"] * 4 + ["INSERT"] * 3
+    assert consulta("SELECT COUNT(*) FROM cliente_eventos WHERE excluido_em IS NULL") == [(320,)]
+
+
+# ---- saldo de reposição ----
+def test_saldo_desmarcou_conta_1(http):
+    ana = aluno("Ana Silva")
+    desmarcou(http, ana)
+    assert saldo(ana) == {"devidas": 1, "usadas": 0, "saldo": 1, "agendadas": 0}
+
+
+def test_saldo_faltou_e_feita_comum_nao_geram_reposicao(http):
+    ana = aluno("Ana Silva")
+    marcar(http, ana, TER, 7, "faltou")
+    marcar(http, ana, QUA, 7, "feita")
+    assert saldo(ana)["saldo"] == 0
+
+
+def test_saldo_reposicao_feita_desconta_1(http):
+    ana = aluno("Ana Silva")
+    desmarcou(http, ana)
+    repor(ana, QUI, 8)
+    assert saldo(ana)["saldo"] == 1
+    marcar(http, ana, QUI, 8, "feita", avulsa=1)
+    assert saldo(ana) == {"devidas": 1, "usadas": 1, "saldo": 0, "agendadas": 0}
+
+
+def test_saldo_reposicao_com_falta_tambem_desconta(http):
+    ana = aluno("Ana Silva")
+    desmarcou(http, ana)
+    repor(ana, QUI, 8)
+    marcar(http, ana, QUI, 8, "faltou", avulsa=1)
+    assert saldo(ana)["saldo"] == 0   # faltar na reposição perde a reposição
+
+
+def test_saldo_reposicao_desmarcada_vira_2(http):
+    ana = aluno("Ana Silva")
+    desmarcou(http, ana)
+    repor(ana, QUI, 8)
+    marcar(http, ana, QUI, 8, "desmarcou", avulsa=1)
+    assert saldo(ana) == {"devidas": 2, "usadas": 0, "saldo": 2, "agendadas": 0}
+
+
+def test_saldo_reposicao_excluida_volta_o_saldo(http):
+    ana = aluno("Ana Silva")
+    desmarcou(http, ana)
+    rid = repor(ana, QUI, 8)
+    marcar(http, ana, QUI, 8, "feita", avulsa=1)
+    assert saldo(ana)["saldo"] == 0
+    http.post(f"/agenda/avulsa/{rid}/excluir", data={"semana": SEMANA})
+    assert saldo(ana)["saldo"] == 1
+    repor(ana, SEX, 8, excluida=True)   # excluída desde o início: nunca conta (nem como agendada)
+    assert saldo(ana)["agendadas"] == 0
+
+
+def test_saldo_avulsa_comum_feita_nao_desconta(http):
+    ana = aluno("Ana Silva")
+    desmarcou(http, ana)
+    repor(ana, QUI, 8, reposicao=0)
+    marcar(http, ana, QUI, 8, "feita", avulsa=1)
+    assert saldo(ana) == {"devidas": 1, "usadas": 0, "saldo": 1, "agendadas": 0}
+
+
+def test_saldo_nunca_fica_negativo_e_marca_so_vale_na_mesma_hora(http):
+    ana = aluno("Ana Silva")
+    repor(ana, QUI, 8)
+    marcar(http, ana, QUI, 8, "feita", avulsa=1)
+    assert saldo(ana) == {"devidas": 0, "usadas": 1, "saldo": 0, "agendadas": 0}   # repôs sem dever: não fica negativo
+    desmarcou(http, ana, TER)
+    repor(ana, SEX, 9)
+    marcar(http, ana, SEX, 10, "feita")   # outra hora do mesmo dia: não é a reposição
+    assert saldo(ana)["usadas"] == 1
+
+
+def test_saldo_agendadas_contam_so_as_de_hoje_em_diante_sem_marca(http):
+    ana = aluno("Ana Silva")
+    repor(ana, "2026-10-14", 7)   # ontem, sem marca: não é agendada
+    repor(ana, "2026-10-15", 7)   # hoje
+    repor(ana, "2026-10-16", 7)
+    repor(ana, "2026-10-17", 7)   # com marca: já foi
+    marcar(http, ana, "2026-10-17", 7, "feita", avulsa=1)
+    repor(ana, "2026-10-18", 7, reposicao=0)   # avulsa comum não conta
+    assert saldo(ana)["agendadas"] == 2
+
+
+def test_saldos_de_todos_os_alunos_em_2_selects_agrupados(http, espiar):
+    a, b, c = aluno("Ana"), aluno("Bia"), aluno("Caio")
+    desmarcou(http, a); desmarcou(http, a, QUA); desmarcou(http, b)
+    repor(a, QUI, 8)
+    con = db.conectar()
+    try:
+        vistos = []
+        todos = main.saldos_reposicao(Espia(con, vistos), None, dt.date(2026, 10, 15))
+        com_ids = main.saldos_reposicao(Espia(con, vistos), [a, b, c], dt.date(2026, 10, 15))
+    finally:
+        con.close()
+    assert len(vistos) == 4 and all(v.startswith("SELECT") and "GROUP BY" in v for v in vistos)   # 2 por chamada, nunca por aluno
+    assert todos[a]["saldo"] == 2 and todos[a]["agendadas"] == 1 and todos[b]["saldo"] == 1 and c not in todos
+    assert com_ids[c] == {"devidas": 0, "usadas": 0, "saldo": 0, "agendadas": 0}
+    assert main.saldos_reposicao(db.conectar(), [], dt.date(2026, 10, 15)) == {}
+
+
+def test_aulas_da_semana_traz_a_flag_de_reposicao(http):
+    ana = aluno("Ana Silva")
+    fixo(ana, 1, 7)
+    repor(ana, TER, 8)
+    repor(ana, QUA, 9, reposicao=0)
+    assert [(a["hora"], a["avulsa"], a["reposicao"]) for a in aulas()] == [(7, False, False), (8, True, True), (9, True, False)]
+
+
+def test_incluir_avulsa_de_reposicao_e_comum(http):
+    ana = aluno("Ana Silva")
+    r = http.post("/agenda/incluir", data={"cliente_id": ana, "local": "CIA", "repetir": 0, "data": TER, "hora": 8, "reposicao": 1, "semana": SEMANA,
+                                          "aluno": ana, "mes": "2026-10"}, follow_redirects=False)
+    assert msg(r) == "Reposição de Ana Silva em 13/10 às 08h." and f"aluno={ana}&mes=2026-10" in r.headers["location"]
+    r = http.post("/agenda/incluir", data={"cliente_id": ana, "local": "CIA", "repetir": 0, "data": QUA, "hora": 9}, follow_redirects=False)
+    assert msg(r) == "Aula avulsa de Ana Silva em 14/10 às 09h."
+    assert consulta("SELECT data, hora, reposicao FROM agenda_avulsas ORDER BY id") == [(TER, 8, 1), (QUA, 9, 0)]
+    pagina = painel(http)
+    assert '<span class="av">reposição</span>' in pagina and '<span class="av">avulsa</span>' in pagina
+
+
+def test_reposicao_aparece_na_agenda_e_na_janelinha_com_o_saldo(http):
+    ana = aluno("Ana Silva")
+    desmarcou(http, ana)
+    repor(ana, TER, 8)
+    cartoes = cards(painel(http), 2, 8)
+    (info, botao), = cartoes
+    assert info["alunos"][0]["reposicao"] is True and info["alunos"][0]["deve"] == 1 and info["alunos"][0]["base"] in ("pendente", "futura")
+    assert 'class="av">reposição<' in botao
+
+
+# ---- painel de controle do aluno ----
+def test_painel_mostra_saldo_contadores_e_lista_do_mes(http):
+    ana, bia = aluno("Ana Silva"), aluno("Bia Costa")
+    fixo(ana, 2, 7)
+    marcar(http, ana, TER, 7, "feita")
+    marcar(http, ana, "2026-10-06", 7, "faltou")
+    desmarcou(http, ana, "2026-10-20")
+    desmarcou(http, ana, "2026-09-29")   # de outro mês: não entra nas contagens do mês, mas o saldo é o total
+    repor(ana, QUI, 8)
+    marcar(http, ana, QUI, 8, "feita", avulsa=1)
+    marcar(http, bia, TER, 7, "feita")
+    pagina = painel(http, aluno=ana, mes="2026-10")
+    assert "Reposições a fazer: 1" in pagina and "agendadas: 0" in pagina and "outubro de 2026" in pagina
+    assert (contador(pagina, "feita"), contador(pagina, "faltou"), contador(pagina, "desmarcou"), contador(pagina, "reposta")) == (2, 1, 1, 1)
+    lista = pagina.split('<ul class="aulas-aluno">', 1)[1].split("</ul>", 1)[0]
+    assert [x for x in re.findall(r'<span class="quando">([^<]*)</span>', lista)] == ["Ter 06/10 · 07h", "Ter 13/10 · 07h", "Qui 15/10 · 08h", "Ter 20/10 · 07h"]
+    assert lista.count("reposição</span>") == 1 and "Bia" not in lista and "CIA" in lista
+    assert f'href="/clientes/{ana}"' in pagina and 'id="btn-repor"' in pagina
+
+
+def test_painel_mes_sem_aulas_e_setas_de_mes(http):
+    ana = aluno("Ana Silva")
+    pagina = painel(http, aluno=ana, mes="2026-12")
+    assert "Nenhuma aula marcada neste mês." in pagina and "dezembro de 2026" in pagina
+    pagina = pagina.replace("&amp;", "&")
+    assert f"&aluno={ana}&mes=2026-11" in pagina and f"&aluno={ana}&mes=2027-01" in pagina   # ← e → (vira o ano)
+    assert f"&aluno={ana}&mes=2025-12" in painel(http, aluno=ana, mes="2026-01").replace("&amp;", "&")
+
+
+def test_painel_abre_no_mes_atual_e_o_saldo_e_sempre_o_total(http):
+    ana = aluno("Ana Silva")
+    desmarcou(http, ana, "2026-03-03")
+    pagina = painel(http, aluno=ana)   # sem mes: mês atual
+    assert f"{main.MESES[dt.date.today().month - 1]} de {dt.date.today().year}" in pagina
+    assert "Reposições a fazer: 1" in pagina
+    assert "Reposições a fazer: 1" in painel(http, aluno=ana, mes="2026-10")   # a desmarcação é de março
+
+
+def test_painel_reposicao_agendada_aparece_na_lista_do_mes(http):
+    ana = aluno("Ana Silva")
+    desmarcou(http, ana)
+    repor(ana, "2099-05-04", 9)
+    pagina = painel(http, aluno=ana, mes="2099-05")
+    assert "agendadas: 1" in pagina and "Seg 04/05 · 09h" in pagina and 'class="tag azul">agendada<' in pagina
+    assert contador(pagina, "feita") == contador(pagina, "reposta") == 0
+
+
+@pytest.mark.parametrize("params", [{"aluno": "999"}, {"aluno": "abc"}, {"aluno": "-3"}, {"aluno": "0"}, {"aluno": "1" * 40}, {"aluno": "", "mes": "2026-10"}])
+def test_painel_aluno_invalido_abre_a_agenda_normal(http, params):
+    aluno("Ana Silva")
+    pagina = painel(http, **params)
+    assert 'class="painel-aluno"' not in pagina and 'id="sel-aluno"' in pagina
+
+
+@pytest.mark.parametrize("mes", ["2026-13", "2026-00", "x", "26-10", "1999-12", "2101-01", "2026-1", "2026-10-01"])
+def test_painel_mes_invalido_cai_no_mes_atual_sem_erro(http, mes):
+    ana = aluno("Ana Silva")
+    pagina = painel(http, aluno=ana, mes=mes)
+    assert 'class="painel-aluno"' in pagina and f"{main.MESES[dt.date.today().month - 1]} de {dt.date.today().year}" in pagina
+
+
+def test_painel_de_aluno_excluido_nao_abre_e_inativo_abre(http):
+    ana, bia = aluno("Ana Silva"), aluno("Bia Costa", status="inativo")
+    grava("UPDATE clientes SET excluido_em=datetime('now') WHERE id=?", ana)
+    assert 'class="painel-aluno"' not in painel(http, aluno=ana)
+    pagina = painel(http, aluno=bia)
+    assert 'class="painel-aluno"' in pagina and "Bia Costa (inativo)" in pagina
+
+
+def test_painel_escapa_nome_com_script(http):
+    ana = aluno("<script>alert(1)</script> Ana")
+    fixo(ana, 2, 7)
+    desmarcou(http, ana)
+    pagina = painel(http, aluno=ana, mes="2026-10")
+    assert "<script>alert(1)</script>" not in pagina and "&lt;script&gt;alert(1)&lt;/script&gt; Ana" in pagina
+    assert "\\u003cscript\\u003ealert(1)" in pagina   # no data-info (JSON) o nome sai com <
+
+
+def test_painel_mantem_aluno_e_mes_nos_links_e_formularios(http):
+    ana = aluno("Ana Silva")
+    fixo(ana, 2, 7)
+    marcar(http, ana, TER, 7, "feita")
+    pagina = painel(http, aluno=ana, mes="2026-10").replace("&amp;", "&")   # o & dos links sai escapado no HTML
+    assert f"/agenda?semana=2026-10-05&aluno={ana}&mes=2026-10" in pagina and f"/agenda?semana=2026-10-19&aluno={ana}&mes=2026-10" in pagina
+    assert pagina.count(f'<input type="hidden" name="aluno" value="{ana}">') >= 2   # janelinha do horário e incluir (Copiar da Grade e Hoje só aparecem quando cabem)
+    assert 'data-aluno="' + str(ana) + '" data-mes="2026-10"' in pagina
+    sem = painel(http)
+    assert '<input type="hidden" name="aluno"' not in sem and "&aluno=" not in sem.split("<script>")[0]   # (o script monta o link do "Ver controle")
+
+
+@pytest.mark.parametrize("rota,dados", [("/agenda/horario", {"dia": 2, "hora": 7, "aluno1": "", "local": "CIA"}),
+                                        ("/agenda/copiar-grade", {})])
+def test_outras_rotas_da_agenda_mantem_aluno_e_mes(http, rota, dados):
+    ana = aluno("Ana Silva")
+    r = http.post(rota, data={**dados, "semana": SEMANA, "aluno": ana, "mes": "2026-10"}, follow_redirects=False)
+    assert f"&aluno={ana}&mes=2026-10" in r.headers["location"]
+
+
+def test_excluir_avulsa_mantem_aluno_e_mes(http):
+    ana = aluno("Ana Silva")
+    rid = repor(ana, TER, 8)
+    r = http.post(f"/agenda/avulsa/{rid}/excluir", data={"semana": SEMANA, "aluno": ana, "mes": "2026-10"}, follow_redirects=False)
+    assert f"&aluno={ana}&mes=2026-10" in r.headers["location"]
+
+
+def test_pagina_tem_o_modo_marcar_varias_e_a_barra(http):
+    ana = aluno("Ana Silva")
+    fixo(ana, 2, 7)
+    pagina = painel(http)
+    assert 'id="btn-lote"' in pagina and 'id="barra-lote"' in pagina and "/agenda/marcar-lote" in pagina
+    assert pagina.count('data-pincel="') == 4
+
+
+# ---- vários horários fixos de uma vez ----
+def incluir_varios(http, cid, dias, horas, local="CIA", **extra):
+    return http.post("/agenda/incluir", data={"cliente_id": cid, "local": local, "repetir": 1, "dias": dias, "horas": horas, "semana": SEMANA, **extra},
+                     follow_redirects=False)
+
+
+def test_varios_horarios_3_pares_gravam_1_insert_na_agenda_e_1_upsert_na_grade(http, espiar):
+    ana = aluno("Ana Silva")
+    with espiar() as vistos:
+        r = incluir_varios(http, ana, [1, 3, 5], [7, 7, 18])
+    assert erro(r) is None and msg(r) == "Ana entrou em Seg 07h, Qua 07h, Sex 18h (CIA)."
+    escritas = gravacoes(vistos)
+    assert len(escritas) == 2
+    assert escritas[0].startswith("INSERT INTO agenda_fixos") and escritas[0].count("(?,?,?,?)") == 3
+    assert escritas[1].startswith("INSERT INTO grade_slots") and escritas[1].count("(?,?,?,?,?,?,?,?)") == 6 and "ON CONFLICT" in escritas[1]
+    assert fixos_ativos() == [("Ana Silva", 1, 7, "CIA"), ("Ana Silva", 3, 7, "CIA"), ("Ana Silva", 5, 18, "CIA")]
+    for dia, hora in ((1, 7), (3, 7), (5, 18)):
+        assert grade(dia, hora) == da_grade(ana, "Ana Silva")
+    assert [(a["dia"], a["hora"]) for a in aulas()] == [(1, 7), (3, 7), (5, 18)]
+
+
+def test_varios_horarios_mantem_multiplicador_da_grade_e_nao_mexe_em_celula_de_outro(http):
+    ana, bia = aluno("Ana Silva"), aluno("Bia Costa")
+    grava("INSERT INTO grade_slots (tipo_calculo, dia, local, hora, status, multiplicador) VALUES ('Pacotes', 1, 'CIA', 7, 'livre', 0.9)")
+    ocupar(bia, 3, 7)
+    grava("INSERT INTO grade_slots (tipo_calculo, dia, local, hora, status) VALUES ('Pacotes', 5, 'CIA', 18, 'indisponivel')")
+    ocupar(ana, 2, 7)   # esta já é dela nos dois tipos
+    antes = consulta("SELECT * FROM grade_slots WHERE NOT (dia=1 AND hora=7) ORDER BY id")
+    r = incluir_varios(http, ana, [1, 3, 5, 2], [7, 7, 18, 7])
+    assert erro(r) is None
+    assert len(fixos_ativos()) == 4   # a Agenda ganha todos; a Grade é que respeita as células dos outros
+    assert consulta("SELECT * FROM grade_slots WHERE NOT (dia=1 AND hora=7) ORDER BY id") == antes
+    assert consulta("SELECT tipo_calculo, status, cliente_id, multiplicador FROM grade_slots WHERE dia=1 AND hora=7 ORDER BY tipo_calculo") == [
+        ("Mensalidades", "ocupado", ana, 1.0), ("Pacotes", "ocupado", ana, 0.9)]
+
+
+def test_varios_horarios_grade_com_erro_nao_derruba_a_agenda(http, monkeypatch):
+    ana = aluno("Ana Silva")
+
+    def quebra(*a, **k):
+        raise sqlite3.OperationalError("grade fora do ar")
+    monkeypatch.setattr(main, "salvar_slots", quebra)
+    r = incluir_varios(http, ana, [1, 2], [7, 7])
+    assert erro(r) is None and len(fixos_ativos()) == 2 and consulta("SELECT COUNT(*) FROM grade_slots") == [(0,)]
+
+
+def test_varios_horarios_par_cheio_e_pulado_com_aviso(http):
+    ana, bia, caio = aluno("Ana Silva"), aluno("Bia Costa"), aluno("Caio Santos")
+    horario(http, 2, 7, bia, caio)
+    r = incluir_varios(http, ana, [1, 2, 3], [7, 7, 7])
+    assert erro(r) is None and msg(r) == "Ana entrou em Seg 07h, Qua 07h (CIA). Ter 07h já tem 2 alunos."
+    assert fixos_ativos(2, 7) == [("Bia Costa", 2, 7, "CIA"), ("Caio Santos", 2, 7, "CIA")] and len(fixos_ativos()) == 4
+
+
+def test_varios_horarios_todos_cheios_vira_erro_e_nao_grava(http, espiar):
+    ana, bia, caio = aluno("Ana Silva"), aluno("Bia Costa"), aluno("Caio Santos")
+    horario(http, 2, 7, bia, caio)
+    horario(http, 3, 7, bia, caio)
+    with espiar() as vistos:
+        r = incluir_varios(http, ana, [2, 3], [7, 7])
+    assert erro(r) == "Ter 07h, Qua 07h já têm 2 alunos." and gravacoes(vistos) == []
+
+
+def test_varios_horarios_par_que_ja_existe_diz_ja_estava_e_nao_grava(http, espiar):
+    ana = aluno("Ana Silva")
+    horario(http, 1, 7, ana)
+    with espiar() as vistos:
+        r = incluir_varios(http, ana, [1, 1], [7, 7])   # par repetido vale uma vez
+    assert msg(r) == "Ana Silva já está no horário fixo de Seg 07h (CIA)."   # virou um par só: mesmo texto do modo antigo
+    assert gravacoes(vistos) == [] and len(fixos_ativos()) == 1
+    with espiar() as vistos:
+        r = incluir_varios(http, ana, [1, 4], [7, 9])
+    assert msg(r) == "Ana entrou em Qui 09h (CIA). Seg 07h já estava."
+    assert [x.split()[0] for x in gravacoes(vistos)] == ["INSERT", "INSERT"]
+
+
+def test_varios_horarios_dois_que_ja_estavam_no_plural(http):
+    ana = aluno("Ana Silva")
+    horario(http, 1, 7, ana)
+    horario(http, 3, 7, ana)
+    r = incluir_varios(http, ana, [1, 3], [7, 7])
+    assert msg(r) == "Seg 07h, Qua 07h já estavam."
+
+
+def test_varios_horarios_em_outro_local_troca_o_local_so_daquele_par(http):
+    ana = aluno("Ana Silva")
+    horario(http, 1, 7, ana, local="CIA")
+    r = incluir_varios(http, ana, [1, 2], [7, 7], local="SmartFit")
+    assert erro(r) is None and msg(r) == "Ana entrou em Ter 07h (SmartFit). Ana agora fica em SmartFit em Seg 07h."
+    assert fixos_ativos() == [("Ana Silva", 1, 7, "SmartFit"), ("Ana Silva", 2, 7, "SmartFit")]
+    assert grade(1, 7, "CIA") == livre() and grade(1, 7, "SmartFit") == da_grade(ana, "Ana Silva") and grade(2, 7, "SmartFit") == da_grade(ana, "Ana Silva")
+
+
+def test_modo_antigo_de_um_dia_continua_igual(http):
+    ana = aluno("Ana Silva")
+    r = http.post("/agenda/incluir", data={"cliente_id": ana, "local": "CIA", "dia": 2, "hora": 7, "repetir": 1, "semana": SEMANA}, follow_redirects=False)
+    assert msg(r) == "Ana Silva entrou no horário fixo de Ter 07h (CIA). A Grade também foi atualizada."
+    assert fixos_ativos() == [("Ana Silva", 2, 7, "CIA")] and grade(2, 7) == da_grade(ana, "Ana Silva")
+    r = incluir_varios(http, ana, [2], [7])   # um par só, pelas listas: mesmo texto de quem já estava
+    assert msg(r) == "Ana Silva já está no horário fixo de Ter 07h (CIA)."
+    r = incluir_varios(http, ana, [4], [9])
+    assert msg(r) == "Ana Silva entrou no horário fixo de Qui 09h (CIA). A Grade também foi atualizada."
+
+
+@pytest.mark.parametrize("dados", [{"dias": [1, 2], "horas": [7]}, {"dias": [1], "horas": [7, 8]}, {"dias": [7], "horas": [7]}, {"dias": [0], "horas": [7]},
+                                   {"dias": [1, 2], "horas": [7, 4]}, {"dias": [1, 2], "horas": [7, 24]}, {"dias": [1], "horas": [7], "local": ""},
+                                   {"dias": [1], "horas": [7], "cliente_id": 999}])
+def test_varios_horarios_invalido_nao_grava_nada(http, dados):
+    ana = aluno("Ana Silva")
+    base = {"cliente_id": ana, "local": "CIA", "repetir": 1, **dados}
+    r = http.post("/agenda/incluir", data=base, follow_redirects=False)
+    assert r.status_code == 303 and erro(r)
+    assert consulta("SELECT * FROM agenda_fixos") == [] and consulta("SELECT * FROM grade_slots") == []
+
+
+def test_varios_horarios_maximo_de_12_pares(http):
+    ana = aluno("Ana Silva")
+    dias = [d for d in range(1, 7) for _ in (0, 1)]
+    horas = [h for _ in range(1, 7) for h in (7, 8)]
+    r = incluir_varios(http, ana, dias[:12], horas[:12])
+    assert erro(r) is None and len(fixos_ativos()) == 12
+    outra = aluno("Bia Costa")
+    assert erro(incluir_varios(http, outra, dias + [1], horas + [9])) == "No máximo 12 horários de uma vez."
+    assert len(fixos_ativos()) == 12
+
+
+def test_varios_horarios_ignoram_dia_e_hora_soltos_quando_vem_a_lista(http):
+    ana = aluno("Ana Silva")
+    r = http.post("/agenda/incluir", data={"cliente_id": ana, "local": "CIA", "repetir": 1, "dia": 6, "hora": 20, "dias": [1], "horas": [7]}, follow_redirects=False)
+    assert erro(r) is None and fixos_ativos() == [("Ana Silva", 1, 7, "CIA")]
+
+
+def test_incluir_com_aluno_e_mes_volta_para_o_painel(http):
+    ana = aluno("Ana Silva")
+    r = incluir_varios(http, ana, [1], [7], aluno=ana, mes="2026-10", todas=1)
+    assert r.headers["location"].startswith(f"/agenda?semana={SEMANA}&todas=1&aluno={ana}&mes=2026-10&msg=")
+
+
+def test_salvar_slots_em_blocos_e_salvar_slot_continua(http):
+    con = db.conectar()
+    try:
+        vistos = []
+        slots = [("Pacotes", 1 + k % 6, "CIA", 5 + k // 6, "ocupado", None, "X", 1.0) for k in range(30)]
+        with con:
+            main.salvar_slots(Espia(con, vistos), slots, bloco=10)
+            main.salvar_slot(con, "Pacotes", 1, "CIA", 5, "livre", None, None, 1.0)   # a mesma célula de novo: atualiza, não duplica
+        assert len(vistos) == 3 and consulta("SELECT COUNT(*) FROM grade_slots") == [(30,)]
+        assert consulta("SELECT status FROM grade_slots WHERE dia=1 AND hora=5") == [("livre",)]
+    finally:
+        con.close()
+
+
 # ---------- 7. banco antigo ----------
 def test_banco_antigo_ganha_coluna_hora_e_tabela_de_avulsas(tmp_path, monkeypatch):
     caminho = tmp_path / "antigo.db"
@@ -967,3 +1521,33 @@ def test_banco_antigo_sem_agenda_fixos_ganha_a_tabela(tmp_path, monkeypatch):
         assert con.execute("SELECT criado_em FROM agenda_fixos").fetchone()[0]   # padrão preenchido
     finally:
         con.close()
+
+
+def test_banco_antigo_de_avulsas_sem_reposicao_ganha_a_coluna(tmp_path, monkeypatch):
+    caminho = tmp_path / "antigo.db"
+    con = sqlite3.connect(caminho)
+    con.execute("CREATE TABLE clientes (id INTEGER PRIMARY KEY, nome TEXT NOT NULL)")
+    con.execute("""CREATE TABLE agenda_avulsas (id INTEGER PRIMARY KEY, cliente_id INTEGER NOT NULL, data TEXT NOT NULL, hora INTEGER NOT NULL,
+                   local TEXT NOT NULL, criado_em TEXT, excluido_em TEXT)""")
+    con.execute("INSERT INTO clientes (nome) VALUES ('Antigo')")
+    con.execute("INSERT INTO agenda_avulsas (cliente_id, data, hora, local) VALUES (1, '2026-09-01', 7, 'CIA')")
+    con.commit()
+    con.close()
+    monkeypatch.setattr(db, "BACKUP_DIR", tmp_path / "backups")
+    db.iniciar_banco(caminho)
+    db.iniciar_banco(caminho)   # idempotente
+    con = db.conectar(caminho)
+    try:
+        assert "reposicao" in {r[1] for r in con.execute("PRAGMA table_info(agenda_avulsas)")}
+        assert [tuple(r) for r in con.execute("SELECT data, hora, reposicao FROM agenda_avulsas")] == [("2026-09-01", 7, 0)]   # as antigas ficam como aula comum
+        with con:
+            con.execute("INSERT INTO agenda_avulsas (cliente_id, data, hora, local, reposicao) VALUES (1, '2026-09-02', 7, 'CIA', 1)")
+        assert main.saldos_reposicao(con, [1], dt.date(2026, 9, 1))[1]["agendadas"] == 1
+    finally:
+        con.close()
+
+
+def test_banco_novo_tem_reposicao_zero_por_padrao(http):
+    ana = aluno("Ana Silva")
+    grava("INSERT INTO agenda_avulsas (cliente_id, data, hora, local) VALUES (?, ?, 7, 'CIA')", ana, TER)
+    assert consulta("SELECT reposicao FROM agenda_avulsas") == [(0,)]

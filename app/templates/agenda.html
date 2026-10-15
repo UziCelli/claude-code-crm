@@ -1,27 +1,77 @@
 {% extends "base.html" %}
 {% block titulo %}Agenda · VFITCOACH CRM{% endblock %}
 {% block conteudo %}
-{% set ROT = {'feita': 'feita', 'faltou': 'faltou', 'desmarcou': 'desmarcou', 'pendente': 'sem marcar', 'futura': ''} %}
-{% set COR = {'feita': 'verde', 'faltou': 'vermelho', 'desmarcou': 'amarelo'} %}
-{% set mais_todas = '&todas=1' if todas else '' %}
+{% set ROT = {'feita': 'feita', 'faltou': 'faltou', 'desmarcou': 'desmarcou', 'pendente': 'sem marcar', 'futura': '', 'agendada': 'agendada'} %}
+{% set COR = {'feita': 'verde', 'faltou': 'vermelho', 'desmarcou': 'amarelo', 'agendada': 'azul'} %}
+{# aluno do painel de controle: vai escondido em todos os formulários e junto nos links, para o painel continuar aberto #}
+{% set ctl %}{% if controle %}<input type="hidden" name="aluno" value="{{ controle.id }}"><input type="hidden" name="mes" value="{{ controle.mes }}">{% endif %}{% endset %}
 <div class="linha topo">
   <h1 style="margin:0">Agenda</h1>
-  <button type="button" data-abrir="dlg-incluir" data-titulo="Incluir aula">+ Incluir aula</button>
+  <div class="topo-acoes">
+    <button type="button" class="claro" id="btn-lote">Marcar várias</button>
+    <button type="button" data-abrir="dlg-incluir" data-titulo="Incluir aula">+ Incluir aula</button>
+  </div>
 </div>
-<div class="agenda-nav">
-  <a class="btn claro" href="/agenda?semana={{ anterior }}{{ mais_todas }}">← Semana anterior</a>
-  <a class="btn {{ '' if atual else 'claro' }}" href="/agenda{{ '?todas=1' if todas }}">Esta semana</a>
-  <a class="btn claro" href="/agenda?semana={{ proxima }}{{ mais_todas }}">Próxima →</a>
+
+<div class="card controle">
+  <form method="get" action="/agenda" class="linha controle-form" id="f-controle">
+    <input type="hidden" name="semana" value="{{ segunda }}">{% if todas %}<input type="hidden" name="todas" value="1">{% endif %}
+    <div class="campo"><label for="sel-aluno">Controle do aluno</label>
+      <select name="aluno" id="sel-aluno"><option value="">Escolha um aluno</option>
+        {%- for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if controle and controle.id == c.id }}>{{ c.nome }}</option>{% endfor %}
+        {%- if controle and controle.id not in clientes|map(attribute='id') %}<option value="{{ controle.id }}" selected>{{ controle.nome }} ({{ controle.status }})</option>{% endif -%}
+      </select></div>
+    <button class="claro">Ver</button>
+  </form>
+  {% if controle %}
+  <div class="painel-aluno">
+    <div class="saldo {{ 'deve' if controle.saldo }}">
+      <div class="saldo-n" aria-hidden="true">{{ controle.saldo }}</div>
+      <div><strong>Reposições a fazer: {{ controle.saldo }}</strong>
+        <div class="muted">agendadas: {{ controle.agendadas }} · desmarcou no total: {{ controle.devidas }} · repostas no total: {{ controle.usadas }}</div></div>
+    </div>
+    <div class="linha mes-nav">
+      <a class="btn claro pequeno" href="/agenda?semana={{ segunda }}{{ '&todas=1' if todas }}&aluno={{ controle.id }}&mes={{ controle.mes_ant }}" aria-label="Mês anterior">←</a>
+      <strong>{{ controle.mes_txt }}</strong>
+      <a class="btn claro pequeno" href="/agenda?semana={{ segunda }}{{ '&todas=1' if todas }}&aluno={{ controle.id }}&mes={{ controle.mes_prox }}" aria-label="Próximo mês">→</a>
+    </div>
+    <div class="contadores">
+      <div class="contador feita"><b>{{ controle.feitas }}</b><span>Feitas</span></div>
+      <div class="contador faltou"><b>{{ controle.faltou }}</b><span>Faltou</span></div>
+      <div class="contador desmarcou"><b>{{ controle.desmarcou }}</b><span>Desmarcou</span></div>
+      <div class="contador reposta"><b>{{ controle.repostas }}</b><span>Repostas</span></div>
+    </div>
+    <ul class="aulas-aluno">
+      {% for l in controle.linhas %}
+      <li class="aula-linha {{ l.estado }}"><span class="quando">{{ l.dia }} {{ l.data_br }}{% if l.hora is not none %} · {{ '%02d'|format(l.hora) }}h{% endif %}</span>
+        <span class="tag {{ COR[l.estado] }}">{{ ROT[l.estado] }}</span>{% if l.reposicao %} <span class="tag neutro">reposição</span>{% endif %}
+        {% if l.local %}<span class="muted">{{ l.local }}</span>{% endif %}</li>
+      {% else %}
+      <li class="muted">Nenhuma aula marcada neste mês.</li>
+      {% endfor %}
+    </ul>
+    <div class="linha mt-p">
+      <button type="button" id="btn-repor" data-aluno="{{ controle.id }}">Agendar reposição</button>
+      <a class="btn claro" href="/clientes/{{ controle.id }}">Abrir ficha</a>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="agenda-nav mt">
+  <a class="btn claro" href="/agenda?semana={{ anterior }}{{ extra }}">← Semana anterior</a>
+  <a class="btn {{ '' if atual else 'claro' }}" href="/agenda?semana={{ hoje_segunda }}{{ extra }}">Esta semana</a>
+  <a class="btn claro" href="/agenda?semana={{ proxima }}{{ extra }}">Próxima →</a>
 </div>
 <div class="linha" style="justify-content:space-between;margin-top:10px">
   <strong>{{ semana_txt }}</strong>
-  <a href="/agenda?semana={{ segunda }}{{ '' if todas else '&todas=1' }}">{{ 'Só horários com aula' if todas else 'Ver todos os horários' }}</a>
+  <a href="/agenda?semana={{ segunda }}{{ '' if todas else '&todas=1' }}{{ extra_aluno }}">{{ 'Só horários com aula' if todas else 'Ver todos os horários' }}</a>
 </div>
 {% if vazia %}
 <div class="card mt copiar-grade">
   <p>Sua agenda está vazia. Copie os alunos da Grade uma vez — cada aluno vira um horário só, sem repetir por local.</p>
   <form method="post" action="/agenda/copiar-grade" data-confirmar="Copiar os alunos da Grade para a Agenda? Isso é feito uma vez só.">
-    <input type="hidden" name="semana" value="{{ segunda }}"><input type="hidden" name="todas" value="{{ todas }}">
+    <input type="hidden" name="semana" value="{{ segunda }}"><input type="hidden" name="todas" value="{{ todas }}">{{ ctl }}
     <button>Copiar da Grade</button>
   </form>
 </div>
@@ -31,15 +81,15 @@
 <div class="card card-hoje mt">
   <h2>Hoje — {{ hoje_d.isoweekday()|dia }} {{ hoje_d.strftime('%d/%m') }}</h2>
   {% for a in hoje_aulas %}
-  <div class="aula-hoje {{ a.estado or '' }}">
+  <div class="aula-hoje {{ a.estado or '' }}" data-marca='{{ a.marca|tojson }}'>
     <div class="quem">
-      <span class="hora">{{ '%02d'|format(a.hora) }}h</span><strong>{{ a.nome }}</strong>
-      <div class="muted">{{ a.local }}{% if a.avulsa %} <span class="tag azul">avulsa</span>{% endif %}</div>
+      <span class="hora">{{ '%02d'|format(a.hora) }}h</span><strong>{{ a.nome }}</strong> <span class="tag estado-lote" hidden></span>
+      <div class="muted">{{ a.local }}{% if a.reposicao %} <span class="tag azul">reposição</span>{% elif a.avulsa %} <span class="tag azul">avulsa</span>{% endif %}</div>
     </div>
     <form method="post" action="/agenda/marcar">
       <input type="hidden" name="cliente_id" value="{{ a.cliente_id }}"><input type="hidden" name="data" value="{{ a.data }}"><input type="hidden" name="hora" value="{{ a.hora }}">
-      <input type="hidden" name="local" value="{{ a.local }}"><input type="hidden" name="avulsa" value="{{ 1 if a.avulsa else 0 }}">
-      <input type="hidden" name="semana" value="{{ segunda }}"><input type="hidden" name="todas" value="{{ todas }}">
+      <input type="hidden" name="local" value="{{ a.local }}"><input type="hidden" name="avulsa" value="{{ 1 if a.avulsa else 0 }}"><input type="hidden" name="reposicao" value="{{ 1 if a.reposicao else 0 }}">
+      <input type="hidden" name="semana" value="{{ segunda }}"><input type="hidden" name="todas" value="{{ todas }}">{{ ctl }}
       {% if a.estado %}
       <span class="tag {{ COR[a.estado] }}">{{ ROT[a.estado] }}</span>
       <button name="estado" value="" class="claro btn-estado">Desfazer</button>
@@ -60,6 +110,7 @@
   <span><i class="l-feita"></i> feita</span><span><i class="l-faltou"></i> faltou</span><span><i class="l-desmarcou"></i> desmarcou</span>
   <span><i class="l-pendente"></i> passou sem marcar</span><span><i class="l-futura"></i> ainda vai acontecer</span>
 </div>
+<p class="muted lote-info" hidden>Escolha o pincel na barra de baixo e toque nos nomes da grade ou nas aulas de hoje. Nada é salvo até apertar Salvar.</p>
 {% if not tem_aulas %}<p class="muted" style="margin:6px 0 0">Nenhuma aula nesta semana. Use <b>+ Incluir aula</b> ou toque em um horário para escolher o aluno.</p>{% endif %}
 <div class="rolagem mt">
 <table class="grade agenda">
@@ -75,8 +126,8 @@
       {% set locs = lst|map(attribute='local')|unique|list %}
       <button type="button" class="cel aula {{ 'dupla' if lst|length > 1 else ('bloq' if lst[0].bloqueio and not lst[0].estado else lst[0].situacao) }}"
         data-info='{{ infos[(d.n, h)]|tojson }}' title="{{ lst|map(attribute='nome')|join(' + ') }} · {{ locs|join(' / ') }}"><span class="nomes">
-          {%- for a in lst %}{% if not loop.first %} <span class="seg"><span class="mais">+</span> {% endif %}<span class="n {{ 'bloq' if a.bloqueio and not a.estado else a.situacao }}">{{ a.curto }}{% if a.avulsa %} <span class="av">avulsa</span>{% endif %}</span>{% if not loop.first %}</span>{% endif %}{% endfor -%}
-        </span>{% if rots or multi_local %}<small class="miudo">{{ rots|join(' · ') }}{% if rots and multi_local %} · {% endif %}{{ locs|join(' / ') if multi_local }}</small>{% endif %}
+          {%- for a in lst %}{% if not loop.first %} <span class="seg"><span class="mais">+</span> {% endif %}<span class="n {{ 'bloq' if a.bloqueio and not a.estado else a.situacao }}">{{ a.curto }}{% if a.reposicao %} <span class="av">reposição</span>{% elif a.avulsa %} <span class="av">avulsa</span>{% endif %}</span>{% if not loop.first %}</span>{% endif %}{% endfor -%}
+        </span>{% if rots or multi_local %}<small class="miudo"><span class="rots">{{ rots|join(' · ') }}{% if rots and multi_local %} · {% endif %}</span>{{ locs|join(' / ') if multi_local }}</small>{% endif %}
       </button>
       {% else %}
       <button type="button" class="cel vazio" data-info='{{ infos[(d.n, h)]|tojson }}' aria-label="Escolher aluno de {{ d.n|dia }} às {{ '%02d'|format(h) }}h">+</button>
@@ -95,7 +146,7 @@
     <h3>Horário fixo (toda semana)</h3>
     <form method="post" action="/agenda/horario" id="f-horario">
       <input type="hidden" name="dia"><input type="hidden" name="hora">
-      <input type="hidden" name="semana" value="{{ segunda }}"><input type="hidden" name="todas" value="{{ todas }}">
+      <input type="hidden" name="semana" value="{{ segunda }}"><input type="hidden" name="todas" value="{{ todas }}">{{ ctl }}
       <div class="campo"><label for="h-aluno1">Aluno</label>
         <select name="aluno1" id="h-aluno1"><option value="">— sem aula —</option>{% for c in clientes %}<option value="{{ c.id }}" data-local="{{ c.local or '' }}">{{ c.nome }}</option>{% endfor %}</select></div>
       <div class="campo"><label for="h-aluno2">2º aluno (opcional)</label>
@@ -109,26 +160,57 @@
 
 <dialog id="dlg-incluir">
   <h2 data-titulo>Incluir aula</h2>
-  <form method="post" action="/agenda/incluir">
-    <input type="hidden" name="semana" value="{{ segunda }}"><input type="hidden" name="todas" value="{{ todas }}">
+  <form method="post" action="/agenda/incluir" id="f-incluir">
+    <input type="hidden" name="semana" value="{{ segunda }}"><input type="hidden" name="todas" value="{{ todas }}">{{ ctl }}
     <div class="campo"><label>Aluno</label>
       <select name="cliente_id" required><option value="">—</option>{% for c in clientes %}<option value="{{ c.id }}" data-local="{{ c.local or '' }}">{{ c.nome }}</option>{% endfor %}</select></div>
     <div class="campo opcoes">
       <label><input type="radio" name="repetir" value="1" checked> Toda semana (horário fixo, vai para a Grade)</label>
       <label><input type="radio" name="repetir" value="0"> Só neste dia (aula avulsa)</label>
     </div>
-    <div class="duas">
-      <div class="campo" id="campo-dia"><label>Dia</label>
-        <select name="dia" required><option value="">—</option>{% for n in range(1, 7) %}<option value="{{ n }}">{{ n|dia }}</option>{% endfor %}</select></div>
-      <div class="campo" id="campo-data" hidden><label>Data</label><input type="date" name="data" value="{{ data_padrao }}"></div>
-      <div class="campo"><label>Hora</label>
-        <select name="hora" required><option value="">—</option>{% for n in range(5, 24) %}<option value="{{ n }}">{{ '%02d'|format(n) }}h</option>{% endfor %}</select></div>
+    <div class="campo" id="campo-dia">
+      <label>Dias e hora</label>
+      <div id="linhas-horario">
+        <div class="linha-horario">
+          <div class="dias-chips" role="group" aria-label="Dias da semana">
+            {%- for n in range(1, 7) %}<label class="chip-dia"><input type="checkbox" value="{{ n }}"><span>{{ n|dia_curto }}</span></label>{% endfor -%}
+          </div>
+          <select class="hora-linha" aria-label="Hora"><option value="">Hora</option>{% for n in range(5, 24) %}<option value="{{ n }}">{{ '%02d'|format(n) }}h</option>{% endfor %}</select>
+          <button type="button" class="claro pequeno tirar-linha" aria-label="Tirar este horário" hidden>Tirar</button>
+        </div>
+      </div>
+      <button type="button" class="claro pequeno" id="mais-horario">+ outro horário</button>
+    </div>
+    <div id="campo-avulsa" hidden>
+      <div class="duas">
+        <div class="campo" id="campo-data"><label>Data</label><input type="date" name="data" value="{{ data_padrao }}"></div>
+        <div class="campo"><label>Hora</label>
+          <select name="hora"><option value="">—</option>{% for n in range(5, 24) %}<option value="{{ n }}">{{ '%02d'|format(n) }}h</option>{% endfor %}</select></div>
+      </div>
+      <div class="campo opcoes"><label><input type="checkbox" name="reposicao" value="1"> É reposição (desconta do saldo do aluno quando fica Feita)</label></div>
     </div>
     <div class="campo"><label>Local</label>
       <select name="local" required>{% for l in locais %}<option>{{ l }}</option>{% endfor %}</select></div>
     <div class="linha"><button>Incluir</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
   </form>
 </dialog>
+
+<div class="barra-lote" id="barra-lote" hidden role="region" aria-label="Marcar várias aulas"
+     data-semana="{{ segunda }}" data-todas="{{ todas }}" data-aluno="{{ controle.id if controle else '' }}" data-mes="{{ controle.mes if controle else '' }}">
+  <div class="interno">
+    <div class="pinceis" role="group" aria-label="Pincel">
+      <button type="button" class="btn-estado feita" data-pincel="feita" aria-pressed="true">Feita</button>
+      <button type="button" class="btn-estado faltou" data-pincel="faltou" aria-pressed="false">Faltou</button>
+      <button type="button" class="btn-estado desmarcou" data-pincel="desmarcou" aria-pressed="false">Desmarcou</button>
+      <button type="button" class="btn-estado claro" data-pincel="" aria-pressed="false">Limpar</button>
+    </div>
+    <div class="acoes-lote">
+      <button type="button" class="verde" id="lote-salvar" disabled>Salvar (0)</button>
+      <button type="button" class="claro" id="lote-cancelar">Cancelar</button>
+    </div>
+    <span class="muted" id="lote-aviso" hidden>Máximo de 300 aulas por vez.</span>
+  </div>
+</div>
 
 <script>
 (function () {
@@ -150,6 +232,9 @@
     i.type = "hidden"; i.name = nome; i.value = valor == null ? "" : valor;
     form.appendChild(i);
   }
+  function contexto(form) {   // aluno e mês do painel de controle (se aberto) voltam junto
+    if (fh.elements.aluno) { oculto(form, "aluno", fh.elements.aluno.value); oculto(form, "mes", fh.elements.mes.value); }
+  }
   function botao(texto, cls, estado) {
     var b = el("button", cls, texto);
     if (estado != null) { b.name = "estado"; b.value = estado; }
@@ -159,10 +244,19 @@
     var bloco = el("div", "h-aluno"), marcada = a.estado in COR;
     var quem = el("div", "h-quem");
     quem.appendChild(el("strong", null, a.nome));
-    if (a.avulsa) quem.appendChild(el("span", "tag azul", "avulsa"));
+    if (a.reposicao) quem.appendChild(el("span", "tag azul", "reposição"));
+    else if (a.avulsa) quem.appendChild(el("span", "tag azul", "avulsa"));
     if (a.local) quem.appendChild(el("span", "muted", a.local));
     bloco.appendChild(quem);
     var estado = el("p", "muted estado-atual");
+    if (a.deve > 0) {   // reposições que ele ainda deve
+      var deve = el("p", "deve-repor");
+      deve.append("Deve " + a.deve + (a.deve === 1 ? " reposição" : " reposições") + " · ");
+      var ver = el("a", null, "Ver controle");
+      ver.href = "/agenda?semana=" + fh.elements.semana.value + (fh.elements.todas.value === "1" ? "&todas=1" : "") + "&aluno=" + a.cliente_id;
+      deve.appendChild(ver);
+      bloco.appendChild(deve);
+    }
     if (marcada) {
       var tag = el("span", "tag " + COR[a.estado], a.estado);
       estado.append("Marcada como: ", tag);
@@ -171,8 +265,8 @@
     var f = el("form", "botoes-estado" + (marcada ? "" : " sem-desfazer"));
     f.method = "post"; f.action = "/agenda/marcar";
     oculto(f, "cliente_id", a.cliente_id); oculto(f, "data", info.data); oculto(f, "hora", info.hora);
-    oculto(f, "local", a.local); oculto(f, "avulsa", a.avulsa ? 1 : 0);
-    oculto(f, "semana", fh.elements.semana.value); oculto(f, "todas", fh.elements.todas.value);
+    oculto(f, "local", a.local); oculto(f, "avulsa", a.avulsa ? 1 : 0); oculto(f, "reposicao", a.reposicao ? 1 : 0);
+    oculto(f, "semana", fh.elements.semana.value); oculto(f, "todas", fh.elements.todas.value); contexto(f);
     f.appendChild(botao("Feita", "btn-estado feita", "feita"));
     f.appendChild(botao("Faltou", "btn-estado faltou", "faltou"));
     f.appendChild(botao("Desmarcou", "btn-estado desmarcou", "desmarcou"));
@@ -185,7 +279,7 @@
     if (a.avulsa) {
       var fa = el("form"); fa.method = "post"; fa.action = "/agenda/avulsa/" + a.avulsa_id + "/excluir";
       fa.dataset.confirmar = "Excluir esta aula avulsa?";
-      oculto(fa, "semana", fh.elements.semana.value); oculto(fa, "todas", fh.elements.todas.value);
+      oculto(fa, "semana", fh.elements.semana.value); oculto(fa, "todas", fh.elements.todas.value); contexto(fa);
       fa.appendChild(botao("Excluir aula avulsa", "perigo pequeno"));
       acoes.appendChild(fa);
     }
@@ -230,21 +324,234 @@
   });
   loc.addEventListener("change", function () { localMexido = true; });   // só o usuário dispara change; defineLocal() não
 
-  // incluir aula: fixo mostra o dia da semana; avulsa mostra a data. O local do aluno já vem escolhido.
-  var f = document.querySelector("#dlg-incluir form");
+  // incluir aula: "Toda semana" = linhas de dias (botões de marcar) + hora; "Só neste dia" = data, hora e "É reposição".
+  // Os dias e horas das linhas viram os campos dias[] e horas[] (pares) só na hora de enviar. O local do aluno já vem escolhido.
+  var f = document.getElementById("f-incluir"), linhasH = document.getElementById("linhas-horario"), maisH = document.getElementById("mais-horario");
+  var MAX_LINHAS = 6, MAX_PARES = 12, primeiraLinha = linhasH.firstElementChild;
+  function chips(l) { return l.querySelectorAll(".chip-dia input"); }
+  function marcados(l) { return Array.prototype.filter.call(chips(l), function (c) { return c.checked; }); }
+  function acertaLinhas() {
+    var ls = linhasH.children, so1 = ls.length === 1;
+    Array.prototype.forEach.call(ls, function (l) {
+      l.querySelector(".tirar-linha").hidden = so1;
+      l.querySelector(".hora-linha").required = f.elements.repetir.value === "1" && marcados(l).length > 0;   // hora só é obrigatória na linha que tem dia
+    });
+    maisH.hidden = ls.length >= MAX_LINHAS;
+  }
   function modo() {
     var repete = f.elements.repetir.value === "1";
     document.getElementById("campo-dia").hidden = !repete;
-    document.getElementById("campo-data").hidden = repete;
-    f.elements.dia.required = repete; f.elements.data.required = !repete;
+    document.getElementById("campo-avulsa").hidden = repete;
+    // campo escondido não é enviado nem exigido (hora vazia daria erro no servidor)
+    ["data", "hora", "reposicao"].forEach(function (n) { f.elements[n].disabled = repete; });
+    f.elements.data.required = !repete; f.elements.hora.required = !repete;
+    acertaLinhas();
   }
-  f.addEventListener("change", function (e) { if (e.target.name === "repetir") modo(); });
-  f.addEventListener("reset", function () { setTimeout(modo, 0); });   // o app.js reseta e preenche; depois disso acerta os campos
-  f.elements.cliente_id.addEventListener("change", function () {
-    var o = this.selectedOptions[0], l = o && o.dataset.local;
-    if (l && Array.prototype.some.call(f.elements.local.options, function (x) { return x.value === l; })) f.elements.local.value = l;
+  function limparLinhas() {   // volta a uma linha só, sem dias marcados
+    while (linhasH.children.length > 1) linhasH.lastElementChild.remove();
+    Array.prototype.forEach.call(chips(linhasH.firstElementChild), function (c) { c.checked = false; c.setCustomValidity(""); });
+    linhasH.firstElementChild.querySelector(".hora-linha").value = "";
+    acertaLinhas();
+  }
+  f.addEventListener("change", function (e) {
+    if (e.target.name === "repetir") modo();
+    else if (e.target.closest("#linhas-horario")) { chips(linhasH.firstElementChild)[0].setCustomValidity(""); acertaLinhas(); }
   });
+  f.addEventListener("reset", function () { setTimeout(function () { limparLinhas(); modo(); }, 0); });   // o app.js reseta e preenche; depois disso acerta os campos
+  maisH.addEventListener("click", function () {
+    if (linhasH.children.length >= MAX_LINHAS) return;
+    var nova = primeiraLinha.cloneNode(true);
+    Array.prototype.forEach.call(chips(nova), function (c) { c.checked = false; });
+    nova.querySelector(".hora-linha").value = "";
+    linhasH.appendChild(nova);
+    acertaLinhas();
+  });
+  linhasH.addEventListener("click", function (e) {
+    var t = e.target.closest(".tirar-linha");
+    if (!t || linhasH.children.length === 1) return;
+    t.closest(".linha-horario").remove();
+    acertaLinhas();
+  });
+  f.addEventListener("submit", function (e) {
+    Array.prototype.forEach.call(f.querySelectorAll("input[data-gerado]"), function (i) { i.remove(); });
+    if (f.elements.repetir.value !== "1") return;
+    var pares = [], vistos = {};
+    Array.prototype.forEach.call(linhasH.children, function (l) {
+      var h = l.querySelector(".hora-linha").value;
+      marcados(l).forEach(function (c) {
+        if (h && !vistos[c.value + "-" + h]) { vistos[c.value + "-" + h] = 1; pares.push([c.value, h]); }
+      });
+    });
+    var primeiro = chips(linhasH.firstElementChild)[0];
+    if (!pares.length || pares.length > MAX_PARES) {
+      e.preventDefault();
+      primeiro.setCustomValidity(pares.length ? "No máximo " + MAX_PARES + " horários de uma vez." : "Marque ao menos um dia e a hora.");
+      primeiro.reportValidity();
+      return;
+    }
+    pares.forEach(function (p) {
+      [["dias", p[0]], ["horas", p[1]]].forEach(function (kv) {
+        var i = document.createElement("input");
+        i.type = "hidden"; i.name = kv[0]; i.value = kv[1]; i.dataset.gerado = "1";
+        f.appendChild(i);
+      });
+    });
+  });
+  function localDoAluno() {
+    var o = f.elements.cliente_id.selectedOptions[0], l = o && o.dataset.local;
+    if (l && Array.prototype.some.call(f.elements.local.options, function (x) { return x.value === l; })) f.elements.local.value = l;
+  }
+  f.elements.cliente_id.addEventListener("change", localDoAluno);
   modo();
+
+  // "Agendar reposição" (painel do aluno): abre o incluir já com o aluno, "Só neste dia" e "É reposição".
+  // Abre aqui (sem data-abrir): o app.js só copia valor e não marca botão de rádio nem caixa.
+  var repor = document.getElementById("btn-repor");
+  if (repor) repor.addEventListener("click", function () {
+    f.reset();
+    f.elements.cliente_id.value = repor.dataset.aluno;
+    f.elements.repetir.value = "0";
+    modo();
+    f.elements.reposicao.checked = true;
+    localDoAluno();
+    var t = document.querySelector("#dlg-incluir [data-titulo]");
+    if (t) t.textContent = "Agendar reposição";
+    document.getElementById("dlg-incluir").showModal();
+  });
+
+  // trocar o aluno do controle já abre o painel
+  document.getElementById("sel-aluno").addEventListener("change", function () { this.form.requestSubmit(); });
+
+  // ===== Marcar várias: pinta aulas só na tela (sem falar com o servidor) e grava tudo com um Salvar =====
+  var CORES = ["feita", "faltou", "desmarcou"], TIRAR = CORES.concat(["futura", "pendente", "bloq"]);
+  var ROTULO = {feita: "feita", faltou: "faltou", desmarcou: "desmarcou", "": "desfazer"};
+  var barra = document.getElementById("barra-lote"), btnLote = document.getElementById("btn-lote");
+  var btnSalvar = document.getElementById("lote-salvar"), aviso = document.getElementById("lote-aviso");
+  var ligado = false, pincel = "feita", mud = new Map(), porChave = new Map(), enviando = false;
+
+  function chave(m) { return m.cliente_id + "|" + m.data + "|" + m.hora; }
+  function registra(e, m) {   // a mesma aula pode estar na grade e no "Hoje"
+    e._marca = m;
+    var k = chave(m);
+    if (!porChave.has(k)) porChave.set(k, []);
+    porChave.get(k).push(e);
+  }
+  document.querySelectorAll(".cel.aula[data-info]").forEach(function (card) {   // cada nome do card = um aluno do data-info
+    var info;
+    try { info = JSON.parse(card.dataset.info); } catch (_) { return; }
+    card.querySelectorAll(".n").forEach(function (n, i) {
+      var a = info.alunos[i];
+      if (a) registra(n, {cliente_id: a.cliente_id, data: info.data, hora: info.hora, local: a.local, avulsa: a.avulsa, reposicao: a.reposicao, estado: a.estado, base: a.base});
+    });
+  });
+  document.querySelectorAll(".aula-hoje[data-marca]").forEach(function (e) {
+    try { registra(e, JSON.parse(e.dataset.marca)); } catch (_) { }
+  });
+  function atual(m) { var x = mud.get(chave(m)); return x ? x.estado : (m.estado || ""); }
+  function trocaCor(e, cls) {
+    TIRAR.forEach(function (c) { e.classList.remove(c); });
+    e.classList.add(cls);
+  }
+  function pinta(m) {
+    var est = atual(m), mudou = mud.has(chave(m));
+    (porChave.get(chave(m)) || []).forEach(function (e) {
+      if (e.classList.contains("n")) {
+        trocaCor(e, est || m.base);
+        var card = e.closest(".cel.aula");
+        if (card && !card.classList.contains("dupla")) trocaCor(card, est || m.base);   // card de 1 aluno: o card todo leva a cor
+      } else {   // linha do "Hoje"
+        CORES.forEach(function (c) { e.classList.remove(c); });
+        if (est) e.classList.add(est);
+        var tag = e.querySelector(".estado-lote");
+        if (tag) {
+          tag.hidden = !mudou;
+          tag.className = "tag estado-lote " + ({feita: "verde", faltou: "vermelho", desmarcou: "amarelo"}[est] || "neutro");
+          tag.textContent = (ROTULO[est] || "desfazer") + " (não salva)";
+        }
+      }
+      e.classList.toggle("nao-salvo", mudou);
+    });
+  }
+  function conta() {
+    btnSalvar.textContent = "Salvar (" + mud.size + ")";
+    btnSalvar.disabled = !mud.size || mud.size > 300;
+    aviso.hidden = mud.size <= 300;
+  }
+  function pintar(e) {
+    var m = e._marca;
+    if (!m) return;
+    var k = chave(m);
+    if (atual(m) === pincel) mud.delete(k);                        // tocar de novo com o mesmo pincel desfaz
+    else if ((m.estado || "") === pincel) mud.delete(k);            // volta ao que já estava salvo
+    else mud.set(k, {m: m, estado: pincel});
+    pinta(m);
+    conta();
+  }
+  function aula(e) {   // o que foi tocado: o nome, a linha do Hoje, ou o card (teclado) quando tem um aluno só
+    var n = e.target.closest(".n");
+    if (n && n._marca) return n;
+    var h = e.target.closest(".aula-hoje[data-marca]");
+    if (h && !e.target.closest("a")) return h;
+    var card = e.target.closest(".cel.aula");
+    var ns = card ? card.querySelectorAll(".n") : [];
+    return ns.length === 1 && ns[0]._marca ? ns[0] : null;
+  }
+  // fase de captura: com o modo ligado, o toque no card só pinta e nunca abre a janelinha do horário
+  document.addEventListener("click", function (e) {
+    if (!ligado) return;
+    var alvo = aula(e);
+    if (alvo) { e.preventDefault(); e.stopImmediatePropagation(); pintar(alvo); return; }
+    if (e.target.closest(".cel")) { e.preventDefault(); e.stopImmediatePropagation(); }
+  }, true);
+
+  function ligar(sim) {
+    ligado = sim;
+    document.body.classList.toggle("modo-lote", sim);
+    barra.hidden = !sim;
+    document.querySelector(".lote-info").hidden = !sim;
+    btnLote.setAttribute("aria-pressed", sim);
+  }
+  function descartar() {
+    var ms = Array.from(mud.values()).map(function (x) { return x.m; });
+    mud.clear();
+    ms.forEach(pinta);
+    conta();
+  }
+  btnLote.addEventListener("click", function () { ligar(true); });
+  barra.querySelectorAll("[data-pincel]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      pincel = b.dataset.pincel;
+      barra.querySelectorAll("[data-pincel]").forEach(function (x) { x.setAttribute("aria-pressed", x === b); });
+    });
+  });
+  document.getElementById("lote-cancelar").addEventListener("click", function () {
+    if (mud.size && !confirm("Descartar as marcações que ainda não foram salvas?")) return;
+    descartar();
+    ligar(false);
+  });
+  btnSalvar.addEventListener("click", function () {
+    if (!mud.size || mud.size > 300 || enviando) return;
+    enviando = true;   // sem aviso de "sair sem salvar" na ida para o servidor
+    btnSalvar.disabled = true; btnSalvar.textContent = "Salvando…";
+    var itens = Array.from(mud.values()).map(function (x) {
+      var m = x.m;
+      return {cliente_id: m.cliente_id, data: m.data, hora: m.hora, local: m.local, avulsa: m.avulsa ? 1 : 0, reposicao: m.reposicao ? 1 : 0, estado: x.estado};
+    });
+    var form = document.createElement("form");
+    form.method = "post"; form.action = "/agenda/marcar-lote"; form.hidden = true;
+    [["itens", JSON.stringify(itens)], ["semana", barra.dataset.semana], ["todas", barra.dataset.todas],
+     ["aluno", barra.dataset.aluno], ["mes", barra.dataset.mes]].forEach(function (kv) {
+      var i = document.createElement("input");
+      i.type = "hidden"; i.name = kv[0]; i.value = kv[1];
+      form.appendChild(i);
+    });
+    document.body.appendChild(form);
+    form.submit();
+  });
+  window.addEventListener("beforeunload", function (e) {
+    if (mud.size && !enviando) { e.preventDefault(); e.returnValue = ""; }
+  });
+  window.addEventListener("pageshow", function () { enviando = false; conta(); });   // voltou pelo histórico: libera o Salvar
 })();
 </script>
 {% endblock %}
