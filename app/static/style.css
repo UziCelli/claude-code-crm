@@ -423,3 +423,64 @@ dialog [hidden] { display: none !important; }
   .aula-hoje form .tag { flex: 0 0 auto; }
   .grade td.hora { width: 38px; }
 }
+
+/* ===== agenda: controle do aluno, "Marcar várias" e vários horários de uma vez ===== */
+.topo-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
+.controle { margin-bottom: 0; }
+.controle-form { align-items: flex-end; gap: 8px; }
+.controle-form .campo { flex: 1 1 220px; margin-bottom: 0; }
+.painel-aluno { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--borda); }
+.saldo { display: flex; align-items: center; gap: 14px; }
+.saldo-n { flex: 0 0 auto; min-width: 64px; text-align: center; padding: 10px 14px; border-radius: 12px; background: var(--neutro-f); color: var(--marinho);
+  font-family: Montserrat, "Segoe UI", Arial, sans-serif; font-size: 36px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.saldo.deve .saldo-n { background: var(--amarelo-f); color: #7a5300; box-shadow: inset 5px 0 0 var(--amarelo); }
+.mes-nav { margin: 14px 0 10px; justify-content: space-between; }
+.mes-nav strong::first-letter { text-transform: uppercase; }   /* "Outubro de 2026", não "Outubro De 2026" */
+.contadores { display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 8px; }
+.contador { padding: 8px 6px; border-radius: 8px; background: var(--neutro-f); text-align: center; min-width: 0; }
+.contador b { display: block; font-size: 22px; line-height: 1.2; color: var(--marinho); font-variant-numeric: tabular-nums; }
+.contador span { display: block; font-size: 11px; font-weight: 600; color: var(--cinza); }
+.contador.feita { background: var(--verde-f); box-shadow: inset 4px 0 0 var(--verde); }
+.contador.faltou { background: var(--vermelho-f); box-shadow: inset 4px 0 0 var(--vermelho); }
+.contador.desmarcou { background: var(--amarelo-f); box-shadow: inset 4px 0 0 var(--amarelo); }
+.contador.reposta { background: var(--azul-f); box-shadow: inset 4px 0 0 var(--aco); }
+.aulas-aluno { list-style: none; margin: 12px 0 0; padding: 0; }
+.aula-linha { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 8px 10px; margin-top: 6px; background: #fff; border: 1px solid var(--borda);
+  border-left: 5px solid var(--borda); border-radius: 8px; }
+.aula-linha.feita { border-left-color: var(--verde); }
+.aula-linha.faltou { border-left-color: var(--vermelho); }
+.aula-linha.desmarcou { border-left-color: var(--amarelo); }
+.aula-linha.agendada { border-left-color: var(--aco); }
+.aula-linha .quando { font-weight: 600; font-variant-numeric: tabular-nums; }
+.mt-p { margin-top: 12px; }
+.deve-repor { margin: 4px 0 8px; font-size: 13px; font-weight: 600; color: #7a5300; }
+.deve-repor a { color: var(--aco); }
+
+/* incluir aula: linhas de dias (botões de marcar) + hora */
+.linha-horario { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px; margin-bottom: 8px; border: 1px solid var(--borda); border-radius: 10px; }
+.dias-chips { display: flex; gap: 4px; flex: 1 1 100%; }
+.chip-dia { position: relative; flex: 1 1 0; min-width: 0; margin: 0; }
+.chip-dia input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.chip-dia span { display: block; padding: 10px 0; text-align: center; border-radius: 8px; background: var(--azul-f); color: var(--aco); font-size: 13px; font-weight: 600; }
+.chip-dia input:checked + span { background: var(--aco); color: #fff; }
+.chip-dia input:focus-visible + span { outline: 2px solid var(--aco); outline-offset: 2px; }
+.linha-horario .hora-linha { flex: 1 1 100px; width: auto; min-width: 0; }
+.opcoes input[type=checkbox] { width: auto; margin-top: 3px; }
+
+/* Marcar várias: barra fixa embaixo, o pincel e o que ainda não foi salvo */
+.lote-info { margin: 8px 0 0; }
+body.modo-lote main { padding-bottom: 160px; }
+body.modo-lote #btn-lote, body.modo-lote .topo-acoes [data-abrir] { display: none; }
+body.modo-lote .aula-hoje form { display: none; }
+body.modo-lote .cel .rots { display: none; }
+body.modo-lote .cel.aula, body.modo-lote .aula-hoje[data-marca] { cursor: pointer; }
+.nao-salvo { outline: 2px dashed var(--aco); outline-offset: 1px; }
+.barra-lote { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--branco);
+  border-top: 1px solid var(--borda); box-shadow: 0 -6px 20px rgba(11,30,61,.12); }
+.barra-lote .interno { max-width: 1400px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.barra-lote .pinceis { flex: 1 1 320px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.barra-lote .pinceis button { min-height: 44px; padding: 8px 2px; font-size: 13px; }
+.barra-lote .pinceis button[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--aco); }
+.barra-lote .acoes-lote { flex: 1 1 200px; display: flex; gap: 8px; }
+.barra-lote .acoes-lote button { min-height: 44px; }
+.barra-lote #lote-salvar { flex: 1; }

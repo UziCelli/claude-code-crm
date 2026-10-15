@@ -142,6 +142,7 @@ def iniciar_banco(caminho: Path = None) -> None:
             )
         _garantir_coluna(con, "campanha_checkpoints", "excluido_em", "TEXT")   # banco de antes de dar para excluir
         _garantir_coluna(con, "cliente_eventos", "hora", "INTEGER")            # banco de antes da Agenda
+        _garantir_coluna(con, "agenda_avulsas", "reposicao", "INTEGER DEFAULT 0")   # banco de antes do controle de reposições
         if con.execute("SELECT COUNT(*) FROM campanha_checkpoints").fetchone()[0] == 0:
             con.executemany(
                 "INSERT INTO campanha_checkpoints (pergunta, canal, prazo) VALUES (?,?,?)", CHECKPOINTS_INICIAIS
