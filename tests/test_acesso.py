@@ -7,7 +7,7 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 
-from app import acesso, db, main
+from app import acesso, db, main, vigia
 
 EQUIPE, AUD = "vfit.cloudflareaccess.com", "aud-do-crm"
 CHAVE = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -39,9 +39,10 @@ def banco(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def desligar(monkeypatch):
-    """Encerrar de mentira: guarda os pedidos em vez de mandar SIGINT para o pytest."""
+def desligar(monkeypatch, tmp_path):
+    """Encerrar de mentira: guarda os pedidos em vez de mandar SIGINT para o pytest (e a marca do vigia vai para a pasta temporária)."""
     pedidos = []
+    monkeypatch.setattr(vigia, "DESLIGADO", tmp_path / "desligado.txt")
     monkeypatch.setattr(main.threading, "Timer", lambda *a: type("T", (), {"start": lambda s: pedidos.append(a)})())
     return pedidos
 
