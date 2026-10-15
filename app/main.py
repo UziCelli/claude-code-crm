@@ -20,7 +20,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse,
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import acesso, atualizar, db, exportar, financeiro, importar, precos
+from . import acesso, atualizar, db, exportar, financeiro, importar, precos, vigia
 
 ROOT = Path(__file__).resolve().parent
 DIAS = {1: "Segunda", 2: "Terça", 3: "Quarta", 4: "Quinta", 5: "Sexta", 6: "Sábado", 7: "Domingo"}
@@ -34,7 +34,14 @@ SEMANAS_MES = 4.33
 async def lifespan(app):
     if db.nuvem.ativo():
         db.nuvem.sincronizar(db.DB_PATH)   # sem internet segue com a réplica local; o alerta avisa
-    db.iniciar_banco()
+    try:
+        db.iniciar_banco()
+    except sqlite3.Error as e:
+        if not db.nuvem.ativo():
+            raise
+        # sem internet as gravações do Turso falham: abre com a réplica local (o banco já existe) em vez de cair e dar 502
+        print(f"AVISO: não deu para atualizar o banco na nuvem ({e}); abrindo com a cópia local.", flush=True)
+        db.nuvem.status["erro"] = f"banco na nuvem fora do ar ao ligar: {e}"
     if db.nuvem.ativo():
         db.nuvem.iniciar_sync_periodico(db.DB_PATH)
     try:
@@ -1883,6 +1890,11 @@ def encerrar(request: Request):
     # no Render, desligar só faria o CRM sumir para todos; pelo túnel, o celular derrubaria o PC sem ninguém lá para religar
     if not acesso.pode_encerrar(request):
         return HTMLResponse("Indisponível pela internet: o CRM só pode ser encerrado no próprio PC.", status_code=404)
+    try:
+        vigia.DESLIGADO.parent.mkdir(exist_ok=True)
+        vigia.DESLIGADO.write_text("desligado pelo botao Encerrar\n", encoding="utf-8")   # avisa o vigia para não religar
+    except OSError as e:
+        print(f"AVISO: não consegui marcar o desligamento ({e}); o vigia pode religar o CRM.", flush=True)
     # o servidor roda sem janela (iniciar-crm.bat); SIGINT faz o uvicorn desligar com calma, depois de responder
     threading.Timer(0.5, signal.raise_signal, (signal.SIGINT,)).start()
     return HTMLResponse("<!doctype html><meta charset='utf-8'><title>CRM encerrado</title>"

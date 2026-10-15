@@ -21,6 +21,7 @@ PASTA = Path(__file__).resolve().parent.parent
 DATA = PASTA / "data"
 RECUSADA = DATA / "atualizacao-recusada.txt"
 LOG = DATA / "atualizacao.log"
+ATUALIZANDO = DATA / "atualizando.txt"   # existe enquanto o ajudante troca de versão: o vigia não religa por cima
 RAMO = "main"
 PORTA = 8765
 INTERVALO = 15 * 60       # entre uma conferida e outra
@@ -168,6 +169,18 @@ def abrir_crm():
 
 
 def ajudante(antigo):
+    try:
+        DATA.mkdir(exist_ok=True)
+        ATUALIZANDO.write_text(str(os.getpid()), encoding="utf-8")
+    except OSError:
+        pass
+    try:
+        _trocar(antigo)
+    finally:
+        ATUALIZANDO.unlink(missing_ok=True)
+
+
+def _trocar(antigo):
     for _ in range(240):   # até 2 minutos para o CRM antigo fechar
         if not porta_ocupada():
             break

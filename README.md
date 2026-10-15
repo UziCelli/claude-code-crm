@@ -48,6 +48,7 @@ Com o Turso ligado, os dados ficam no banco da nuvem (plano grátis) e o CRM tra
   No próprio PC, `http://localhost:8765` entra direto, como sempre.
 - PC, celular e reserva usam o mesmo banco (Turso). O que é lançado num aparelho aparece no outro em até 30 segundos.
 - **Encerrar** só aparece no PC e desliga também o acesso pelo celular. Para religar, abra o CRM pelo atalho.
+- Se o CRM cair, o vigia religa sozinho em até 2 minutos (o botão Encerrar desliga de verdade; o atalho ou reiniciar o PC liga de novo).
 
 ### Configurar (uma vez só)
 Os nomes dos botões no Cloudflare e no Render podem mudar um pouco.

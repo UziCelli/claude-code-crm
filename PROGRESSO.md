@@ -61,6 +61,7 @@ Plano completo em `C:\Users\victo\.claude\plans\a-gente-vai-come-ar-functional-t
 - **Agenda (14/10/2026):** aba nova com os horários fixos da Grade e aulas avulsas; marcar aula feita/faltou/desmarcou com 1 toque (vai para o histórico do aluno); aviso de aulas da semana sem marcar.
 - **Agenda com seletor (14/10/2026):** 1 card por horário (até 2 alunos), escolhe aluno e local; Copiar da Grade em uma gravação só.
 - **Agenda: reposições e lote (15/10/2026):** controle do aluno (saldo de reposições, aulas do mês, "Agendar reposição"); "Marcar várias" grava tudo com um Salvar (2 gravações); vários horários fixos de um aluno de uma vez.
+- **Vigia do CRM (15/10/2026, `app/vigia.py`):** o `iniciar-crm.bat /servidor` liga um processo sem janela que confere a porta a cada minuto e religa o CRM se cair 2 vezes seguidas (fim do 502 no celular). Não religa depois do botão Encerrar (`data/desligado.txt`, apagado ao abrir pelo atalho ou ligar o Windows) nem durante a atualização automática (`data/atualizando.txt`). O .bat agora espera até 2 minutos o servidor subir, e o CRM abre com a réplica local se o Turso estiver fora ao ligar.
 - **Depois:** repositório privado no GitHub (feito: UziCelli/claude-code-crm); agente de IA (Sonnet 5.5) adiado.
 - Forma de pagamento dos clientes importados vem como "Mensal"/"Parcelado" (texto da planilha); o motor usa PIX como padrão nesses casos.
 - Multiagente: tarefas simples em Haiku, implementação em Sonnet 5.5, modelo principal só para revisão.

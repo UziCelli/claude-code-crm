@@ -35,6 +35,7 @@ def repos(tmp_path, monkeypatch):
     monkeypatch.setattr(atualizar, "DATA", pc / "data")
     monkeypatch.setattr(atualizar, "RECUSADA", pc / "data" / "atualizacao-recusada.txt")
     monkeypatch.setattr(atualizar, "LOG", pc / "data" / "atualizacao.log")
+    monkeypatch.setattr(atualizar, "ATUALIZANDO", pc / "data" / "atualizando.txt")
     monkeypatch.setitem(atualizar.status, "erro", None)
     reinicios = []
     monkeypatch.setattr(atualizar, "reiniciar", reinicios.append)
