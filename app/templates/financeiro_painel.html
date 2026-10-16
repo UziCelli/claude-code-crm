@@ -63,7 +63,7 @@
           <i class="b-custos" style="height:{{ (100 * custos / maximo)|round }}%"></i>
           <i class="b-lucro" style="height:{{ (100 * [s.lucro, 0]|max / maximo)|round }}%"></i>
         </div>
-        <span>{{ s.mes[5:] }}/{{ s.mes[2:4] }}</span>
+        <span>{{ s.mes[5:] }}<b class="ano">/{{ s.mes[2:4] }}</b></span>
       </div>
       {% endfor %}
     </div>
