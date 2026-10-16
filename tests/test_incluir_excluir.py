@@ -116,7 +116,7 @@ def test_tarefas_excluidas_nao_voltam_ao_reabrir(http):
     con.close()
     db.iniciar_banco()
     db.iniciar_banco()
-    assert len(consulta("SELECT * FROM rotina_tarefas")) == len(db.ROTINA_INICIAL)
+    assert len(consulta("SELECT * FROM rotina_tarefas")) == len(db.ROTINA_INICIAL) + 1   # + a tarefa "saldos" do Saldo livre
     assert not consulta("SELECT * FROM rotina_tarefas WHERE excluido_em IS NULL")
 
 
@@ -133,6 +133,6 @@ def test_banco_antigo_ganha_coluna_e_tarefas(tmp_path, monkeypatch):
     con = db.conectar(caminho)
     try:
         assert [tuple(r) for r in con.execute("SELECT pergunta, excluido_em FROM campanha_checkpoints")] == [("Antigo?", None)]
-        assert [r[0] for r in con.execute("SELECT chave FROM rotina_tarefas ORDER BY ordem")] == [c for c, _, _ in db.ROTINA_INICIAL]
+        assert [r[0] for r in con.execute("SELECT chave FROM rotina_tarefas ORDER BY ordem")] == [c for c, _, _ in db.ROTINA_INICIAL] + ["saldos"]
     finally:
         con.close()

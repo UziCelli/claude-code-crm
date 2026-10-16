@@ -14,6 +14,38 @@
     <button data-abrir="dlg-lanc" data-titulo="Novo lançamento">Novo lançamento</button>
   </div>
 </div>
+
+<section class="mt" aria-labelledby="t-livre">
+  <div class="linha topo">
+    <h2 id="t-livre" style="margin:0">Quanto dá para gastar</h2>
+    <button class="claro" data-abrir="dlg-saldos" data-titulo="Atualizar saldos">Atualizar saldos</button>
+  </div>
+  <p class="muted">Dinheiro que já está nas contas, menos tudo que vence até {{ livre.PF.ate|data }} e o imposto a guardar. Entrada prevista não conta.</p>
+  {% if livre.sem_frente %}<p class="aviso erro">Conta sem frente: {{ livre.sem_frente|join(', ') }}. Escolha PF, PJ, Reserva ou Fora em Atualizar saldos.</p>{% endif %}
+  <div class="grid c2">
+    {% for f in ['PF', 'PJ'] %}{% set l = livre[f] %}
+    <div class="kpi {{ 'amarelo' if l.sem_saldo else ('verde' if l.livre >= 0 else 'vermelho') }}">
+      <div class="rotulo">Livre {{ 'pessoal (PF)' if f == 'PF' else 'empresa (PJ)' }}</div>
+      {% if l.sem_saldo %}
+      <div class="valor">—</div>
+      <div class="meta">Digite o saldo das contas {{ f }} em Atualizar saldos para ver este número.</div>
+      {% else %}
+      <div class="valor">{{ l.livre|moeda }}</div>
+      <div class="meta">Tem {{ l.tem|moeda }} · já comprometido {{ l.comprometido|moeda }}{% if f == 'PJ' %} · imposto a guardar {{ l.imposto|moeda }}{% endif %}</div>
+      {% if l.desatualizado %}<div class="meta"><span class="tag amarelo">saldo de {{ l.dias_velho }} dias atrás: atualize</span></div>{% endif %}
+      {% if l.itens %}
+      <details class="mt"><summary class="muted">O que já está comprometido ({{ l.itens|length }})</summary>
+        <table><tbody>{% for i in l.itens %}<tr><td>{{ i.data|data }}</td><td>{{ i.descricao }}</td><td class="num">{{ i.valor|moeda }}</td></tr>{% endfor %}</tbody></table>
+      </details>
+      {% endif %}
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% if livre.reserva %}<p class="muted">Guardado no colchão (contas Reserva): {{ livre.reserva|moeda }}. Não entra no livre.</p>{% endif %}
+</section>
+
+<h2 class="mt">Mês</h2>
 <form class="linha" method="get">
   <input type="month" name="mes" value="{{ mes }}" aria-label="Mês" style="width:auto" required>
   <select name="escopo" aria-label="Escopo" style="width:auto">
@@ -131,6 +163,31 @@
       <div class="campo largo"><label>Pago em (deixe vazio se ainda não foi pago)</label><input name="pago_em" type="date"></div>
     </div>
     <div class="linha"><button>Salvar</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-saldos">
+  <h2 data-titulo>Atualizar saldos</h2>
+  <p class="muted">Abra o app de cada banco e copie o saldo de hoje. Deixe vazio o que não quiser mudar. Reserva = caixinha do colchão; Fora = cartão.</p>
+  <form method="post" action="/financeiro/saldos">
+    <input type="hidden" name="volta" value="{{ volta }}">
+    <div class="campo"><label>Data dos saldos</label><input name="data" type="date" value="{{ hoje() }}" required></div>
+    <table>
+      <thead><tr><th>Conta</th><th>Frente</th><th class="num">Saldo hoje (R$)</th></tr></thead>
+      <tbody>
+      {% for conta, v in saldos.items() %}
+      <tr>
+        <td>{{ conta }}<input type="hidden" name="conta_{{ loop.index }}" value="{{ conta }}">{% if v.data %}<div class="muted">último: {{ v.saldo|moeda }} em {{ v.data|data }}</div>{% endif %}</td>
+        <td><select name="frente_{{ loop.index }}" aria-label="Frente de {{ conta }}" style="width:auto">
+          {% if not v.escopo %}<option value="">escolher</option>{% endif %}
+          {% for fr in frentes %}<option {{ 'selected' if v.escopo == fr }}>{{ fr }}</option>{% endfor %}
+        </select></td>
+        <td><input name="saldo_{{ loop.index }}" inputmode="decimal" placeholder="0,00" aria-label="Saldo de {{ conta }}" {{ 'disabled' if v.escopo == 'Fora' }}></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <div class="linha mt"><button>Salvar saldos</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
   </form>
 </dialog>
 

@@ -136,3 +136,71 @@ def test_valor_nao_finito_e_recusado(con_temp):
 def test_ponto_de_equilibrio_sem_custos_fixos(con_temp):
     lancar(con_temp, "entrada", 1000, "2026-09-06", "2026-09-06")
     assert financeiro.resumo_mes(con_temp, "2026-09")["ponto_equilibrio"] is None
+
+
+# ---------- Saldo livre ----------
+def saldo(con, conta, valor, data):
+    financeiro.salvar_saldos(con, data, {conta: valor}, {})
+
+
+def test_saldo_livre_desconta_recorrencia_aberta_e_nao_a_baixada(con_temp):
+    saldo(con_temp, "Contabilizei Bank", 3000, "2026-10-15")
+    rid = recorrencia(con_temp, valor=1000, dia=10)
+    with con_temp:
+        con_temp.execute("UPDATE recorrencias SET inicio='2026-09'")
+    livre = financeiro.saldo_livre(con_temp, "2026-10-16")["PJ"]
+    # setembro e outubro atrasados + novembro (10/11 cabe nos 30 dias)
+    assert [i["data"] for i in livre["itens"]] == ["2026-09-10", "2026-10-10", "2026-11-10"]
+    assert livre["tem"] == 3000 and livre["comprometido"] == 3000 and livre["livre"] == 0
+    financeiro.baixar_recorrencia(con_temp, rid, "2026-09", 1000, "2026-10-16")
+    financeiro.baixar_recorrencia(con_temp, rid, "2026-10", 1000, "2026-10-16")
+    livre = financeiro.saldo_livre(con_temp, "2026-10-16")["PJ"]
+    assert livre["comprometido"] == 1000 and livre["livre"] == 2000
+
+
+def test_saldo_livre_ignora_entrada_futura_e_conta_atrasado(con_temp):
+    saldo(con_temp, "Inter", 500, "2026-10-16")
+    lancar(con_temp, "entrada", 2000, "2026-10-20", escopo="PF")          # previsto: não conta
+    lancar(con_temp, "saida", 300, "2026-09-01", escopo="PF")             # atrasado: conta
+    lancar(con_temp, "saida", 100, "2026-12-01", escopo="PF")             # depois de 30 dias: não conta
+    livre = financeiro.saldo_livre(con_temp, "2026-10-16")["PF"]
+    assert livre["livre"] == 200 and livre["comprometido"] == 300
+
+
+def test_saldo_livre_guarda_das_da_receita_do_mes(con_temp):
+    saldo(con_temp, "Contabilizei Bank", 1000, "2026-10-16")
+    lancar(con_temp, "entrada", 1000, "2026-10-05", pago_em="2026-10-05")
+    pj = financeiro.saldo_livre(con_temp, "2026-10-16")["PJ"]
+    assert pj["imposto"] == 60 and pj["livre"] == 940
+    # o DAS de novembro já lançado em aberto não é contado duas vezes
+    with con_temp:
+        con_temp.execute("INSERT INTO lancamentos (escopo, tipo, data, valor, categoria) VALUES ('PJ','saida','2026-11-10',60,'Impostos/Taxas')")
+    pj = financeiro.saldo_livre(con_temp, "2026-10-16")["PJ"]
+    assert pj["imposto"] == 0 and pj["livre"] == 940
+
+
+def test_saldo_velho_reserva_e_sem_saldo(con_temp):
+    out = financeiro.saldo_livre(con_temp, "2026-10-16")
+    assert out["PF"]["sem_saldo"] and not out["PF"]["desatualizado"]
+    saldo(con_temp, "Inter", 100, "2026-10-01")
+    financeiro.salvar_saldos(con_temp, "2026-10-16", {"Caixinha": 5000}, {})            # conta fora da lista: ignorada
+    out = financeiro.saldo_livre(con_temp, "2026-10-16")
+    assert out["PF"]["desatualizado"] and out["PF"]["dias_velho"] == 15 and out["reserva"] == 0
+    financeiro.salvar_saldos(con_temp, "2026-10-16", {"Caixa": 800}, {"Caixa": "Reserva"})
+    out = financeiro.saldo_livre(con_temp, "2026-10-16")
+    assert out["reserva"] == 800 and out["PF"]["tem"] == 100
+
+
+def test_salvar_saldo_no_mesmo_dia_troca_a_foto(con_temp):
+    saldo(con_temp, "Inter", 100, "2026-10-16")
+    saldo(con_temp, "Inter", 150, "2026-10-16")
+    assert financeiro.saldos_atuais(con_temp)["Inter"]["saldo"] == 150
+    assert con_temp.execute("SELECT COUNT(*) FROM saldos WHERE excluido_em IS NULL").fetchone()[0] == 1
+
+
+def test_conta_nova_sem_frente(con_temp):
+    with con_temp:
+        con_temp.execute("INSERT INTO parametros (grupo, chave, valor_texto) VALUES ('lista_contas','Nubank','Nubank'), ('lista_contas','Cartão XP','Cartão XP')")
+    fr = financeiro.frentes_contas(con_temp)
+    assert fr["Nubank"] is None and fr["Cartão XP"] == "Fora"
+    assert "Nubank" in financeiro.saldo_livre(con_temp, "2026-10-16")["sem_frente"]

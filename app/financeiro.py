@@ -31,21 +31,122 @@ def pendencias(con: sqlite3.Connection, mes: str, hoje: str) -> list[dict]:
                       "descricao": r["descricao"] or r["categoria"], "categoria": r["categoria"], "valor": r["valor"],
                       "status": status(r, hoje)})
     # ponytail: olha até 3 competências para trás (conta não paga não some na virada do mês); mais antigo que isso, só pelo livro-caixa
-    ano, m = int(mes[:4]), int(mes[5:7])
     for k in range(4):
-        comp = f"{(ano * 12 + m - 1 - k) // 12:04d}-{(ano * 12 + m - 1 - k) % 12 + 1:02d}"
-        for r in con.execute(
-            """SELECT * FROM recorrencias WHERE excluido_em IS NULL AND inicio <= ? AND (fim IS NULL OR fim >= ?)
-               AND NOT EXISTS (SELECT 1 FROM lancamentos l WHERE l.recorrencia_id = recorrencias.id AND l.competencia = ?
-                               AND l.excluido_em IS NULL)""",
-            (comp, comp, comp),
-        ):
-            data = vencimento(r["dia_vencimento"], comp)
-            itens.append({"origem": "recorrencia", "id": r["id"], "escopo": r["escopo"], "tipo": "saida", "data": data,
-                          "descricao": r["descricao"], "categoria": r["categoria"], "valor": r["valor"], "competencia": comp,
-                          "status": status({"pago_em": None, "data": data}, hoje)})
+        itens += _recorrencias_abertas(con, somar_meses(mes, -k), hoje)
     itens.sort(key=lambda i: (i["status"] != "atrasado", i["data"]))
     return itens
+
+
+def somar_meses(mes: str, n: int) -> str:
+    """'AAAA-MM' mais n meses (n pode ser negativo)."""
+    t = int(mes[:4]) * 12 + int(mes[5:7]) - 1 + n
+    return f"{t // 12:04d}-{t % 12 + 1:02d}"
+
+
+def _recorrencias_abertas(con: sqlite3.Connection, comp: str, hoje: str) -> list[dict]:
+    """Recorrências ativas na competência que ainda não têm lançamento nela (nem pago nem em aberto)."""
+    itens = []
+    for r in con.execute(
+        """SELECT * FROM recorrencias WHERE excluido_em IS NULL AND inicio <= ? AND (fim IS NULL OR fim >= ?)
+           AND NOT EXISTS (SELECT 1 FROM lancamentos l WHERE l.recorrencia_id = recorrencias.id AND l.competencia = ?
+                           AND l.excluido_em IS NULL)""",
+        (comp, comp, comp),
+    ):
+        data = vencimento(r["dia_vencimento"], comp)
+        itens.append({"origem": "recorrencia", "id": r["id"], "escopo": r["escopo"], "tipo": "saida", "data": data,
+                      "descricao": r["descricao"], "categoria": r["categoria"], "valor": r["valor"], "competencia": comp,
+                      "status": status({"pago_em": None, "data": data}, hoje)})
+    return itens
+
+
+# ---------- Saldo livre ----------
+FRENTES = ("PF", "PJ", "Reserva", "Fora")   # Reserva = colchão (fica fora do livre); Fora = cartão, não guarda dinheiro
+DIAS_SALDO_VELHO = 7
+
+
+def frentes_contas(con: sqlite3.Connection) -> dict:
+    """{conta: frente ou None} para todas as contas da lista. Conta nova sem frente: cartão vai para Fora, o resto fica None."""
+    escolhidas = db.parametros(con, "conta_escopo")
+    out = {}
+    for conta in db.lista(con, "lista_contas"):
+        f = escolhidas.get(conta)
+        out[conta] = f if f in FRENTES else ("Fora" if conta.lower().startswith("cartão") else None)
+    return out
+
+
+def saldos_atuais(con: sqlite3.Connection) -> dict:
+    """{conta: {saldo, data, escopo}} com a foto mais recente de cada conta da lista (saldo/data None se nunca digitado)."""
+    ultimos = {}
+    for r in con.execute("""SELECT conta, saldo, data FROM saldos WHERE excluido_em IS NULL ORDER BY data, id"""):
+        ultimos[r["conta"]] = r   # a última linha de cada conta vence
+    return {conta: {"saldo": ultimos[conta]["saldo"] if conta in ultimos else None,
+                    "data": ultimos[conta]["data"] if conta in ultimos else None, "escopo": f}
+            for conta, f in frentes_contas(con).items()}
+
+
+def em_aberto_ate(con: sqlite3.Connection, ate: str, hoje: str) -> list[dict]:
+    """Tudo em aberto com data até 'ate' (inclui atrasado): lançamentos sem pago_em + recorrências não baixadas,
+    da competência de 3 meses atrás até a de 'ate'."""
+    itens = [{"origem": "lancamento", "id": r["id"], "escopo": r["escopo"], "tipo": r["tipo"], "data": r["data"],
+              "descricao": r["descricao"] or r["categoria"], "categoria": r["categoria"], "valor": r["valor"],
+              "status": status(r, hoje)}
+             for r in con.execute("SELECT * FROM lancamentos WHERE pago_em IS NULL AND excluido_em IS NULL AND data <= ?", (ate,))]
+    comp, fim = somar_meses(hoje[:7], -3), ate[:7]
+    while comp <= fim:
+        itens += [i for i in _recorrencias_abertas(con, comp, hoje) if i["data"] <= ate]
+        comp = somar_meses(comp, 1)
+    itens.sort(key=lambda i: i["data"])
+    return itens
+
+
+def saldo_livre(con: sqlite3.Connection, hoje: str, dias: int = 30) -> dict:
+    """Quanto dá para gastar de verdade, por frente (PF e PJ).
+    livre = tem nas contas − saídas em aberto até hoje+dias − imposto a guardar (só PJ).
+    Conservador: entrada prevista não conta; só o dinheiro que já está na conta.
+    Imposto a guardar = DAS% da receita PJ recebida no mês (o DAS dela vence no mês seguinte),
+    menos impostos PJ do mês seguinte que já estão nas saídas em aberto (não conta duas vezes)."""
+    ate = (dt.date.fromisoformat(hoje) + dt.timedelta(days=dias)).isoformat()
+    saldos = saldos_atuais(con)
+    abertos = [i for i in em_aberto_ate(con, ate, hoje) if i["tipo"] == "saida"]
+    receita_pj = con.execute("""SELECT COALESCE(SUM(valor), 0) FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
+                                AND excluido_em IS NULL AND pago_em IS NOT NULL AND substr(pago_em,1,7)=?""", (hoje[:7],)).fetchone()[0]
+    das = db.parametros(con, "imposto").get("DAS", 0.06) * receita_pj
+    prox = somar_meses(hoje[:7], 1)
+    das -= sum(i["valor"] for i in abertos if i["escopo"] == "PJ" and i["data"][:7] == prox and "imposto" in i["categoria"].lower())
+    out = {}
+    for frente in ("PF", "PJ"):
+        contas = {c: v for c, v in saldos.items() if v["escopo"] == frente}
+        datas = [v["data"] for v in contas.values() if v["data"]]
+        tem = sum(v["saldo"] for v in contas.values() if v["saldo"] is not None)
+        comprometido = sum(i["valor"] for i in abertos if i["escopo"] == frente)
+        imposto = max(das, 0) if frente == "PJ" else 0
+        dias_velho = (dt.date.fromisoformat(hoje) - dt.date.fromisoformat(min(datas))).days if datas else None
+        out[frente] = {
+            "tem": round(tem, 2), "comprometido": round(comprometido, 2), "imposto": round(imposto, 2),
+            "livre": round(tem - comprometido - imposto, 2), "ate": ate,
+            "itens": [i for i in abertos if i["escopo"] == frente],
+            "sem_saldo": not datas,   # nenhuma conta da frente com saldo digitado: o número não vale
+            "dias_velho": dias_velho, "desatualizado": dias_velho is not None and dias_velho > DIAS_SALDO_VELHO,
+        }
+    out["reserva"] = round(sum(v["saldo"] for v in saldos.values() if v["escopo"] == "Reserva" and v["saldo"] is not None), 2)
+    out["sem_frente"] = [c for c, v in saldos.items() if v["escopo"] is None]
+    return out
+
+
+def salvar_saldos(con: sqlite3.Connection, data: str, valores: dict, frentes: dict) -> int:
+    """Grava a foto do dia. valores = {conta: saldo} (só as contas digitadas); frentes = {conta: frente}.
+    Digitar de novo no mesmo dia troca a foto do dia (não acumula). Devolve quantas contas gravou."""
+    with con:
+        for conta, frente in frentes.items():
+            if frente in FRENTES:
+                con.execute("""INSERT INTO parametros (grupo, chave, valor_texto, ordem) VALUES ('conta_escopo', ?, ?,
+                               (SELECT COALESCE(MAX(ordem), 0) + 1 FROM parametros WHERE grupo='conta_escopo'))
+                               ON CONFLICT (grupo, chave) DO UPDATE SET valor_texto=excluded.valor_texto""", (conta, frente))
+        for conta, saldo in valores.items():
+            con.execute("UPDATE saldos SET excluido_em=datetime('now','localtime') WHERE conta=? AND data=? AND excluido_em IS NULL",
+                        (conta, data))
+            con.execute("INSERT INTO saldos (conta, saldo, data) VALUES (?,?,?)", (conta, round(saldo, 2), data))
+    return len(valores)
 
 
 def baixar_recorrencia(con: sqlite3.Connection, rid: int, competencia: str, valor: float, pago_em: str) -> int:

@@ -126,3 +126,23 @@ def test_restaurar_backup_antigo_recria_tabelas_novas(cliente_http):
     con.close()
     db.restaurar_backup("crm-antigo.db")
     assert http.get("/dados").status_code == 200
+
+
+def test_atualizar_saldos_e_ver_saldo_livre(cliente_http):
+    import datetime as dt
+    http, _ = cliente_http
+    hoje = dt.date.today()
+    r = http.post("/financeiro/saldos", data={"data": hoje.isoformat(), "volta": "mes=&escopo=todos",
+                                               "conta_1": "Inter", "frente_1": "PF", "saldo_1": "-50,00",
+                                               "conta_2": "Contabilizei Bank", "frente_2": "PJ", "saldo_2": "1.200,00",
+                                               "conta_3": "Caixa", "frente_3": "Reserva", "saldo_3": ""}, follow_redirects=False)
+    assert "msg=" in r.headers["location"]
+    con = db.conectar()
+    assert con.execute("SELECT COUNT(*) FROM saldos").fetchone()[0] == 2
+    assert db.parametros(con, "conta_escopo")["Caixa"] == "Reserva"
+    con.close()
+    pagina = http.get("/financeiro").text
+    assert "Quanto dá para gastar" in pagina and "R$ 1.200,00" in pagina
+    assert "Saldo livre PF negativo" in http.get("/").text
+    r = http.post("/financeiro/saldos", data={"data": "ontem", "conta_1": "Inter", "saldo_1": "10"}, follow_redirects=False)
+    assert "erro=" in r.headers["location"]

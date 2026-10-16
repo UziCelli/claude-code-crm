@@ -253,6 +253,13 @@ def alertas(con):
     if venc:
         add("vermelho" if any(p["status"] == "atrasado" for p in venc) else "amarelo",
             f"{len(venc)} conta{s(len(venc))} vencida{s(len(venc))} ou vencendo em 3 dias", "/financeiro")
+    livre = financeiro.saldo_livre(con, h)
+    for frente in ("PF", "PJ"):
+        if not livre[frente]["sem_saldo"] and livre[frente]["livre"] < 0:
+            add("vermelho", f"Saldo livre {frente} negativo ({moeda(livre[frente]['livre'])}): segure gastos até entrar dinheiro", "/financeiro")
+    velho = max((livre[f]["dias_velho"] or 0) for f in ("PF", "PJ"))
+    if velho > financeiro.DIAS_SALDO_VELHO:
+        add("amarelo", f"Saldos das contas sem atualizar há {velho} dias: o Saldo livre pode estar errado", "/financeiro")
     n = con.execute("SELECT COUNT(*) FROM propostas WHERE excluido_em IS NULL AND status='enviada'").fetchone()[0]
     if n:
         add("azul", f"{n} proposta{s(n)} enviada{s(n)} esperando resposta", "/propostas")
@@ -1648,7 +1655,34 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", con=
     recs = con.execute(f"SELECT * FROM recorrencias WHERE excluido_em IS NULL AND escopo IN ({qs}) ORDER BY escopo, dia_vencimento, descricao", lista).fetchall()
     clientes_ = con.execute("SELECT id, nome FROM clientes WHERE excluido_em IS NULL ORDER BY nome").fetchall()
     return render(request, "financeiro.html", con, mes=mes, escopo=escopo, lancs=lancs, entradas=entradas, saidas=saidas,
-                  saldo=round(entradas - saidas, 2), pend=pend, recs=recs, clientes_=clientes_, volta=f"mes={mes}&escopo={escopo}")
+                  saldo=round(entradas - saidas, 2), pend=pend, recs=recs, clientes_=clientes_, volta=f"mes={mes}&escopo={escopo}",
+                  livre=financeiro.saldo_livre(con, h), saldos=financeiro.saldos_atuais(con), frentes=financeiro.FRENTES)
+
+
+@app.post("/financeiro/saldos")
+async def financeiro_saldos(request: Request, con=Depends(get_db)):
+    """Foto semanal dos saldos: uma linha por conta (conta_i, saldo_i, frente_i). Saldo vazio = não mexe naquela conta."""
+    f = await request.form()
+    volta = f.get("volta", "")
+    data = f.get("data") or dt.date.today().isoformat()
+    valores, frentes = {}, {}
+    contas = set(db.lista(con, "lista_contas"))
+    try:
+        dt.date.fromisoformat(data)
+        for k, conta in f.items():
+            if not k.startswith("conta_") or conta not in contas:
+                continue
+            i = k[6:]
+            frentes[conta] = f.get(f"frente_{i}", "")
+            if (f.get(f"saldo_{i}") or "").strip():
+                v = _num_br(f[f"saldo_{i}"].replace("−", "-"))   # saldo pode ser negativo (cheque especial)
+                if not math.isfinite(v):
+                    raise ValueError
+                valores[conta] = v
+    except ValueError:
+        return _fin_voltar(volta, erro="Confira a data e os valores dos saldos.")
+    n = financeiro.salvar_saldos(con, data, valores, frentes)
+    return _fin_voltar(volta, msg=f"Saldos salvos ({n} conta{'s' if n != 1 else ''})." if n else "Frentes das contas salvas.")
 
 
 def _fin_valor(f):
