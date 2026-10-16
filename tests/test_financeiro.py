@@ -204,3 +204,50 @@ def test_conta_nova_sem_frente(con_temp):
     fr = financeiro.frentes_contas(con_temp)
     assert fr["Nubank"] is None and fr["Cartão XP"] == "Fora"
     assert "Nubank" in financeiro.saldo_livre(con_temp, "2026-10-16")["sem_frente"]
+
+
+# ---------- Salário fixo ----------
+def ligar_salario(con, valor=2000, dia=5):
+    with con:
+        con.execute("UPDATE parametros SET valor=? WHERE grupo='salario' AND chave='valor'", (valor,))
+        con.execute("UPDATE parametros SET valor=? WHERE grupo='salario' AND chave='dia'", (dia,))
+
+
+def test_salario_desligado_nao_paga(con_temp):
+    assert not financeiro.salario_mes(con_temp, "2026-10", "2026-10-16")["pode_pagar"]
+    with pytest.raises(ValueError):
+        financeiro.pagar_salario(con_temp, "2026-10", "2026-10-16")
+
+
+def test_salario_pago_uma_vez_e_fora_do_custo(con_temp):
+    ligar_salario(con_temp)
+    lancar(con_temp, "entrada", 5000, "2026-10-02", pago_em="2026-10-02")
+    assert financeiro.salario_mes(con_temp, "2026-10", "2026-10-04")["pode_pagar"] is False   # antes do dia
+    assert financeiro.salario_mes(con_temp, "2026-10", "2026-10-05")["pode_pagar"] is True
+    financeiro.pagar_salario(con_temp, "2026-10", "2026-10-05")
+    with pytest.raises(ValueError):
+        financeiro.pagar_salario(con_temp, "2026-10", "2026-10-06")
+    r = financeiro.resumo_mes(con_temp, "2026-10")
+    assert r["retirada"] == 2000 and r["custos_variaveis"] == 0 and r["lucro"] == 5000
+    assert r["pf"]["entradas"] == 2000
+    s = financeiro.salario_mes(con_temp, "2026-10", "2026-10-06")
+    assert s["pago_em"] == "2026-10-05" and not s["pode_pagar"]
+
+
+def test_salario_excluido_pode_ser_pago_de_novo(con_temp):
+    ligar_salario(con_temp)
+    financeiro.pagar_salario(con_temp, "2026-10", "2026-10-05")
+    with con_temp:
+        con_temp.execute("UPDATE lancamentos SET excluido_em='2026-10-06' WHERE origem LIKE 'SAL:2026-10:%'")
+    ligar_salario(con_temp, valor=1800)
+    financeiro.pagar_salario(con_temp, "2026-10", "2026-10-07")
+    assert [r[0] for r in con_temp.execute("SELECT valor FROM lancamentos WHERE excluido_em IS NULL")] == [1800, 1800]
+
+
+def test_gasto_pf_contra_salario_e_sugestao(con_temp):
+    ligar_salario(con_temp, valor=1000)
+    lancar(con_temp, "saida", 950, "2026-10-03", pago_em="2026-10-03", escopo="PF")
+    assert financeiro.salario_mes(con_temp, "2026-10", "2026-10-16")["pct_gasto"] == 95
+    for m in ("07", "08", "09"):
+        lancar(con_temp, "entrada", 3000, f"2026-{m}-10", pago_em=f"2026-{m}-10")
+    assert financeiro.sugestao_salario(con_temp, "2026-10") == 2400
