@@ -71,6 +71,14 @@ PARAMETROS_INICIAIS = [
     ("fiscal", "salario_minimo", 1518, None, 1),   # R$; pró-labore nunca fica abaixo disto
     ("fiscal", "pro_labore_pct", 0.28, None, 2),   # fração da receita (0,28 = 28%)
     ("fiscal", "inss_pct", 0.11, None, 3),         # fração do pró-labore
+    # frente de cada conta no Saldo livre: PF, PJ, Reserva (colchão, fica fora do livre) ou Fora (cartões)
+    ("conta_escopo", "Contabilizei Bank", None, "PJ", 1),
+    ("conta_escopo", "Inter", None, "PF", 2),
+    ("conta_escopo", "Itaú", None, "PF", 3),
+    ("conta_escopo", "Caixa", None, "PF", 4),
+    ("conta_escopo", "Mercado Pago", None, "PF", 5),
+    ("conta_escopo", "Cartão Inter", None, "Fora", 6),
+    ("conta_escopo", "Cartão Itaú", None, "Fora", 7),
 ]
 LISTAS_INICIAIS = {
     "lista_canais": ["Indicação", "Parceria (síndico/academia)", "WhatsApp", "Google", "Instagram orgânico",
@@ -153,6 +161,10 @@ def iniciar_banco(caminho: Path = None) -> None:
                 "INSERT OR IGNORE INTO rotina_tarefas (chave, texto, dia, ordem) VALUES (?,?,?,?)",
                 [(c, txt, d, k) for k, (c, txt, d) in enumerate(ROTINA_INICIAL, 1)],
             )
+        # tarefa que veio com o Saldo livre: entra também em banco antigo (excluída fica na lixeira e não volta)
+        con.execute("""INSERT OR IGNORE INTO rotina_tarefas (chave, texto, dia, ordem)
+                       VALUES ('saldos', 'atualizar os saldos das contas e olhar o Saldo livre', 1,
+                               (SELECT COALESCE(MAX(ordem), 0) + 1 FROM rotina_tarefas))""")
     con.close()
 
 

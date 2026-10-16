@@ -291,3 +291,15 @@ CREATE TABLE IF NOT EXISTS lancamentos (
 );
 CREATE INDEX IF NOT EXISTS idx_lancamentos_data ON lancamentos (data);
 CREATE INDEX IF NOT EXISTS idx_lancamentos_competencia ON lancamentos (competencia);
+
+-- Foto do saldo de cada conta, digitada 1x por semana. O saldo atual é o mais recente da conta.
+-- A frente da conta (PF, PJ, Reserva ou Fora) fica em parametros, grupo conta_escopo.
+CREATE TABLE IF NOT EXISTS saldos (
+    id INTEGER PRIMARY KEY,
+    conta TEXT NOT NULL,
+    saldo REAL NOT NULL,
+    data TEXT NOT NULL,                               -- AAAA-MM-DD
+    criado_em TEXT DEFAULT (datetime('now','localtime')),
+    excluido_em TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_saldos_conta ON saldos (conta, data);
