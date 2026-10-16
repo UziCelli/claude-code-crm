@@ -1,4 +1,6 @@
 """Teste de fumaça: todas as telas abrem (200) num banco temporário. Rede de segurança para mudanças nos templates."""
+from urllib.parse import unquote
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -163,3 +165,15 @@ def test_pagar_salario_pela_tela(cliente_http):
     assert con.execute("SELECT COUNT(*) FROM lancamentos WHERE origem LIKE 'SAL:%'").fetchone()[0] == 2
     con.close()
     assert "Salário pago à PF" in http.get("/financeiro/painel").text
+
+
+def test_entrada_pj_diz_como_separar(cliente_http):
+    import datetime as dt
+    http, _ = cliente_http
+    hoje = dt.date.today().isoformat()
+    r = http.post("/financeiro/lancamento", data={"escopo": "PJ", "tipo": "entrada", "data": hoje, "pago_em": hoje, "valor": "1000",
+                                                  "categoria": "Outros", "volta": "mes=&escopo=todos"}, follow_redirects=False)
+    assert "Separe" in unquote(r.headers["location"])
+    pagina = http.get("/financeiro").text
+    assert "Potes do mês" in pagina and "R$ 60,00" in pagina
+    assert "Colchão para meses fracos" in http.get("/financeiro/painel").text

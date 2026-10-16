@@ -39,6 +39,19 @@
     {% else %}<p class="muted">Nada pago no pessoal neste mês. Lance entradas e saídas com escopo PF no <a href="/financeiro?mes={{ mes }}&escopo=PF">livro-caixa</a>.</p>{% endif %}
   </div>
   <div class="card">
+    <h2>Colchão para meses fracos</h2>
+    <p class="muted">Custo fixo de 1 mês: contas fixas da PJ + {{ 'o salário da PF' if salario.ligado else 'contas fixas da PF' }} = {{ colchao.mensal|moeda }}.</p>
+    <div class="linha" style="gap:24px">
+      <div><div class="muted">1 mês</div><strong>{{ colchao.um|moeda }}</strong></div>
+      <div><div class="muted">3 meses</div><strong>{{ colchao.tres|moeda }}</strong></div>
+      <div><div class="muted">Guardado (contas Reserva)</div><strong>{{ colchao.guardado|moeda }}</strong>{% if colchao.cobre_meses is not none %} <span class="muted">cobre {{ '%.1f'|format(colchao.cobre_meses)|replace('.', ',') }} mês(es)</span>{% endif %}</div>
+    </div>
+    {% if colchao.meta %}
+    <div class="mt muted">Meta: {{ colchao.meses_meta|int }} mês(es) = {{ colchao.meta|moeda }} ({{ colchao.pct }}%)</div>
+    <div class="barra"><i style="width:{{ colchao.pct }}%"></i></div>
+    {% else %}<p class="muted mt">Sem meta ainda. Quando decidir, defina os meses em <a href="/configuracoes">Configurações</a>. Para guardar, crie uma caixinha no banco e marque a conta como Reserva em Atualizar saldos.</p>{% endif %}
+  </div>
+  <div class="card">
     <h2>Últimos 12 meses — receita, custos e lucro</h2>
     <div class="linha muted" style="font-size:12px"><span><span class="tag verde">&nbsp;</span> Receita</span><span><span class="tag vermelho">&nbsp;</span> Custos</span><span><span class="tag azul">&nbsp;</span> Lucro</span></div>
     <div class="grafico">

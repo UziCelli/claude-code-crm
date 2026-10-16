@@ -84,6 +84,26 @@
 </div>
 
 <div class="card mt">
+  <h3>Potes do mês</h3>
+  <p class="muted">Cada entrada da PJ enche os potes nesta ordem: imposto, contas da PJ, salário da PF e, por último, o colchão. Ao receber, separe o dinheiro nas caixinhas do banco.</p>
+  {% if potes.entradas %}
+  <div class="grid c4">
+    {% for p in potes.potes %}
+    <div>
+      <div class="linha topo"><strong>{{ p.nome }}</strong><span class="muted">{{ p.cheio|moeda }}{% if p.alvo is not none and p.chave != 'imposto' %} de {{ p.alvo|moeda }}{% endif %}</span></div>
+      {% if p.chave not in ('imposto', 'colchao') %}<div class="barra"><i style="width:{{ p.pct }}%"></i></div>
+      <div class="muted">{{ 'cheio' if not p.falta else 'falta ' ~ (p.falta|moeda) }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  <details class="mt"><summary class="muted">Divisão de cada entrada ({{ potes.entradas|length }})</summary>
+    <table><tbody>{% for e in potes.entradas %}<tr><td>{{ e.pago_em|data }}</td><td>{{ e.descricao }}</td><td class="num">{{ e.valor|moeda }}</td>
+      <td class="muted">{% for k, v in e.divisao.items() if v > 0 %}{{ v|moeda }} {{ {'imposto': 'imposto', 'contas': 'contas', 'salario': 'salário', 'colchao': 'colchão'}[k] }}{{ ' · ' if not loop.last }}{% endfor %}</td></tr>{% endfor %}</tbody></table>
+  </details>
+  {% else %}<p class="muted">Nenhuma entrada da PJ recebida neste mês.</p>{% endif %}
+</div>
+
+<div class="card mt">
   <h3>A pagar e a receber</h3>
   <table>
     <thead><tr><th>Vence</th><th>Conta</th><th class="sec">Categoria</th><th class="num dest">Valor</th><th>Situação</th><th></th></tr></thead>

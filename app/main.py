@@ -1663,7 +1663,7 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", con=
     return render(request, "financeiro.html", con, mes=mes, escopo=escopo, lancs=lancs, entradas=entradas, saidas=saidas,
                   saldo=round(entradas - saidas, 2), pend=pend, recs=recs, clientes_=clientes_, volta=f"mes={mes}&escopo={escopo}",
                   livre=financeiro.saldo_livre(con, h), saldos=financeiro.saldos_atuais(con), frentes=financeiro.FRENTES,
-                  salario=financeiro.salario_mes(con, h[:7], h))
+                  salario=financeiro.salario_mes(con, h[:7], h), potes=financeiro.potes_mes(con, mes))
 
 
 @app.post("/financeiro/salario")
@@ -1746,10 +1746,15 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
                 con.execute("""UPDATE lancamentos SET escopo=?, tipo=?, data=?, pago_em=?, valor=?, categoria=?, descricao=?, contraparte=?,
                                cliente_id=?, conta=?, forma=?, parcela_num=?, parcela_total=? WHERE id=?""", (*campos, lid))
             else:
-                con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao, contraparte, cliente_id,
-                               conta, forma, parcela_num, parcela_total) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""", campos)
+                lid = con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao, contraparte, cliente_id,
+                                     conta, forma, parcela_num, parcela_total) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""", campos).lastrowid
     except sqlite3.IntegrityError:
         return _fin_voltar(volta, erro="Não foi possível salvar: confira o aluno e os campos.")
+    if f["escopo"] == "PJ" and f["tipo"] == "entrada" and pago_em:
+        # dinheiro que entrou na PJ: diz na hora quanto vai para cada pote
+        div = next((e["divisao"] for e in financeiro.potes_mes(con, pago_em[:7])["entradas"] if e["id"] == lid), None)
+        if div:
+            return _fin_voltar(volta, msg="Lançamento salvo. Separe: " + financeiro.texto_divisao(div) + ".")
     return _fin_voltar(volta, msg="Lançamento salvo.")
 
 
@@ -1839,7 +1844,7 @@ def financeiro_painel(request: Request, mes: str = "", con=Depends(get_db)):
     serie = [financeiro.resumo_mes(con, x) for x in meses]
     maximo = max([s["receita"] for s in serie] + [s["custos_fixos"] + s["custos_variaveis"] for s in serie] + [1])
     return render(request, "financeiro_painel.html", con, mes=mes, r=serie[-1], serie=serie, maximo=maximo,
-                  salario=financeiro.salario_mes(con, mes, dt.date.today().isoformat()))
+                  salario=financeiro.salario_mes(con, mes, dt.date.today().isoformat()), colchao=financeiro.colchao(con, mes))
 
 
 # =====================================================================
@@ -1852,7 +1857,8 @@ GRUPOS_CONFIG = [("imposto", "Imposto (DAS)", "pct"), ("taxa_pagamento", "Taxas 
                  ("mao_obra_aula", "Mão de obra por aula (tipo|qtd)", "num"), ("lead_parado_dias", "Limite de dias parado por etapa", "num"),
                  ("funil_chance", "Chance de fechar por etapa do funil", "pct"),
                  ("fiscal", "Fiscal: salário mínimo (R$), pró-labore e INSS (frações, ex.: 0,28 = 28%)", "num"),
-                 ("salario", "Salário fixo da PJ para a PF: valor (R$ por mês; 0 = desligado) e dia do pagamento", "num")]
+                 ("salario", "Salário fixo da PJ para a PF: valor (R$ por mês; 0 = desligado) e dia do pagamento", "num"),
+                 ("colchao", "Colchão: meta em meses de custo fixo (0 = sem meta)", "num")]
 
 
 @app.get("/configuracoes", response_class=HTMLResponse)
