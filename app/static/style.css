@@ -48,6 +48,9 @@ main { padding: 20px 24px 60px; max-width: 1400px; margin: 0 auto; }
 
 /* cards e grids */
 .card { background: var(--branco); border: 1px solid var(--borda); border-radius: 12px; padding: 16px; overflow-x: auto; overflow-wrap: break-word; } /* tabela larga rola dentro do card em vez de vazar */
+.card.atencao { background: var(--amarelo-f); border-color: #f1d98a; }
+.item-ligar { padding: 10px 0; border-top: 1px solid #f1d98a; }
+.item-ligar form { margin-top: 6px; }
 .grid { display: grid; gap: 14px; }
 .grid.c2 { grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); }
 .grid.c3 { grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); }

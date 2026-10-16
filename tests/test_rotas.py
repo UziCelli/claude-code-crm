@@ -95,6 +95,56 @@ def test_registrar_pagamento_mensalidade(cliente_http):
     con.close()
 
 
+def test_registrar_pagamento_da_baixa_na_entrada_ja_lancada(cliente_http):
+    """Aluno com a entrada já lançada em aberto: registrar o pagamento dá baixa nela em vez de criar uma 2ª (contaria duas vezes)."""
+    import datetime as dt
+    http, cid = cliente_http
+    hoje = dt.date.today().isoformat()
+    volta = f"/financeiro/mensalidades?mes={hoje[:7]}"
+    con = db.conectar()
+    with con:
+        con.execute("UPDATE clientes SET valor=500, status='ativo' WHERE id=?", (cid,))
+    base = {"escopo": "PJ", "tipo": "entrada", "data": hoje, "valor": "500,00", "categoria": "Outros", "cliente_id": cid, "volta": volta}
+    http.post("/financeiro/lancamento", data=base, follow_redirects=False)                  # lançada, ainda não caiu
+    tela = http.get(volta).text
+    assert "Dar baixa R$ 500,00" in tela and "Registrar pagamento</button>" not in tela     # nada falta lançar: só a baixa
+    r = http.post("/financeiro/lancamento", data={**base, "pago_em": hoje, "conta": "Inter"}, follow_redirects=False)
+    assert "dei baixa" in unquote(r.headers["location"])
+    linhas = con.execute("SELECT pago_em, conta FROM lancamentos WHERE cliente_id=? AND excluido_em IS NULL", (cid,)).fetchall()
+    assert [tuple(x) for x in linhas] == [(hoje, "Inter")]
+    # valor diferente é outro pagamento: grava normal
+    http.post("/financeiro/lancamento", data={**base, "valor": "80", "pago_em": hoje}, follow_redirects=False)
+    assert con.execute("SELECT COUNT(*) FROM lancamentos WHERE cliente_id=? AND excluido_em IS NULL", (cid,)).fetchone()[0] == 2
+    con.close()
+
+
+def test_ligar_entrada_sem_aluno_e_falta_por_aluno(cliente_http):
+    import datetime as dt
+    import re
+    http, cid = cliente_http
+    hoje = dt.date.today().isoformat()
+    volta = f"/financeiro/mensalidades?mes={hoje[:7]}"
+    con = db.conectar()
+    with con:
+        con.execute("UPDATE clientes SET valor=500, status='ativo' WHERE id=?", (cid,))
+        outro = con.execute("INSERT INTO clientes (nome, valor, status) VALUES ('Pagou Adiantado', 500, 'ativo')").lastrowid
+        con.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, cliente_id) VALUES ('PJ','entrada',?,?,800,'Outros',?)",
+                    (hoje, hoje, outro))
+        lid = con.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao) VALUES ('PJ','entrada',?,?,500,'Outros',?)",
+                          (hoje, hoje, "PIX Aluno Teste")).lastrowid
+    tela = http.get(volta).text
+    assert "1 entrada sem aluno" in tela and f'<option value="{cid}" selected>' in tela   # sugere o aluno citado
+    # quem pagou a mais não cobre quem não pagou: falta 500, não 200
+    assert re.search(r'Falta receber</div><div class="valor">([^<]+)<', tela).group(1) == "R$ 500,00"
+    r = http.post(f"/financeiro/lancamento/{lid}/aluno", data={"cliente_id": cid, "volta": volta}, follow_redirects=False)
+    assert "ligada a Aluno Teste" in unquote(r.headers["location"])
+    tela = http.get(volta).text
+    assert "sem aluno" not in tela
+    assert re.search(r'Falta receber</div><div class="valor">([^<]+)<', tela).group(1) == "R$ 0,00"
+    assert http.post(f"/financeiro/lancamento/{lid}/aluno", data={"cliente_id": 0, "volta": volta}, follow_redirects=False).status_code == 303
+    con.close()
+
+
 @pytest.mark.parametrize("valor,esperado", [("1.500", 1500), ("1.500,50", 1500.5), ("10.5", 10.5), ("1.234.567", 1234567)])
 def test_num_br_milhar_sem_centavos(valor, esperado):
     assert main._num_br(valor) == esperado
