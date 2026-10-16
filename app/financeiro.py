@@ -185,6 +185,10 @@ def resumo_mes(con: sqlite3.Connection, mes: str, escopo: str = "PJ") -> dict:
            WHERE l.escopo=? AND l.excluido_em IS NULL AND l.pago_em IS NOT NULL AND substr(l.data,1,7)=?
            GROUP BY l.tipo, r.fixo""", (escopo, mes)):
         soma[(tipo, fixo)] = total
+    # salário da PJ para a PF: sai do lucro, não é custo do negócio
+    retirada = con.execute("""SELECT COALESCE(SUM(valor), 0) FROM lancamentos WHERE escopo=? AND tipo='saida' AND categoria=?
+                              AND excluido_em IS NULL AND pago_em IS NOT NULL AND substr(data,1,7)=?""", (escopo, RETIRADA, mes)).fetchone()[0]
+    soma[("saida", None)] = soma.get(("saida", None), 0) - retirada   # retirada nunca vem de recorrência (r.fixo é NULL)
     receita = sum(v for (t, _), v in soma.items() if t == "entrada")
     fixos = sum(v for (t, f), v in soma.items() if t == "saida" and f == 1)
     variaveis = sum(v for (t, f), v in soma.items() if t == "saida" and f != 1)
@@ -200,7 +204,7 @@ def resumo_mes(con: sqlite3.Connection, mes: str, escopo: str = "PJ") -> dict:
     return {
         "mes": mes, "escopo": escopo,
         "receita": round(receita, 2), "custos_fixos": round(fixos, 2), "custos_variaveis": round(variaveis, 2),
-        "lucro": round(receita - fixos - variaveis, 2),
+        "lucro": round(receita - fixos - variaveis, 2), "retirada": round(retirada, 2),
         "ponto_equilibrio": round(fixos / margem, 2) if margem > 0 and fixos > 0 else None,
         "das": round(db.parametros(con, "imposto").get("DAS", 0.06) * receita, 2),
         "pro_labore": round(pro_labore, 2), "inss": round(fiscal["inss_pct"] * pro_labore, 2),
@@ -223,3 +227,51 @@ def mensalidades(con: sqlite3.Connection, mes: str) -> list[dict]:
         sit = "recebido" if recebido >= previsto else ("parcial" if recebido > 0 else "em aberto")
         itens.append({"id": c["id"], "nome": c["nome"], "previsto": previsto, "recebido": recebido, "situacao": sit})
     return itens
+
+
+# ---------- Salário fixo PJ -> PF ----------
+RETIRADA = "Retirada"
+
+
+def salario_mes(con: sqlite3.Connection, mes: str, hoje: str) -> dict:
+    """Salário do mês: valor e dia (parâmetros), se já foi pago, se já pode pagar e quanto a PF já gastou do salário."""
+    p = db.parametros(con, "salario")
+    valor, dia = round(p.get("valor") or 0, 2), int(p.get("dia") or 5)
+    pago = con.execute("SELECT pago_em FROM lancamentos WHERE origem=? AND excluido_em IS NULL", (f"SAL:{mes}:PJ",)).fetchone()
+    gasto = con.execute("""SELECT COALESCE(SUM(valor), 0) FROM lancamentos WHERE escopo='PF' AND tipo='saida' AND excluido_em IS NULL
+                           AND pago_em IS NOT NULL AND substr(pago_em,1,7)=?""", (mes,)).fetchone()[0]
+    data = vencimento(min(max(dia, 1), 31), mes)
+    return {"mes": mes, "valor": valor, "dia": dia, "data": data, "ligado": valor > 0,
+            "pago_em": pago["pago_em"] if pago else None, "pode_pagar": valor > 0 and not pago and hoje >= data,
+            "gasto_pf": round(gasto, 2), "pct_gasto": round(100 * gasto / valor) if valor > 0 else None,
+            "sugestao": sugestao_salario(con, mes)}
+
+
+def sugestao_salario(con: sqlite3.Connection, mes: str) -> float:
+    """80% do lucro PJ médio dos 3 meses fechados antes de 'mes' (os 20% restantes vão para o colchão), em múltiplos de 50."""
+    lucros = [resumo_mes(con, somar_meses(mes, -k))["lucro"] for k in (1, 2, 3)]
+    media = sum(lucros) / 3
+    return max(0, math.floor(0.8 * media / 50) * 50)
+
+
+def pagar_salario(con: sqlite3.Connection, mes: str, pago_em: str) -> None:
+    """Saída PJ (Retirada) + entrada PF (Salário) do mês, numa transação. ValueError se desligado ou já pago."""
+    valor = round(db.parametros(con, "salario").get("valor") or 0, 2)
+    if valor <= 0:
+        raise ValueError("Defina o valor do salário em Configurações.")
+    nome = f"Salário {mes[5:]}/{mes[:4]}"
+    antigo = con.execute("SELECT id FROM lancamentos WHERE origem=?", (f"SAL:{mes}:PJ",)).fetchone()
+    try:
+        with con:
+            if antigo:   # pagamento que foi para a lixeira: volta com o valor de hoje
+                cur = con.execute("""UPDATE lancamentos SET excluido_em=NULL, valor=?, data=?, pago_em=?
+                                     WHERE origem IN (?, ?) AND excluido_em IS NOT NULL""", (valor, pago_em, pago_em, f"SAL:{mes}:PJ", f"SAL:{mes}:PF"))
+                if cur.rowcount == 0:   # as duas linhas estão ativas: já pago
+                    raise sqlite3.IntegrityError
+                return
+            con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao, conta, origem)
+                           VALUES ('PJ','saida',?,?,?,?,?, 'Contabilizei Bank', ?)""", (pago_em, pago_em, valor, RETIRADA, nome, f"SAL:{mes}:PJ"))
+            con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao, origem)
+                           VALUES ('PF','entrada',?,?,?, 'Salário', ?, ?)""", (pago_em, pago_em, valor, nome, f"SAL:{mes}:PF"))
+    except sqlite3.IntegrityError:
+        raise ValueError("O salário deste mês já foi pago.") from None

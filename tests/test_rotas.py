@@ -146,3 +146,20 @@ def test_atualizar_saldos_e_ver_saldo_livre(cliente_http):
     assert "Saldo livre PF negativo" in http.get("/").text
     r = http.post("/financeiro/saldos", data={"data": "ontem", "conta_1": "Inter", "saldo_1": "10"}, follow_redirects=False)
     assert "erro=" in r.headers["location"]
+
+
+def test_pagar_salario_pela_tela(cliente_http):
+    import datetime as dt
+    http, _ = cliente_http
+    hoje = dt.date.today()
+    con = db.conectar()
+    with con:
+        con.execute("UPDATE parametros SET valor=1500 WHERE grupo='salario' AND chave='valor'")
+        con.execute("UPDATE parametros SET valor=1 WHERE grupo='salario' AND chave='dia'")
+    assert "Pagar salário de" in http.get("/financeiro").text
+    dados = {"mes": f"{hoje:%Y-%m}", "pago_em": hoje.isoformat(), "volta": "mes=&escopo=todos"}
+    assert "msg=" in http.post("/financeiro/salario", data=dados, follow_redirects=False).headers["location"]
+    assert "erro=" in http.post("/financeiro/salario", data=dados, follow_redirects=False).headers["location"]
+    assert con.execute("SELECT COUNT(*) FROM lancamentos WHERE origem LIKE 'SAL:%'").fetchone()[0] == 2
+    con.close()
+    assert "Salário pago à PF" in http.get("/financeiro/painel").text

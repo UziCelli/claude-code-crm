@@ -42,6 +42,29 @@
     </div>
     {% endfor %}
   </div>
+  <div class="card mt">
+    <h3>Salário fixo PJ → PF</h3>
+    {% if not salario.ligado %}
+    <p class="muted">A PJ paga um valor fixo à PF, sempre no mesmo dia. A PF vive só dele e o resto fica na empresa. Defina o valor em <a href="/configuracoes">Configurações</a>{% if salario.sugestao %} (sugestão: {{ salario.sugestao|moeda }}, 80% do lucro médio dos últimos 3 meses){% endif %}.</p>
+    {% else %}
+    <div class="linha topo">
+      <div>
+        <strong>{{ salario.valor|moeda }}</strong> <span class="muted">todo dia {{ salario.dia }}</span>
+        {% if salario.pago_em %}<span class="tag verde">pago em {{ salario.pago_em|data }}</span>
+        {% elif not salario.pode_pagar %}<span class="tag neutro">dia {{ salario.data|data }}</span>{% endif %}
+      </div>
+      {% if salario.pode_pagar %}
+      <form method="post" action="/financeiro/salario" class="inline">
+        <input type="hidden" name="mes" value="{{ salario.mes }}"><input type="hidden" name="pago_em" value="{{ hoje() }}"><input type="hidden" name="volta" value="{{ volta }}">
+        <button class="verde">Pagar salário de {{ salario.mes[5:] }}/{{ salario.mes[:4] }}</button>
+      </form>
+      {% endif %}
+    </div>
+    <div class="muted mt">Gasto pessoal no mês: {{ salario.gasto_pf|moeda }} de {{ salario.valor|moeda }} ({{ salario.pct_gasto }}%)</div>
+    <div class="barra"><i style="width:{{ [salario.pct_gasto, 100]|min }}%;{{ ' background:var(--vermelho)' if salario.pct_gasto >= 90 }}"></i></div>
+    {% if salario.sugestao and salario.sugestao < salario.valor %}<p class="muted">O salário passa da sugestão ({{ salario.sugestao|moeda }}, 80% do lucro médio dos últimos 3 meses). Nos meses fracos pode faltar na PJ.</p>{% endif %}
+    {% endif %}
+  </div>
   {% if livre.reserva %}<p class="muted">Guardado no colchão (contas Reserva): {{ livre.reserva|moeda }}. Não entra no livre.</p>{% endif %}
 </section>
 

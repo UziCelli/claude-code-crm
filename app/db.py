@@ -71,6 +71,8 @@ PARAMETROS_INICIAIS = [
     ("fiscal", "salario_minimo", 1518, None, 1),   # R$; pró-labore nunca fica abaixo disto
     ("fiscal", "pro_labore_pct", 0.28, None, 2),   # fração da receita (0,28 = 28%)
     ("fiscal", "inss_pct", 0.11, None, 3),         # fração do pró-labore
+    ("salario", "valor", 0, None, 1),              # R$ por mês que a PJ paga à PF; 0 = desligado
+    ("salario", "dia", 5, None, 2),                # dia do mês do pagamento
     # frente de cada conta no Saldo livre: PF, PJ, Reserva (colchão, fica fora do livre) ou Fora (cartões)
     ("conta_escopo", "Contabilizei Bank", None, "PJ", 1),
     ("conta_escopo", "Inter", None, "PF", 2),
@@ -89,7 +91,7 @@ LISTAS_INICIAIS = {
     "lista_formas_pagamento": ["PIX", "Cartão 1x", "Cartão 3x", "Cartão 6x", "Cartão 12x"],
     # financeiro (lista_formas_pagamento acima é de preço; não reaproveitar)
     "lista_categorias_pj": ["Pacotes de Aulas", "Mensalidade (Aulas Presenciais)", "Consultoria Online",
-                            "Consultoria Híbrida", "Aluguel", "Internet/Telefone", "Material de Trabalho",
+                            "Consultoria Híbrida", "Retirada", "Aluguel", "Internet/Telefone", "Material de Trabalho",
                             "Transporte", "Marketing/Divulgação", "Impostos/Taxas", "Alimentação",
                             "Software/Assinaturas", "Manutenção", "Outros"],
     "lista_categorias_pf": ["Alimentação", "Moradia", "Transporte", "Pessoal", "Lazer", "Educação", "Vestuário",
