@@ -204,3 +204,127 @@ def test_conta_nova_sem_frente(con_temp):
     fr = financeiro.frentes_contas(con_temp)
     assert fr["Nubank"] is None and fr["Cartão XP"] == "Fora"
     assert "Nubank" in financeiro.saldo_livre(con_temp, "2026-10-16")["sem_frente"]
+
+
+# ---------- Salário fixo ----------
+def ligar_salario(con, valor=2000, dia=5):
+    with con:
+        con.execute("UPDATE parametros SET valor=? WHERE grupo='salario' AND chave='valor'", (valor,))
+        con.execute("UPDATE parametros SET valor=? WHERE grupo='salario' AND chave='dia'", (dia,))
+
+
+def test_salario_desligado_nao_paga(con_temp):
+    assert not financeiro.salario_mes(con_temp, "2026-10", "2026-10-16")["pode_pagar"]
+    with pytest.raises(ValueError):
+        financeiro.pagar_salario(con_temp, "2026-10", "2026-10-16")
+
+
+def test_salario_pago_uma_vez_e_fora_do_custo(con_temp):
+    ligar_salario(con_temp)
+    lancar(con_temp, "entrada", 5000, "2026-10-02", pago_em="2026-10-02")
+    assert financeiro.salario_mes(con_temp, "2026-10", "2026-10-04")["pode_pagar"] is False   # antes do dia
+    assert financeiro.salario_mes(con_temp, "2026-10", "2026-10-05")["pode_pagar"] is True
+    financeiro.pagar_salario(con_temp, "2026-10", "2026-10-05")
+    with pytest.raises(ValueError):
+        financeiro.pagar_salario(con_temp, "2026-10", "2026-10-06")
+    r = financeiro.resumo_mes(con_temp, "2026-10")
+    assert r["retirada"] == 2000 and r["custos_variaveis"] == 0 and r["lucro"] == 5000
+    assert r["pf"]["entradas"] == 2000
+    s = financeiro.salario_mes(con_temp, "2026-10", "2026-10-06")
+    assert s["pago_em"] == "2026-10-05" and not s["pode_pagar"]
+
+
+def test_salario_excluido_pode_ser_pago_de_novo(con_temp):
+    ligar_salario(con_temp)
+    financeiro.pagar_salario(con_temp, "2026-10", "2026-10-05")
+    with con_temp:
+        con_temp.execute("UPDATE lancamentos SET excluido_em='2026-10-06' WHERE origem LIKE 'SAL:2026-10:%'")
+    ligar_salario(con_temp, valor=1800)
+    financeiro.pagar_salario(con_temp, "2026-10", "2026-10-07")
+    assert [r[0] for r in con_temp.execute("SELECT valor FROM lancamentos WHERE excluido_em IS NULL")] == [1800, 1800]
+
+
+def test_gasto_pf_contra_salario_e_sugestao(con_temp):
+    ligar_salario(con_temp, valor=1000)
+    lancar(con_temp, "saida", 950, "2026-10-03", pago_em="2026-10-03", escopo="PF")
+    assert financeiro.salario_mes(con_temp, "2026-10", "2026-10-16")["pct_gasto"] == 95
+    for m in ("07", "08", "09"):
+        lancar(con_temp, "entrada", 3000, f"2026-{m}-10", pago_em=f"2026-{m}-10")
+    assert financeiro.sugestao_salario(con_temp, "2026-10") == 2400
+
+
+# ---------- Potes e colchão ----------
+def test_potes_em_cascata(con_temp):
+    ligar_salario(con_temp, valor=1000)
+    with con_temp:
+        con_temp.execute("UPDATE recorrencias SET excluido_em='x'")
+    recorrencia(con_temp, valor=500, dia=10)                                     # contas da PJ: 500
+    lancar(con_temp, "entrada", 400, "2026-10-02", pago_em="2026-10-02")         # 24 imposto, 376 contas
+    lancar(con_temp, "entrada", 1000, "2026-10-05", pago_em="2026-10-05")        # 60 imposto, 124 contas, 816 salário
+    lancar(con_temp, "entrada", 500, "2026-10-09", pago_em="2026-10-09")         # 30 imposto, 184 salário, 286 colchão
+    lancar(con_temp, "entrada", 999, "2026-10-20")                               # não recebida: fora
+    p = financeiro.potes_mes(con_temp, "2026-10")
+    divs = [e["divisao"] for e in p["entradas"]]
+    assert divs[0] == {"imposto": 24, "contas": 376, "salario": 0, "colchao": 0}
+    assert divs[1] == {"imposto": 60, "contas": 124, "salario": 816, "colchao": 0}
+    assert divs[2] == {"imposto": 30, "contas": 0, "salario": 184, "colchao": 286}
+    potes = {x["chave"]: x for x in p["potes"]}
+    assert potes["contas"]["falta"] == 0 and potes["salario"]["cheio"] == 1000 and potes["colchao"]["cheio"] == 286
+    assert financeiro.texto_divisao(divs[2]) == "R$ 30,00 imposto · R$ 184,00 salário pf · R$ 286,00 colchão"
+
+
+def test_potes_sem_salario_pula_o_pote(con_temp):
+    lancar(con_temp, "entrada", 100, "2026-10-02", pago_em="2026-10-02")
+    assert "salario" not in [x["chave"] for x in financeiro.potes_mes(con_temp, "2026-10")["potes"]]
+
+
+def test_colchao(con_temp):
+    recorrencia(con_temp, valor=800, dia=5, fixo=1)
+    recorrencia(con_temp, valor=300, dia=5, fixo=0)                              # variável: fora do colchão
+    c = financeiro.colchao(con_temp, "2026-10")
+    assert c["mensal"] == 800 and c["tres"] == 2400 and c["meta"] is None
+    ligar_salario(con_temp, valor=2000)
+    financeiro.salvar_saldos(con_temp, "2026-10-16", {"Caixa": 1400}, {"Caixa": "Reserva"})
+    with con_temp:
+        con_temp.execute("UPDATE parametros SET valor=3 WHERE grupo='colchao' AND chave='meses'")
+    c = financeiro.colchao(con_temp, "2026-10")
+    assert c["mensal"] == 2800 and c["meta"] == 8400 and c["guardado"] == 1400 and c["cobre_meses"] == 0.5 and c["pct"] == 17
+
+
+# ---------- Previsão 90 dias ----------
+def test_previsao_sem_duplicar_e_com_aperto(con_temp):
+    with con_temp:
+        con_temp.execute("UPDATE parametros SET valor=0 WHERE grupo='imposto' AND chave='DAS'")   # sem DAS para isolar
+    financeiro.salvar_saldos(con_temp, "2026-10-16", {"Inter": 1000, "Contabilizei Bank": 500}, {})
+    with con_temp:
+        rid = con_temp.execute("""INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, fixo, inicio)
+                                  VALUES ('PF','Fatura','Fatura',800,25,0,'2026-10')""").lastrowid
+    # outubro já lançado em aberto pela recorrência: não pode contar duas vezes
+    lancar(con_temp, "saida", 800, "2026-10-25", escopo="PF", recorrencia_id=rid, competencia="2026-10")
+    p = financeiro.previsao(con_temp, "2026-10-16")
+    assert len(p["semanas"]) == 13 and p["fim"] == "2027-01-14"
+    s1 = p["semanas"][1]   # 23/10 a 29/10
+    assert s1["PF"]["saidas"] == 800 and s1["PF"]["saldo"] == 200
+    assert p["aperto"]["PF"]["inicio"] == "2026-11-20" and p["aperto"]["PF"]["saldo"] == -600   # fatura de novembro
+    assert "PJ" not in p["aperto"] and p["menor"]["PJ"] == 500
+    assert p["semanas"][5]["negativo"]
+
+
+def test_previsao_mensalidades_salario_e_das(con_temp):
+    financeiro.salvar_saldos(con_temp, "2026-10-16", {"Contabilizei Bank": 0}, {})
+    ligar_salario(con_temp, valor=1000, dia=5)
+    with con_temp:
+        cid = con_temp.execute("INSERT INTO clientes (nome, valor, status) VALUES ('Ana', 2000, 'ativo')").lastrowid
+    lancar(con_temp, "entrada", 2000, "2026-09-10", pago_em="2026-09-10")                     # receita de setembro
+    with con_temp:
+        con_temp.execute("UPDATE lancamentos SET cliente_id=? ", (cid,))
+    p = financeiro.previsao(con_temp, "2026-10-16")
+    itens = [i for s in p["semanas"] for i in s["itens"]]
+    descr = sorted((i["data"], i["descricao"], i["escopo"], i["valor"]) for i in itens)
+    # outubro: Ana não pagou (entra hoje, atrasada), salário de outubro não pago (hoje), DAS de setembro dia 20
+    assert ("2026-10-16", "Mensalidades a receber", "PJ", 2000) in descr
+    assert ("2026-10-16", "Salário para a PF", "PJ", 1000) in descr and ("2026-10-16", "Salário da PJ", "PF", 1000) in descr
+    assert ("2026-10-20", "DAS estimado (09/2026)", "PJ", 120) in descr
+    # novembro: DAS sobre a receita esperada de outubro (2000)
+    assert ("2026-11-20", "DAS estimado (10/2026)", "PJ", 120) in descr
+    assert all(i["estimado"] for i in itens if i["descricao"].startswith(("Mensalidades", "DAS")))

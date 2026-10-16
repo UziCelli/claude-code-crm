@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block titulo %}Próximos 90 dias · VFITCOACH CRM{% endblock %}
+{% block conteudo %}
+<div class="linha topo">
+  <h1 style="margin:0">Próximos 90 dias</h1>
+  <div class="linha"><a class="btn claro" href="/financeiro">Livro-caixa</a><a class="btn claro" href="/financeiro/painel">Painel financeiro</a></div>
+</div>
+<p class="muted">Começa no saldo de hoje das contas e soma, semana a semana, o que deve entrar e sair. Inclui contas em aberto, recorrentes, salário, mensalidades a receber e o DAS. "Estimado" é previsão: confira com o que entrar de verdade.</p>
+
+<div class="grid c2 mt">
+  {% for f in ['PF', 'PJ'] %}
+  <div class="kpi {{ 'amarelo' if prev.sem_saldo[f] else ('vermelho' if f in prev.aperto else 'verde') }}">
+    <div class="rotulo">{{ 'Pessoal (PF)' if f == 'PF' else 'Empresa (PJ)' }}</div>
+    {% if prev.sem_saldo[f] %}
+    <div class="valor">—</div><div class="meta">Digite os saldos {{ f }} em <a href="/financeiro">Atualizar saldos</a>. Até lá, a previsão começa do zero.</div>
+    {% elif f in prev.aperto %}
+    <div class="valor">Aperto em {{ prev.aperto[f].inicio|data }}</div>
+    <div class="meta">Nessa semana o saldo fica em {{ prev.aperto[f].saldo|moeda }}. O ponto mais baixo dos 90 dias é {{ prev.menor[f]|moeda }}. Segure gastos ou reforce o colchão antes dessa data.</div>
+    {% else %}
+    <div class="valor">Sem aperto</div>
+    <div class="meta">O ponto mais baixo dos 90 dias é {{ prev.menor[f]|moeda }}.</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card mt">
+  <h3>Semana a semana</h3>
+  <table>
+    <thead><tr><th>Semana</th><th class="num">PF entra / sai</th><th class="num dest">Saldo PF</th><th class="num">PJ entra / sai</th><th class="num dest">Saldo PJ</th><th></th></tr></thead>
+    <tbody>
+    <tr><td class="muted">Hoje</td><td></td><td class="num">{{ prev.inicio.PF|moeda }}</td><td></td><td class="num">{{ prev.inicio.PJ|moeda }}</td><td></td></tr>
+    {% for s in prev.semanas %}
+    <tr{% if s.negativo %} class="semana-negativa"{% endif %}>
+      <td>{{ s.inicio|data }}{% if loop.first %} <span class="muted">(+ atrasados)</span>{% endif %}</td>
+      <td class="num muted">+{{ s.PF.entradas|moeda }} / −{{ s.PF.saidas|moeda }}</td>
+      <td class="num {{ 'v-saida' if s.PF.saldo < 0 }}"><strong>{{ s.PF.saldo|moeda }}</strong></td>
+      <td class="num muted">+{{ s.PJ.entradas|moeda }} / −{{ s.PJ.saidas|moeda }}</td>
+      <td class="num {{ 'v-saida' if s.PJ.saldo < 0 }}"><strong>{{ s.PJ.saldo|moeda }}</strong></td>
+      <td>{% if s.itens %}<details><summary class="muted">{{ s.itens|length }} {{ "itens" if s.itens|length > 1 else "item" }}</summary>
+        <table><tbody>{% for i in s.itens %}<tr><td>{{ i.data|data }}</td><td>{{ i.descricao }} <span class="tag neutro">{{ i.escopo }}</span>{% if i.estimado %} <span class="tag amarelo">estimado</span>{% endif %}</td>
+          <td class="num v-{{ i.tipo }}">{{ '+' if i.tipo == 'entrada' else '−' }} {{ i.valor|moeda }}</td></tr>{% endfor %}</tbody></table>
+      </details>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

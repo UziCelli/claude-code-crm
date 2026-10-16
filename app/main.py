@@ -257,6 +257,12 @@ def alertas(con):
     for frente in ("PF", "PJ"):
         if not livre[frente]["sem_saldo"] and livre[frente]["livre"] < 0:
             add("vermelho", f"Saldo livre {frente} negativo ({moeda(livre[frente]['livre'])}): segure gastos até entrar dinheiro", "/financeiro")
+    sal = financeiro.salario_mes(con, h[:7], h)
+    if sal["ligado"] and sal["pct_gasto"] >= 90:
+        add("vermelho" if sal["pct_gasto"] >= 100 else "amarelo",
+            f"Gasto pessoal do mês em {sal['pct_gasto']}% do salário ({moeda(sal['gasto_pf'])} de {moeda(sal['valor'])})", "/financeiro")
+    if sal["pode_pagar"]:
+        add("azul", f"Pagar o salário do mês ({moeda(sal['valor'])}) da PJ para a PF", "/financeiro")
     velho = max((livre[f]["dias_velho"] or 0) for f in ("PF", "PJ"))
     if velho > financeiro.DIAS_SALDO_VELHO:
         add("amarelo", f"Saldos das contas sem atualizar há {velho} dias: o Saldo livre pode estar errado", "/financeiro")
@@ -1656,7 +1662,28 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", con=
     clientes_ = con.execute("SELECT id, nome FROM clientes WHERE excluido_em IS NULL ORDER BY nome").fetchall()
     return render(request, "financeiro.html", con, mes=mes, escopo=escopo, lancs=lancs, entradas=entradas, saidas=saidas,
                   saldo=round(entradas - saidas, 2), pend=pend, recs=recs, clientes_=clientes_, volta=f"mes={mes}&escopo={escopo}",
-                  livre=financeiro.saldo_livre(con, h), saldos=financeiro.saldos_atuais(con), frentes=financeiro.FRENTES)
+                  livre=financeiro.saldo_livre(con, h), saldos=financeiro.saldos_atuais(con), frentes=financeiro.FRENTES,
+                  salario=financeiro.salario_mes(con, h[:7], h), potes=financeiro.potes_mes(con, mes))
+
+
+@app.get("/financeiro/previsao", response_class=HTMLResponse)
+def financeiro_previsao(request: Request, con=Depends(get_db)):
+    return render(request, "financeiro_previsao.html", con, prev=financeiro.previsao(con, dt.date.today().isoformat()))
+
+
+@app.post("/financeiro/salario")
+def financeiro_salario(mes: str = Form(...), pago_em: str = Form(...), volta: str = Form(""), con=Depends(get_db)):
+    try:
+        dt.date.fromisoformat(pago_em)
+    except ValueError:
+        return _fin_voltar(volta, erro="Confira a data do pagamento.")
+    if not RE_MES.match(mes):
+        return _fin_voltar(volta, erro="Mês inválido.")
+    try:
+        financeiro.pagar_salario(con, mes, pago_em)
+    except ValueError as e:
+        return _fin_voltar(volta, erro=str(e))
+    return _fin_voltar(volta, msg="Salário pago: saída na PJ e entrada na PF lançadas. Faça a transferência no banco.")
 
 
 @app.post("/financeiro/saldos")
@@ -1724,10 +1751,15 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
                 con.execute("""UPDATE lancamentos SET escopo=?, tipo=?, data=?, pago_em=?, valor=?, categoria=?, descricao=?, contraparte=?,
                                cliente_id=?, conta=?, forma=?, parcela_num=?, parcela_total=? WHERE id=?""", (*campos, lid))
             else:
-                con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao, contraparte, cliente_id,
-                               conta, forma, parcela_num, parcela_total) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""", campos)
+                lid = con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao, contraparte, cliente_id,
+                                     conta, forma, parcela_num, parcela_total) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""", campos).lastrowid
     except sqlite3.IntegrityError:
         return _fin_voltar(volta, erro="Não foi possível salvar: confira o aluno e os campos.")
+    if f["escopo"] == "PJ" and f["tipo"] == "entrada" and pago_em:
+        # dinheiro que entrou na PJ: diz na hora quanto vai para cada pote
+        div = next((e["divisao"] for e in financeiro.potes_mes(con, pago_em[:7])["entradas"] if e["id"] == lid), None)
+        if div:
+            return _fin_voltar(volta, msg="Lançamento salvo. Separe: " + financeiro.texto_divisao(div) + ".")
     return _fin_voltar(volta, msg="Lançamento salvo.")
 
 
@@ -1816,7 +1848,8 @@ def financeiro_painel(request: Request, mes: str = "", con=Depends(get_db)):
     meses = [f"{(n - i) // 12}-{(n - i) % 12 + 1:02d}" for i in range(11, -1, -1)]
     serie = [financeiro.resumo_mes(con, x) for x in meses]
     maximo = max([s["receita"] for s in serie] + [s["custos_fixos"] + s["custos_variaveis"] for s in serie] + [1])
-    return render(request, "financeiro_painel.html", con, mes=mes, r=serie[-1], serie=serie, maximo=maximo)
+    return render(request, "financeiro_painel.html", con, mes=mes, r=serie[-1], serie=serie, maximo=maximo,
+                  salario=financeiro.salario_mes(con, mes, dt.date.today().isoformat()), colchao=financeiro.colchao(con, mes))
 
 
 # =====================================================================
@@ -1828,7 +1861,9 @@ GRUPOS_CONFIG = [("imposto", "Imposto (DAS)", "pct"), ("taxa_pagamento", "Taxas 
                  ("grupo_mao_obra_extra", "Mão de obra extra por nº de pessoas", "pct"), ("metas", "Metas do painel", "num"),
                  ("mao_obra_aula", "Mão de obra por aula (tipo|qtd)", "num"), ("lead_parado_dias", "Limite de dias parado por etapa", "num"),
                  ("funil_chance", "Chance de fechar por etapa do funil", "pct"),
-                 ("fiscal", "Fiscal: salário mínimo (R$), pró-labore e INSS (frações, ex.: 0,28 = 28%)", "num")]
+                 ("fiscal", "Fiscal: salário mínimo (R$), pró-labore e INSS (frações, ex.: 0,28 = 28%)", "num"),
+                 ("salario", "Salário fixo da PJ para a PF: valor (R$ por mês; 0 = desligado) e dia do pagamento", "num"),
+                 ("colchao", "Colchão: meta em meses de custo fixo (0 = sem meta)", "num")]
 
 
 @app.get("/configuracoes", response_class=HTMLResponse)

@@ -1,11 +1,13 @@
 """Teste de fumaça: todas as telas abrem (200) num banco temporário. Rede de segurança para mudanças nos templates."""
+from urllib.parse import unquote
+
 import pytest
 from fastapi.testclient import TestClient
 
 from app import db, main
 
 TELAS = ["/", "/clientes", "/clientes/novo", "/leads", "/grade", "/agenda", "/simulador", "/explorador",
-         "/campanhas", "/rotina", "/configuracoes", "/dados", "/financeiro", "/financeiro/painel", "/financeiro/mensalidades"]
+         "/campanhas", "/rotina", "/configuracoes", "/dados", "/financeiro", "/financeiro/painel", "/financeiro/mensalidades", "/financeiro/previsao"]
 
 
 @pytest.fixture
@@ -146,3 +148,32 @@ def test_atualizar_saldos_e_ver_saldo_livre(cliente_http):
     assert "Saldo livre PF negativo" in http.get("/").text
     r = http.post("/financeiro/saldos", data={"data": "ontem", "conta_1": "Inter", "saldo_1": "10"}, follow_redirects=False)
     assert "erro=" in r.headers["location"]
+
+
+def test_pagar_salario_pela_tela(cliente_http):
+    import datetime as dt
+    http, _ = cliente_http
+    hoje = dt.date.today()
+    con = db.conectar()
+    with con:
+        con.execute("UPDATE parametros SET valor=1500 WHERE grupo='salario' AND chave='valor'")
+        con.execute("UPDATE parametros SET valor=1 WHERE grupo='salario' AND chave='dia'")
+    assert "Pagar salário de" in http.get("/financeiro").text
+    dados = {"mes": f"{hoje:%Y-%m}", "pago_em": hoje.isoformat(), "volta": "mes=&escopo=todos"}
+    assert "msg=" in http.post("/financeiro/salario", data=dados, follow_redirects=False).headers["location"]
+    assert "erro=" in http.post("/financeiro/salario", data=dados, follow_redirects=False).headers["location"]
+    assert con.execute("SELECT COUNT(*) FROM lancamentos WHERE origem LIKE 'SAL:%'").fetchone()[0] == 2
+    con.close()
+    assert "Salário pago à PF" in http.get("/financeiro/painel").text
+
+
+def test_entrada_pj_diz_como_separar(cliente_http):
+    import datetime as dt
+    http, _ = cliente_http
+    hoje = dt.date.today().isoformat()
+    r = http.post("/financeiro/lancamento", data={"escopo": "PJ", "tipo": "entrada", "data": hoje, "pago_em": hoje, "valor": "1000",
+                                                  "categoria": "Outros", "volta": "mes=&escopo=todos"}, follow_redirects=False)
+    assert "Separe" in unquote(r.headers["location"])
+    pagina = http.get("/financeiro").text
+    assert "Potes do mês" in pagina and "R$ 60,00" in pagina
+    assert "Colchão para meses fracos" in http.get("/financeiro/painel").text
