@@ -335,3 +335,83 @@ def colchao(con: sqlite3.Connection, mes: str) -> dict:
     return {"mensal": round(mensal, 2), "um": round(mensal, 2), "tres": round(3 * mensal, 2), "guardado": round(guardado, 2),
             "meses_meta": meses, "meta": meta, "pct": min(100, round(100 * guardado / meta)) if meta else None,
             "cobre_meses": round(guardado / mensal, 1) if mensal else None}
+
+
+# ---------- Linha do tempo (previsão) ----------
+def _mensalidades_a_receber(con: sqlite3.Connection, mes: str) -> float:
+    """Quanto dos alunos ativos ainda falta entrar no mês: previsto − recebido − entradas já lançadas em aberto, por aluno."""
+    total = 0.0
+    for m in mensalidades(con, mes):
+        aberto = con.execute("""SELECT COALESCE(SUM(valor), 0) FROM lancamentos WHERE cliente_id=? AND escopo='PJ' AND tipo='entrada'
+                                AND excluido_em IS NULL AND pago_em IS NULL AND substr(data,1,7)=?""", (m["id"], mes)).fetchone()[0]
+        total += max(m["previsto"] - m["recebido"] - aberto, 0)
+    return round(total, 2)
+
+
+def previsao(con: sqlite3.Connection, hoje: str, semanas: int = 13) -> dict:
+    """Saldo previsto semana a semana, PF e PJ, a partir dos saldos digitados.
+    Entra: tudo em aberto (lançamentos e recorrências), salário ainda não pago (sai da PJ, entra na PF),
+    mensalidades que faltam receber (estimado, no dia previsao.dia_recebimento) e o DAS estimado
+    (DAS% da receita do mês anterior, no dia previsao.dia_das, se o mês ainda não tem imposto PJ lançado).
+    O que já venceu e não foi pago entra na primeira semana."""
+    h = dt.date.fromisoformat(hoje)
+    fim = (h + dt.timedelta(days=7 * semanas - 1)).isoformat()
+    meses = []
+    m = hoje[:7]
+    while m <= fim[:7]:
+        meses.append(m)
+        m = somar_meses(m, 1)
+    par = db.parametros(con, "previsao")
+    das_pct = db.parametros(con, "imposto").get("DAS", 0.06)
+    sal = db.parametros(con, "salario")
+    itens = [dict(i, estimado=False) for i in em_aberto_ate(con, fim, hoje)]
+
+    def add(escopo, tipo, data, descricao, valor, estimado=True):
+        if valor > 0 and data <= fim:
+            itens.append({"escopo": escopo, "tipo": tipo, "data": max(data, hoje), "descricao": descricao,
+                          "categoria": "", "valor": round(valor, 2), "estimado": estimado})
+
+    receita = {}   # receita PJ esperada por mês (recebida + a receber), base do DAS do mês seguinte
+    for mes in meses:
+        recebido = con.execute("""SELECT COALESCE(SUM(valor), 0) FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
+                                  AND excluido_em IS NULL AND pago_em IS NOT NULL AND substr(pago_em,1,7)=?""", (mes,)).fetchone()[0]
+        falta = _mensalidades_a_receber(con, mes)
+        abertas = sum(i["valor"] for i in itens if i["escopo"] == "PJ" and i["tipo"] == "entrada" and i["data"][:7] == mes)
+        receita[mes] = recebido + falta + abertas
+        add("PJ", "entrada", vencimento(int(par.get("dia_recebimento") or 10), mes), "Mensalidades a receber", falta)
+        if (sal.get("valor") or 0) > 0 and not con.execute("SELECT 1 FROM lancamentos WHERE origem=? AND excluido_em IS NULL",
+                                                           (f"SAL:{mes}:PJ",)).fetchone():
+            data = vencimento(int(sal.get("dia") or 5), mes)
+            add("PJ", "saida", data, "Salário para a PF", sal["valor"], estimado=False)
+            add("PF", "entrada", data, "Salário da PJ", sal["valor"], estimado=False)
+        tem_imposto = con.execute("""SELECT 1 FROM lancamentos WHERE escopo='PJ' AND tipo='saida' AND excluido_em IS NULL
+                                     AND lower(categoria) LIKE '%imposto%' AND substr(data,1,7)=?""", (mes,)).fetchone() or any(
+            i["escopo"] == "PJ" and i["tipo"] == "saida" and "imposto" in i["categoria"].lower() and i["data"][:7] == mes for i in itens)
+        if not tem_imposto:
+            anterior = somar_meses(mes, -1)
+            base = receita.get(anterior)
+            if base is None:   # mês anterior a hoje: só o que entrou de fato
+                base = con.execute("""SELECT COALESCE(SUM(valor), 0) FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
+                                      AND excluido_em IS NULL AND pago_em IS NOT NULL AND substr(pago_em,1,7)=?""", (anterior,)).fetchone()[0]
+            add("PJ", "saida", vencimento(int(par.get("dia_das") or 20), mes), f"DAS estimado ({anterior[5:]}/{anterior[:4]})", das_pct * base)
+
+    livre = saldo_livre(con, hoje)
+    saldo = {f: livre[f]["tem"] for f in ("PF", "PJ")}
+    linhas, aperto = [], {}
+    for k in range(semanas):
+        ini = (h + dt.timedelta(days=7 * k)).isoformat()
+        fim_sem = (h + dt.timedelta(days=7 * k + 6)).isoformat()
+        da_semana = sorted((i for i in itens if (i["data"] <= fim_sem and (k == 0 or i["data"] >= ini))), key=lambda i: i["data"])
+        linha = {"inicio": ini, "fim": fim_sem, "itens": da_semana}
+        for f in ("PF", "PJ"):
+            ent = sum(i["valor"] for i in da_semana if i["escopo"] == f and i["tipo"] == "entrada")
+            sai = sum(i["valor"] for i in da_semana if i["escopo"] == f and i["tipo"] == "saida")
+            saldo[f] += ent - sai
+            linha[f] = {"entradas": round(ent, 2), "saidas": round(sai, 2), "saldo": round(saldo[f], 2)}
+            if saldo[f] < 0 and f not in aperto:
+                aperto[f] = {"inicio": ini, "saldo": round(saldo[f], 2)}
+        linha["negativo"] = any(linha[f]["saldo"] < 0 for f in ("PF", "PJ"))
+        linhas.append(linha)
+    menor = {f: min(l[f]["saldo"] for l in linhas) for f in ("PF", "PJ")}
+    return {"semanas": linhas, "aperto": aperto, "menor": menor, "inicio": {f: livre[f]["tem"] for f in ("PF", "PJ")},
+            "sem_saldo": {f: livre[f]["sem_saldo"] for f in ("PF", "PJ")}, "fim": fim}

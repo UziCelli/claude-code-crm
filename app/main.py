@@ -1666,6 +1666,11 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", con=
                   salario=financeiro.salario_mes(con, h[:7], h), potes=financeiro.potes_mes(con, mes))
 
 
+@app.get("/financeiro/previsao", response_class=HTMLResponse)
+def financeiro_previsao(request: Request, con=Depends(get_db)):
+    return render(request, "financeiro_previsao.html", con, prev=financeiro.previsao(con, dt.date.today().isoformat()))
+
+
 @app.post("/financeiro/salario")
 def financeiro_salario(mes: str = Form(...), pago_em: str = Form(...), volta: str = Form(""), con=Depends(get_db)):
     try:

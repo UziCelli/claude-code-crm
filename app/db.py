@@ -73,6 +73,8 @@ PARAMETROS_INICIAIS = [
     ("fiscal", "inss_pct", 0.11, None, 3),         # fração do pró-labore
     ("salario", "valor", 0, None, 1),              # R$ por mês que a PJ paga à PF; 0 = desligado
     ("salario", "dia", 5, None, 2),                # dia do mês do pagamento
+    ("previsao", "dia_recebimento", 10, None, 1),  # dia em que a previsão põe as mensalidades que faltam receber
+    ("previsao", "dia_das", 20, None, 2),          # vencimento do DAS (sobre a receita do mês anterior)
     ("colchao", "meses", 0, None, 1),              # meta do colchão em meses de custo fixo; 0 = sem meta ainda
     # frente de cada conta no Saldo livre: PF, PJ, Reserva (colchão, fica fora do livre) ou Fora (cartões)
     ("conta_escopo", "Contabilizei Bank", None, "PJ", 1),

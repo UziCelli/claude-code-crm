@@ -484,3 +484,6 @@ body.modo-lote .cel.aula, body.modo-lote .aula-hoje[data-marca] { cursor: pointe
 .barra-lote .acoes-lote { flex: 1 1 200px; display: flex; gap: 8px; }
 .barra-lote .acoes-lote button { min-height: 44px; }
 .barra-lote #lote-salvar { flex: 1; }
+
+/* Próximos 90 dias: semana com saldo previsto negativo (vence a listra da tabela) */
+table tr.semana-negativa td, table.cartoes tr.semana-negativa.par td { background: var(--vermelho-f); }
