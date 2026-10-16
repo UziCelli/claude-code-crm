@@ -185,6 +185,8 @@ dialog[open]::backdrop { opacity: 1; transition-duration: var(--dur-normal); }
 .grafico .col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; font-size: 11px; color: var(--cinza); }
 .grafico .col i { display: block; width: 100%; background: var(--aco); border-radius: 4px 4px 0 0; }
 .grafico .col.atual i { background: var(--marinho); }
+.grafico .col span { white-space: nowrap; }
+.grafico .col .ano { font-weight: inherit; }
 
 /* navegação: crossfade curto; menu fica parado */
 @view-transition { navigation: auto; }
@@ -321,6 +323,8 @@ table.cartoes tr.foco td:first-child { box-shadow: inset 4px 0 0 var(--amarelo);
   /* gráficos de barras: 12 meses cabem na largura do celular */
   .grafico { gap: 3px; }
   .grafico .col { min-width: 0; font-size: 9px; }
+  /* sem espaço para "02/26": mostra só o mês (a tabela abaixo tem o ano) */
+  .grafico .col .ano { display: none; }
 
   /* leads: colunas do funil uma embaixo da outra */
   .kanban { grid-template-columns: 1fr; overflow: visible; }

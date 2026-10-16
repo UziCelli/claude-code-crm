@@ -60,7 +60,7 @@
       {% for h in historico %}
       <div class="col {{ 'atual' if h.mes == m.mes }}" title="{{ h.faturamento_recorrente|moeda }} · {{ h.clientes_ativos }} clientes · {{ h.horas_ocupadas|num(0) }} h">
         <i style="height:{{ (100 * (h.faturamento_recorrente or 0) / maximo)|round }}%"></i>
-        <span>{{ h.mes[5:] }}/{{ h.mes[2:4] }}</span>
+        <span>{{ h.mes[5:] }}<b class="ano">/{{ h.mes[2:4] }}</b></span>
       </div>
       {% endfor %}
     </div>
