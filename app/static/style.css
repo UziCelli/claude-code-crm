@@ -491,3 +491,15 @@ body.modo-lote .cel.aula, body.modo-lote .aula-hoje[data-marca] { cursor: pointe
 
 /* Próximos 90 dias: semana com saldo previsto negativo (vence a listra da tabela) */
 table tr.semana-negativa td, table.cartoes tr.semana-negativa.par td { background: var(--vermelho-f); }
+
+/* divisão de cada entrada: data e valor nunca quebram; no celular, cada entrada vira um bloco */
+table.divisao td:first-child, table.divisao td.num { white-space: nowrap; }
+@media (max-width: 760px) {
+  table.divisao, table.divisao tbody { display: block; }
+  table.divisao tr { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "data valor" "desc desc" "div div"; padding: 8px 0; border-bottom: 1px solid var(--borda); }
+  table.divisao td { border: 0; padding: 2px 0; }
+  table.divisao td:nth-child(1) { grid-area: data; color: var(--cinza); font-size: 13px; }
+  table.divisao td:nth-child(2) { grid-area: desc; font-weight: 600; }
+  table.divisao td:nth-child(3) { grid-area: valor; font-weight: 600; }
+  table.divisao td:nth-child(4) { grid-area: div; font-size: 13px; }
+}
