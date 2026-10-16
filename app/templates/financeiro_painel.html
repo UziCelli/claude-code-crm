@@ -3,7 +3,7 @@
 {% block conteudo %}
 <div class="linha topo">
   <h1 style="margin:0">Painel financeiro — {{ mes[5:] }}/{{ mes[:4] }}</h1>
-  <div class="linha"><a class="btn claro" href="/financeiro?mes={{ mes }}">Livro-caixa</a><a class="btn claro" href="/financeiro/mensalidades?mes={{ mes }}">Mensalidades</a></div>
+  <div class="linha"><a class="btn claro" href="/financeiro?mes={{ mes }}">Livro-caixa</a><a class="btn claro" href="/financeiro/mensalidades?mes={{ mes }}">Mensalidades</a><a class="btn claro" href="/financeiro/previsao">Próximos 90 dias</a></div>
 </div>
 <form class="linha" method="get">
   <input type="month" name="mes" value="{{ mes }}" aria-label="Mês" style="width:auto" required>

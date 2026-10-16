@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from app import db, main
 
 TELAS = ["/", "/clientes", "/clientes/novo", "/leads", "/grade", "/agenda", "/simulador", "/explorador",
-         "/campanhas", "/rotina", "/configuracoes", "/dados", "/financeiro", "/financeiro/painel", "/financeiro/mensalidades"]
+         "/campanhas", "/rotina", "/configuracoes", "/dados", "/financeiro", "/financeiro/painel", "/financeiro/mensalidades", "/financeiro/previsao"]
 
 
 @pytest.fixture

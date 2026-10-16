@@ -289,3 +289,42 @@ def test_colchao(con_temp):
         con_temp.execute("UPDATE parametros SET valor=3 WHERE grupo='colchao' AND chave='meses'")
     c = financeiro.colchao(con_temp, "2026-10")
     assert c["mensal"] == 2800 and c["meta"] == 8400 and c["guardado"] == 1400 and c["cobre_meses"] == 0.5 and c["pct"] == 17
+
+
+# ---------- Previsão 90 dias ----------
+def test_previsao_sem_duplicar_e_com_aperto(con_temp):
+    with con_temp:
+        con_temp.execute("UPDATE parametros SET valor=0 WHERE grupo='imposto' AND chave='DAS'")   # sem DAS para isolar
+    financeiro.salvar_saldos(con_temp, "2026-10-16", {"Inter": 1000, "Contabilizei Bank": 500}, {})
+    with con_temp:
+        rid = con_temp.execute("""INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, fixo, inicio)
+                                  VALUES ('PF','Fatura','Fatura',800,25,0,'2026-10')""").lastrowid
+    # outubro já lançado em aberto pela recorrência: não pode contar duas vezes
+    lancar(con_temp, "saida", 800, "2026-10-25", escopo="PF", recorrencia_id=rid, competencia="2026-10")
+    p = financeiro.previsao(con_temp, "2026-10-16")
+    assert len(p["semanas"]) == 13 and p["fim"] == "2027-01-14"
+    s1 = p["semanas"][1]   # 23/10 a 29/10
+    assert s1["PF"]["saidas"] == 800 and s1["PF"]["saldo"] == 200
+    assert p["aperto"]["PF"]["inicio"] == "2026-11-20" and p["aperto"]["PF"]["saldo"] == -600   # fatura de novembro
+    assert "PJ" not in p["aperto"] and p["menor"]["PJ"] == 500
+    assert p["semanas"][5]["negativo"]
+
+
+def test_previsao_mensalidades_salario_e_das(con_temp):
+    financeiro.salvar_saldos(con_temp, "2026-10-16", {"Contabilizei Bank": 0}, {})
+    ligar_salario(con_temp, valor=1000, dia=5)
+    with con_temp:
+        cid = con_temp.execute("INSERT INTO clientes (nome, valor, status) VALUES ('Ana', 2000, 'ativo')").lastrowid
+    lancar(con_temp, "entrada", 2000, "2026-09-10", pago_em="2026-09-10")                     # receita de setembro
+    with con_temp:
+        con_temp.execute("UPDATE lancamentos SET cliente_id=? ", (cid,))
+    p = financeiro.previsao(con_temp, "2026-10-16")
+    itens = [i for s in p["semanas"] for i in s["itens"]]
+    descr = sorted((i["data"], i["descricao"], i["escopo"], i["valor"]) for i in itens)
+    # outubro: Ana não pagou (entra hoje, atrasada), salário de outubro não pago (hoje), DAS de setembro dia 20
+    assert ("2026-10-16", "Mensalidades a receber", "PJ", 2000) in descr
+    assert ("2026-10-16", "Salário para a PF", "PJ", 1000) in descr and ("2026-10-16", "Salário da PJ", "PF", 1000) in descr
+    assert ("2026-10-20", "DAS estimado (09/2026)", "PJ", 120) in descr
+    # novembro: DAS sobre a receita esperada de outubro (2000)
+    assert ("2026-11-20", "DAS estimado (10/2026)", "PJ", 120) in descr
+    assert all(i["estimado"] for i in itens if i["descricao"].startswith(("Mensalidades", "DAS")))
