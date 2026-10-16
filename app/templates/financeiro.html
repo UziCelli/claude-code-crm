@@ -98,7 +98,7 @@
     {% endfor %}
   </div>
   <details class="mt"><summary class="muted">Divisão de cada entrada ({{ potes.entradas|length }})</summary>
-    <table><tbody>{% for e in potes.entradas %}<tr><td>{{ e.pago_em|data }}</td><td>{{ e.descricao }}</td><td class="num">{{ e.valor|moeda }}</td>
+    <table class="divisao"><tbody>{% for e in potes.entradas %}<tr><td>{{ e.pago_em|data }}</td><td>{{ e.descricao }}</td><td class="num">{{ e.valor|moeda }}</td>
       <td class="muted">{% for k, v in e.divisao.items() if v > 0 %}{{ v|moeda }} {{ {'imposto': 'imposto', 'contas': 'contas', 'salario': 'salário', 'colchao': 'colchão'}[k] }}{{ ' · ' if not loop.last }}{% endfor %}</td></tr>{% endfor %}</tbody></table>
   </details>
   {% else %}<p class="muted">Nenhuma entrada da PJ recebida neste mês.</p>{% endif %}
