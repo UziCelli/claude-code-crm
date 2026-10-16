@@ -251,3 +251,41 @@ def test_gasto_pf_contra_salario_e_sugestao(con_temp):
     for m in ("07", "08", "09"):
         lancar(con_temp, "entrada", 3000, f"2026-{m}-10", pago_em=f"2026-{m}-10")
     assert financeiro.sugestao_salario(con_temp, "2026-10") == 2400
+
+
+# ---------- Potes e colchão ----------
+def test_potes_em_cascata(con_temp):
+    ligar_salario(con_temp, valor=1000)
+    with con_temp:
+        con_temp.execute("UPDATE recorrencias SET excluido_em='x'")
+    recorrencia(con_temp, valor=500, dia=10)                                     # contas da PJ: 500
+    lancar(con_temp, "entrada", 400, "2026-10-02", pago_em="2026-10-02")         # 24 imposto, 376 contas
+    lancar(con_temp, "entrada", 1000, "2026-10-05", pago_em="2026-10-05")        # 60 imposto, 124 contas, 816 salário
+    lancar(con_temp, "entrada", 500, "2026-10-09", pago_em="2026-10-09")         # 30 imposto, 184 salário, 286 colchão
+    lancar(con_temp, "entrada", 999, "2026-10-20")                               # não recebida: fora
+    p = financeiro.potes_mes(con_temp, "2026-10")
+    divs = [e["divisao"] for e in p["entradas"]]
+    assert divs[0] == {"imposto": 24, "contas": 376, "salario": 0, "colchao": 0}
+    assert divs[1] == {"imposto": 60, "contas": 124, "salario": 816, "colchao": 0}
+    assert divs[2] == {"imposto": 30, "contas": 0, "salario": 184, "colchao": 286}
+    potes = {x["chave"]: x for x in p["potes"]}
+    assert potes["contas"]["falta"] == 0 and potes["salario"]["cheio"] == 1000 and potes["colchao"]["cheio"] == 286
+    assert financeiro.texto_divisao(divs[2]) == "R$ 30,00 imposto · R$ 184,00 salário pf · R$ 286,00 colchão"
+
+
+def test_potes_sem_salario_pula_o_pote(con_temp):
+    lancar(con_temp, "entrada", 100, "2026-10-02", pago_em="2026-10-02")
+    assert "salario" not in [x["chave"] for x in financeiro.potes_mes(con_temp, "2026-10")["potes"]]
+
+
+def test_colchao(con_temp):
+    recorrencia(con_temp, valor=800, dia=5, fixo=1)
+    recorrencia(con_temp, valor=300, dia=5, fixo=0)                              # variável: fora do colchão
+    c = financeiro.colchao(con_temp, "2026-10")
+    assert c["mensal"] == 800 and c["tres"] == 2400 and c["meta"] is None
+    ligar_salario(con_temp, valor=2000)
+    financeiro.salvar_saldos(con_temp, "2026-10-16", {"Caixa": 1400}, {"Caixa": "Reserva"})
+    with con_temp:
+        con_temp.execute("UPDATE parametros SET valor=3 WHERE grupo='colchao' AND chave='meses'")
+    c = financeiro.colchao(con_temp, "2026-10")
+    assert c["mensal"] == 2800 and c["meta"] == 8400 and c["guardado"] == 1400 and c["cobre_meses"] == 0.5 and c["pct"] == 17

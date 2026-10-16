@@ -275,3 +275,63 @@ def pagar_salario(con: sqlite3.Connection, mes: str, pago_em: str) -> None:
                            VALUES ('PF','entrada',?,?,?, 'Salário', ?, ?)""", (pago_em, pago_em, valor, nome, f"SAL:{mes}:PF"))
     except sqlite3.IntegrityError:
         raise ValueError("O salário deste mês já foi pago.") from None
+
+
+# ---------- Potes ----------
+POTES = (("imposto", "Imposto"), ("contas", "Contas da PJ"), ("salario", "Salário PF"), ("colchao", "Colchão"))
+
+
+def _fixos_mes(con: sqlite3.Connection, mes: str, escopo: str, so_fixos: bool) -> float:
+    """Soma prevista das recorrências ativas do escopo na competência (sem a Retirada)."""
+    return con.execute(f"""SELECT COALESCE(SUM(valor), 0) FROM recorrencias WHERE excluido_em IS NULL AND escopo=? AND categoria != ?
+                           AND inicio <= ? AND (fim IS NULL OR fim >= ?){' AND fixo=1' if so_fixos else ''}""",
+                       (escopo, RETIRADA, mes, mes)).fetchone()[0]
+
+
+def potes_mes(con: sqlite3.Connection, mes: str) -> dict:
+    """Divide cada entrada PJ recebida no mês em cascata: imposto (DAS% de cada entrada, sempre primeiro),
+    contas da PJ (até as recorrências PJ do mês), salário da PF (até o salário fixo) e o resto no colchão."""
+    das = db.parametros(con, "imposto").get("DAS", 0.06)
+    alvo = {"contas": _fixos_mes(con, mes, "PJ", False), "salario": db.parametros(con, "salario").get("valor") or 0}
+    cheio = dict.fromkeys(dict(POTES), 0.0)
+    entradas = []
+    for e in con.execute("""SELECT id, valor, descricao, categoria, contraparte, pago_em FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
+                            AND excluido_em IS NULL AND pago_em IS NOT NULL AND substr(pago_em,1,7)=? ORDER BY pago_em, id""", (mes,)):
+        resto = e["valor"]
+        div = {"imposto": round(das * resto, 2)}
+        resto -= div["imposto"]
+        for k in ("contas", "salario"):
+            div[k] = round(max(0, min(resto, alvo[k] - cheio[k])), 2)
+            resto -= div[k]
+        div["colchao"] = round(max(resto, 0), 2)
+        for k, v in div.items():
+            cheio[k] += v
+        entradas.append({"id": e["id"], "valor": e["valor"], "descricao": e["descricao"] or e["contraparte"] or e["categoria"],
+                         "pago_em": e["pago_em"], "divisao": div})
+    alvo["imposto"] = cheio["imposto"]   # imposto não tem teto: é sempre a fração da entrada
+    alvo["colchao"] = None               # colchão não tem teto no mês
+    potes = [{"chave": k, "nome": nome, "alvo": round(alvo[k], 2) if alvo[k] is not None else None, "cheio": round(cheio[k], 2),
+              "falta": round(max(alvo[k] - cheio[k], 0), 2) if alvo[k] is not None else 0,
+              "pct": min(100, round(100 * cheio[k] / alvo[k])) if alvo[k] else (100 if cheio[k] else 0)}
+             for k, nome in POTES if k != "salario" or alvo["salario"]]
+    return {"mes": mes, "potes": potes, "entradas": entradas}
+
+
+def texto_divisao(div: dict) -> str:
+    """'R$ 30,00 imposto · R$ 400,00 contas da PJ · ...', só os potes com valor."""
+    nomes = dict(POTES)
+    return " · ".join(f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") + " " + nomes[k].lower()
+                      for k, v in div.items() if v > 0)
+
+
+def colchao(con: sqlite3.Connection, mes: str) -> dict:
+    """Custo fixo de 1 mês para o colchão: recorrências fixas da PJ + o salário da PF
+    (sem salário fixo, as recorrências fixas da PF). Mostra 1 e 3 meses, o guardado e a meta."""
+    sal = db.parametros(con, "salario").get("valor") or 0
+    mensal = _fixos_mes(con, mes, "PJ", True) + (sal if sal > 0 else _fixos_mes(con, mes, "PF", True))
+    guardado = sum(v["saldo"] for v in saldos_atuais(con).values() if v["escopo"] == "Reserva" and v["saldo"] is not None)
+    meses = db.parametros(con, "colchao").get("meses") or 0
+    meta = round(mensal * meses, 2) if meses else None
+    return {"mensal": round(mensal, 2), "um": round(mensal, 2), "tres": round(3 * mensal, 2), "guardado": round(guardado, 2),
+            "meses_meta": meses, "meta": meta, "pct": min(100, round(100 * guardado / meta)) if meta else None,
+            "cobre_meses": round(guardado / mensal, 1) if mensal else None}
