@@ -1658,12 +1658,19 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", con=
     pend = [p for p in financeiro.pendencias(con, mes, h) if p["escopo"] in lista]
     for p in pend:
         p["dias"] = (dt.date.fromisoformat(h) - dt.date.fromisoformat(p["data"])).days if p["status"] == "atrasado" else 0
+    parecidas = [s for s in financeiro.saidas_parecidas(con) if s["escopo"] in lista]
+    # recorrência em aberto cuja conta parece já ter sido lançada à mão naquele mês: etiqueta "talvez já pago"
+    talvez = {(c["id"], s["data"][:7]) for s in parecidas for c in s["candidatos"] if not c["ja_baixada"]}
+    for p in pend:
+        p["talvez_pago"] = p["origem"] == "recorrencia" and (p["id"], p["competencia"]) in talvez
     recs = con.execute(f"SELECT * FROM recorrencias WHERE excluido_em IS NULL AND escopo IN ({qs}) ORDER BY escopo, dia_vencimento, descricao", lista).fetchall()
     clientes_ = con.execute("SELECT id, nome FROM clientes WHERE excluido_em IS NULL ORDER BY nome").fetchall()
     return render(request, "financeiro.html", con, mes=mes, escopo=escopo, lancs=lancs, entradas=entradas, saidas=saidas,
                   saldo=round(entradas - saidas, 2), pend=pend, recs=recs, clientes_=clientes_, volta=f"mes={mes}&escopo={escopo}",
                   livre=financeiro.saldo_livre(con, h), saldos=financeiro.saldos_atuais(con), frentes=financeiro.FRENTES,
-                  salario=financeiro.salario_mes(con, h[:7], h), potes=financeiro.potes_mes(con, mes))
+                  salario=financeiro.salario_mes(con, h[:7], h), potes=financeiro.potes_mes(con, mes),
+                  parecidas=parecidas, recs_retirada=financeiro.recorrencias_retirada(con),
+                  recs_todas=con.execute("SELECT * FROM recorrencias WHERE excluido_em IS NULL ORDER BY escopo, descricao").fetchall())
 
 
 @app.get("/financeiro/previsao", response_class=HTMLResponse)
@@ -1750,10 +1757,35 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
             raise ValueError("Confira as datas e os números.") from None
         if pago_em and not _ja_aconteceu(pago_em):
             raise ValueError("\"Pago em\" não pode ser no futuro: deixe vazio e dê baixa no dia em que pagar.")
+        if parcela_num is not None and parcela_num < 1 or parcela_total is not None and parcela_total < 1:
+            raise ValueError("Parcela e total começam em 1.")
+        if parcela_num and not parcela_total:
+            raise ValueError("Informe também \"De quantas\" parcelas.")
+        if parcela_num and parcela_num > parcela_total:
+            raise ValueError(f"Parcela {parcela_num} de {parcela_total} não existe: o número não pode passar do total.")
+        try:
+            rec_id = int(f["recorrencia_id"]) if f.get("recorrencia_id") else None
+        except ValueError:
+            raise ValueError("Conta recorrente inválida.") from None
+        rec = None
+        if rec_id:
+            if f["tipo"] != "saida":
+                raise ValueError("Só saída pode ser uma conta recorrente.")
+            rec = con.execute("SELECT * FROM recorrencias WHERE id=? AND excluido_em IS NULL", (rec_id,)).fetchone()
+            if rec is None:
+                raise ValueError("Conta recorrente não encontrada.")
+            if rec["escopo"] != f["escopo"]:
+                raise ValueError(f"{rec['descricao']} é da {rec['escopo']} e este lançamento é da {f['escopo']}.")
     except ValueError as e:
         return _fin_voltar(volta, erro=str(e))
     campos = [f["escopo"], f["tipo"], f["data"], pago_em, valor, f["categoria"], f.get("descricao") or None, f.get("contraparte") or None,
               cliente_id, f.get("conta") or None, f.get("forma") or None, parcela_num, parcela_total]
+    # competência: o mês da data; ao editar uma baixa já ligada à mesma conta, fica a competência dela (mexer na data não troca de mês)
+    competencia = f["data"][:7] if rec_id else None
+    if rec_id and lid:
+        atual = con.execute("SELECT recorrencia_id, competencia FROM lancamentos WHERE id=?", (lid,)).fetchone()
+        if atual and atual["recorrencia_id"] == rec_id and atual["competencia"]:
+            competencia = atual["competencia"]
     aberta, aviso = None, ""
     if not lid and cliente_id and pago_em and f["escopo"] == "PJ" and f["tipo"] == "entrada":
         # o aluno já tem essa entrada lançada em aberto no mês: dar baixa nela em vez de criar outra (senão conta duas vezes)
@@ -1762,6 +1794,8 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
                              (cliente_id, valor, f["data"][:7])).fetchone()
     try:
         with con:
+            if rec_id:
+                financeiro.liberar_vaga(con, rec_id, competencia, lid)   # ValueError amigável se o mês já foi baixado
             if aberta:
                 lid, aviso = aberta["id"], "Esse valor já estava lançado em aberto para o aluno: dei baixa nele, sem criar outro. "
                 con.execute("UPDATE lancamentos SET pago_em=?, conta=COALESCE(?, conta), forma=COALESCE(?, forma) WHERE id=?",
@@ -1769,9 +1803,18 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
             elif lid:
                 con.execute("""UPDATE lancamentos SET escopo=?, tipo=?, data=?, pago_em=?, valor=?, categoria=?, descricao=?, contraparte=?,
                                cliente_id=?, conta=?, forma=?, parcela_num=?, parcela_total=? WHERE id=?""", (*campos, lid))
+                if rec_id:
+                    con.execute("UPDATE lancamentos SET recorrencia_id=?, competencia=?, sem_recorrencia=NULL WHERE id=?", (rec_id, competencia, lid))
+                elif not con.execute("""SELECT 1 FROM lancamentos l JOIN recorrencias r ON r.id = l.recorrencia_id
+                                        WHERE l.id=? AND r.excluido_em IS NOT NULL""", (lid,)).fetchone():
+                    # campo vazio = "não é conta recorrente"; só mantém a ligação se a conta recorrente está na lixeira (não aparece na lista)
+                    con.execute("UPDATE lancamentos SET recorrencia_id=NULL, competencia=NULL WHERE id=?", (lid,))
             else:
                 lid = con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao, contraparte, cliente_id,
-                                     conta, forma, parcela_num, parcela_total) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""", campos).lastrowid
+                                     conta, forma, parcela_num, parcela_total, recorrencia_id, competencia)
+                                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (*campos, rec_id, competencia)).lastrowid
+    except ValueError as e:
+        return _fin_voltar(volta, erro=str(e))
     except sqlite3.IntegrityError:
         return _fin_voltar(volta, erro="Não foi possível salvar: confira o aluno e os campos.")
     if f["escopo"] == "PJ" and f["tipo"] == "entrada" and pago_em:
@@ -1800,6 +1843,24 @@ def financeiro_ligar_aluno(lid: int, cliente_id: int = Form(0), volta: str = For
     return _fin_voltar(volta, msg=f"Entrada ligada a {c['nome']}.")
 
 
+@app.post("/financeiro/lancamento/{lid}/recorrencia")
+def financeiro_ligar_recorrencia(lid: int, recorrencia_id: int = Form(0), volta: str = Form(""), con=Depends(get_db)):
+    """Liga uma saída lançada à mão à conta recorrente: ela sai de A pagar e do Saldo livre, e 'Pagar' não lança de novo."""
+    try:
+        nome = financeiro.ligar_recorrencia(con, lid, recorrencia_id)
+    except ValueError as e:
+        return _fin_voltar(volta, erro=str(e))
+    return _fin_voltar(volta, msg=f"Lançamento ligado a {nome}.")
+
+
+@app.post("/financeiro/lancamento/{lid}/nao-recorrente")
+def financeiro_nao_recorrente(lid: int, volta: str = Form(""), con=Depends(get_db)):
+    """'Não é a mesma conta': o lançamento sai da lista de contas parecidas com recorrentes."""
+    with con:
+        con.execute("UPDATE lancamentos SET sem_recorrencia=1 WHERE id=? AND recorrencia_id IS NULL AND excluido_em IS NULL", (lid,))
+    return _fin_voltar(volta, msg="Combinado: este lançamento não é uma conta recorrente.")
+
+
 @app.post("/financeiro/lancamento/{lid}/excluir")
 def financeiro_lancamento_excluir(lid: int, volta: str = Form(""), con=Depends(get_db)):
     with con:
@@ -1816,6 +1877,8 @@ async def financeiro_recorrencia(request: Request, con=Depends(get_db)):
         valor = _fin_valor(f)
         if not f.get("descricao", "").strip() or not f.get("categoria"):
             raise ValueError("Informe a descrição e a categoria.")
+        if f["categoria"] == financeiro.RETIRADA:
+            raise ValueError("Salário não é conta recorrente: configure o valor em Configurações e use \"Pagar salário\".")
         if not (RE_MES.match(f.get("inicio", "")) and (fim is None or RE_MES.match(fim))):
             raise ValueError("Confira o início e o fim (mês/ano).")
         if not 1 <= int(f.get("dia_vencimento") or 0) <= 31:

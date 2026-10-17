@@ -154,6 +154,7 @@ def iniciar_banco(caminho: Path = None) -> None:
                 [(n, i, f, t, k) for k, (n, i, f, t) in enumerate(FASES_INICIAIS, 1)],
             )
         _garantir_coluna(con, "campanha_checkpoints", "excluido_em", "TEXT")   # banco de antes de dar para excluir
+        _garantir_coluna(con, "lancamentos", "sem_recorrencia", "INTEGER")     # banco de antes de ligar saída à recorrência
         _garantir_coluna(con, "cliente_eventos", "hora", "INTEGER")            # banco de antes da Agenda
         _garantir_coluna(con, "agenda_avulsas", "reposicao", "INTEGER DEFAULT 0")   # banco de antes do controle de reposições
         if con.execute("SELECT COUNT(*) FROM campanha_checkpoints").fetchone()[0] == 0:
