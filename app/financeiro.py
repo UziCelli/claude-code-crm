@@ -252,18 +252,91 @@ def baixar_recorrencia(con: sqlite3.Connection, rid: int, competencia: str, valo
     return cur.lastrowid
 
 
+def _mes_br(comp: str) -> str:
+    return f"{comp[5:7]}/{comp[:4]}"
+
+
+def liberar_vaga(con: sqlite3.Connection, rid: int, comp: str, lid: int | None) -> None:
+    """Confere se a recorrência `rid` pode ser baixada em `comp` pelo lançamento `lid` (UNIQUE recorrencia_id+competencia).
+    ValueError em português se o mês já tem outra baixa ativa. Baixa que está na lixeira só ocupa a vaga: é solta dela
+    (volta como lançamento comum se for restaurada). Não faz commit: quem chama já está em `with con`."""
+    outra = con.execute(
+        """SELECT l.id, l.excluido_em, l.pago_em, l.data, r.descricao FROM lancamentos l JOIN recorrencias r ON r.id = l.recorrencia_id
+           WHERE l.recorrencia_id=? AND l.competencia=? AND l.id IS NOT ?""", (rid, comp, lid)).fetchone()
+    if outra is None:
+        return
+    if outra["excluido_em"] is None:
+        quando = f" (dia {outra['pago_em'][8:10]}/{outra['pago_em'][5:7]})" if outra["pago_em"] else " (ainda em aberto)"
+        raise ValueError(f"{outra['descricao']} de {_mes_br(comp)} já tem um lançamento{quando}. "
+                         "Se pagou duas vezes, exclua um dos dois.")
+    con.execute("UPDATE lancamentos SET recorrencia_id=NULL, competencia=NULL WHERE id=?", (outra["id"],))
+
+
+def ligar_recorrencia(con: sqlite3.Connection, lid: int, rid: int) -> str:
+    """Liga uma saída lançada à mão à conta recorrente (a competência é o mês da data). Devolve a descrição da conta.
+    ValueError em português se não pode: não é saída, escopo diferente ou o mês já tem baixa."""
+    lanc = con.execute("SELECT * FROM lancamentos WHERE id=? AND excluido_em IS NULL", (lid,)).fetchone()
+    if lanc is None:
+        raise ValueError("Lançamento não encontrado.")
+    r = con.execute("SELECT * FROM recorrencias WHERE id=? AND excluido_em IS NULL", (rid,)).fetchone()
+    if r is None:
+        raise ValueError("Conta recorrente não encontrada.")
+    if lanc["tipo"] != "saida":
+        raise ValueError("Só saída pode ser uma conta recorrente.")
+    if lanc["escopo"] != r["escopo"]:
+        raise ValueError(f"{r['descricao']} é da {r['escopo']} e este lançamento é da {lanc['escopo']}.")
+    comp = lanc["data"][:7]
+    with con:
+        liberar_vaga(con, rid, comp, lid)
+        con.execute("UPDATE lancamentos SET recorrencia_id=?, competencia=?, sem_recorrencia=NULL WHERE id=?", (rid, comp, lid))
+    return r["descricao"]
+
+
+def saidas_parecidas(con: sqlite3.Connection) -> list[dict]:
+    """Saídas lançadas à mão (sem recorrencia_id) que parecem ser uma conta recorrente ativa da mesma frente: mesma descrição
+    ou mesma categoria e valor. Só sugere, nunca liga sozinho (despesa avulsa de mesmo valor é falso positivo).
+    `ja_baixada` = a recorrência já tem baixa naquele mês: a conta foi paga duas vezes."""
+    achados: dict[int, dict] = {}
+    for x in con.execute(
+        """SELECT l.id, l.data, l.pago_em, l.escopo, l.valor, l.categoria, l.descricao,
+                  r.id AS rid, r.descricao AS rdescricao, r.valor AS rvalor, r.dia_vencimento,
+                  CASE WHEN lower(trim(coalesce(l.descricao,''))) = lower(trim(r.descricao)) THEN 'descricao' ELSE 'categoria+valor' END AS casou_por,
+                  EXISTS (SELECT 1 FROM lancamentos b WHERE b.recorrencia_id = r.id AND b.competencia = substr(l.data,1,7)
+                          AND b.excluido_em IS NULL) AS ja_baixada
+           FROM lancamentos l
+           JOIN recorrencias r ON r.excluido_em IS NULL AND r.escopo = l.escopo
+                AND r.inicio <= substr(l.data,1,7) AND (r.fim IS NULL OR r.fim >= substr(l.data,1,7))
+                AND (lower(trim(coalesce(l.descricao,''))) = lower(trim(r.descricao))
+                     OR (l.categoria = r.categoria AND abs(l.valor - r.valor) < 0.005))
+           WHERE l.tipo = 'saida' AND l.excluido_em IS NULL AND l.recorrencia_id IS NULL AND l.categoria <> ?
+                 AND COALESCE(l.sem_recorrencia, 0) = 0
+           ORDER BY l.data, l.id, r.id""", (RETIRADA,)):
+        item = achados.setdefault(x["id"], {
+            "id": x["id"], "data": x["data"], "pago_em": x["pago_em"], "escopo": x["escopo"], "valor": x["valor"],
+            "categoria": x["categoria"], "descricao": x["descricao"] or x["categoria"], "candidatos": []})
+        item["candidatos"].append({"id": x["rid"], "descricao": x["rdescricao"], "valor": x["rvalor"],
+                                   "dia_vencimento": x["dia_vencimento"], "casou_por": x["casou_por"], "ja_baixada": bool(x["ja_baixada"])})
+    return list(achados.values())
+
+
+def recorrencias_retirada(con: sqlite3.Connection) -> list:
+    """Recorrências ativas cadastradas como Retirada: salário não é conta recorrente (usa 'Pagar salário')."""
+    return con.execute("SELECT * FROM recorrencias WHERE excluido_em IS NULL AND categoria=? ORDER BY escopo, descricao",
+                       (RETIRADA,)).fetchall()
+
+
 def resumo_mes(con: sqlite3.Connection, mes: str, escopo: str = "PJ") -> dict:
     """Números do mês, só com lançamentos pagos. Fixo = saída vinda de recorrência fixa; o resto das saídas é variável."""
     soma = {}   # (tipo, fixo) -> total
+    # salário da PJ para a PF: sai do lucro, não é custo do negócio (nem fixo, nem variável), venha de recorrência ou não
     for tipo, fixo, total in con.execute(
         """SELECT l.tipo, r.fixo, SUM(l.valor) FROM lancamentos l LEFT JOIN recorrencias r ON r.id = l.recorrencia_id
            WHERE l.escopo=? AND l.excluido_em IS NULL AND l.pago_em IS NOT NULL AND substr(l.data,1,7)=?
-           GROUP BY l.tipo, r.fixo""", (escopo, mes)):
+                 AND NOT (l.tipo='saida' AND l.categoria=?)
+           GROUP BY l.tipo, r.fixo""", (escopo, mes, RETIRADA)):
         soma[(tipo, fixo)] = total
-    # salário da PJ para a PF: sai do lucro, não é custo do negócio
     retirada = con.execute("""SELECT COALESCE(SUM(valor), 0) FROM lancamentos WHERE escopo=? AND tipo='saida' AND categoria=?
                               AND excluido_em IS NULL AND pago_em IS NOT NULL AND substr(data,1,7)=?""", (escopo, RETIRADA, mes)).fetchone()[0]
-    soma[("saida", None)] = soma.get(("saida", None), 0) - retirada   # retirada nunca vem de recorrência (r.fixo é NULL)
     receita = sum(v for (t, _), v in soma.items() if t == "entrada")
     fixos = sum(v for (t, f), v in soma.items() if t == "saida" and f == 1)
     variaveis = sum(v for (t, f), v in soma.items() if t == "saida" and f != 1)

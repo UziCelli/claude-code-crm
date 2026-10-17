@@ -261,3 +261,95 @@ def test_entrada_pj_diz_como_separar(cliente_http):
     pagina = http.get("/financeiro").text
     assert "Potes do mês" in pagina and "R$ 60,00" in pagina
     assert "Colchão para meses fracos" in http.get("/financeiro/painel").text
+
+
+def test_financeiro_ligar_saida_a_recorrencia(cliente_http):
+    import datetime as dt
+    http, _ = cliente_http
+    hoje = dt.date.today()
+    mes = f"{hoje:%Y-%m}"
+    base = {"escopo": "PJ", "volta": f"mes={mes}&escopo=todos"}
+    http.post("/financeiro/recorrencia", data={**base, "descricao": "Aluguel", "categoria": "Aluguel", "valor": "1000", "dia_vencimento": "5",
+                                               "fixo": "1", "inicio": mes}, follow_redirects=False)
+    con = db.conectar()
+    rid = con.execute("SELECT id FROM recorrencias").fetchone()[0]
+    # lançado à mão pelo formulário, já ligado à conta recorrente: competência = mês da data
+    saida = {**base, "tipo": "saida", "data": hoje.isoformat(), "valor": "1000", "categoria": "Aluguel", "descricao": "Aluguel",
+             "pago_em": hoje.isoformat(), "recorrencia_id": str(rid)}
+    r = http.post("/financeiro/lancamento", data=saida, follow_redirects=False)
+    assert "erro=" not in r.headers["location"]
+    lid, comp = con.execute("SELECT id, competencia FROM lancamentos").fetchone()
+    assert comp == mes and "talvez" not in http.get("/financeiro").text
+    # o mesmo mês de novo: erro amigável, nada gravado
+    r = http.post("/financeiro/lancamento", data=saida, follow_redirects=False)
+    assert "erro=" in r.headers["location"] and "j%C3%A1+tem+um+lan%C3%A7amento" in r.headers["location"].replace("%20", "+")
+    assert con.execute("SELECT COUNT(*) FROM lancamentos").fetchone()[0] == 1
+    # editar a data para outro mês mantém a competência da baixa; esvaziar o campo desliga
+    outro = (hoje.replace(day=1) - dt.timedelta(days=1)).isoformat()
+    http.post("/financeiro/lancamento", data={**saida, "id": str(lid), "data": outro, "pago_em": outro}, follow_redirects=False)
+    assert tuple(con.execute("SELECT recorrencia_id, competencia FROM lancamentos").fetchone()) == (rid, mes)
+    http.post("/financeiro/lancamento", data={**saida, "id": str(lid), "recorrencia_id": ""}, follow_redirects=False)
+    assert tuple(con.execute("SELECT recorrencia_id, competencia FROM lancamentos").fetchone()) == (None, None)
+    # entrada não pode ser conta recorrente
+    r = http.post("/financeiro/lancamento", data={**saida, "tipo": "entrada", "data": hoje.isoformat()}, follow_redirects=False)
+    assert "erro=" in r.headers["location"]
+    con.close()
+
+
+def test_financeiro_card_de_contas_parecidas_ligar_e_descartar(cliente_http):
+    import datetime as dt
+    http, _ = cliente_http
+    hoje = dt.date.today()
+    mes = f"{hoje:%Y-%m}"
+    base = {"escopo": "PJ", "volta": f"mes={mes}&escopo=todos"}
+    http.post("/financeiro/recorrencia", data={**base, "descricao": "Aluguel", "categoria": "Aluguel", "valor": "1000", "dia_vencimento": "5",
+                                               "fixo": "1", "inicio": mes}, follow_redirects=False)
+    con = db.conectar()
+    rid = con.execute("SELECT id FROM recorrencias").fetchone()[0]
+    for desc in ("Aluguel", "Sala"):
+        http.post("/financeiro/lancamento", data={**base, "tipo": "saida", "data": hoje.isoformat(), "valor": "1000", "categoria": "Aluguel",
+                                                  "descricao": desc, "pago_em": hoje.isoformat()}, follow_redirects=False)
+    a, b = [r[0] for r in con.execute("SELECT id FROM lancamentos ORDER BY id")]
+    tela = http.get(f"/financeiro?mes={mes}").text
+    assert "2 contas lançadas à mão parecem recorrentes" in tela and "talvez já pago" in tela
+    http.post(f"/financeiro/lancamento/{a}/recorrencia", data={**base, "recorrencia_id": rid}, follow_redirects=False)
+    assert con.execute("SELECT recorrencia_id FROM lancamentos WHERE id=?", (a,)).fetchone()[0] == rid
+    # o outro agora é pagamento em dobro: sem Ligar, com Excluir; "Não é a mesma conta" tira da lista
+    tela = http.get(f"/financeiro?mes={mes}").text
+    assert "1 conta lançada à mão parece recorrente" in tela and "já foi paga pelo botão Pagar" in tela
+    r = http.post(f"/financeiro/lancamento/{b}/recorrencia", data={**base, "recorrencia_id": rid}, follow_redirects=False)
+    assert "erro=" in r.headers["location"]
+    http.post(f"/financeiro/lancamento/{b}/nao-recorrente", data=base, follow_redirects=False)
+    assert con.execute("SELECT sem_recorrencia FROM lancamentos WHERE id=?", (b,)).fetchone()[0] == 1
+    assert "lançada à mão parece" not in http.get(f"/financeiro?mes={mes}").text
+    con.close()
+
+
+def test_financeiro_parcela_e_retirada_recorrente_sao_recusadas(cliente_http):
+    import datetime as dt
+    http, _ = cliente_http
+    hoje = dt.date.today()
+    base = {"escopo": "PF", "volta": f"mes={hoje:%Y-%m}&escopo=todos"}
+    con = db.conectar()
+    nota = {**base, "tipo": "saida", "data": hoje.isoformat(), "valor": "250", "categoria": "Pessoal", "descricao": "Notebook"}
+    r = http.post("/financeiro/lancamento", data={**nota, "parcela_num": "15", "parcela_total": "12"}, follow_redirects=False)
+    assert "erro=" in r.headers["location"] and con.execute("SELECT COUNT(*) FROM lancamentos").fetchone()[0] == 0
+    r = http.post("/financeiro/lancamento", data={**nota, "parcela_num": "3"}, follow_redirects=False)       # nº sem o total
+    assert "erro=" in r.headers["location"]
+    http.post("/financeiro/lancamento", data={**nota, "parcela_num": "3", "parcela_total": "12"}, follow_redirects=False)
+    assert tuple(con.execute("SELECT parcela_num, parcela_total FROM lancamentos").fetchone()) == (3, 12)
+    r = http.post("/financeiro/recorrencia", data={"escopo": "PJ", "descricao": "Salário", "categoria": "Retirada", "valor": "3000",
+                                                   "dia_vencimento": "5", "fixo": "1", "inicio": f"{hoje:%Y-%m}", "volta": base["volta"]},
+                  follow_redirects=False)
+    assert "erro=" in r.headers["location"] and con.execute("SELECT COUNT(*) FROM recorrencias").fetchone()[0] == 0
+    con.close()
+
+
+def test_financeiro_card_avisa_recorrencia_de_retirada_ja_cadastrada(cliente_http):
+    http, _ = cliente_http
+    con = db.conectar()
+    with con:
+        con.execute("INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, fixo, inicio)"
+                    " VALUES ('PJ','Salário','Retirada',3000,5,1,'2026-01')")
+    con.close()
+    assert "Salário não é conta recorrente" in http.get("/financeiro").text

@@ -504,3 +504,97 @@ def test_potes_e_colchao_sem_o_das_recorrente(con_temp):
     contas = next(p for p in financeiro.potes_mes(con_temp, "2026-10")["potes"] if p["chave"] == "contas")
     assert contas["alvo"] == 1200
     assert financeiro.colchao(con_temp, "2026-10")["mensal"] == 1200
+
+
+# ---------- Recorrência paga à mão (PR 4 da auditoria) ----------
+def paga_a_mao(con, valor=1000, data="2026-10-05", descricao="Aluguel", categoria="Aluguel", pago_em="2026-10-05", escopo="PJ", tipo="saida"):
+    with con:
+        return con.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao) VALUES (?,?,?,?,?,?,?)",
+                           (escopo, tipo, data, pago_em, valor, categoria, descricao)).lastrowid
+
+
+def abertas_de_outubro(con):
+    return [i for i in financeiro.pendencias(con, "2026-10", "2026-10-16") if i["origem"] == "recorrencia" and i["competencia"] == "2026-10"]
+
+
+def test_ligar_recorrencia_some_de_a_pagar_do_livre_e_vira_custo_fixo(con_temp):
+    rid = recorrencia(con_temp, valor=1000, dia=5)
+    saldo(con_temp, "Contabilizei Bank", 5000, "2026-10-01")
+    lid = paga_a_mao(con_temp)
+    assert len(abertas_de_outubro(con_temp)) == 1                                    # fantasma: já paguei, mas continua atrasada
+    antes = financeiro.saldo_livre(con_temp, "2026-10-16")["PJ"]["comprometido"]
+    resumo = financeiro.resumo_mes(con_temp, "2026-10")
+    assert (resumo["custos_fixos"], resumo["custos_variaveis"]) == (0, 1000)
+    assert financeiro.ligar_recorrencia(con_temp, lid, rid) == "Aluguel"
+    assert abertas_de_outubro(con_temp) == []
+    assert antes - financeiro.saldo_livre(con_temp, "2026-10-16")["PJ"]["comprometido"] == 1000
+    resumo = financeiro.resumo_mes(con_temp, "2026-10")
+    assert (resumo["custos_fixos"], resumo["custos_variaveis"]) == (1000, 0)
+    assert tuple(con_temp.execute("SELECT recorrencia_id, competencia FROM lancamentos WHERE id=?", (lid,)).fetchone()) == (rid, "2026-10")
+
+
+def test_ligar_recusa_mes_ja_baixado_e_nao_muda_nada(con_temp):
+    rid = recorrencia(con_temp)
+    financeiro.baixar_recorrencia(con_temp, rid, "2026-10", 1000, "2026-10-06")
+    lid = paga_a_mao(con_temp)
+    with pytest.raises(ValueError, match=r"Aluguel de 10/2026 já tem um lançamento \(dia 06/10\)"):
+        financeiro.ligar_recorrencia(con_temp, lid, rid)
+    assert con_temp.execute("SELECT recorrencia_id FROM lancamentos WHERE id=?", (lid,)).fetchone()[0] is None
+
+
+def test_ligar_solta_a_vaga_presa_pela_lixeira(con_temp):
+    rid = recorrencia(con_temp)
+    velha = financeiro.baixar_recorrencia(con_temp, rid, "2026-10", 1000, "2026-10-06")
+    with con_temp:
+        con_temp.execute("UPDATE lancamentos SET excluido_em='x' WHERE id=?", (velha,))
+    lid = paga_a_mao(con_temp)
+    financeiro.ligar_recorrencia(con_temp, lid, rid)
+    assert con_temp.execute("SELECT recorrencia_id FROM lancamentos WHERE id=?", (lid,)).fetchone()[0] == rid
+    assert tuple(con_temp.execute("SELECT recorrencia_id, competencia FROM lancamentos WHERE id=?", (velha,)).fetchone()) == (None, None)
+
+
+def test_ligar_recusa_entrada_e_escopo_diferente(con_temp):
+    rid = recorrencia(con_temp)
+    entrada = paga_a_mao(con_temp, tipo="entrada")
+    pf = paga_a_mao(con_temp, escopo="PF")
+    with pytest.raises(ValueError, match="Só saída"):
+        financeiro.ligar_recorrencia(con_temp, entrada, rid)
+    with pytest.raises(ValueError, match="é da PJ e este lançamento é da PF"):
+        financeiro.ligar_recorrencia(con_temp, pf, rid)
+
+
+def test_saidas_parecidas_acha_por_descricao_ou_categoria_e_valor(con_temp):
+    rid = recorrencia(con_temp, valor=1000)
+    a = paga_a_mao(con_temp, valor=1010, descricao="  aluguel ", categoria="Outros")      # mesma descrição, valor diferente
+    b = paga_a_mao(con_temp, valor=1000, descricao="Sala", data="2026-11-05", pago_em=None)   # categoria + valor, em aberto
+    paga_a_mao(con_temp, valor=999, descricao="Reforma")                                    # mesma categoria, outro valor
+    paga_a_mao(con_temp, valor=1000, descricao="Salário", categoria="Retirada")             # Retirada nunca é conta recorrente
+    paga_a_mao(con_temp, valor=1000, descricao="Sala 2", data="2025-12-05")                 # antes do início da recorrência
+    descartada = paga_a_mao(con_temp, valor=1000, descricao="Outro aluguel")
+    with con_temp:
+        con_temp.execute("UPDATE lancamentos SET sem_recorrencia=1 WHERE id=?", (descartada,))
+    ligada = paga_a_mao(con_temp, valor=1000, descricao="Já ligado", data="2026-12-05")
+    financeiro.ligar_recorrencia(con_temp, ligada, rid)
+    achados = {s["id"]: s for s in financeiro.saidas_parecidas(con_temp)}
+    assert set(achados) == {a, b}
+    assert achados[a]["candidatos"][0]["casou_por"] == "descricao" and achados[b]["candidatos"][0]["casou_por"] == "categoria+valor"
+    assert not achados[a]["candidatos"][0]["ja_baixada"] and achados[b]["pago_em"] is None
+
+
+def test_saidas_parecidas_avisa_pagamento_em_dobro(con_temp):
+    rid = recorrencia(con_temp)
+    financeiro.baixar_recorrencia(con_temp, rid, "2026-10", 1000, "2026-10-06")
+    paga_a_mao(con_temp)
+    (achado,) = financeiro.saidas_parecidas(con_temp)
+    assert achado["candidatos"][0]["ja_baixada"] is True
+
+
+def test_retirada_recorrente_nao_deixa_custo_negativo(con_temp):
+    with con_temp:
+        rid = con_temp.execute("INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, fixo, inicio)"
+                               " VALUES ('PJ','Salário','Retirada',3000,5,1,'2026-01')").lastrowid
+    financeiro.baixar_recorrencia(con_temp, rid, "2026-10", 3000, "2026-10-05")
+    lancar(con_temp, "entrada", 10000, "2026-10-02", pago_em="2026-10-02")
+    resumo = financeiro.resumo_mes(con_temp, "2026-10")
+    assert (resumo["custos_fixos"], resumo["custos_variaveis"], resumo["retirada"], resumo["lucro"]) == (0, 0, 3000, 10000)
+    assert [r["id"] for r in financeiro.recorrencias_retirada(con_temp)] == [rid]
