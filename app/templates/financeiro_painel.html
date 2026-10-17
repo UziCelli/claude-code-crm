@@ -17,7 +17,7 @@
   <div class="kpi"><div class="rotulo">Custos variáveis</div><div class="valor">{{ r.custos_variaveis|moeda }}</div></div>
   <div class="kpi {{ 'verde' if r.lucro >= 0 else 'vermelho' }}"><div class="rotulo">Lucro</div><div class="valor">{{ r.lucro|moeda }}</div><div class="meta">Receita menos custos fixos e variáveis</div></div>
   <div class="kpi"><div class="rotulo">Ponto de equilíbrio</div><div class="valor">{{ r.ponto_equilibrio|moeda }}</div><div class="meta">{% if r.ponto_equilibrio is none %}Aparece quando há receita e custos fixos pagos no mês (meses anteriores à migração não separam fixo de variável){% else %}Receita para cobrir os custos fixos{% endif %}</div></div>
-  <div class="kpi"><div class="rotulo">DAS estimado</div><div class="valor">{{ r.das|moeda }}</div><div class="meta">Estimativa: 6% da receita do mês. O DAS já pago entra em custos.</div></div>
+  <div class="kpi"><div class="rotulo">DAS estimado</div><div class="valor">{{ r.das|moeda }}</div><div class="meta">Estimativa: {{ das_pct }}% da receita do mês. O DAS já pago entra em custos.</div></div>
   <div class="kpi"><div class="rotulo">Pró-labore</div><div class="valor">{{ r.pro_labore|moeda }}</div><div class="meta">Fora do lucro</div></div>
   <div class="kpi"><div class="rotulo">INSS do pró-labore</div><div class="valor">{{ r.inss|moeda }}</div><div class="meta">Fora do lucro</div></div>
   <div class="kpi"><div class="rotulo">Salário pago à PF</div><div class="valor">{{ r.retirada|moeda }}</div><div class="meta">Retirada: sai do lucro, não é custo</div></div>
@@ -51,9 +51,9 @@
     <div class="barra"><i style="width:{{ colchao.pct }}%"></i></div>
     {% else %}<p class="muted mt">Sem meta ainda. Quando decidir, defina os meses em <a href="/configuracoes">Configurações</a>. Para guardar, crie uma caixinha no banco e marque a conta como Reserva em Atualizar saldos.</p>{% endif %}
   </div>
-  <div class="card">
+  <div class="card" style="grid-column:1/-1">
     <h2>Últimos 12 meses — receita, custos e lucro</h2>
-    <div class="linha muted" style="font-size:12px"><span><span class="tag verde">&nbsp;</span> Receita</span><span><span class="tag vermelho">&nbsp;</span> Custos</span><span><span class="tag azul">&nbsp;</span> Lucro</span></div>
+    <div class="linha muted" style="font-size:12px"><span><span class="tag verde">&nbsp;</span> Receita</span><span><span class="tag vermelho">&nbsp;</span> Custos</span><span><span class="tag azul">&nbsp;</span> Lucro</span><span><span class="tag vermelho listrado">&nbsp;</span> Prejuízo</span></div>
     <div class="grafico">
       {% for s in serie %}
       {% set custos = s.custos_fixos + s.custos_variaveis %}
@@ -61,7 +61,7 @@
         <div class="barras">
           <i class="b-receita" style="height:{{ (100 * s.receita / maximo)|round }}%"></i>
           <i class="b-custos" style="height:{{ (100 * custos / maximo)|round }}%"></i>
-          <i class="b-lucro" style="height:{{ (100 * [s.lucro, 0]|max / maximo)|round }}%"></i>
+          <i class="{{ 'b-prejuizo' if s.lucro < 0 else 'b-lucro' }}" style="height:{{ (100 * s.lucro|abs / maximo)|round }}%"></i>
         </div>
         <span>{{ s.mes[5:] }}<b class="ano">/{{ s.mes[2:4] }}</b></span>
       </div>

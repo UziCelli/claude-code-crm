@@ -615,6 +615,11 @@ def previsao(con: sqlite3.Connection, hoje: str, semanas: int = 13) -> dict:
     livre = saldo_livre(con, hoje)
     saldo = {f: livre[f]["tem"] for f in ("PF", "PJ")}
     linhas, aperto = [], {}
+    # pior dia: o saldo é seguido dia a dia, não só no fim da semana (um buraco entre dois recebimentos aparece)
+    menor_dia = {f: {"saldo": round(saldo[f], 2), "data": hoje} for f in ("PF", "PJ")}
+    for f in ("PF", "PJ"):
+        if saldo[f] < 0:
+            aperto[f] = {"inicio": hoje, "saldo": round(saldo[f], 2)}
     for k in range(semanas):
         ini = (h + dt.timedelta(days=7 * k)).isoformat()
         fim_sem = (h + dt.timedelta(days=7 * k + 6)).isoformat()
@@ -623,14 +628,25 @@ def previsao(con: sqlite3.Connection, hoje: str, semanas: int = 13) -> dict:
         for f in ("PF", "PJ"):
             ent = sum(i["valor"] for i in da_semana if i["escopo"] == f and i["tipo"] == "entrada")
             sai = sum(i["valor"] for i in da_semana if i["escopo"] == f and i["tipo"] == "saida")
-            saldo[f] += ent - sai
-            linha[f] = {"entradas": round(ent, 2), "saidas": round(sai, 2), "saldo": round(saldo[f], 2)}
-            if saldo[f] < 0 and f not in aperto:
-                aperto[f] = {"inicio": ini, "saldo": round(saldo[f], 2)}
-        linha["negativo"] = any(linha[f]["saldo"] < 0 for f in ("PF", "PJ"))
+            pior = None   # (saldo, dia) do pior fim de dia da semana; atrasado conta em "hoje"
+            por_dia = {}
+            for i in da_semana:
+                if i["escopo"] == f:
+                    por_dia[max(i["data"], hoje)] = por_dia.get(max(i["data"], hoje), 0) + (i["valor"] if i["tipo"] == "entrada" else -i["valor"])
+            for dia in sorted(por_dia):
+                saldo[f] += por_dia[dia]
+                if pior is None or saldo[f] < pior[0]:
+                    pior = (round(saldo[f], 2), dia)
+                if saldo[f] < 0 and f not in aperto:
+                    aperto[f] = {"inicio": dia, "saldo": round(saldo[f], 2)}
+                if saldo[f] < menor_dia[f]["saldo"]:
+                    menor_dia[f] = {"saldo": round(saldo[f], 2), "data": dia}
+            linha[f] = {"entradas": round(ent, 2), "saidas": round(sai, 2), "saldo": round(saldo[f], 2),
+                        "pior": {"saldo": pior[0], "data": pior[1]} if pior and pior[0] < 0 else None}
+        linha["negativo"] = any(linha[f]["pior"] for f in ("PF", "PJ"))
         linhas.append(linha)
-    menor = {f: min(l[f]["saldo"] for l in linhas) for f in ("PF", "PJ")}
-    return {"semanas": linhas, "aperto": aperto, "menor": menor, "inicio": {f: livre[f]["tem"] for f in ("PF", "PJ")},
+    menor = {f: menor_dia[f]["saldo"] for f in ("PF", "PJ")}
+    return {"semanas": linhas, "aperto": aperto, "menor": menor, "menor_dia": menor_dia, "inicio": {f: livre[f]["tem"] for f in ("PF", "PJ")},
             "sem_saldo": {f: livre[f]["sem_saldo"] for f in ("PF", "PJ")}, "fim": fim,
             "dias_velho": {f: livre[f]["dias_velho"] for f in ("PF", "PJ")},
             "desatualizado": {f: livre[f]["desatualizado"] for f in ("PF", "PJ")}, "sem_frente": livre["sem_frente"],

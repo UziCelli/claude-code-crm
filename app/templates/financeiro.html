@@ -64,7 +64,7 @@
     </div>
     <div class="muted mt">Gasto pessoal no mês: {{ salario.gasto_pf|moeda }} de {{ salario.valor|moeda }} ({{ salario.pct_gasto }}%)</div>
     <div class="barra"><i style="width:{{ [salario.pct_gasto, 100]|min }}%;{{ ' background:var(--vermelho)' if salario.pct_gasto >= 90 }}"></i></div>
-    {% if salario.sugestao and salario.sugestao < salario.valor %}<p class="muted">O salário passa da sugestão ({{ salario.sugestao|moeda }}, 80% do lucro médio dos últimos 3 meses). Nos meses fracos pode faltar na PJ.</p>{% endif %}
+    {% if salario.sugestao is not none and salario.sugestao < salario.valor %}<p class="muted">O salário passa da sugestão ({{ salario.sugestao|moeda }}, 80% do lucro médio dos últimos 3 meses{% if not salario.sugestao %}: nos últimos 3 meses a PJ não teve lucro{% endif %}). Nos meses fracos pode faltar na PJ.</p>{% endif %}
     {% endif %}
   </div>
   {% if livre.reserva %}<p class="muted">Guardado no colchão (contas Reserva): {{ livre.reserva|moeda }}. Não entra no livre.</p>{% endif %}
@@ -81,8 +81,8 @@
 
 <div class="grid c3 mt">
   <div class="kpi verde"><div class="rotulo">Entradas</div><div class="valor">{{ entradas|moeda }}</div></div>
-  <div class="kpi vermelho"><div class="rotulo">Saídas</div><div class="valor">{{ saidas|moeda }}</div></div>
-  <div class="kpi {{ 'verde' if saldo >= 0 else 'vermelho' }}"><div class="rotulo">Saldo do mês</div><div class="valor">{{ saldo|moeda }}</div><div class="meta">Inclui o que ainda está pendente</div></div>
+  <div class="kpi vermelho"><div class="rotulo">Saídas</div><div class="valor">{{ saidas|moeda }}</div>{% if transferencia %}<div class="meta">Sem o salário PJ→PF ({{ transferencia|moeda }}): é só transferência.</div>{% endif %}</div>
+  <div class="kpi {{ 'verde' if saldo >= 0 else 'vermelho' }}"><div class="rotulo">Saldo do mês</div><div class="valor">{{ saldo|moeda }}</div><div class="meta">Só lançamentos do mês (pagos e em aberto). Recorrência que ainda não virou lançamento não entra.</div></div>
 </div>
 
 <div class="card mt">
