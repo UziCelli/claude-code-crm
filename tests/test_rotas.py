@@ -217,6 +217,40 @@ def test_pagar_salario_pela_tela(cliente_http):
     assert "Salário pago à PF" in http.get("/financeiro/painel").text
 
 
+def test_saldo_e_pagamento_no_futuro_sao_recusados(cliente_http):
+    import datetime as dt
+    http, _ = cliente_http
+    amanha = (dt.date.today() + dt.timedelta(days=1)).isoformat()
+    base = {"volta": "mes=&escopo=todos"}
+    con = db.conectar()
+    with con:
+        con.execute("UPDATE parametros SET valor=1500 WHERE grupo='salario' AND chave='valor'")
+        rid = con.execute("INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, inicio) VALUES ('PJ','Aluguel','Outros',500,1,'2026-01')").lastrowid
+    pedidos = [("/financeiro/saldos", {"data": amanha, "conta_1": "Inter", "saldo_1": "10"}),
+               ("/financeiro/lancamento", {"escopo": "PF", "tipo": "saida", "data": "2026-10-01", "pago_em": amanha, "valor": "10", "categoria": "Outros"}),
+               ("/financeiro/salario", {"mes": amanha[:7], "pago_em": amanha}),
+               ("/financeiro/recorrencia/baixa", {"rid": rid, "competencia": amanha[:7], "valor": "500", "pago_em": amanha})]
+    for url, dados in pedidos:
+        r = http.post(url, data={**base, **dados}, follow_redirects=False)
+        assert "futuro" in unquote(r.headers["location"]), url
+    assert con.execute("SELECT COUNT(*) FROM saldos").fetchone()[0] == 0
+    assert con.execute("SELECT COUNT(*) FROM lancamentos").fetchone()[0] == 0
+    con.close()
+
+
+def test_previsao_avisa_saldo_velho_e_conta_sem_frente(cliente_http):
+    import datetime as dt
+    http, _ = cliente_http
+    velho = (dt.date.today() - dt.timedelta(days=10)).isoformat()
+    http.post("/financeiro/saldos", data={"data": velho, "conta_1": "Inter", "frente_1": "PF", "saldo_1": "100"}, follow_redirects=False)
+    con = db.conectar()
+    with con:
+        con.execute("INSERT INTO parametros (grupo, chave, valor_texto) VALUES ('lista_contas','Nubank','Nubank')")
+    con.close()
+    tela = http.get("/financeiro/previsao").text
+    assert "Saldo PF de 10 dias atrás" in tela and "Conta sem frente: Nubank" in tela
+
+
 def test_entrada_pj_diz_como_separar(cliente_http):
     import datetime as dt
     http, _ = cliente_http
