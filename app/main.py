@@ -1671,12 +1671,18 @@ def financeiro_previsao(request: Request, con=Depends(get_db)):
     return render(request, "financeiro_previsao.html", con, prev=financeiro.previsao(con, dt.date.today().isoformat()))
 
 
+def _ja_aconteceu(data: str) -> bool:
+    """Data ISO válida e não no futuro: pagamento e saldo só valem para o que já aconteceu."""
+    try:
+        return dt.date.fromisoformat(data) <= dt.date.today()
+    except (TypeError, ValueError):
+        return False
+
+
 @app.post("/financeiro/salario")
 def financeiro_salario(mes: str = Form(...), pago_em: str = Form(...), volta: str = Form(""), con=Depends(get_db)):
-    try:
-        dt.date.fromisoformat(pago_em)
-    except ValueError:
-        return _fin_voltar(volta, erro="Confira a data do pagamento.")
+    if not _ja_aconteceu(pago_em):
+        return _fin_voltar(volta, erro="Confira a data do pagamento: não pode ser no futuro.")
     if not RE_MES.match(mes):
         return _fin_voltar(volta, erro="Mês inválido.")
     try:
@@ -1694,8 +1700,9 @@ async def financeiro_saldos(request: Request, con=Depends(get_db)):
     data = f.get("data") or dt.date.today().isoformat()
     valores, frentes = {}, {}
     contas = set(db.lista(con, "lista_contas"))
+    if not _ja_aconteceu(data):   # foto no futuro venceria todas as outras e esconderia o que for pago até lá
+        return _fin_voltar(volta, erro="Confira a data dos saldos: não pode ser no futuro.")
     try:
-        dt.date.fromisoformat(data)
         for k, conta in f.items():
             if not k.startswith("conta_") or conta not in contas:
                 continue
@@ -1741,6 +1748,8 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
             cliente_id, parcela_num, parcela_total, lid = (int(f[k]) if f.get(k) else None for k in ("cliente_id", "parcela_num", "parcela_total", "id"))
         except ValueError:
             raise ValueError("Confira as datas e os números.") from None
+        if pago_em and not _ja_aconteceu(pago_em):
+            raise ValueError("\"Pago em\" não pode ser no futuro: deixe vazio e dê baixa no dia em que pagar.")
     except ValueError as e:
         return _fin_voltar(volta, erro=str(e))
     campos = [f["escopo"], f["tipo"], f["data"], pago_em, valor, f["categoria"], f.get("descricao") or None, f.get("contraparte") or None,
@@ -1840,7 +1849,8 @@ def financeiro_recorrencia_excluir(rid: int, volta: str = Form(""), con=Depends(
 def financeiro_recorrencia_baixa(rid: int = Form(...), competencia: str = Form(...), valor: str = Form(...), pago_em: str = Form(...),
                                  volta: str = Form(""), con=Depends(get_db)):
     try:
-        dt.date.fromisoformat(pago_em)
+        if not _ja_aconteceu(pago_em):
+            raise ValueError("Confira a data do pagamento: não pode ser no futuro.")
         if not RE_MES.match(competencia):
             raise ValueError("Competência inválida.")
         financeiro.baixar_recorrencia(con, rid, competencia, _num_br(valor), pago_em)

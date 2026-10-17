@@ -21,7 +21,7 @@
     <h2 id="t-livre" style="margin:0">Quanto dá para gastar</h2>
     <button class="claro" data-abrir="dlg-saldos" data-titulo="Atualizar saldos">Atualizar saldos</button>
   </div>
-  <p class="muted">Dinheiro que já está nas contas, menos tudo que vence até {{ livre.PF.ate|data }} e o imposto a guardar. Entrada prevista não conta.</p>
+  <p class="muted">Dinheiro nas contas (o último saldo digitado mais o que foi pago depois dele), menos tudo que vence até {{ livre.PF.ate|data }}, o imposto a guardar e o salário ainda não pago. Entrada prevista não conta.</p>
   {% if livre.sem_frente %}<p class="aviso erro">Conta sem frente: {{ livre.sem_frente|join(', ') }}. Escolha PF, PJ, Reserva ou Fora em Atualizar saldos.</p>{% endif %}
   <div class="grid c2">
     {% for f in ['PF', 'PJ'] %}{% set l = livre[f] %}
@@ -32,7 +32,7 @@
       <div class="meta">Digite o saldo das contas {{ f }} em Atualizar saldos para ver este número.</div>
       {% else %}
       <div class="valor">{{ l.livre|moeda }}</div>
-      <div class="meta">Tem {{ l.tem|moeda }} · já comprometido {{ l.comprometido|moeda }}{% if f == 'PJ' %} · imposto a guardar {{ l.imposto|moeda }}{% endif %}</div>
+      <div class="meta">Tem {{ l.tem|moeda }} · já comprometido {{ l.comprometido|moeda }}{% if f == 'PJ' %} · imposto a guardar {{ l.imposto|moeda }}{% if l.salario %} · salário a pagar {{ l.salario|moeda }}{% endif %}{% endif %}</div>
       {% if l.desatualizado %}<div class="meta"><span class="tag amarelo">saldo de {{ l.dias_velho }} dias atrás: atualize</span></div>{% endif %}
       {% if l.itens %}
       <details class="mt"><summary class="muted">O que já está comprometido ({{ l.itens|length }})</summary>
@@ -52,6 +52,7 @@
       <div>
         <strong>{{ salario.valor|moeda }}</strong> <span class="muted">todo dia {{ salario.dia }}</span>
         {% if salario.pago_em %}<span class="tag verde">pago em {{ salario.pago_em|data }}</span>
+        {% elif salario.retirado %}<span class="tag amarelo">Retirada lançada: {{ salario.retirado|moeda }}{% if salario.falta %} · falta {{ salario.falta|moeda }}{% endif %}</span>
         {% elif not salario.pode_pagar %}<span class="tag neutro">dia {{ salario.data|data }}</span>{% endif %}
       </div>
       {% if salario.pode_pagar %}
@@ -204,7 +205,7 @@
       <div class="campo"><label>Forma</label><select name="forma"><option value="">—</option>{% for k in listas.lista_formas_lancamento %}<option>{{ k }}</option>{% endfor %}</select></div>
       <div class="campo"><label>Parcela nº (opcional)</label><input name="parcela_num" type="number" min="1"></div>
       <div class="campo"><label>De quantas</label><input name="parcela_total" type="number" min="1"></div>
-      <div class="campo largo"><label>Pago em (deixe vazio se ainda não foi pago)</label><input name="pago_em" type="date"></div>
+      <div class="campo largo"><label>Pago em (deixe vazio se ainda não foi pago)</label><input name="pago_em" type="date" max="{{ hoje() }}"></div>
     </div>
     <div class="linha"><button>Salvar</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
   </form>
@@ -215,7 +216,7 @@
   <p class="muted">Abra o app de cada banco e copie o saldo de hoje. Deixe vazio o que não quiser mudar. Reserva = caixinha do colchão; Fora = cartão.</p>
   <form method="post" action="/financeiro/saldos">
     <input type="hidden" name="volta" value="{{ volta }}">
-    <div class="campo"><label>Data dos saldos</label><input name="data" type="date" value="{{ hoje() }}" required></div>
+    <div class="campo"><label>Data dos saldos</label><input name="data" type="date" value="{{ hoje() }}" max="{{ hoje() }}" required></div>
     <table>
       <thead><tr><th>Conta</th><th>Frente</th><th class="num">Saldo hoje (R$)</th></tr></thead>
       <tbody>
@@ -240,7 +241,7 @@
   <form method="post" action="/financeiro/recorrencia/baixa">
     <input type="hidden" name="rid" value=""><input type="hidden" name="competencia" value=""><input type="hidden" name="volta" value="{{ volta }}">
     <div class="campo"><label>Valor pago (R$)</label><input name="valor" inputmode="decimal" required></div>
-    <div class="campo"><label>Pago em</label><input name="pago_em" type="date" value="{{ hoje() }}" required></div>
+    <div class="campo"><label>Pago em</label><input name="pago_em" type="date" value="{{ hoje() }}" max="{{ hoje() }}" required></div>
     <div class="linha"><button class="verde">Confirmar pagamento</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
   </form>
 </dialog>

@@ -90,11 +90,15 @@ def saldos_atuais(con: sqlite3.Connection) -> dict:
 
 def em_aberto_ate(con: sqlite3.Connection, ate: str, hoje: str) -> list[dict]:
     """Tudo em aberto com data até 'ate' (inclui atrasado): lançamentos sem pago_em + recorrências não baixadas,
-    da competência de 3 meses atrás até a de 'ate'."""
-    itens = [{"origem": "lancamento", "id": r["id"], "escopo": r["escopo"], "tipo": r["tipo"], "data": r["data"],
-              "descricao": r["descricao"] or r["categoria"], "categoria": r["categoria"], "valor": r["valor"],
-              "status": status(r, hoje)}
-             for r in con.execute("SELECT * FROM lancamentos WHERE pago_em IS NULL AND excluido_em IS NULL AND data <= ?", (ate,))]
+    da competência de 3 meses atrás até a de 'ate'. Pago com data no futuro (agendado) ainda está na conta:
+    conta como aberto, na data do pagamento."""
+    itens = []
+    for r in con.execute("""SELECT * FROM lancamentos WHERE (pago_em IS NULL OR pago_em > ?) AND excluido_em IS NULL
+                            AND COALESCE(pago_em, data) <= ?""", (hoje, ate)):
+        data = r["pago_em"] or r["data"]
+        itens.append({"origem": "lancamento", "id": r["id"], "escopo": r["escopo"], "tipo": r["tipo"], "data": data,
+                      "descricao": r["descricao"] or r["categoria"], "categoria": r["categoria"], "valor": r["valor"],
+                      "status": status({"pago_em": None, "data": data}, hoje)})
     comp, fim = somar_meses(hoje[:7], -3), ate[:7]
     while comp <= fim:
         itens += [i for i in _recorrencias_abertas(con, comp, hoje) if i["data"] <= ate]
@@ -143,29 +147,58 @@ def _das_a_guardar(con: sqlite3.Connection, mes: str, abertos: list[dict], base:
     return 0.0 if real else max(das_pct * base - previsto, 0)
 
 
+def _tem(con: sqlite3.Connection, contas: dict, frente: str, hoje: str) -> float:
+    """Saldo de partida da frente: a foto mais recente de cada conta + entradas − saídas pagas depois dela, até hoje.
+    Pago no dia da foto já está nela (por isso 'depois'); pago no futuro ainda não saiu da conta.
+    Lançamento com conta só mexe nela: cartão, Reserva e conta de outra frente ficam de fora. Sem conta, vai pelo escopo,
+    do lado seguro: saída conta depois da foto mais antiga da frente; entrada, só depois da mais recente."""
+    fotos = {c: v for c, v in contas.items() if v["data"]}
+    if not fotos:
+        return 0.0
+    datas = [v["data"] for v in fotos.values()]
+    tem = sum(v["saldo"] for v in fotos.values())
+    for r in con.execute("""SELECT escopo, tipo, valor, conta, pago_em FROM lancamentos WHERE excluido_em IS NULL
+                            AND pago_em > ? AND pago_em <= ?""", (min(datas), hoje)):
+        entrada = r["tipo"] == "entrada"
+        if r["conta"]:
+            corte = fotos[r["conta"]]["data"] if r["conta"] in fotos else None
+        else:
+            corte = (max(datas) if entrada else min(datas)) if r["escopo"] == frente else None
+        if corte and r["pago_em"] > corte:
+            tem += r["valor"] if entrada else -r["valor"]
+    return tem
+
+
 def saldo_livre(con: sqlite3.Connection, hoje: str, dias: int = 30) -> dict:
     """Quanto dá para gastar de verdade, por frente (PF e PJ).
-    livre = tem nas contas − saídas em aberto até hoje+dias − imposto a guardar (só PJ).
-    Conservador: entrada prevista não conta; só o dinheiro que já está na conta.
+    livre = tem nas contas − saídas em aberto até hoje+dias − imposto a guardar e salário ainda não pago (só PJ).
+    Conservador: entrada prevista não conta; só o dinheiro que já está na conta (ver _tem).
     Imposto a guardar = DAS do mês que vem (DAS% da receita PJ recebida neste mês) + DAS deste mês, enquanto não for
-    lançado (DAS% da receita do mês passado). DAS já em aberto está no comprometido e não conta duas vezes."""
+    lançado (DAS% da receita do mês passado). DAS já em aberto está no comprometido e não conta duas vezes.
+    Salário: o que falta tirar da PJ em cada salário que vence até hoje+dias (deste mês em diante)."""
     ate = (dt.date.fromisoformat(hoje) + dt.timedelta(days=dias)).isoformat()
     saldos = saldos_atuais(con)
     abertos = [i for i in em_aberto_ate(con, ate, hoje) if i["tipo"] == "saida"]
     mes, das_pct = hoje[:7], db.parametros(con, "imposto").get("DAS", 0.06)
     das = (_das_a_guardar(con, somar_meses(mes, 1), abertos, _receita_pj(con, mes), das_pct)
            + _das_a_guardar(con, mes, abertos, _receita_pj(con, somar_meses(mes, -1)), das_pct))
+    sal_valor, sal_dia = _salario_parametros(con)
+    salario, m = 0.0, mes
+    while m <= ate[:7]:
+        if vencimento(sal_dia, m) <= ate:
+            salario += _salario_falta(con, m, sal_valor)
+        m = somar_meses(m, 1)
     out = {}
     for frente in ("PF", "PJ"):
         contas = {c: v for c, v in saldos.items() if v["escopo"] == frente}
         datas = [v["data"] for v in contas.values() if v["data"]]
-        tem = sum(v["saldo"] for v in contas.values() if v["saldo"] is not None)
+        tem = _tem(con, contas, frente, hoje)
         comprometido = sum(i["valor"] for i in abertos if i["escopo"] == frente)
-        imposto = das if frente == "PJ" else 0
+        imposto, sal = (das, salario) if frente == "PJ" else (0, 0)
         dias_velho = (dt.date.fromisoformat(hoje) - dt.date.fromisoformat(min(datas))).days if datas else None
         out[frente] = {
-            "tem": round(tem, 2), "comprometido": round(comprometido, 2), "imposto": round(imposto, 2),
-            "livre": round(tem - comprometido - imposto, 2), "ate": ate,
+            "tem": round(tem, 2), "comprometido": round(comprometido, 2), "imposto": round(imposto, 2), "salario": round(sal, 2),
+            "livre": round(tem - comprometido - imposto - sal, 2), "ate": ate,
             "itens": [i for i in abertos if i["escopo"] == frente],
             "sem_saldo": not datas,   # nenhuma conta da frente com saldo digitado: o número não vale
             "dias_velho": dias_velho, "desatualizado": dias_velho is not None and dias_velho > DIAS_SALDO_VELHO,
@@ -315,16 +348,38 @@ def sugerir_aluno(texto: str, alunos) -> int | None:
 RETIRADA = "Retirada"
 
 
-def salario_mes(con: sqlite3.Connection, mes: str, hoje: str) -> dict:
-    """Salário do mês: valor e dia (parâmetros), se já foi pago, se já pode pagar e quanto a PF já gastou do salário."""
+def _salario_parametros(con: sqlite3.Connection) -> tuple[float, int]:
+    """(valor, dia de 1 a 31) do salário fixo; valor 0 = desligado."""
     p = db.parametros(con, "salario")
-    valor, dia = round(p.get("valor") or 0, 2), int(p.get("dia") or 5)
-    pago = con.execute("SELECT pago_em FROM lancamentos WHERE origem=? AND excluido_em IS NULL", (f"SAL:{mes}:PJ",)).fetchone()
+    return round(p.get("valor") or 0, 2), min(max(int(p.get("dia") or 5), 1), 31)
+
+
+def _retiradas_mes(con: sqlite3.Connection, mes: str) -> list:
+    """Retiradas PJ do mês (o salário), pagas ou em aberto: a do botão (origem SAL) e as lançadas à mão com data no mês.
+    A do botão de outro mês (salário de setembro pago em outubro) não conta para outubro."""
+    return con.execute("""SELECT valor, pago_em FROM lancamentos WHERE escopo='PJ' AND tipo='saida' AND excluido_em IS NULL
+                          AND (origem=? OR (categoria=? AND substr(data,1,7)=? AND COALESCE(origem,'') NOT LIKE 'SAL:%'))""",
+                       (f"SAL:{mes}:PJ", RETIRADA, mes)).fetchall()
+
+
+def _salario_falta(con: sqlite3.Connection, mes: str, valor: float) -> float:
+    """Quanto do salário do mês ainda não saiu da PJ nem foi lançado."""
+    return round(max(valor - sum(r["valor"] for r in _retiradas_mes(con, mes)), 0), 2) if valor > 0 else 0.0
+
+
+def salario_mes(con: sqlite3.Connection, mes: str, hoje: str) -> dict:
+    """Salário do mês: valor e dia (parâmetros), se já foi pago (pelo botão ou Retirada à mão), se já pode pagar
+    e quanto a PF já gastou do salário."""
+    valor, dia = _salario_parametros(con)
+    linhas = _retiradas_mes(con, mes)
+    retirado = round(sum(r["valor"] for r in linhas), 2)
+    falta = round(max(valor - retirado, 0), 2) if valor > 0 else 0.0
+    pago_em = max(r["pago_em"] for r in linhas) if linhas and not falta and all(r["pago_em"] for r in linhas) else None
     gasto = con.execute("""SELECT COALESCE(SUM(valor), 0) FROM lancamentos WHERE escopo='PF' AND tipo='saida' AND excluido_em IS NULL
                            AND pago_em IS NOT NULL AND substr(pago_em,1,7)=?""", (mes,)).fetchone()[0]
-    data = vencimento(min(max(dia, 1), 31), mes)
+    data = vencimento(dia, mes)
     return {"mes": mes, "valor": valor, "dia": dia, "data": data, "ligado": valor > 0,
-            "pago_em": pago["pago_em"] if pago else None, "pode_pagar": valor > 0 and not pago and hoje >= data,
+            "pago_em": pago_em, "retirado": retirado, "falta": falta, "pode_pagar": valor > 0 and not linhas and hoje >= data,
             "gasto_pf": round(gasto, 2), "pct_gasto": round(100 * gasto / valor) if valor > 0 else None,
             "sugestao": sugestao_salario(con, mes)}
 
@@ -337,10 +392,13 @@ def sugestao_salario(con: sqlite3.Connection, mes: str) -> float:
 
 
 def pagar_salario(con: sqlite3.Connection, mes: str, pago_em: str) -> None:
-    """Saída PJ (Retirada) + entrada PF (Salário) do mês, numa transação. ValueError se desligado ou já pago."""
+    """Saída PJ (Retirada) + entrada PF (Salário) do mês, numa transação. ValueError se desligado ou já pago
+    (pelo botão ou com Retirada lançada à mão no mês)."""
     valor = round(db.parametros(con, "salario").get("valor") or 0, 2)
     if valor <= 0:
         raise ValueError("Defina o valor do salário em Configurações.")
+    if _retiradas_mes(con, mes):
+        raise ValueError("O salário deste mês já foi pago (tem Retirada lançada no mês).")
     nome = f"Salário {mes[5:]}/{mes[:4]}"
     antigo = con.execute("SELECT id FROM lancamentos WHERE origem=?", (f"SAL:{mes}:PJ",)).fetchone()
     try:
@@ -446,7 +504,7 @@ def previsao(con: sqlite3.Connection, hoje: str, semanas: int = 13) -> dict:
         m = somar_meses(m, 1)
     par = db.parametros(con, "previsao")
     das_pct = db.parametros(con, "imposto").get("DAS", 0.06)
-    sal = db.parametros(con, "salario")
+    sal_valor, sal_dia = _salario_parametros(con)
     itens = [dict(i, estimado=False) for i in em_aberto_ate(con, fim, hoje)]
 
     def add(escopo, tipo, data, descricao, valor, estimado=True):
@@ -464,11 +522,13 @@ def previsao(con: sqlite3.Connection, hoje: str, semanas: int = 13) -> dict:
         abertas = sum(i["valor"] for i in itens if i["escopo"] == "PJ" and i["tipo"] == "entrada" and i["data"][:7] == mes)
         receita[mes] = recebido + falta + abertas
         add("PJ", "entrada", vencimento(int(par.get("dia_recebimento") or 10), mes), "Mensalidades a receber", falta)
-        if (sal.get("valor") or 0) > 0 and not con.execute("SELECT 1 FROM lancamentos WHERE origem=? AND excluido_em IS NULL",
-                                                           (f"SAL:{mes}:PJ",)).fetchone():
-            data = vencimento(int(sal.get("dia") or 5), mes)
-            add("PJ", "saida", data, "Salário para a PF", sal["valor"], estimado=False)
-            add("PF", "entrada", data, "Salário da PJ", sal["valor"], estimado=False)
+        # salário: só o que falta tirar da PJ (Retirada à mão também vale); a entrada na PF não volta se ela já está lançada
+        falta_sal = _salario_falta(con, mes, sal_valor)
+        if falta_sal:
+            data = vencimento(sal_dia, mes)
+            add("PJ", "saida", data, "Salário para a PF", falta_sal, estimado=False)
+            if not con.execute("SELECT 1 FROM lancamentos WHERE origem=? AND excluido_em IS NULL", (f"SAL:{mes}:PF",)).fetchone():
+                add("PF", "entrada", data, "Salário da PJ", falta_sal, estimado=False)
         # DAS: com DAS de verdade no mês (pago ou em aberto), nada a estimar; recorrência de DAS só conta o que ela prevê
         real, previsto = _das_do_mes(con, mes, itens)
         if not real:
@@ -499,4 +559,6 @@ def previsao(con: sqlite3.Connection, hoje: str, semanas: int = 13) -> dict:
     menor = {f: min(l[f]["saldo"] for l in linhas) for f in ("PF", "PJ")}
     return {"semanas": linhas, "aperto": aperto, "menor": menor, "inicio": {f: livre[f]["tem"] for f in ("PF", "PJ")},
             "sem_saldo": {f: livre[f]["sem_saldo"] for f in ("PF", "PJ")}, "fim": fim,
+            "dias_velho": {f: livre[f]["dias_velho"] for f in ("PF", "PJ")},
+            "desatualizado": {f: livre[f]["desatualizado"] for f in ("PF", "PJ")}, "sem_frente": livre["sem_frente"],
             "sem_aluno": sem_aluno, "sem_aluno_total": round(sum(e["valor"] for e in sem_aluno), 2)}

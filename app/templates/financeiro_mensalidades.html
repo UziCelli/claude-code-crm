@@ -66,7 +66,7 @@
       <div class="campo largo"><label>Descrição</label><input name="descricao"></div>
       <div class="campo"><label>Conta</label><select name="conta"><option value="">—</option>{% for k in listas.lista_contas %}<option>{{ k }}</option>{% endfor %}</select></div>
       <div class="campo"><label>Forma</label><select name="forma"><option value="">—</option>{% for k in listas.lista_formas_lancamento %}<option>{{ k }}</option>{% endfor %}</select></div>
-      <div class="campo largo"><label>Pago em (deixe vazio se ainda não caiu)</label><input name="pago_em" type="date" value="{{ hoje() }}"></div>
+      <div class="campo largo"><label>Pago em (deixe vazio se ainda não caiu)</label><input name="pago_em" type="date" value="{{ hoje() }}" max="{{ hoje() }}"></div>
     </div>
     <div class="linha"><button class="verde">Salvar</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
   </form>

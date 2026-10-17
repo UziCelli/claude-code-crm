@@ -5,7 +5,7 @@
   <h1 style="margin:0">Próximos 90 dias</h1>
   <div class="linha"><a class="btn claro" href="/financeiro">Livro-caixa</a><a class="btn claro" href="/financeiro/painel">Painel financeiro</a></div>
 </div>
-<p class="muted">Começa no saldo de hoje das contas e soma, semana a semana, o que deve entrar e sair. Inclui contas em aberto, recorrentes, salário, mensalidades a receber e o DAS. "Estimado" é previsão: confira com o que entrar de verdade.</p>
+<p class="muted">Começa no saldo das contas (o último digitado mais o que foi pago depois dele) e soma, semana a semana, o que deve entrar e sair. Inclui contas em aberto, recorrentes, salário, mensalidades a receber e o DAS. "Estimado" é previsão: confira com o que entrar de verdade.</p>
 
 <div class="grid c2 mt">
   {% for f in ['PF', 'PJ'] %}
@@ -23,6 +23,18 @@
   </div>
   {% endfor %}
 </div>
+
+{% if prev.desatualizado.PF or prev.desatualizado.PJ or prev.sem_frente %}
+<div class="card mt atencao">
+  <strong>O ponto de partida pode estar errado</strong>
+  {% for f in ['PF', 'PJ'] %}{% if prev.desatualizado[f] %}
+  <p class="muted" style="margin:4px 0">Saldo {{ f }} de {{ prev.dias_velho[f] }} dias atrás. O que foi lançado depois já entrou; o que não foi lançado, não. <a href="/financeiro">Atualize os saldos</a>.</p>
+  {% endif %}{% endfor %}
+  {% if prev.sem_frente %}
+  <p class="muted" style="margin:4px 0">Conta sem frente: {{ prev.sem_frente|join(', ') }}. O saldo dela não entra. Escolha PF, PJ, Reserva ou Fora em <a href="/financeiro">Atualizar saldos</a>.</p>
+  {% endif %}
+</div>
+{% endif %}
 
 {% if prev.sem_aluno %}
 <div class="card mt atencao">

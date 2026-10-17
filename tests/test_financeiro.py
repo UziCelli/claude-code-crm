@@ -15,10 +15,10 @@ def con_temp(tmp_path, monkeypatch):
     con.close()
 
 
-def lancar(con, tipo, valor, data, pago_em=None, escopo="PJ", recorrencia_id=None, competencia=None):
+def lancar(con, tipo, valor, data, pago_em=None, escopo="PJ", recorrencia_id=None, competencia=None, conta=None, categoria="Outros"):
     with con:
-        con.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, recorrencia_id, competencia)"
-                    " VALUES (?,?,?,?,?,'Outros',?,?)", (escopo, tipo, data, pago_em, valor, recorrencia_id, competencia))
+        con.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, recorrencia_id, competencia, conta)"
+                    " VALUES (?,?,?,?,?,?,?,?,?)", (escopo, tipo, data, pago_em, valor, categoria, recorrencia_id, competencia, conta))
 
 
 def recorrencia(con, valor=1000, dia=31, fixo=1):
@@ -178,7 +178,8 @@ def test_saldo_livre_desconta_recorrencia_aberta_e_nao_a_baixada(con_temp):
     financeiro.baixar_recorrencia(con_temp, rid, "2026-09", 1000, "2026-10-16")
     financeiro.baixar_recorrencia(con_temp, rid, "2026-10", 1000, "2026-10-16")
     livre = financeiro.saldo_livre(con_temp, "2026-10-16")["PJ"]
-    assert livre["comprometido"] == 1000 and livre["livre"] == 2000
+    # pagas depois da foto: saem do comprometido e do "tem" (o livre não sobe só por pagar)
+    assert livre["comprometido"] == 1000 and livre["tem"] == 1000 and livre["livre"] == 0
 
 
 def test_saldo_livre_ignora_entrada_futura_e_conta_atrasado(con_temp):
@@ -229,6 +230,35 @@ def test_conta_nova_sem_frente(con_temp):
     assert "Nubank" in financeiro.saldo_livre(con_temp, "2026-10-16")["sem_frente"]
 
 
+def test_saldo_de_partida_desconta_o_pago_depois_da_foto(con_temp):
+    """Foto de 10/10 com 1.000 e aluguel pago em 12/10: tem 400, não 1.000."""
+    saldo(con_temp, "Inter", 1000, "2026-10-10")
+    lancar(con_temp, "saida", 600, "2026-10-12", pago_em="2026-10-12", escopo="PF", conta="Inter")             # aluguel
+    lancar(con_temp, "saida", 50, "2026-10-10", pago_em="2026-10-10", escopo="PF", conta="Inter")              # dia da foto: já está nela
+    lancar(con_temp, "saida", 300, "2026-10-13", pago_em="2026-10-13", escopo="PF", conta="Cartão Inter")      # cartão não tira do banco
+    lancar(con_temp, "entrada", 200, "2026-10-14", pago_em="2026-10-14", escopo="PF", conta="Contabilizei Bank")  # conta da PJ
+    out = financeiro.saldo_livre(con_temp, "2026-10-17")
+    assert out["PF"]["tem"] == 400 and out["PF"]["livre"] == 400
+    assert out["PJ"]["tem"] == 0 and out["PJ"]["sem_saldo"]   # PJ sem foto: a entrada sozinha não vira saldo
+    assert financeiro.previsao(con_temp, "2026-10-17")["inicio"]["PF"] == 400
+
+
+def test_saldo_de_partida_sem_conta_vai_pelo_escopo_e_agendado_fica_em_aberto(con_temp):
+    saldo(con_temp, "Inter", 1000, "2026-10-10")
+    saldo(con_temp, "Itaú", 500, "2026-10-15")
+    lancar(con_temp, "saida", 100, "2026-10-12", pago_em="2026-10-12", escopo="PF")     # sem conta, entre as fotos: desconta (lado seguro)
+    lancar(con_temp, "entrada", 300, "2026-10-12", pago_em="2026-10-12", escopo="PF")   # talvez já esteja na foto do Itaú: não soma
+    lancar(con_temp, "entrada", 80, "2026-10-16", pago_em="2026-10-16", escopo="PF")    # depois de todas as fotos: soma
+    lancar(con_temp, "saida", 40, "2026-10-16", pago_em="2026-10-16", escopo="PJ")      # outra frente
+    lancar(con_temp, "saida", 250, "2026-10-15", pago_em="2026-10-25", escopo="PF", conta="Inter")   # agendado: ainda está na conta
+    pf = financeiro.saldo_livre(con_temp, "2026-10-17")["PF"]
+    assert pf["tem"] == 1480 and pf["comprometido"] == 250 and pf["livre"] == 1230
+    assert [i["data"] for i in pf["itens"]] == ["2026-10-25"]
+    p = financeiro.previsao(con_temp, "2026-10-17")
+    assert p["semanas"][1]["PF"]["saidas"] == 250 and p["semanas"][1]["PF"]["saldo"] == 1230   # sai na semana do pagamento
+    assert p["desatualizado"]["PF"] is False and p["dias_velho"]["PF"] == 7
+
+
 # ---------- Salário fixo ----------
 def ligar_salario(con, valor=2000, dia=5):
     with con:
@@ -274,6 +304,38 @@ def test_gasto_pf_contra_salario_e_sugestao(con_temp):
     for m in ("07", "08", "09"):
         lancar(con_temp, "entrada", 3000, f"2026-{m}-10", pago_em=f"2026-{m}-10")
     assert financeiro.sugestao_salario(con_temp, "2026-10") == 2400
+
+
+def test_livre_pj_guarda_o_salario_nao_pago(con_temp):
+    """Salário de 3.000 no dia 20 com 4.000 na PJ: livre 1.000, antes e depois de pagar."""
+    ligar_salario(con_temp, valor=3000, dia=20)
+    saldo(con_temp, "Contabilizei Bank", 4000, "2026-10-17")
+    pj = financeiro.saldo_livre(con_temp, "2026-10-17")["PJ"]
+    assert pj["salario"] == 3000 and pj["livre"] == 1000
+    financeiro.pagar_salario(con_temp, "2026-10", "2026-10-20")
+    pj = financeiro.saldo_livre(con_temp, "2026-10-20")["PJ"]   # o de novembro (20/11) ainda não cabe nos 30 dias
+    assert pj["tem"] == 1000 and pj["salario"] == 0 and pj["livre"] == 1000
+    assert financeiro.saldo_livre(con_temp, "2026-10-17", dias=40)["PJ"]["salario"] == 3000   # com 40 dias, só o de novembro
+
+
+def test_retirada_a_mao_conta_como_salario_pago(con_temp):
+    ligar_salario(con_temp, valor=3000, dia=20)
+    financeiro.pagar_salario(con_temp, "2026-09", "2026-10-02")   # setembro pago em outubro: não paga outubro
+    assert financeiro.salario_mes(con_temp, "2026-10", "2026-10-20")["pode_pagar"]
+    lancar(con_temp, "saida", 1000, "2026-10-18", pago_em="2026-10-18", categoria="Retirada")
+    s = financeiro.salario_mes(con_temp, "2026-10", "2026-10-20")
+    assert not s["pode_pagar"] and s["retirado"] == 1000 and s["falta"] == 2000 and s["pago_em"] is None
+    with pytest.raises(ValueError):
+        financeiro.pagar_salario(con_temp, "2026-10", "2026-10-20")
+    p = financeiro.previsao(con_temp, "2026-10-20")
+    sal = sorted((i["data"], i["escopo"], i["valor"]) for s in p["semanas"] for i in s["itens"] if i["descricao"].startswith("Salário"))
+    assert sal[:2] == [("2026-10-20", "PF", 2000), ("2026-10-20", "PJ", 2000)]   # só o que falta
+    lancar(con_temp, "saida", 2000, "2026-10-19", pago_em="2026-10-19", categoria="Retirada")
+    s = financeiro.salario_mes(con_temp, "2026-10", "2026-10-20")
+    assert s["falta"] == 0 and s["pago_em"] == "2026-10-19"
+    p = financeiro.previsao(con_temp, "2026-10-20")
+    assert not [i for s in p["semanas"] for i in s["itens"] if i["descricao"].startswith("Salário") and i["data"] < "2026-11"]
+    assert financeiro.saldo_livre(con_temp, "2026-10-20")["PJ"]["salario"] == 0
 
 
 # ---------- Potes e colchão ----------
