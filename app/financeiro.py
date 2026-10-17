@@ -103,27 +103,65 @@ def em_aberto_ate(con: sqlite3.Connection, ate: str, hoje: str) -> list[dict]:
     return itens
 
 
+# ---------- DAS ----------
+def eh_das(descricao: str | None, categoria: str | None) -> bool:
+    """Saída que é o DAS (Simples Nacional): categoria 'DAS', 'DAS' na descrição (em maiúsculas ou como primeira palavra),
+    'Simples Nacional', ou imposto sem descrição (como era antes). 'Imposto' na categoria não basta: DARF, INSS e taxas
+    também caem em 'Impostos/Taxas' e não são o DAS. Descrição igual à categoria conta como vazia (as telas usam a
+    categoria quando não há descrição)."""
+    descricao = (descricao or "").strip()
+    if descricao == (categoria or "").strip():
+        descricao = ""
+    palavras = _palavras(descricao)
+    if _palavras(categoria) == ["das"] or re.search(r"\bDAS\b", descricao) or palavras[:1] == ["das"] \
+            or "simples nacional" in " ".join(palavras):
+        return True
+    return not descricao and "imposto" in (categoria or "").lower()
+
+
+def _receita_pj(con: sqlite3.Connection, mes: str) -> float:
+    """Entradas PJ recebidas no mês (por pago_em): a base do DAS que vence no mês seguinte."""
+    return con.execute("""SELECT COALESCE(SUM(valor), 0) FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
+                          AND excluido_em IS NULL AND pago_em IS NOT NULL AND substr(pago_em,1,7)=?""", (mes,)).fetchone()[0]
+
+
+def _das_do_mes(con: sqlite3.Connection, mes: str, abertos: list[dict]) -> tuple[bool, float]:
+    """O que já se sabe do DAS que vence no mês: (tem DAS de verdade, pago ou lançado entre os abertos;
+    soma das recorrências de DAS ainda não baixadas, que são só um valor previsto). Itens estimados pelo app não contam."""
+    pago = any(eh_das(r["descricao"], r["categoria"]) for r in con.execute(
+        """SELECT descricao, categoria FROM lancamentos WHERE escopo='PJ' AND tipo='saida' AND excluido_em IS NULL
+           AND pago_em IS NOT NULL AND substr(data,1,7)=?""", (mes,)))
+    meus = [i for i in abertos if i.get("origem") and i["escopo"] == "PJ" and i["tipo"] == "saida" and i["data"][:7] == mes
+            and eh_das(i["descricao"], i["categoria"])]
+    return pago or any(i["origem"] == "lancamento" for i in meus), sum(i["valor"] for i in meus if i["origem"] == "recorrencia")
+
+
+def _das_a_guardar(con: sqlite3.Connection, mes: str, abertos: list[dict], base: float, das_pct: float) -> float:
+    """DAS que vence no mês e ainda não está em lugar nenhum: DAS% × base menos o que a recorrência de DAS já prevê.
+    Com DAS de verdade (pago ou em aberto), nada a guardar."""
+    real, previsto = _das_do_mes(con, mes, abertos)
+    return 0.0 if real else max(das_pct * base - previsto, 0)
+
+
 def saldo_livre(con: sqlite3.Connection, hoje: str, dias: int = 30) -> dict:
     """Quanto dá para gastar de verdade, por frente (PF e PJ).
     livre = tem nas contas − saídas em aberto até hoje+dias − imposto a guardar (só PJ).
     Conservador: entrada prevista não conta; só o dinheiro que já está na conta.
-    Imposto a guardar = DAS% da receita PJ recebida no mês (o DAS dela vence no mês seguinte),
-    menos impostos PJ do mês seguinte que já estão nas saídas em aberto (não conta duas vezes)."""
+    Imposto a guardar = DAS do mês que vem (DAS% da receita PJ recebida neste mês) + DAS deste mês, enquanto não for
+    lançado (DAS% da receita do mês passado). DAS já em aberto está no comprometido e não conta duas vezes."""
     ate = (dt.date.fromisoformat(hoje) + dt.timedelta(days=dias)).isoformat()
     saldos = saldos_atuais(con)
     abertos = [i for i in em_aberto_ate(con, ate, hoje) if i["tipo"] == "saida"]
-    receita_pj = con.execute("""SELECT COALESCE(SUM(valor), 0) FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
-                                AND excluido_em IS NULL AND pago_em IS NOT NULL AND substr(pago_em,1,7)=?""", (hoje[:7],)).fetchone()[0]
-    das = db.parametros(con, "imposto").get("DAS", 0.06) * receita_pj
-    prox = somar_meses(hoje[:7], 1)
-    das -= sum(i["valor"] for i in abertos if i["escopo"] == "PJ" and i["data"][:7] == prox and "imposto" in i["categoria"].lower())
+    mes, das_pct = hoje[:7], db.parametros(con, "imposto").get("DAS", 0.06)
+    das = (_das_a_guardar(con, somar_meses(mes, 1), abertos, _receita_pj(con, mes), das_pct)
+           + _das_a_guardar(con, mes, abertos, _receita_pj(con, somar_meses(mes, -1)), das_pct))
     out = {}
     for frente in ("PF", "PJ"):
         contas = {c: v for c, v in saldos.items() if v["escopo"] == frente}
         datas = [v["data"] for v in contas.values() if v["data"]]
         tem = sum(v["saldo"] for v in contas.values() if v["saldo"] is not None)
         comprometido = sum(i["valor"] for i in abertos if i["escopo"] == frente)
-        imposto = max(das, 0) if frente == "PJ" else 0
+        imposto = das if frente == "PJ" else 0
         dias_velho = (dt.date.fromisoformat(hoje) - dt.date.fromisoformat(min(datas))).days if datas else None
         out[frente] = {
             "tem": round(tem, 2), "comprometido": round(comprometido, 2), "imposto": round(imposto, 2),
@@ -326,10 +364,12 @@ POTES = (("imposto", "Imposto"), ("contas", "Contas da PJ"), ("salario", "Salár
 
 
 def _fixos_mes(con: sqlite3.Connection, mes: str, escopo: str, so_fixos: bool) -> float:
-    """Soma prevista das recorrências ativas do escopo na competência (sem a Retirada)."""
-    return con.execute(f"""SELECT COALESCE(SUM(valor), 0) FROM recorrencias WHERE excluido_em IS NULL AND escopo=? AND categoria != ?
-                           AND inicio <= ? AND (fim IS NULL OR fim >= ?){' AND fixo=1' if so_fixos else ''}""",
-                       (escopo, RETIRADA, mes, mes)).fetchone()[0]
+    """Soma prevista das recorrências ativas do escopo na competência, sem a Retirada e sem o DAS
+    (o DAS já sai do pote Imposto e, sem receita, não existe: não é conta a cobrir nem custo do colchão)."""
+    return sum(r["valor"] for r in con.execute(
+        f"""SELECT valor, descricao, categoria FROM recorrencias WHERE excluido_em IS NULL AND escopo=? AND categoria != ?
+            AND inicio <= ? AND (fim IS NULL OR fim >= ?){' AND fixo=1' if so_fixos else ''}""", (escopo, RETIRADA, mes, mes))
+        if not eh_das(r["descricao"], r["categoria"]))
 
 
 def potes_mes(con: sqlite3.Connection, mes: str) -> dict:
@@ -395,7 +435,7 @@ def previsao(con: sqlite3.Connection, hoje: str, semanas: int = 13) -> dict:
     """Saldo previsto semana a semana, PF e PJ, a partir dos saldos digitados.
     Entra: tudo em aberto (lançamentos e recorrências), salário ainda não pago (sai da PJ, entra na PF),
     mensalidades que faltam receber (estimado, no dia previsao.dia_recebimento) e o DAS estimado
-    (DAS% da receita do mês anterior, no dia previsao.dia_das, se o mês ainda não tem imposto PJ lançado).
+    (DAS% da receita do mês anterior, no dia previsao.dia_das, se o mês ainda não tem DAS lançado; ver eh_das).
     O que já venceu e não foi pago entra na primeira semana."""
     h = dt.date.fromisoformat(hoje)
     fim = (h + dt.timedelta(days=7 * semanas - 1)).isoformat()
@@ -429,16 +469,15 @@ def previsao(con: sqlite3.Connection, hoje: str, semanas: int = 13) -> dict:
             data = vencimento(int(sal.get("dia") or 5), mes)
             add("PJ", "saida", data, "Salário para a PF", sal["valor"], estimado=False)
             add("PF", "entrada", data, "Salário da PJ", sal["valor"], estimado=False)
-        tem_imposto = con.execute("""SELECT 1 FROM lancamentos WHERE escopo='PJ' AND tipo='saida' AND excluido_em IS NULL
-                                     AND lower(categoria) LIKE '%imposto%' AND substr(data,1,7)=?""", (mes,)).fetchone() or any(
-            i["escopo"] == "PJ" and i["tipo"] == "saida" and "imposto" in i["categoria"].lower() and i["data"][:7] == mes for i in itens)
-        if not tem_imposto:
+        # DAS: com DAS de verdade no mês (pago ou em aberto), nada a estimar; recorrência de DAS só conta o que ela prevê
+        real, previsto = _das_do_mes(con, mes, itens)
+        if not real:
             anterior = somar_meses(mes, -1)
             base = receita.get(anterior)
             if base is None:   # mês anterior a hoje: só o que entrou de fato
-                base = con.execute("""SELECT COALESCE(SUM(valor), 0) FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
-                                      AND excluido_em IS NULL AND pago_em IS NOT NULL AND substr(pago_em,1,7)=?""", (anterior,)).fetchone()[0]
-            add("PJ", "saida", vencimento(int(par.get("dia_das") or 20), mes), f"DAS estimado ({anterior[5:]}/{anterior[:4]})", das_pct * base)
+                base = _receita_pj(con, anterior)
+            add("PJ", "saida", vencimento(int(par.get("dia_das") or 20), mes),
+                f"DAS estimado ({anterior[5:]}/{anterior[:4]}){' além do previsto' if previsto else ''}", das_pct * base - previsto)
 
     livre = saldo_livre(con, hoje)
     saldo = {f: livre[f]["tem"] for f in ("PF", "PJ")}
