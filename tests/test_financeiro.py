@@ -390,7 +390,7 @@ def test_previsao_sem_duplicar_e_com_aperto(con_temp):
     assert len(p["semanas"]) == 13 and p["fim"] == "2027-01-14"
     s1 = p["semanas"][1]   # 23/10 a 29/10
     assert s1["PF"]["saidas"] == 800 and s1["PF"]["saldo"] == 200
-    assert p["aperto"]["PF"]["inicio"] == "2026-11-20" and p["aperto"]["PF"]["saldo"] == -600   # fatura de novembro
+    assert p["aperto"]["PF"]["inicio"] == "2026-11-25" and p["aperto"]["PF"]["saldo"] == -600   # fatura de novembro: o aperto aponta o dia da fatura, não o início da semana
     assert "PJ" not in p["aperto"] and p["menor"]["PJ"] == 500
     assert p["semanas"][5]["negativo"]
 

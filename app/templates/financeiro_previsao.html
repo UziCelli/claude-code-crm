@@ -15,10 +15,10 @@
     <div class="valor">—</div><div class="meta">Digite os saldos {{ f }} em <a href="/financeiro">Atualizar saldos</a>. Até lá, a previsão começa do zero.</div>
     {% elif f in prev.aperto %}
     <div class="valor">Aperto em {{ prev.aperto[f].inicio|data }}</div>
-    <div class="meta">Nessa semana o saldo fica em {{ prev.aperto[f].saldo|moeda }}. O ponto mais baixo dos 90 dias é {{ prev.menor[f]|moeda }}. Segure gastos ou reforce o colchão antes dessa data.</div>
+    <div class="meta">Nesse dia o saldo fica em {{ prev.aperto[f].saldo|moeda }}. O ponto mais baixo dos 90 dias é {{ prev.menor[f]|moeda }}, em {{ prev.menor_dia[f].data|data }}. Segure gastos ou reforce o colchão antes dessa data.</div>
     {% else %}
     <div class="valor">Sem aperto</div>
-    <div class="meta">O ponto mais baixo dos 90 dias é {{ prev.menor[f]|moeda }}.</div>
+    <div class="meta">O ponto mais baixo dos 90 dias é {{ prev.menor[f]|moeda }}, em {{ prev.menor_dia[f].data|data }}.</div>
     {% endif %}
   </div>
   {% endfor %}
@@ -47,18 +47,18 @@
 <div class="card mt">
   <h3>Semana a semana</h3>
   <table>
-    <thead><tr><th>Semana</th><th class="num">PF entra / sai</th><th class="num dest">Saldo PF</th><th class="num">PJ entra / sai</th><th class="num dest">Saldo PJ</th><th></th></tr></thead>
+    <thead><tr><th>Semana</th><th class="num">PF entra / sai</th><th class="num dest">Saldo PF no fim da semana</th><th class="num">PJ entra / sai</th><th class="num dest">Saldo PJ no fim da semana</th><th></th></tr></thead>
     <tbody>
     <tr><td class="muted">Hoje</td><td></td><td class="num">{{ prev.inicio.PF|moeda }}</td><td></td><td class="num">{{ prev.inicio.PJ|moeda }}</td><td></td></tr>
     {% for s in prev.semanas %}
     <tr{% if s.negativo %} class="semana-negativa"{% endif %}>
-      <td>{{ s.inicio|data }}{% if loop.first %} <span class="muted">(+ atrasados)</span>{% endif %}</td>
+      <td>{{ s.inicio[8:] }}/{{ s.inicio[5:7] }} a {{ s.fim[8:] }}/{{ s.fim[5:7] }}{% if loop.first %} <span class="muted">(+ atrasados)</span>{% endif %}</td>
       <td class="num muted">+{{ s.PF.entradas|moeda }} / −{{ s.PF.saidas|moeda }}</td>
-      <td class="num {{ 'v-saida' if s.PF.saldo < 0 }}"><strong>{{ s.PF.saldo|moeda }}</strong></td>
+      <td class="num {{ 'v-saida' if s.PF.saldo < 0 }}"><strong>{{ s.PF.saldo|moeda }}</strong>{% if s.PF.pior %}<div class="muted" style="font-size:12px">pior: {{ s.PF.pior.saldo|moeda }} em {{ s.PF.pior.data|data }}</div>{% endif %}</td>
       <td class="num muted">+{{ s.PJ.entradas|moeda }} / −{{ s.PJ.saidas|moeda }}</td>
-      <td class="num {{ 'v-saida' if s.PJ.saldo < 0 }}"><strong>{{ s.PJ.saldo|moeda }}</strong></td>
+      <td class="num {{ 'v-saida' if s.PJ.saldo < 0 }}"><strong>{{ s.PJ.saldo|moeda }}</strong>{% if s.PJ.pior %}<div class="muted" style="font-size:12px">pior: {{ s.PJ.pior.saldo|moeda }} em {{ s.PJ.pior.data|data }}</div>{% endif %}</td>
       <td>{% if s.itens %}<details><summary class="muted">{{ s.itens|length }} {{ "itens" if s.itens|length > 1 else "item" }}</summary>
-        <table><tbody>{% for i in s.itens %}<tr><td>{{ i.data|data }}</td><td>{{ i.descricao }} <span class="tag neutro">{{ i.escopo }}</span>{% if i.estimado %} <span class="tag amarelo">estimado</span>{% endif %}</td>
+        <table><tbody>{% for i in s.itens %}<tr><td>{{ i.data|data }}</td><td>{{ i.descricao }} <span class="tag neutro">{{ i.escopo }}</span>{% if i.status == 'atrasado' %} <span class="tag vermelho">atrasado</span>{% endif %}{% if i.estimado %} <span class="tag amarelo">estimado</span>{% elif i.origem == 'recorrencia' %} <span class="tag neutro">previsto</span>{% endif %}</td>
           <td class="num v-{{ i.tipo }}">{{ '+' if i.tipo == 'entrada' else '−' }} {{ i.valor|moeda }}</td></tr>{% endfor %}</tbody></table>
       </details>{% endif %}</td>
     </tr>

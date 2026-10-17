@@ -4,7 +4,7 @@
   <h1 style="margin:0">Funil de vendas</h1>
   <button data-abrir="dlg-lead" data-titulo="Novo lead">Novo lead</button>
 </div>
-{% if previsao.ticket and previsao.leads %}<p class="muted">Receita provável dos leads em aberto: {{ previsao.receita|moeda }}/mês ({{ previsao.leads }} leads x ticket médio {{ previsao.ticket|moeda }})</p>{% endif %}
+{% if previsao.ticket and previsao.leads %}<p class="muted">Receita provável dos leads em aberto: {{ previsao.receita|moeda }}/mês ({{ previsao.leads }} leads em aberto, cada um pesado pela chance de fechar da sua etapa, x ticket médio {{ previsao.ticket|moeda }})</p>{% endif %}
 <div class="kanban">
   {% for chave, nome in ETAPAS %}
   <div class="coluna {{ chave }}">

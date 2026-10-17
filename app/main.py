@@ -80,8 +80,9 @@ templates = Jinja2Templates(directory=ROOT / "templates")
 def moeda(v):
     if v is None:
         return "—"
-    s = f"{float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    return f"R$ {s}"
+    v = round(float(v), 2) + 0.0   # "-0,00" vira "0,00"
+    s = f"{abs(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"−R$ {s}" if v < 0 else f"R$ {s}"   # negativo num formato só
 
 
 def data_br(v):
@@ -182,6 +183,21 @@ def base_do_cliente(con, c):
         (c["tipo_servico"], c["local"], qtd, freq, forma)).fetchone()
 
 
+def estimativa_cliente(con, c, p):
+    """Preço, custo e lucro do aluno pelo motor de preços (o mesmo da ficha, do simulador e da grade). None sem preço base ou sem valor.
+    O valor da ficha é o que o aluno paga de verdade: o multiplicador de grupo do motor não se aplica por cima dele."""
+    base = base_do_cliente(con, c)
+    if not (base and c["valor"]):
+        return None
+    pessoas = c["pessoas"] or 1
+    forma = c["forma_pagamento"] if c["forma_pagamento"] in p["taxas"] else "PIX"
+    try:
+        return precos.calcular({**dict(base), "preco_base": c["valor"] / (p["grupo_mult"].get(pessoas) or 1.0)}, p,
+                               pessoas=pessoas, forma_pagamento=forma)
+    except ValueError:
+        return None
+
+
 def dias_parado(con, lead, hoje: str) -> int | None:
     """Dias que um lead ficou parado na etapa. None se ainda não atingiu o limite."""
     limites = db.parametros(con, "lead_parado_dias")
@@ -247,9 +263,15 @@ def alertas(con):
     for c in con.execute("""SELECT pergunta, prazo FROM campanha_checkpoints WHERE excluido_em IS NULL AND resposta='pendente'
                             AND prazo <= ? ORDER BY prazo""", (lim7,)):
         add("vermelho" if c["prazo"] < h else "amarelo", f"Checkpoint de campanha ({data_br(c['prazo'])}): {c['pergunta']}", "/campanhas")
-    # ponytail: só o mês corrente; recorrência do mês seguinte entra no dia 1
     lim3 = (hoje + dt.timedelta(days=3)).isoformat()
-    venc = [p for p in financeiro.pendencias(con, h[:7], h) if p["tipo"] == "saida" and p["data"] <= lim3]
+    # na virada do mês (30/10 olhando 01/11) olha também as pendências do mês seguinte
+    vistos, venc = set(), []
+    for mes_pend in dict.fromkeys((h[:7], lim3[:7])):
+        for p in financeiro.pendencias(con, mes_pend, h):
+            chave = (p["origem"], p["id"], p.get("competencia"))
+            if p["tipo"] == "saida" and p["data"] <= lim3 and chave not in vistos:
+                vistos.add(chave)
+                venc.append(p)
     if venc:
         add("vermelho" if any(p["status"] == "atrasado" for p in venc) else "amarelo",
             f"{len(venc)} conta{s(len(venc))} vencida{s(len(venc))} ou vencendo em 3 dias", "/financeiro")
@@ -286,7 +308,7 @@ def calcular_metricas(con, mes=None):
     p = precos.carregar_parametros(con)
     metas = db.parametros(con, "metas")
     clientes = con.execute("SELECT * FROM clientes WHERE excluido_em IS NULL AND status='ativo'").fetchall()
-    horas = lucro_total = 0.0
+    horas = horas_com_preco = lucro_total = 0.0
     receita = receita_grupos = 0.0
     for c in clientes:
         h = aulas_mes(c)
@@ -294,17 +316,16 @@ def calcular_metricas(con, mes=None):
         receita += c["valor"] or 0
         if (c["pessoas"] or 1) > 1:
             receita_grupos += c["valor"] or 0
-        base = base_do_cliente(con, c)
-        if base and c["valor"]:
-            forma = c["forma_pagamento"] if c["forma_pagamento"] in p["taxas"] else "PIX"
-            taxa = p["das"] + p["taxas"][forma]
-            lucro_total += c["valor"] * (1 - taxa) - base["custo_total"]
+        est = estimativa_cliente(con, c, p)
+        if est:   # lucro/h só sobre as horas de quem tem preço base: sem ele o aluno não tem lucro calculado
+            horas_com_preco += h
+            lucro_total += est["lucro"]
     perdidos = con.execute("""SELECT COUNT(*) FROM cliente_eventos WHERE tipo='status' AND descricao LIKE '%inativo%'
                               AND substr(data,1,7)=?""", (mes,)).fetchone()[0]
     abaixo10 = con.execute("""SELECT COUNT(*) FROM propostas WHERE excluido_em IS NULL AND status='aceita'
                               AND margem < 0.10 AND substr(data,1,7)=?""", (mes,)).fetchone()[0]
     espera_pico = con.execute("SELECT COUNT(*) FROM lista_espera WHERE excluido_em IS NULL AND hora IN (7,9,18,19)").fetchone()[0]
-    lucro_hora = lucro_total / horas if horas else 0
+    lucro_hora = lucro_total / horas_com_preco if horas_com_preco else 0
     nivel = 1
     if lucro_hora >= metas["lucro_hora_dez26"] and horas >= metas["horas_dez26"]:
         nivel = 2
@@ -324,27 +345,27 @@ def metricas_por_canal(con, mes):
     for canal in db.lista(con, "lista_canais"):
         ids = [r[0] for r in con.execute("SELECT id FROM leads WHERE excluido_em IS NULL AND canal_origem=?", (canal,))]
 
-        def chegou(etapa):
+        def chegou(etapa):   # leads que chegaram na etapa NESTE mês (o gasto também é do mês: dividir pela história inteira engana o CAC)
             if not ids:
                 return 0
             q = ",".join("?" * len(ids))
-            return con.execute(f"SELECT COUNT(DISTINCT lead_id) FROM lead_etapas_log WHERE etapa=? AND lead_id IN ({q})",
-                               (etapa, *ids)).fetchone()[0]
-        n_conv, n_aval, n_cli = chegou("conversa"), chegou("avaliacao"), chegou("cliente")
+            return con.execute(f"SELECT COUNT(DISTINCT lead_id) FROM lead_etapas_log WHERE etapa=? AND substr(data,1,7)=? AND lead_id IN ({q})",
+                               (etapa, mes, *ids)).fetchone()[0]
+        n_novos, n_conv, n_aval, n_cli = chegou("lead"), chegou("conversa"), chegou("avaliacao"), chegou("cliente")
         gasto = con.execute("""SELECT COALESCE(SUM(mensalidade+anuncios+comissoes+outros),0), COALESCE(SUM(leads),0),
                                COALESCE(SUM(clientes),0) FROM gastos_marketing WHERE excluido_em IS NULL AND canal=? AND mes=?""",
                             (canal, mes)).fetchone()
         clientes_canal = con.execute("""SELECT COUNT(*), COALESCE(AVG(valor),0) FROM clientes WHERE excluido_em IS NULL
                                         AND canal_origem=? AND substr(COALESCE(data_inicio, criado_em),1,7)=?""", (canal, mes)).fetchone()
-        n_leads = len(ids) or gasto[1]
+        n_leads = n_novos or gasto[1]
         n_clientes = n_cli or gasto[2] or clientes_canal[0]
-        if not (ids or gasto[0] or n_clientes):
+        if not (n_novos or n_conv or n_aval or gasto[0] or n_clientes):
             continue
         cpl = gasto[0] / n_leads if n_leads else None
         cac = gasto[0] / n_clientes if n_clientes else None
         ltv = clientes_canal[1] * ltv_meses if clientes_canal[1] else None
         out.append(dict(canal=canal, leads=n_leads, conversa=n_conv, avaliacao=n_aval, clientes=n_clientes, gasto=gasto[0],
-                        tx_conversa=(n_conv / len(ids)) if ids else None, tx_avaliacao=(n_aval / n_conv) if n_conv else None,
+                        tx_conversa=(n_conv / n_novos) if n_novos else None, tx_avaliacao=(n_aval / n_conv) if n_conv else None,
                         tx_fechamento=(n_cli / n_aval) if n_aval else None, cpl=cpl, cac=cac,
                         ltv_cac=(ltv / cac) if (ltv and cac) else None))
     return out
@@ -457,15 +478,7 @@ def cliente_ficha(request: Request, cid: int, con=Depends(get_db)):
     if not c:
         return voltar("/clientes", erro="Cliente não encontrado.")
     eventos = con.execute("SELECT * FROM cliente_eventos WHERE cliente_id=? AND excluido_em IS NULL ORDER BY data DESC, id DESC", (cid,)).fetchall()
-    estimativa = None
-    base = base_do_cliente(con, c)
-    if base and c["valor"]:
-        p = precos.carregar_parametros(con)
-        forma = c["forma_pagamento"] if c["forma_pagamento"] in p["taxas"] else "PIX"
-        try:
-            estimativa = precos.calcular({**dict(base), "preco_base": c["valor"]}, p, pessoas=c["pessoas"] or 1, forma_pagamento=forma)
-        except ValueError:
-            estimativa = None
+    estimativa = estimativa_cliente(con, c, precos.carregar_parametros(con))
     propostas = con.execute("SELECT * FROM propostas WHERE cliente_id=? AND excluido_em IS NULL ORDER BY id DESC", (cid,)).fetchall()
     pagamentos = con.execute("SELECT * FROM lancamentos WHERE cliente_id=? AND excluido_em IS NULL ORDER BY data DESC, id DESC LIMIT 8", (cid,)).fetchall()
     return render(request, "cliente.html", con, c=c, eventos=eventos, estimativa=estimativa, propostas=propostas, pagamentos=pagamentos)
@@ -516,7 +529,8 @@ def cliente_excluir(cid: int, con=Depends(get_db)):
 # =====================================================================
 def previsao_funil(con):
     chance = db.parametros(con, "funil_chance")
-    ticket = con.execute("SELECT AVG(valor) FROM clientes WHERE status='ativo' AND excluido_em IS NULL").fetchone()[0] or 0
+    # valor 0 é lead recém-convertido, ainda sem preço: não entra na média do ticket
+    ticket = con.execute("SELECT AVG(valor) FROM clientes WHERE status='ativo' AND excluido_em IS NULL AND valor > 0").fetchone()[0] or 0
     etapas = con.execute("SELECT etapa, COUNT(*) n FROM leads WHERE excluido_em IS NULL GROUP BY etapa").fetchall()
     n = sum(r["n"] for r in etapas if r["etapa"] in chance)
     return {"receita": sum(chance[r["etapa"]] * r["n"] for r in etapas if r["etapa"] in chance) * ticket, "leads": n, "ticket": ticket}
@@ -1474,8 +1488,12 @@ def campanhas(request: Request, mes: str = "", con=Depends(get_db)):
     for c in con.execute("SELECT * FROM campanha_checkpoints WHERE excluido_em IS NULL ORDER BY prazo, id"):
         n, auto = None, "pendente"   # sem canal: só a resposta na mão
         if c["canal"]:
-            n = con.execute("SELECT COUNT(*) FROM clientes WHERE excluido_em IS NULL AND canal_origem=? AND COALESCE(data_inicio, substr(criado_em,1,10)) <= ?",
-                            (c["canal"], c["prazo"])).fetchone()[0]
+            # só cliente que chegou depois do início da fase do prazo: cliente antigo do canal não prova que a campanha funcionou
+            fase = con.execute("""SELECT inicio FROM campanha_fases WHERE tipo='fase' AND inicio IS NOT NULL AND inicio<=?
+                                  ORDER BY (fim>=?) DESC, inicio DESC LIMIT 1""", (c["prazo"], c["prazo"])).fetchone()
+            n = con.execute("""SELECT COUNT(*) FROM clientes WHERE excluido_em IS NULL AND canal_origem=?
+                               AND COALESCE(data_inicio, substr(criado_em,1,10)) BETWEEN ? AND ?""",
+                            (c["canal"], fase["inicio"] if fase else "0000-00-00", c["prazo"])).fetchone()[0]
             auto = "sim" if n > 0 else ("nao" if hoje > c["prazo"] else "pendente")
         checkpoints.append({**dict(c), "clientes": n, "auto": auto})
     gastos = con.execute("SELECT * FROM gastos_marketing WHERE excluido_em IS NULL AND mes=? ORDER BY canal", (mes,)).fetchall()
@@ -1653,8 +1671,12 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", con=
     qs = ",".join("?" * len(lista))
     lancs = [dict(r, status=financeiro.status(r, h)) for r in con.execute(
         f"SELECT * FROM lancamentos WHERE excluido_em IS NULL AND substr(data,1,7)=? AND escopo IN ({qs}) ORDER BY data, id", (mes, *lista))]
-    entradas = round(sum(l["valor"] for l in lancs if l["tipo"] == "entrada"), 2)
-    saidas = round(sum(l["valor"] for l in lancs if l["tipo"] == "saida"), 2)
+    # PJ e PF juntos: o salário (Retirada da PJ + Salário na PF) é só transferência e não entra nas somas
+    transf = [l for l in lancs if escopo == "todos" and ((l["escopo"] == "PJ" and l["tipo"] == "saida" and l["categoria"] == financeiro.RETIRADA)
+                                                         or (l["escopo"] == "PF" and l["tipo"] == "entrada" and l["categoria"] == "Salário"))]
+    transf_ids = {l["id"] for l in transf}
+    entradas = round(sum(l["valor"] for l in lancs if l["tipo"] == "entrada" and l["id"] not in transf_ids), 2)
+    saidas = round(sum(l["valor"] for l in lancs if l["tipo"] == "saida" and l["id"] not in transf_ids), 2)
     pend = [p for p in financeiro.pendencias(con, mes, h) if p["escopo"] in lista]
     for p in pend:
         p["dias"] = (dt.date.fromisoformat(h) - dt.date.fromisoformat(p["data"])).days if p["status"] == "atrasado" else 0
@@ -1666,7 +1688,7 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", con=
     recs = con.execute(f"SELECT * FROM recorrencias WHERE excluido_em IS NULL AND escopo IN ({qs}) ORDER BY escopo, dia_vencimento, descricao", lista).fetchall()
     clientes_ = con.execute("SELECT id, nome FROM clientes WHERE excluido_em IS NULL ORDER BY nome").fetchall()
     return render(request, "financeiro.html", con, mes=mes, escopo=escopo, lancs=lancs, entradas=entradas, saidas=saidas,
-                  saldo=round(entradas - saidas, 2), pend=pend, recs=recs, clientes_=clientes_, volta=f"mes={mes}&escopo={escopo}",
+                  saldo=round(entradas - saidas, 2), transferencia=round(sum(l["valor"] for l in transf if l["tipo"] == "saida"), 2), pend=pend, recs=recs, clientes_=clientes_, volta=f"mes={mes}&escopo={escopo}",
                   livre=financeiro.saldo_livre(con, h), saldos=financeiro.saldos_atuais(con), frentes=financeiro.FRENTES,
                   salario=financeiro.salario_mes(con, h[:7], h), potes=financeiro.potes_mes(con, mes),
                   parecidas=parecidas, recs_retirada=financeiro.recorrencias_retirada(con),
@@ -1946,8 +1968,9 @@ def financeiro_painel(request: Request, mes: str = "", con=Depends(get_db)):
     n = int(mes[:4]) * 12 + int(mes[5:]) - 1
     meses = [f"{(n - i) // 12}-{(n - i) % 12 + 1:02d}" for i in range(11, -1, -1)]
     serie = [financeiro.resumo_mes(con, x) for x in meses]
-    maximo = max([s["receita"] for s in serie] + [s["custos_fixos"] + s["custos_variaveis"] for s in serie] + [1])
-    return render(request, "financeiro_painel.html", con, mes=mes, r=serie[-1], serie=serie, maximo=maximo,
+    maximo = max([s["receita"] for s in serie] + [s["custos_fixos"] + s["custos_variaveis"] for s in serie] + [abs(s["lucro"]) for s in serie] + [1])
+    das_pct = f"{db.parametros(con, 'imposto').get('DAS', 0.06) * 100:g}".replace(".", ",")
+    return render(request, "financeiro_painel.html", con, mes=mes, r=serie[-1], serie=serie, maximo=maximo, das_pct=das_pct,
                   salario=financeiro.salario_mes(con, mes, dt.date.today().isoformat()), colchao=financeiro.colchao(con, mes))
 
 

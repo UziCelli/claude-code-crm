@@ -250,6 +250,7 @@ button.claro.ativo { background: var(--aco); color: #fff; }
 .grafico .barras .b-receita { background: var(--verde); }
 .grafico .barras .b-custos { background: var(--vermelho); }
 .grafico .barras .b-lucro { background: var(--aco); }
+.grafico .col .barras i.b-prejuizo, .listrado { background: repeating-linear-gradient(45deg, var(--vermelho) 0 3px, transparent 3px 6px); border: 1px solid var(--vermelho); }
 
 /* menu: encerrar o servidor pelo site (o CRM roda sem janela) */
 .menu .sair { background: none; color: #cdd8ea; padding: 8px 12px; border-radius: 8px; font-weight: 500; white-space: nowrap; }
