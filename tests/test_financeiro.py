@@ -372,3 +372,73 @@ def test_previsao_entrada_sem_aluno_nao_conta_duas_vezes(con_temp):
         con_temp.execute("UPDATE lancamentos SET cliente_id=(SELECT id FROM clientes WHERE nome='Giuliana')")
     p = financeiro.previsao(con_temp, "2026-10-16")
     assert p["semanas"][0]["PJ"]["entradas"] == 1623.37 and p["sem_aluno"] == []
+
+
+# ---------- DAS ----------
+def saida(con, valor, data, descricao, categoria="Impostos/Taxas", pago_em=None):
+    with con:
+        con.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao) VALUES ('PJ','saida',?,?,?,?,?)",
+                    (data, pago_em, valor, categoria, descricao))
+
+
+def recorrencia_imposto(con, descricao, valor, inicio="2026-10", fixo=1):
+    with con:
+        con.execute("INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, fixo, inicio)"
+                    " VALUES ('PJ',?,'Impostos/Taxas',?,20,?,?)", (descricao, valor, fixo, inicio))
+
+
+def test_eh_das():
+    assert financeiro.eh_das("DAS", "Impostos/Taxas") and financeiro.eh_das("Guia DAS 09/2026", "Outros")
+    assert financeiro.eh_das("das setembro", "Outros") and financeiro.eh_das("Simples Nacional", "Impostos/Taxas")
+    assert financeiro.eh_das(None, "DAS") and financeiro.eh_das("", "Impostos/Taxas")          # sem descrição: como era antes
+    assert financeiro.eh_das("Impostos/Taxas", "Impostos/Taxas")                                 # tela mostra a categoria no lugar
+    assert not financeiro.eh_das("DARF", "Impostos/Taxas") and not financeiro.eh_das("Taxa bancária", "Impostos/Taxas")
+    assert not financeiro.eh_das("Anuidade CREF", "Impostos/Taxas") and not financeiro.eh_das("Material das aulas", "Material de Trabalho")
+
+
+def test_previsao_das_nao_some_com_darf_nem_duplica(con_temp):
+    with con_temp:
+        con_temp.execute("UPDATE recorrencias SET excluido_em='x'")
+        con_temp.execute("INSERT INTO clientes (nome, valor, status) VALUES ('Ana', 2000, 'ativo')")
+    financeiro.salvar_saldos(con_temp, "2026-10-16", {"Contabilizei Bank": 0}, {})
+    lancar(con_temp, "entrada", 5000, "2026-09-10", pago_em="2026-09-10")             # receita de setembro
+    recorrencia_imposto(con_temp, "DARF", 290.52)                                    # DARF todo mês: não é o DAS
+    saida(con_temp, 400, "2026-11-20", "DAS 10/2026", categoria="Outros")             # DAS de novembro já lançado, fora de "Impostos"
+    recorrencia_imposto(con_temp, "DAS", 100, inicio="2026-12")                      # DAS previsto por recorrência em dezembro
+    itens = [i for s in financeiro.previsao(con_temp, "2026-10-16")["semanas"] for i in s["itens"]]
+    das = sorted((i["data"], i["descricao"], i["valor"]) for i in itens if "DAS" in i["descricao"])
+    assert das == [("2026-10-20", "DAS estimado (09/2026)", 300),                    # o DARF não apaga mais o DAS
+                   ("2026-11-20", "DAS 10/2026", 400),                               # lançado: sem estimado em dobro
+                   ("2026-12-20", "DAS", 100),
+                   ("2026-12-20", "DAS estimado (11/2026) além do previsto", 20)]    # 6% de 2000 − 100 da recorrência
+    assert sum(1 for i in itens if i["descricao"] == "DARF") == 3
+
+
+def test_saldo_livre_guarda_das_do_mes_passado_ate_lancar(con_temp):
+    saldo(con_temp, "Contabilizei Bank", 12000, "2026-11-01")
+    lancar(con_temp, "entrada", 10000, "2026-10-05", pago_em="2026-10-05")
+    pj = financeiro.saldo_livre(con_temp, "2026-11-01")["PJ"]
+    assert pj["imposto"] == 600 and pj["livre"] == 11400                          # antes: 0 no dia 1º
+    saida(con_temp, 600, "2026-11-20", "DAS 10/2026")                              # lançou: vai para o comprometido
+    pj = financeiro.saldo_livre(con_temp, "2026-11-01")["PJ"]
+    assert (pj["imposto"], pj["comprometido"], pj["livre"]) == (0, 600, 11400)
+
+
+def test_saldo_livre_darf_nao_abate_reserva_do_das(con_temp):
+    saldo(con_temp, "Contabilizei Bank", 5000, "2026-10-16")
+    lancar(con_temp, "entrada", 5000, "2026-10-05", pago_em="2026-10-05")
+    saida(con_temp, 290.52, "2026-11-10", "DARF")
+    pj = financeiro.saldo_livre(con_temp, "2026-10-16")["PJ"]
+    assert (pj["imposto"], pj["comprometido"]) == (300, 290.52)                   # antes: imposto 9,48
+
+
+def test_potes_e_colchao_sem_o_das_recorrente(con_temp):
+    with con_temp:
+        con_temp.execute("UPDATE recorrencias SET excluido_em='x'")
+    recorrencia(con_temp, valor=1000)
+    recorrencia_imposto(con_temp, "DAS", 600, inicio="2026-01")                  # o pote Imposto já guarda o DAS
+    recorrencia_imposto(con_temp, "DARF", 200, inicio="2026-01")                 # DARF continua nas contas
+    lancar(con_temp, "entrada", 10000, "2026-10-02", pago_em="2026-10-02")
+    contas = next(p for p in financeiro.potes_mes(con_temp, "2026-10")["potes"] if p["chave"] == "contas")
+    assert contas["alvo"] == 1200
+    assert financeiro.colchao(con_temp, "2026-10")["mensal"] == 1200
