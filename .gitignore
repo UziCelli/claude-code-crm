@@ -10,3 +10,6 @@ Claude outputs/
 .claude/settings.local.json
 # contém chave de API em texto puro — nunca versionar
 continuar-com-omniroute.bat
+
+# mapa do código do Graphify (gerado a cada sessão)
+graphify-out/
