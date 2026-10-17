@@ -109,6 +109,29 @@ def test_mensalidades_previsto_x_recebido(con_temp):
     assert financeiro.mensalidades(con_temp, "2026-02")[1]["situacao"] == "parcial"
 
 
+def test_mensalidades_em_aberto_falta_e_inicio(con_temp):
+    with con_temp:
+        a = con_temp.execute("INSERT INTO clientes (nome, valor, status) VALUES ('Aluno A', 500, 'ativo')").lastrowid
+        con_temp.execute("INSERT INTO clientes (nome, valor, status, data_inicio) VALUES ('Começa em dezembro', 400, 'ativo', '2026-12-01')")
+        con_temp.execute("INSERT INTO clientes (nome, valor, status, data_inicio) VALUES ('Data antiga', 300, 'ativo', '05/12/2026')")
+        con_temp.execute("INSERT INTO lancamentos (escopo, tipo, data, valor, categoria, cliente_id) VALUES ('PJ','entrada','2026-10-05',500,'Outros',?)", (a,))
+    r = {i["nome"]: i for i in financeiro.mensalidades(con_temp, "2026-10")}
+    assert set(r) == {"Aluno A", "Data antiga"}   # quem começa depois do mês não deve nada nele; data fora do padrão não some
+    assert (r["Aluno A"]["aberto"], r["Aluno A"]["falta"], r["Aluno A"]["situacao"]) == (500, 0, "em aberto")
+    assert [x["valor"] for x in r["Aluno A"]["abertos"]] == [500]
+    assert "Começa em dezembro" in {i["nome"] for i in financeiro.mensalidades(con_temp, "2026-12")}
+
+
+def test_sugerir_aluno():
+    alunos = [{"id": 1, "nome": "Giuliana Souza"}, {"id": 2, "nome": "Ana Lima"}, {"id": 3, "nome": "Ana Costa"}, {"id": 4, "nome": "Bia"}]
+    assert financeiro.sugerir_aluno("10 aulas Giuliana", alunos) == 1
+    assert financeiro.sugerir_aluno("PIX GIULIÂNA", alunos) == 1
+    assert financeiro.sugerir_aluno("Mensalidade Ana", alunos) is None        # duas Anas: não chuta
+    assert financeiro.sugerir_aluno("Ana Costa pix", alunos) == 3             # nome completo desempata
+    assert financeiro.sugerir_aluno("Bianca", alunos) is None                 # palavra inteira, não pedaço
+    assert financeiro.sugerir_aluno("Consultoria Híbrida", alunos) is None
+
+
 def test_recorrencia_nao_paga_continua_atrasada_no_mes_seguinte(con_temp):
     recorrencia(con_temp, dia=10)
     pend = financeiro.pendencias(con_temp, "2026-10", "2026-10-02")
@@ -328,3 +351,24 @@ def test_previsao_mensalidades_salario_e_das(con_temp):
     # novembro: DAS sobre a receita esperada de outubro (2000)
     assert ("2026-11-20", "DAS estimado (10/2026)", "PJ", 120) in descr
     assert all(i["estimado"] for i in itens if i["descricao"].startswith(("Mensalidades", "DAS")))
+
+
+def test_previsao_entrada_sem_aluno_nao_conta_duas_vezes(con_temp):
+    """O caso do print: '10 aulas Giuliana' em aberto sem ligar à aluna não pode entrar de novo em 'Mensalidades a receber'."""
+    with con_temp:
+        con_temp.execute("UPDATE parametros SET valor=0 WHERE grupo='imposto' AND chave='DAS'")   # sem DAS para isolar
+        con_temp.execute("INSERT INTO clientes (nome, valor, status) VALUES ('Giuliana', 1123.37, 'ativo')")
+        con_temp.execute("INSERT INTO clientes (nome, valor, status) VALUES ('Ana', 500, 'ativo')")
+        con_temp.execute("INSERT INTO lancamentos (escopo, tipo, data, valor, categoria, descricao)"
+                         " VALUES ('PJ','entrada','2026-10-05',1123.37,'Pacotes de Aulas','10 aulas Giuliana')")
+    financeiro.salvar_saldos(con_temp, "2026-10-16", {"Contabilizei Bank": 0}, {})
+    p = financeiro.previsao(con_temp, "2026-10-16")
+    entradas = {i["descricao"]: i["valor"] for i in p["semanas"][0]["itens"] if i["tipo"] == "entrada"}
+    assert entradas == {"10 aulas Giuliana": 1123.37, "Mensalidades a receber": 500}   # só a Ana falta
+    assert p["semanas"][0]["PJ"]["entradas"] == 1623.37
+    assert [e["descricao"] for e in p["sem_aluno"]] == ["10 aulas Giuliana"] and p["sem_aluno_total"] == 1123.37
+    # ligada à aluna: mesmo resultado, e o aviso some
+    with con_temp:
+        con_temp.execute("UPDATE lancamentos SET cliente_id=(SELECT id FROM clientes WHERE nome='Giuliana')")
+    p = financeiro.previsao(con_temp, "2026-10-16")
+    assert p["semanas"][0]["PJ"]["entradas"] == 1623.37 and p["sem_aluno"] == []

@@ -58,8 +58,9 @@
 
     <div class="card mt">
       <h2>Registrar no histórico</h2>
+      <p class="muted">Pagamento vai para o financeiro: <a href="/financeiro/mensalidades">Mensalidades</a> → Registrar pagamento.</p>
       <form method="post" action="/clientes/{{ c.id }}/evento" class="form-grid">
-        <div><label>Tipo</label><select name="tipo" id="tipo-evento"><option value="aula">Aula dada</option><option value="falta">Faltou</option><option value="desmarcou">Desmarcou</option><option value="pagamento">Pagamento</option><option value="renovacao">Renovação</option><option value="anotacao">Anotação</option></select></div>
+        <div><label>Tipo</label><select name="tipo" id="tipo-evento"><option value="aula">Aula dada</option><option value="falta">Faltou</option><option value="desmarcou">Desmarcou</option><option value="renovacao">Renovação</option><option value="anotacao">Anotação</option></select></div>
         <div><label>Data</label><input name="data" type="date" value="{{ hoje() }}" required></div>
         <div><label>Valor (R$)</label><input name="valor" placeholder="opcional"></div>
         <div><label>Nova data de renovação</label><input name="nova_renovacao" type="date"></div>

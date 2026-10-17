@@ -1745,9 +1745,19 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
         return _fin_voltar(volta, erro=str(e))
     campos = [f["escopo"], f["tipo"], f["data"], pago_em, valor, f["categoria"], f.get("descricao") or None, f.get("contraparte") or None,
               cliente_id, f.get("conta") or None, f.get("forma") or None, parcela_num, parcela_total]
+    aberta, aviso = None, ""
+    if not lid and cliente_id and pago_em and f["escopo"] == "PJ" and f["tipo"] == "entrada":
+        # o aluno já tem essa entrada lançada em aberto no mês: dar baixa nela em vez de criar outra (senão conta duas vezes)
+        aberta = con.execute("""SELECT id FROM lancamentos WHERE cliente_id=? AND escopo='PJ' AND tipo='entrada' AND pago_em IS NULL
+                                AND excluido_em IS NULL AND ROUND(valor, 2)=? AND substr(data,1,7)=? ORDER BY data, id LIMIT 1""",
+                             (cliente_id, valor, f["data"][:7])).fetchone()
     try:
         with con:
-            if lid:
+            if aberta:
+                lid, aviso = aberta["id"], "Esse valor já estava lançado em aberto para o aluno: dei baixa nele, sem criar outro. "
+                con.execute("UPDATE lancamentos SET pago_em=?, conta=COALESCE(?, conta), forma=COALESCE(?, forma) WHERE id=?",
+                            (pago_em, f.get("conta") or None, f.get("forma") or None, lid))
+            elif lid:
                 con.execute("""UPDATE lancamentos SET escopo=?, tipo=?, data=?, pago_em=?, valor=?, categoria=?, descricao=?, contraparte=?,
                                cliente_id=?, conta=?, forma=?, parcela_num=?, parcela_total=? WHERE id=?""", (*campos, lid))
             else:
@@ -1759,8 +1769,8 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
         # dinheiro que entrou na PJ: diz na hora quanto vai para cada pote
         div = next((e["divisao"] for e in financeiro.potes_mes(con, pago_em[:7])["entradas"] if e["id"] == lid), None)
         if div:
-            return _fin_voltar(volta, msg="Lançamento salvo. Separe: " + financeiro.texto_divisao(div) + ".")
-    return _fin_voltar(volta, msg="Lançamento salvo.")
+            return _fin_voltar(volta, msg=(aviso or "Lançamento salvo. ") + "Separe: " + financeiro.texto_divisao(div) + ".")
+    return _fin_voltar(volta, msg=aviso.strip() or "Lançamento salvo.")
 
 
 @app.post("/financeiro/lancamento/{lid}/baixa")
@@ -1768,6 +1778,17 @@ def financeiro_baixa(lid: int, volta: str = Form(""), con=Depends(get_db)):
     with con:
         con.execute("UPDATE lancamentos SET pago_em=? WHERE id=? AND pago_em IS NULL", (dt.date.today().isoformat(), lid))
     return _fin_voltar(volta, msg="Baixa registrada.")
+
+
+@app.post("/financeiro/lancamento/{lid}/aluno")
+def financeiro_ligar_aluno(lid: int, cliente_id: int = Form(0), volta: str = Form(""), con=Depends(get_db)):
+    """Liga uma entrada PJ sem aluno à ficha: mensalidades e previsão passam a contar o pagamento dele uma vez só."""
+    c = con.execute("SELECT nome FROM clientes WHERE id=? AND excluido_em IS NULL", (cliente_id,)).fetchone()
+    if c is None:
+        return _fin_voltar(volta, erro="Escolha o aluno.")
+    with con:
+        con.execute("UPDATE lancamentos SET cliente_id=? WHERE id=? AND cliente_id IS NULL AND excluido_em IS NULL", (cliente_id, lid))
+    return _fin_voltar(volta, msg=f"Entrada ligada a {c['nome']}.")
 
 
 @app.post("/financeiro/lancamento/{lid}/excluir")
@@ -1837,8 +1858,13 @@ def financeiro_mensalidades(request: Request, mes: str = "", con=Depends(get_db)
     mes = _fin_mes(mes)
     itens = financeiro.mensalidades(con, mes)
     previsto, recebido = (round(sum(i[k] for i in itens), 2) for k in ("previsto", "recebido"))
-    return render(request, "financeiro_mensalidades.html", con, mes=mes, itens=itens, previsto=previsto, recebido=recebido,
-                  volta=f"/financeiro/mensalidades?mes={mes}")
+    # falta por aluno: quem pagou a mais não cobre quem não pagou
+    falta = round(sum(max(i["previsto"] - i["recebido"], 0) for i in itens), 2)
+    alunos = con.execute("SELECT id, nome FROM clientes WHERE excluido_em IS NULL ORDER BY status != 'ativo', nome").fetchall()
+    sem_aluno = [dict(e, sugestao=financeiro.sugerir_aluno(f"{e['descricao'] or ''} {e['contraparte'] or ''}", alunos))
+                 for e in financeiro.entradas_sem_aluno(con, mes)]
+    return render(request, "financeiro_mensalidades.html", con, mes=mes, itens=itens, previsto=previsto, recebido=recebido, falta=falta,
+                  sem_aluno=sem_aluno, alunos=alunos, volta=f"/financeiro/mensalidades?mes={mes}")
 
 
 @app.get("/financeiro/painel", response_class=HTMLResponse)

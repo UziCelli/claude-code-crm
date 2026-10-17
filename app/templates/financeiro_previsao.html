@@ -24,6 +24,14 @@
   {% endfor %}
 </div>
 
+{% if prev.sem_aluno %}
+<div class="card mt atencao">
+  <strong>{{ prev.sem_aluno|length }} entrada{{ 's' if prev.sem_aluno|length > 1 }} sem aluno ({{ prev.sem_aluno_total|moeda }})</strong>
+  <p class="muted" style="margin:4px 0">Descontada{{ 's' if prev.sem_aluno|length > 1 }} das mensalidades a receber para não contar duas vezes. Se for de aluno, toque e ligue à ficha: a previsão fica exata.</p>
+  {% for e in prev.sem_aluno %}<div><a href="/financeiro/mensalidades?mes={{ e.mes }}">{{ e.descricao or e.contraparte or e.categoria }}</a> <span class="muted">· {{ e.data|data }} · {{ e.valor|moeda }}</span></div>{% endfor %}
+</div>
+{% endif %}
+
 <div class="card mt">
   <h3>Semana a semana</h3>
   <table>

@@ -12,9 +12,25 @@
 
 <div class="grid c3 mt">
   <div class="kpi"><div class="rotulo">Previsto</div><div class="valor">{{ previsto|moeda }}</div><div class="meta">Valor mensal dos alunos ativos</div></div>
-  <div class="kpi verde"><div class="rotulo">Recebido</div><div class="valor">{{ recebido|moeda }}</div><div class="meta">Entradas PJ já pagas no mês</div></div>
-  <div class="kpi {{ 'verde' if recebido >= previsto else 'amarelo' }}"><div class="rotulo">Falta receber</div><div class="valor">{{ [previsto - recebido, 0]|max|moeda }}</div></div>
+  <div class="kpi verde"><div class="rotulo">Recebido</div><div class="valor">{{ recebido|moeda }}</div><div class="meta">Pago pelos alunos da lista (entradas ligadas à ficha)</div></div>
+  <div class="kpi {{ 'verde' if falta == 0 else 'amarelo' }}"><div class="rotulo">Falta receber</div><div class="valor">{{ falta|moeda }}</div><div class="meta">Soma do que falta de cada aluno</div></div>
 </div>
+
+{% if sem_aluno %}
+<div class="card mt atencao">
+  <h3 style="margin-top:0">{{ sem_aluno|length }} entrada{{ 's' if sem_aluno|length > 1 }} sem aluno neste mês</h3>
+  <p class="muted">É pagamento de aluno? Ligue à ficha dele: senão ele aparece "em aberto" e a previsão conta duas vezes. Não é de aluno? Ignore: a previsão só fica mais conservadora.</p>
+  {% for e in sem_aluno %}
+  <div class="item-ligar">
+    <div class="linha" style="justify-content:space-between"><strong>{{ e.descricao or e.contraparte or e.categoria }}</strong><strong>{{ e.valor|moeda }}</strong></div>
+    <div class="muted">{{ e.data|data }} · <span class="tag {{ 'verde' if e.pago_em else 'amarelo' }}">{{ 'pago' if e.pago_em else 'em aberto' }}</span></div>
+    <form method="post" action="/financeiro/lancamento/{{ e.id }}/aluno" class="linha"><input type="hidden" name="volta" value="{{ volta }}">
+      <select name="cliente_id" required aria-label="Aluno" style="width:auto;flex:1"><option value="">Escolha o aluno</option>{% for a in alunos %}<option value="{{ a.id }}" {{ 'selected' if a.id == e.sugestao }}>{{ a.nome }}</option>{% endfor %}</select>
+      <button class="pequeno">Ligar</button></form>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
 
 <div class="card mt">
   <table>
@@ -25,8 +41,12 @@
       <td><a href="/clientes/{{ i.id }}">{{ i.nome }}</a></td>
       <td class="num">{{ i.previsto|moeda }}</td>
       <td class="num">{{ i.recebido|moeda }}</td>
-      <td><span class="tag {{ {'recebido': 'verde', 'parcial': 'amarelo', 'em aberto': 'vermelho'}[i.situacao] }}">{{ i.situacao }}</span></td>
-      <td>{% if i.situacao != 'recebido' %}<button class="verde pequeno" data-abrir="dlg-pgto" data-titulo="Registrar pagamento de {{ i.nome }}" data-cliente_id="{{ i.id }}" data-valor="{{ ('%.2f'|format([i.previsto - i.recebido, 0]|max))|replace('.', ',') }}" data-descricao="Mensalidade {{ mes[5:] }}/{{ mes[:4] }}" data-data="{{ hoje() if hoje()[:7] == mes else mes ~ '-01' }}">Registrar pagamento</button>{% endif %}</td>
+      <td><span class="tag {{ {'recebido': 'verde', 'parcial': 'amarelo', 'em aberto': 'vermelho'}[i.situacao] }}">{{ i.situacao }}</span>{% if i.aberto and i.situacao != 'recebido' %} <span class="muted">{{ i.aberto|moeda }} lançado, a receber</span>{% endif %}</td>
+      <td>{% if i.situacao != 'recebido' %}
+        {# já lançado em aberto: dar baixa nele; "Registrar pagamento" só para o que nem foi lançado (senão vira 2ª entrada) #}
+        {% for a in i.abertos %}<form method="post" action="/financeiro/lancamento/{{ a.id }}/baixa" class="inline"><input type="hidden" name="volta" value="{{ volta }}"><button class="verde pequeno" title="{{ a.descricao or a.categoria }} · {{ a.data|data }}">Dar baixa {{ a.valor|moeda }}</button></form> {% endfor %}
+        {% if i.falta > 0 %}<button class="{{ 'claro' if i.abertos else 'verde' }} pequeno" data-abrir="dlg-pgto" data-titulo="Registrar pagamento de {{ i.nome }}" data-cliente_id="{{ i.id }}" data-valor="{{ ('%.2f'|format(i.falta))|replace('.', ',') }}" data-descricao="Mensalidade {{ mes[5:] }}/{{ mes[:4] }}" data-data="{{ hoje() if hoje()[:7] == mes else mes ~ '-01' }}">Registrar pagamento</button>{% endif %}
+      {% endif %}</td>
     </tr>
     {% else %}
     <tr><td colspan="5" class="muted">Nenhum aluno ativo com valor mensal. Preencha o valor mensal na ficha do aluno e ele aparece aqui.</td></tr>

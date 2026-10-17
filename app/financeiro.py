@@ -2,9 +2,13 @@
 import calendar
 import datetime as dt
 import math
+import re
 import sqlite3
+import unicodedata
 
 from . import db
+
+ISO_DATA = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 def vencimento(dia: int, mes: str) -> str:
@@ -213,20 +217,60 @@ def resumo_mes(con: sqlite3.Connection, mes: str, escopo: str = "PJ") -> dict:
 
 
 def mensalidades(con: sqlite3.Connection, mes: str) -> list[dict]:
-    """Alunos ativos: previsto = clientes.valor; recebido = entradas PJ pagas do cliente no mês.
-    Situação: 'recebido' (recebido >= previsto), 'parcial' ou 'em aberto'."""
+    """Alunos ativos: previsto = clientes.valor; recebido = entradas PJ pagas do cliente no mês;
+    abertos = entradas PJ do cliente no mês já lançadas e ainda sem baixa; falta = previsto − recebido − em aberto (nem foi lançado).
+    Aluno que só começa depois do mês fica de fora. Situação: 'recebido' (recebido >= previsto), 'parcial' ou 'em aberto'."""
+    abertos = {}
+    for r in con.execute("""SELECT id, cliente_id, data, valor, descricao, categoria FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
+                            AND excluido_em IS NULL AND pago_em IS NULL AND cliente_id IS NOT NULL AND substr(data,1,7)=? ORDER BY data, id""", (mes,)):
+        abertos.setdefault(r["cliente_id"], []).append(dict(r))
     itens = []
     for c in con.execute(
-        """SELECT c.id, c.nome, COALESCE(c.valor, 0) AS previsto,
+        """SELECT c.id, c.nome, c.data_inicio, COALESCE(c.valor, 0) AS previsto,
                   (SELECT COALESCE(SUM(l.valor), 0) FROM lancamentos l WHERE l.cliente_id = c.id AND l.escopo='PJ' AND l.tipo='entrada'
                    AND l.excluido_em IS NULL AND l.pago_em IS NOT NULL AND substr(l.data,1,7)=?) AS recebido
            FROM clientes c WHERE c.excluido_em IS NULL AND c.status='ativo' ORDER BY c.nome""", (mes,)):
+        ini = str(c["data_inicio"] or "").strip()[:10]
+        if ISO_DATA.fullmatch(ini) and ini[:7] > mes:   # começa depois do mês: não deve nada nele
+            continue
         previsto, recebido = round(c["previsto"], 2), round(c["recebido"], 2)
         if previsto <= 0 and recebido <= 0:
             continue
         sit = "recebido" if recebido >= previsto else ("parcial" if recebido > 0 else "em aberto")
-        itens.append({"id": c["id"], "nome": c["nome"], "previsto": previsto, "recebido": recebido, "situacao": sit})
+        meus = abertos.get(c["id"], [])
+        aberto = round(sum(a["valor"] for a in meus), 2)
+        itens.append({"id": c["id"], "nome": c["nome"], "previsto": previsto, "recebido": recebido, "situacao": sit,
+                      "abertos": meus, "aberto": aberto, "falta": round(max(previsto - recebido - aberto, 0), 2)})
     return itens
+
+
+def entradas_sem_aluno(con: sqlite3.Connection, mes: str) -> list[dict]:
+    """Entradas PJ do mês (pagas ou em aberto) sem aluno ligado. Podem ser o pagamento de alguém que aparece 'em aberto'
+    nas mensalidades: a previsão as desconta do estimado e as telas pedem para ligar ao aluno."""
+    return [dict(r) for r in con.execute(
+        """SELECT id, data, pago_em, valor, descricao, contraparte, categoria FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
+           AND excluido_em IS NULL AND cliente_id IS NULL AND substr(data,1,7)=? ORDER BY data, id""", (mes,))]
+
+
+def _palavras(texto: str) -> list[str]:
+    """Palavras sem acento e em minúsculas ('Giuliana Souza' -> ['giuliana', 'souza'])."""
+    return re.findall(r"[a-z0-9]+", unicodedata.normalize("NFKD", texto or "").encode("ascii", "ignore").decode().lower())
+
+
+def sugerir_aluno(texto: str, alunos) -> int | None:
+    """Aluno que o texto do lançamento cita: nome completo, ou só o primeiro nome se um único aluno tiver esse primeiro nome.
+    Na dúvida (dois candidatos) não sugere nada: quem confirma é o usuário."""
+    palavras = set(_palavras(texto))
+    completos, primeiros = [], []
+    for a in alunos:
+        nome = _palavras(a["nome"])
+        if nome and set(nome) <= palavras:
+            completos.append(a["id"])
+        elif nome and len(nome[0]) >= 3 and nome[0] in palavras:
+            primeiros.append(a["id"])
+    if len(completos) == 1:
+        return completos[0]
+    return primeiros[0] if not completos and len(primeiros) == 1 else None
 
 
 # ---------- Salário fixo PJ -> PF ----------
@@ -338,14 +382,13 @@ def colchao(con: sqlite3.Connection, mes: str) -> dict:
 
 
 # ---------- Linha do tempo (previsão) ----------
-def _mensalidades_a_receber(con: sqlite3.Connection, mes: str) -> float:
-    """Quanto dos alunos ativos ainda falta entrar no mês: previsto − recebido − entradas já lançadas em aberto, por aluno."""
-    total = 0.0
-    for m in mensalidades(con, mes):
-        aberto = con.execute("""SELECT COALESCE(SUM(valor), 0) FROM lancamentos WHERE cliente_id=? AND escopo='PJ' AND tipo='entrada'
-                                AND excluido_em IS NULL AND pago_em IS NULL AND substr(data,1,7)=?""", (m["id"], mes)).fetchone()[0]
-        total += max(m["previsto"] - m["recebido"] - aberto, 0)
-    return round(total, 2)
+def _mensalidades_a_receber(con: sqlite3.Connection, mes: str) -> tuple[float, list[dict]]:
+    """Quanto dos alunos ativos ainda falta lançar no mês (soma do 'falta' de cada aluno), menos as entradas PJ do mês sem aluno:
+    se uma delas é o pagamento de quem aparece em aberto, contaria duas vezes. Na dúvida a previsão fica do lado seguro.
+    Devolve (valor, entradas sem aluno)."""
+    sem_aluno = entradas_sem_aluno(con, mes)
+    falta = sum(m["falta"] for m in mensalidades(con, mes)) - sum(e["valor"] for e in sem_aluno)
+    return round(max(falta, 0), 2), sem_aluno
 
 
 def previsao(con: sqlite3.Connection, hoje: str, semanas: int = 13) -> dict:
@@ -372,10 +415,12 @@ def previsao(con: sqlite3.Connection, hoje: str, semanas: int = 13) -> dict:
                           "categoria": "", "valor": round(valor, 2), "estimado": estimado})
 
     receita = {}   # receita PJ esperada por mês (recebida + a receber), base do DAS do mês seguinte
+    sem_aluno = []   # entradas PJ sem aluno descontadas do estimado: a tela pede para ligar ao aluno
     for mes in meses:
         recebido = con.execute("""SELECT COALESCE(SUM(valor), 0) FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
                                   AND excluido_em IS NULL AND pago_em IS NOT NULL AND substr(pago_em,1,7)=?""", (mes,)).fetchone()[0]
-        falta = _mensalidades_a_receber(con, mes)
+        falta, sem = _mensalidades_a_receber(con, mes)
+        sem_aluno += [dict(e, mes=mes) for e in sem]
         abertas = sum(i["valor"] for i in itens if i["escopo"] == "PJ" and i["tipo"] == "entrada" and i["data"][:7] == mes)
         receita[mes] = recebido + falta + abertas
         add("PJ", "entrada", vencimento(int(par.get("dia_recebimento") or 10), mes), "Mensalidades a receber", falta)
@@ -414,4 +459,5 @@ def previsao(con: sqlite3.Connection, hoje: str, semanas: int = 13) -> dict:
         linhas.append(linha)
     menor = {f: min(l[f]["saldo"] for l in linhas) for f in ("PF", "PJ")}
     return {"semanas": linhas, "aperto": aperto, "menor": menor, "inicio": {f: livre[f]["tem"] for f in ("PF", "PJ")},
-            "sem_saldo": {f: livre[f]["sem_saldo"] for f in ("PF", "PJ")}, "fim": fim}
+            "sem_saldo": {f: livre[f]["sem_saldo"] for f in ("PF", "PJ")}, "fim": fim,
+            "sem_aluno": sem_aluno, "sem_aluno_total": round(sum(e["valor"] for e in sem_aluno), 2)}
