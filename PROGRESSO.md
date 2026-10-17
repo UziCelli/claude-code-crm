@@ -76,6 +76,35 @@ Plano completo em `C:\Users\victo\.claude\plans\a-gente-vai-come-ar-functional-t
 - Multiagente: tarefas simples em Haiku, implementação em Sonnet 5.5, modelo principal só para revisão.
 - PRs do Claude: sem check-ins agendados. Claude revisa e dá merge sozinho quando os testes passam e a revisão está limpa; se o merge já tiver sido feito à mão, só avisa que viu.
 
+## O que falta fazer (atualizado em 17/10/2026, depois do PR 5)
+A auditoria financeira de 16/10 tinha 5 PRs: os 5 estão na `main` (#26 a #30). Não há PR da auditoria aberto.
+
+**Para o usuário (nada disso o Claude faz por você)**
+- [ ] `/financeiro`: resolver o card "contas lançadas à mão parecem recorrentes" (PR 4). Item por item: Ligar ou Não é a mesma conta; se o mês já foi pago pelo botão, Excluir um dos dois.
+- [ ] `/financeiro/mensalidades`: ligar à ficha as entradas "sem aluno" (PR 1), para a previsão não descontar à toa.
+- [ ] Conferir o painel depois do PR 5: lucro/h e Nível mudam (o histórico já gravado não muda). Se achar o custo errado, a decisão está abaixo.
+- [ ] Atualizar os saldos das contas (Atualizar saldos, 1x por semana) e dar a frente (PF, PJ, Reserva, Fora) às contas novas.
+- [ ] Conferir se o DAS e o DARF têm o nome certo ("DAS" na descrição ou categoria própria), senão o DAS estimado dobra (PR 2).
+- [ ] Completar telefone e data de renovação dos alunos (o painel mostra "cadastro incompleto").
+- [ ] Celular: reserva no Render (`crm-reserva`) e sessão de 1 mês no Access (passo a passo no README, "CRM no celular").
+
+**Decisão aberta**
+- [ ] Custo do plano no painel, na ficha e no simulador: hoje todos usam o custo operacional + extras de grupo (o do PLANO). Se preferir o "custo total" da planilha (inclui mão de obra), é uma troca pequena em `estimativa_cliente` (`app/main.py`).
+
+**Código: o que a auditoria achou e nenhum dos 5 PRs corrigiu (baixa gravidade, ordem sugerida)**
+- [ ] Pacote e avaliação entram em "Mensalidades a receber" todo mês (D2): só deveriam entrar no mês em que foram vendidos.
+- [ ] Duplo envio e restaurar da lixeira (D21): rede lenta (mais de 8 s) ou restaurar algo que já foi recriado gera lançamento, recorrência ou aluno em dobro.
+- [ ] Fuso no Render (D26): no servidor reserva (UTC), depois das 21h o "hoje" já é amanhã. O PC não é afetado.
+- [ ] Setas "vs mês anterior" (N6): sem "Fechar o mês", o mês anterior é gravado na 1ª visita com os alunos de hoje.
+- [ ] Lucro/h de serviço sem aulas (N9): Consultoria Online vai para o topo do Explorador ordenado por lucro/h.
+- [ ] DAS e entrada atrasada de mês anterior (N10): o DAS estimado do mês seguinte não inclui uma entrada atrasada que vai ser recebida agora.
+- [ ] "Faturamento recorrente" (N11) soma o valor cadastrado de todo aluno ativo (inclui pacote, avaliação e quem não paga). Confirmar se é decisão da Rodada 1.
+- [ ] Mês por data × mês por pago_em (D10): cada tela diz qual regra usa, mas elas se misturam no card PF do painel financeiro.
+- [ ] Rótulo "mês em andamento" no lucro do mês corrente (D17) e gastos de marketing em duas bases, Campanhas e categoria "Marketing/Divulgação" (lance nos dois lugares ou o CAC diverge).
+
+**Decisões de projeto já registradas (não são bug)**
+- Só a fatura do cartão é registrada; compra no cartão fica para depois (D16). Saldo livre não conta entrada prevista. Recorrência some depois de 3 meses sem baixa (D19). Saldos de contas da planilha (`tblSaldosContas`) não foram migrados.
+
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.
 - Nomes de serviço no CRM: Pacote de Aulas, Mensalidade, Consultoria Online, Consultoria Híbrida, Avaliação Física.
