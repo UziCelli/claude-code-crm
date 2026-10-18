@@ -87,6 +87,8 @@ A auditoria financeira de 16/10 tinha 5 PRs: os 5 estão na `main` (#26 a #30). 
 - [ ] Conferir se o DAS e o DARF têm o nome certo ("DAS" na descrição ou categoria própria), senão o DAS estimado dobra (PR 2).
 - [ ] Completar telefone e data de renovação dos alunos (o painel mostra "cadastro incompleto").
 - [ ] Celular: reserva no Render (`crm-reserva`) e sessão de 1 mês no Access (passo a passo no README, "CRM no celular").
+- [ ] **Renomear o repo no GitHub** para `vfitcoach-crm` (Settings › Repository name). Depois, rodar `configurar-pc-servidor.ps1` uma vez no PC (ele troca o `origin` sozinho). O serviço do Render não muda de nome.
+- [ ] **Bancos no CRM (Open Finance), adiado:** a conta no Pluggy já foi criada; falta conectar os bancos. O banco PJ é a **Dock**: ela tem área de Open Finance no app, mas não aparece nas sugestões de conexão do Pluggy. Ao retomar: (1) procurar "Dock" pelo CNPJ ou nome, no sandbox e em produção; (2) se não aparecer, perguntar ao suporte do Pluggy se a Dock é suportada; (3) sem suporte, usar o extrato OFX/CSV da Dock com o importador do CRM. O código (saldos em `saldos`, transações em `lancamentos` com `origem` única) só começa depois disso. Chaves do Pluggy só no `.env`, nunca no repo.
 
 **Decisão aberta**
 - [ ] Custo do plano no painel, na ficha e no simulador: hoje todos usam o custo operacional + extras de grupo (o do PLANO). Se preferir o "custo total" da planilha (inclui mão de obra), é uma troca pequena em `estimativa_cliente` (`app/main.py`).
