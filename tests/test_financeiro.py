@@ -598,3 +598,54 @@ def test_retirada_recorrente_nao_deixa_custo_negativo(con_temp):
     resumo = financeiro.resumo_mes(con_temp, "2026-10")
     assert (resumo["custos_fixos"], resumo["custos_variaveis"], resumo["retirada"], resumo["lucro"]) == (0, 0, 3000, 10000)
     assert [r["id"] for r in financeiro.recorrencias_retirada(con_temp)] == [rid]
+
+
+# ---------- Empréstimo da PJ não é receita ----------
+EMP = financeiro.EMPRESTIMO
+
+
+def test_emprestimo_nao_paga_das_nem_entra_no_lucro(con_temp):
+    saldo(con_temp, "Contabilizei Bank", 0, "2026-10-01")
+    lancar(con_temp, "entrada", 1000, "2026-10-05", pago_em="2026-10-05")                         # mensalidade
+    lancar(con_temp, "entrada", 5000, "2026-10-06", pago_em="2026-10-06", categoria=EMP)         # empréstimo
+    lancar(con_temp, "saida", 700, "2026-10-08", pago_em="2026-10-08", categoria=financeiro.DEVOLUCAO)
+    assert financeiro._receita_pj(con_temp, "2026-10") == 1000
+    r = financeiro.resumo_mes(con_temp, "2026-10")
+    assert (r["receita"], r["custos_variaveis"], r["lucro"]) == (1000, 0, 1000)
+    assert (r["emprestimos"], r["devolucoes"]) == (5000, 700)
+    # o dinheiro está na conta: o "tem" conta o empréstimo, o DAS (6%) só a mensalidade
+    pj = financeiro.saldo_livre(con_temp, "2026-10-16")["PJ"]
+    assert pj["imposto"] == 60 and pj["tem"] == 5300
+
+
+def test_emprestimo_vai_inteiro_para_as_contas_da_pj(con_temp):
+    with con_temp:
+        con_temp.execute("UPDATE recorrencias SET excluido_em='x'")
+    lancar(con_temp, "entrada", 3000, "2026-10-02", pago_em="2026-10-02", categoria=EMP)
+    (e,) = financeiro.potes_mes(con_temp, "2026-10")["entradas"]
+    assert e["divisao"] == {"imposto": 0, "contas": 3000, "salario": 0, "colchao": 0}
+    assert financeiro.texto_divisao(e["divisao"]) == "R$ 3.000,00 contas da pj"
+
+
+def test_emprestimo_nao_pede_aluno_nem_desconta_mensalidade(con_temp):
+    with con_temp:
+        con_temp.execute("INSERT INTO clientes (nome, valor, status) VALUES ('Ana', 500, 'ativo')")
+    lancar(con_temp, "entrada", 2000, "2026-10-05", pago_em="2026-10-05", categoria=EMP)
+    assert financeiro.entradas_sem_aluno(con_temp, "2026-10") == []
+    falta, sem = financeiro._mensalidades_a_receber(con_temp, "2026-10")
+    assert falta == 500 and sem == []      # sem a regra, os 2000 zerariam a mensalidade da Ana
+
+
+def test_previsao_ignora_emprestimo_na_base_do_das(con_temp):
+    financeiro.salvar_saldos(con_temp, "2026-10-16", {"Contabilizei Bank": 0}, {})
+    lancar(con_temp, "entrada", 10000, "2026-10-05", pago_em="2026-10-05", categoria=EMP)
+    lancar(con_temp, "entrada", 1000, "2026-10-06", pago_em="2026-10-06")
+    descr = {i["descricao"]: i["valor"] for s in financeiro.previsao(con_temp, "2026-10-16")["semanas"] for i in s["itens"]}
+    assert descr["DAS estimado (10/2026)"] == 60      # 6% de 1000, não de 11000
+
+
+def test_parece_emprestimo():
+    assert financeiro.parece_emprestimo("PIX recebido - Empréstimo Banco X")
+    assert financeiro.parece_emprestimo("capital de giro Dock")
+    assert not financeiro.parece_emprestimo("PIX recebido Ana Souza")
+    assert not financeiro.parece_emprestimo("CRÉDITO EM CONTA")      # extrato comum: não pode sugerir em toda entrada

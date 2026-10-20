@@ -19,14 +19,15 @@
 {% if sem_aluno %}
 <div class="card mt atencao">
   <h3 style="margin-top:0">{{ sem_aluno|length }} entrada{{ 's' if sem_aluno|length > 1 }} sem aluno neste mês</h3>
-  <p class="muted">É pagamento de aluno? Ligue à ficha dele: senão ele aparece "em aberto" e a previsão conta duas vezes. Não é de aluno? Ignore: a previsão só fica mais conservadora.</p>
+  <p class="muted">É pagamento de aluno? Ligue à ficha dele: senão ele aparece "em aberto" e a previsão conta duas vezes. Foi dinheiro emprestado? Marque "É empréstimo": não vira receita nem paga DAS.</p>
   {% for e in sem_aluno %}
   <div class="item-ligar">
     <div class="linha" style="justify-content:space-between"><strong>{{ e.descricao or e.contraparte or e.categoria }}</strong><strong>{{ e.valor|moeda }}</strong></div>
-    <div class="muted">{{ e.data|data }} · <span class="tag {{ 'verde' if e.pago_em else 'amarelo' }}">{{ 'pago' if e.pago_em else 'em aberto' }}</span></div>
+    <div class="muted">{{ e.data|data }} · <span class="tag {{ 'verde' if e.pago_em else 'amarelo' }}">{{ 'pago' if e.pago_em else 'em aberto' }}</span>{% if e.parece_emprestimo %} <span class="tag azul">parece empréstimo</span>{% endif %}</div>
     <form method="post" action="/financeiro/lancamento/{{ e.id }}/aluno" class="linha"><input type="hidden" name="volta" value="{{ volta }}">
       <select name="cliente_id" required aria-label="Aluno" style="width:auto;flex:1"><option value="">Escolha o aluno</option>{% for a in alunos %}<option value="{{ a.id }}" {{ 'selected' if a.id == e.sugestao }}>{{ a.nome }}</option>{% endfor %}</select>
       <button class="pequeno">Ligar</button></form>
+    <form method="post" action="/financeiro/lancamento/{{ e.id }}/emprestimo" class="inline" data-confirmar="Marcar como empréstimo? Ele deixa de contar como receita e não paga DAS."><input type="hidden" name="volta" value="{{ volta }}"><button class="{{ '' if e.parece_emprestimo else 'claro ' }}pequeno">É empréstimo</button></form>
   </div>
   {% endfor %}
 </div>

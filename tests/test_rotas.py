@@ -145,6 +145,32 @@ def test_ligar_entrada_sem_aluno_e_falta_por_aluno(cliente_http):
     con.close()
 
 
+def test_marcar_entrada_como_emprestimo_tira_da_receita_e_da_lista_de_sem_aluno(cliente_http):
+    import datetime as dt
+    http, cid = cliente_http
+    hoje = dt.date.today().isoformat()
+    volta = f"/financeiro/mensalidades?mes={hoje[:7]}"
+    con = db.conectar()
+    with con:
+        lid = con.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao) VALUES ('PJ','entrada',?,?,4000,'Outros',?)",
+                          (hoje, hoje, "Empréstimo Dock")).lastrowid
+        pf = con.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria) VALUES ('PF','entrada',?,?,10,'Outros')",
+                         (hoje, hoje)).lastrowid
+    tela = http.get(volta).text
+    assert "1 entrada sem aluno" in tela and "parece empréstimo" in tela and "É empréstimo" in tela
+    r = http.post(f"/financeiro/lancamento/{lid}/emprestimo", data={"volta": volta}, follow_redirects=False)
+    assert "Marcado como empréstimo" in unquote(r.headers["location"])
+    assert con.execute("SELECT categoria FROM lancamentos WHERE id=?", (lid,)).fetchone()[0] == "Empréstimo"
+    assert "sem aluno" not in http.get(volta).text
+    livro = http.get(f"/financeiro?mes={hoje[:7]}").text
+    assert "Sem empréstimo (R$ 4.000,00)" in livro and ">empréstimo</span>" in livro
+    # PF não pode ser empréstimo da PJ: nada muda e volta com erro
+    r = http.post(f"/financeiro/lancamento/{pf}/emprestimo", data={"volta": volta}, follow_redirects=False)
+    assert "Só uma entrada da PJ" in unquote(r.headers["location"])
+    assert con.execute("SELECT categoria FROM lancamentos WHERE id=?", (pf,)).fetchone()[0] == "Outros"
+    con.close()
+
+
 @pytest.mark.parametrize("valor,esperado", [("1.500", 1500), ("1.500,50", 1500.5), ("10.5", 10.5), ("1.234.567", 1234567)])
 def test_num_br_milhar_sem_centavos(valor, esperado):
     assert main._num_br(valor) == esperado

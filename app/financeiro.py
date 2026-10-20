@@ -124,9 +124,10 @@ def eh_das(descricao: str | None, categoria: str | None) -> bool:
 
 
 def _receita_pj(con: sqlite3.Connection, mes: str) -> float:
-    """Entradas PJ recebidas no mês (por pago_em): a base do DAS que vence no mês seguinte."""
+    """Entradas PJ recebidas no mês (por pago_em): a base do DAS que vence no mês seguinte. Empréstimo não é receita."""
     return con.execute("""SELECT COALESCE(SUM(valor), 0) FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
-                          AND excluido_em IS NULL AND pago_em IS NOT NULL AND substr(pago_em,1,7)=?""", (mes,)).fetchone()[0]
+                          AND excluido_em IS NULL AND pago_em IS NOT NULL AND substr(pago_em,1,7)=? AND categoria != ?""",
+                       (mes, EMPRESTIMO)).fetchone()[0]
 
 
 def _das_do_mes(con: sqlite3.Connection, mes: str, abertos: list[dict]) -> tuple[bool, float]:
@@ -328,15 +329,19 @@ def recorrencias_retirada(con: sqlite3.Connection) -> list:
 def resumo_mes(con: sqlite3.Connection, mes: str, escopo: str = "PJ") -> dict:
     """Números do mês, só com lançamentos pagos. Fixo = saída vinda de recorrência fixa; o resto das saídas é variável."""
     soma = {}   # (tipo, fixo) -> total
-    # salário da PJ para a PF: sai do lucro, não é custo do negócio (nem fixo, nem variável), venha de recorrência ou não
+    # salário da PJ para a PF: sai do lucro, não é custo do negócio (nem fixo, nem variável), venha de recorrência ou não.
+    # Empréstimo (entrada) e a devolução (saída) também ficam fora: dinheiro emprestado não é receita nem custo
     for tipo, fixo, total in con.execute(
         """SELECT l.tipo, r.fixo, SUM(l.valor) FROM lancamentos l LEFT JOIN recorrencias r ON r.id = l.recorrencia_id
            WHERE l.escopo=? AND l.excluido_em IS NULL AND l.pago_em IS NOT NULL AND substr(l.data,1,7)=?
-                 AND NOT (l.tipo='saida' AND l.categoria=?)
-           GROUP BY l.tipo, r.fixo""", (escopo, mes, RETIRADA)):
+                 AND NOT (l.tipo='saida' AND l.categoria IN (?, ?)) AND NOT (l.tipo='entrada' AND l.categoria=?)
+           GROUP BY l.tipo, r.fixo""", (escopo, mes, RETIRADA, DEVOLUCAO, EMPRESTIMO)):
         soma[(tipo, fixo)] = total
     retirada = con.execute("""SELECT COALESCE(SUM(valor), 0) FROM lancamentos WHERE escopo=? AND tipo='saida' AND categoria=?
                               AND excluido_em IS NULL AND pago_em IS NOT NULL AND substr(data,1,7)=?""", (escopo, RETIRADA, mes)).fetchone()[0]
+    emprestimos, devolucoes = (con.execute("""SELECT COALESCE(SUM(valor), 0) FROM lancamentos WHERE escopo=? AND tipo=? AND categoria=?
+                                              AND excluido_em IS NULL AND pago_em IS NOT NULL AND substr(data,1,7)=?""",
+                                           (escopo, tipo, cat, mes)).fetchone()[0] for tipo, cat in (("entrada", EMPRESTIMO), ("saida", DEVOLUCAO)))
     receita = sum(v for (t, _), v in soma.items() if t == "entrada")
     fixos = sum(v for (t, f), v in soma.items() if t == "saida" and f == 1)
     variaveis = sum(v for (t, f), v in soma.items() if t == "saida" and f != 1)
@@ -353,6 +358,7 @@ def resumo_mes(con: sqlite3.Connection, mes: str, escopo: str = "PJ") -> dict:
         "mes": mes, "escopo": escopo,
         "receita": round(receita, 2), "custos_fixos": round(fixos, 2), "custos_variaveis": round(variaveis, 2),
         "lucro": round(receita - fixos - variaveis, 2), "retirada": round(retirada, 2),
+        "emprestimos": round(emprestimos, 2), "devolucoes": round(devolucoes, 2),
         "ponto_equilibrio": round(fixos / margem, 2) if margem > 0 and fixos > 0 else None,
         "das": round(db.parametros(con, "imposto").get("DAS", 0.06) * receita, 2),
         "pro_labore": round(pro_labore, 2), "inss": round(fiscal["inss_pct"] * pro_labore, 2),
@@ -390,10 +396,18 @@ def mensalidades(con: sqlite3.Connection, mes: str) -> list[dict]:
 
 def entradas_sem_aluno(con: sqlite3.Connection, mes: str) -> list[dict]:
     """Entradas PJ do mês (pagas ou em aberto) sem aluno ligado. Podem ser o pagamento de alguém que aparece 'em aberto'
-    nas mensalidades: a previsão as desconta do estimado e as telas pedem para ligar ao aluno."""
+    nas mensalidades: a previsão as desconta do estimado e as telas pedem para ligar ao aluno.
+    Empréstimo não entra: não é pagamento de aluno."""
     return [dict(r) for r in con.execute(
         """SELECT id, data, pago_em, valor, descricao, contraparte, categoria FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
-           AND excluido_em IS NULL AND cliente_id IS NULL AND substr(data,1,7)=? ORDER BY data, id""", (mes,))]
+           AND excluido_em IS NULL AND cliente_id IS NULL AND categoria != ? AND substr(data,1,7)=? ORDER BY data, id""",
+        (EMPRESTIMO, mes))]
+
+
+def parece_emprestimo(texto: str) -> bool:
+    """O texto do lançamento fala de empréstimo? Só sugere: quem decide é o usuário (nunca troca a categoria sozinho)."""
+    t = " ".join(_palavras(texto))
+    return any(p in t for p in ("emprestimo", "capital de giro", "financiamento", "consignado"))
 
 
 def _palavras(texto: str) -> list[str]:
@@ -419,6 +433,9 @@ def sugerir_aluno(texto: str, alunos) -> int | None:
 
 # ---------- Salário fixo PJ -> PF ----------
 RETIRADA = "Retirada"
+# Empréstimo da PJ (não emite nota): entra no caixa e paga contas, mas não é receita (não paga DAS, não é lucro, não é mensalidade)
+EMPRESTIMO = "Empréstimo"
+DEVOLUCAO = "Empréstimo (devolução)"
 
 
 def _salario_parametros(con: sqlite3.Connection) -> tuple[float, int]:
@@ -513,12 +530,15 @@ def potes_mes(con: sqlite3.Connection, mes: str) -> dict:
     for e in con.execute("""SELECT id, valor, descricao, categoria, contraparte, pago_em FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
                             AND excluido_em IS NULL AND pago_em IS NOT NULL AND substr(pago_em,1,7)=? ORDER BY pago_em, id""", (mes,)):
         resto = e["valor"]
-        div = {"imposto": round(das * resto, 2)}
-        resto -= div["imposto"]
-        for k in ("contas", "salario"):
-            div[k] = round(max(0, min(resto, alvo[k] - cheio[k])), 2)
-            resto -= div[k]
-        div["colchao"] = round(max(resto, 0), 2)
+        if e["categoria"] == EMPRESTIMO:   # empréstimo: sem imposto e tudo para as contas da PJ (é para isso que ele serve)
+            div = {"imposto": 0.0, "contas": round(resto, 2), "salario": 0.0, "colchao": 0.0}
+        else:
+            div = {"imposto": round(das * resto, 2)}
+            resto -= div["imposto"]
+            for k in ("contas", "salario"):
+                div[k] = round(max(0, min(resto, alvo[k] - cheio[k])), 2)
+                resto -= div[k]
+            div["colchao"] = round(max(resto, 0), 2)
         for k, v in div.items():
             cheio[k] += v
         entradas.append({"id": e["id"], "valor": e["valor"], "descricao": e["descricao"] or e["contraparte"] or e["categoria"],
@@ -588,11 +608,11 @@ def previsao(con: sqlite3.Connection, hoje: str, semanas: int = 13) -> dict:
     receita = {}   # receita PJ esperada por mês (recebida + a receber), base do DAS do mês seguinte
     sem_aluno = []   # entradas PJ sem aluno descontadas do estimado: a tela pede para ligar ao aluno
     for mes in meses:
-        recebido = con.execute("""SELECT COALESCE(SUM(valor), 0) FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
-                                  AND excluido_em IS NULL AND pago_em IS NOT NULL AND substr(pago_em,1,7)=?""", (mes,)).fetchone()[0]
+        recebido = _receita_pj(con, mes)
         falta, sem = _mensalidades_a_receber(con, mes)
         sem_aluno += [dict(e, mes=mes) for e in sem]
-        abertas = sum(i["valor"] for i in itens if i["escopo"] == "PJ" and i["tipo"] == "entrada" and i["data"][:7] == mes)
+        abertas = sum(i["valor"] for i in itens if i["escopo"] == "PJ" and i["tipo"] == "entrada" and i["data"][:7] == mes
+                      and i["categoria"] != EMPRESTIMO)
         receita[mes] = recebido + falta + abertas
         add("PJ", "entrada", vencimento(int(par.get("dia_recebimento") or 10), mes), "Mensalidades a receber", falta)
         # salário: só o que falta tirar da PJ (Retirada à mão também vale); a entrada na PF não volta se ela já está lançada

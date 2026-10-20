@@ -21,6 +21,7 @@
   <div class="kpi"><div class="rotulo">Pró-labore</div><div class="valor">{{ r.pro_labore|moeda }}</div><div class="meta">Fora do lucro</div></div>
   <div class="kpi"><div class="rotulo">INSS do pró-labore</div><div class="valor">{{ r.inss|moeda }}</div><div class="meta">Fora do lucro</div></div>
   <div class="kpi"><div class="rotulo">Salário pago à PF</div><div class="valor">{{ r.retirada|moeda }}</div><div class="meta">Retirada: sai do lucro, não é custo</div></div>
+  {% if r.emprestimos or r.devolucoes %}<div class="kpi"><div class="rotulo">Empréstimos</div><div class="valor">{{ r.emprestimos|moeda }}</div><div class="meta">Recebido no mês{% if r.devolucoes %} · devolvido {{ r.devolucoes|moeda }}{% endif %}. Fora da receita e dos custos.</div></div>{% endif %}
 </div>
 
 <div class="grid c2 mt">

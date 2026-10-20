@@ -1674,9 +1674,14 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", con=
     # PJ e PF juntos: o salário (Retirada da PJ + Salário na PF) é só transferência e não entra nas somas
     transf = [l for l in lancs if escopo == "todos" and ((l["escopo"] == "PJ" and l["tipo"] == "saida" and l["categoria"] == financeiro.RETIRADA)
                                                          or (l["escopo"] == "PF" and l["tipo"] == "entrada" and l["categoria"] == "Salário"))]
+    # empréstimo da PJ (e a devolução) também não é receita nem custo: fica fora das somas, com o valor avisado
+    empr = [l for l in lancs if l["escopo"] == "PJ" and l["categoria"] in (financeiro.EMPRESTIMO, financeiro.DEVOLUCAO)]
     transf_ids = {l["id"] for l in transf}
-    entradas = round(sum(l["valor"] for l in lancs if l["tipo"] == "entrada" and l["id"] not in transf_ids), 2)
-    saidas = round(sum(l["valor"] for l in lancs if l["tipo"] == "saida" and l["id"] not in transf_ids), 2)
+    fora_ids = transf_ids | {l["id"] for l in empr}
+    entradas = round(sum(l["valor"] for l in lancs if l["tipo"] == "entrada" and l["id"] not in fora_ids), 2)
+    saidas = round(sum(l["valor"] for l in lancs if l["tipo"] == "saida" and l["id"] not in fora_ids), 2)
+    emprestado = round(sum(l["valor"] for l in empr if l["tipo"] == "entrada"), 2)
+    devolvido = round(sum(l["valor"] for l in empr if l["tipo"] == "saida"), 2)
     pend = [p for p in financeiro.pendencias(con, mes, h) if p["escopo"] in lista]
     for p in pend:
         p["dias"] = (dt.date.fromisoformat(h) - dt.date.fromisoformat(p["data"])).days if p["status"] == "atrasado" else 0
@@ -1688,7 +1693,8 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", con=
     recs = con.execute(f"SELECT * FROM recorrencias WHERE excluido_em IS NULL AND escopo IN ({qs}) ORDER BY escopo, dia_vencimento, descricao", lista).fetchall()
     clientes_ = con.execute("SELECT id, nome FROM clientes WHERE excluido_em IS NULL ORDER BY nome").fetchall()
     return render(request, "financeiro.html", con, mes=mes, escopo=escopo, lancs=lancs, entradas=entradas, saidas=saidas,
-                  saldo=round(entradas - saidas, 2), transferencia=round(sum(l["valor"] for l in transf if l["tipo"] == "saida"), 2), pend=pend, recs=recs, clientes_=clientes_, volta=f"mes={mes}&escopo={escopo}",
+                  saldo=round(entradas - saidas, 2), transferencia=round(sum(l["valor"] for l in transf if l["tipo"] == "saida"), 2),
+                  emprestado=emprestado, devolvido=devolvido, pend=pend, recs=recs, clientes_=clientes_, volta=f"mes={mes}&escopo={escopo}",
                   livre=financeiro.saldo_livre(con, h), saldos=financeiro.saldos_atuais(con), frentes=financeiro.FRENTES,
                   salario=financeiro.salario_mes(con, h[:7], h), potes=financeiro.potes_mes(con, mes),
                   parecidas=parecidas, recs_retirada=financeiro.recorrencias_retirada(con),
@@ -1839,6 +1845,8 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
         return _fin_voltar(volta, erro=str(e))
     except sqlite3.IntegrityError:
         return _fin_voltar(volta, erro="Não foi possível salvar: confira o aluno e os campos.")
+    if f["escopo"] == "PJ" and f["tipo"] == "entrada" and f["categoria"] == financeiro.EMPRESTIMO:
+        return _fin_voltar(volta, msg=(aviso or "Lançamento salvo. ") + "É empréstimo: não paga DAS e não conta como receita.")
     if f["escopo"] == "PJ" and f["tipo"] == "entrada" and pago_em:
         # dinheiro que entrou na PJ: diz na hora quanto vai para cada pote
         div = next((e["divisao"] for e in financeiro.potes_mes(con, pago_em[:7])["entradas"] if e["id"] == lid), None)
@@ -1863,6 +1871,17 @@ def financeiro_ligar_aluno(lid: int, cliente_id: int = Form(0), volta: str = For
     with con:
         con.execute("UPDATE lancamentos SET cliente_id=? WHERE id=? AND cliente_id IS NULL AND excluido_em IS NULL", (cliente_id, lid))
     return _fin_voltar(volta, msg=f"Entrada ligada a {c['nome']}.")
+
+
+@app.post("/financeiro/lancamento/{lid}/emprestimo")
+def financeiro_emprestimo(lid: int, volta: str = Form(""), con=Depends(get_db)):
+    """'É empréstimo': a entrada PJ deixa de ser receita (DAS, lucro, mensalidades) e passa a pagar as contas da PJ."""
+    with con:
+        n = con.execute("""UPDATE lancamentos SET categoria=?, cliente_id=NULL WHERE id=? AND escopo='PJ' AND tipo='entrada'
+                           AND excluido_em IS NULL""", (financeiro.EMPRESTIMO, lid)).rowcount
+    if not n:
+        return _fin_voltar(volta, erro="Só uma entrada da PJ pode ser empréstimo.")
+    return _fin_voltar(volta, msg="Marcado como empréstimo: não paga DAS e não conta como receita nem como mensalidade.")
 
 
 @app.post("/financeiro/lancamento/{lid}/recorrencia")
@@ -1956,7 +1975,8 @@ def financeiro_mensalidades(request: Request, mes: str = "", con=Depends(get_db)
     # falta por aluno: quem pagou a mais não cobre quem não pagou
     falta = round(sum(max(i["previsto"] - i["recebido"], 0) for i in itens), 2)
     alunos = con.execute("SELECT id, nome FROM clientes WHERE excluido_em IS NULL ORDER BY status != 'ativo', nome").fetchall()
-    sem_aluno = [dict(e, sugestao=financeiro.sugerir_aluno(f"{e['descricao'] or ''} {e['contraparte'] or ''}", alunos))
+    sem_aluno = [dict(e, sugestao=financeiro.sugerir_aluno(f"{e['descricao'] or ''} {e['contraparte'] or ''}", alunos),
+                      parece_emprestimo=financeiro.parece_emprestimo(f"{e['descricao'] or ''} {e['contraparte'] or ''}"))
                  for e in financeiro.entradas_sem_aluno(con, mes)]
     return render(request, "financeiro_mensalidades.html", con, mes=mes, itens=itens, previsto=previsto, recebido=recebido, falta=falta,
                   sem_aluno=sem_aluno, alunos=alunos, volta=f"/financeiro/mensalidades?mes={mes}")

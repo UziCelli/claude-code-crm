@@ -80,8 +80,8 @@
 </form>
 
 <div class="grid c3 mt">
-  <div class="kpi verde"><div class="rotulo">Entradas</div><div class="valor">{{ entradas|moeda }}</div></div>
-  <div class="kpi vermelho"><div class="rotulo">Saídas</div><div class="valor">{{ saidas|moeda }}</div>{% if transferencia %}<div class="meta">Sem o salário PJ→PF ({{ transferencia|moeda }}): é só transferência.</div>{% endif %}</div>
+  <div class="kpi verde"><div class="rotulo">Entradas</div><div class="valor">{{ entradas|moeda }}</div>{% if emprestado %}<div class="meta">Sem empréstimo ({{ emprestado|moeda }}): dinheiro emprestado não é receita.</div>{% endif %}</div>
+  <div class="kpi vermelho"><div class="rotulo">Saídas</div><div class="valor">{{ saidas|moeda }}</div>{% if transferencia %}<div class="meta">Sem o salário PJ→PF ({{ transferencia|moeda }}): é só transferência.</div>{% endif %}{% if devolvido %}<div class="meta">Sem devolução de empréstimo ({{ devolvido|moeda }}).</div>{% endif %}</div>
   <div class="kpi {{ 'verde' if saldo >= 0 else 'vermelho' }}"><div class="rotulo">Saldo do mês</div><div class="valor">{{ saldo|moeda }}</div><div class="meta">Só lançamentos do mês (pagos e em aberto). Recorrência que ainda não virou lançamento não entra.</div></div>
 </div>
 
@@ -172,7 +172,7 @@
     {% for l in lancs %}
     <tr>
       <td>{{ l.data|data }}</td>
-      <td>{{ l.descricao or '—' }}{% if l.parcela_total %} <span class="muted">{{ l.parcela_num or '?' }}/{{ l.parcela_total }}</span>{% endif %} <span class="tag neutro">{{ l.escopo }}</span></td>
+      <td>{{ l.descricao or '—' }}{% if l.parcela_total %} <span class="muted">{{ l.parcela_num or '?' }}/{{ l.parcela_total }}</span>{% endif %} <span class="tag neutro">{{ l.escopo }}</span>{% if l.escopo == 'PJ' and l.categoria.startswith('Empréstimo') %} <span class="tag azul">empréstimo</span>{% endif %}</td>
       <td>{{ l.categoria }}</td>
       <td>{{ l.contraparte or '—' }}</td>
       <td>{{ l.conta or '—' }}</td>

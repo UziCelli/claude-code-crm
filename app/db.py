@@ -94,7 +94,8 @@ LISTAS_INICIAIS = {
     "lista_formas_pagamento": ["PIX", "Cartão 1x", "Cartão 3x", "Cartão 6x", "Cartão 12x"],
     # financeiro (lista_formas_pagamento acima é de preço; não reaproveitar)
     "lista_categorias_pj": ["Pacotes de Aulas", "Mensalidade (Aulas Presenciais)", "Consultoria Online",
-                            "Consultoria Híbrida", "Retirada", "Aluguel", "Internet/Telefone", "Material de Trabalho",
+                            "Consultoria Híbrida", "Empréstimo", "Retirada", "Empréstimo (devolução)", "Aluguel",
+                            "Internet/Telefone", "Material de Trabalho",
                             "Transporte", "Marketing/Divulgação", "Impostos/Taxas", "Alimentação",
                             "Software/Assinaturas", "Manutenção", "Outros"],
     "lista_categorias_pf": ["Alimentação", "Moradia", "Transporte", "Pessoal", "Lazer", "Educação", "Vestuário",
