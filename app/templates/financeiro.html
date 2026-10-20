@@ -9,6 +9,7 @@
 <div class="linha topo">
   <h1 style="margin:0">Financeiro</h1>
   <div class="linha">
+    <a class="btn claro" href="/financeiro/conferir">Conferir{% if n_conferir %} ({{ n_conferir }}){% endif %}</a>
     <a class="btn claro" href="/financeiro/mensalidades?mes={{ mes }}">Mensalidades</a>
     <a class="btn claro" href="/financeiro/previsao">Próximos 90 dias</a>
     <a class="btn claro" href="/financeiro/painel?mes={{ mes }}">Painel financeiro</a>
@@ -105,35 +106,12 @@
   {% else %}<p class="muted">Nenhuma entrada da PJ recebida neste mês.</p>{% endif %}
 </div>
 
-{% if parecidas or recs_retirada %}
+{% if n_conferir %}
 <div class="card mt atencao">
-  {% if parecidas %}
-  <h3 style="margin-top:0">{{ parecidas|length }} conta{{ 's' if parecidas|length > 1 }} lançada{{ 's' if parecidas|length > 1 }} à mão parece{{ 'm' if parecidas|length > 1 }} recorrente{{ 's' if parecidas|length > 1 }}</h3>
-  <p class="muted">Ligue o lançamento à conta recorrente: senão ela continua aparecendo como atrasada, o Saldo livre desconta duas vezes e o botão Pagar lançaria de novo. Não é a mesma conta? Diga que não.</p>
-  {% for s in parecidas %}
-  <div class="item-ligar">
-    <div class="linha" style="justify-content:space-between"><strong>{{ s.descricao }} <span class="tag neutro">{{ s.escopo }}</span></strong><strong>{{ s.valor|moeda }}</strong></div>
-    <div class="muted">{{ s.data|data }} · <span class="tag {{ 'verde' if s.pago_em else 'amarelo' }}">{{ 'pago' if s.pago_em else 'em aberto' }}</span></div>
-    {% set livres = s.candidatos|rejectattr('ja_baixada')|list %}
-    {% if livres %}
-    <form method="post" action="/financeiro/lancamento/{{ s.id }}/recorrencia" class="linha"><input type="hidden" name="volta" value="{{ volta }}">
-      <select name="recorrencia_id" required aria-label="Conta recorrente" style="width:auto;flex:1">{% if livres|length > 1 %}<option value="">Escolha a conta recorrente</option>{% endif %}{% for c in livres %}<option value="{{ c.id }}">{{ c.descricao }} · dia {{ c.dia_vencimento }} · {{ c.valor|moeda }}</option>{% endfor %}</select>
-      <button class="pequeno">Ligar</button></form>
-    {% else %}
-    <p class="muted" style="margin:6px 0">{{ s.candidatos[0].descricao }} deste mês já foi paga pelo botão Pagar. Se é o mesmo pagamento, exclua um dos dois.</p>
-    <form method="post" action="/financeiro/lancamento/{{ s.id }}/excluir" class="inline" data-confirmar="Enviar este lançamento para a lixeira?"><input type="hidden" name="volta" value="{{ volta }}"><button class="claro pequeno">Excluir este lançamento</button></form>
-    {% endif %}
-    <form method="post" action="/financeiro/lancamento/{{ s.id }}/nao-recorrente" class="inline"><input type="hidden" name="volta" value="{{ volta }}"><button class="claro pequeno">Não é a mesma conta</button></form>
+  <div class="linha topo">
+    <div><strong>{{ n_conferir }} coisa{{ 's' if n_conferir > 1 }} para conferir</strong><div class="muted">Lançamentos que parecem repetidos e contas lançadas à mão que parecem recorrentes.</div></div>
+    <a class="btn" href="/financeiro/conferir">Conferir</a>
   </div>
-  {% endfor %}
-  {% endif %}
-  {% for r in recs_retirada %}
-  <div class="item-ligar">
-    <div class="linha" style="justify-content:space-between"><strong>{{ r.descricao }} <span class="tag neutro">{{ r.escopo }}</span></strong><strong>{{ r.valor|moeda }}</strong></div>
-    <p class="muted" style="margin:6px 0">Salário não é conta recorrente: ele já tem o botão "Pagar salário". Exclua esta recorrência para o custo do mês e o ponto de equilíbrio ficarem certos.</p>
-    <form method="post" action="/financeiro/recorrencia/{{ r.id }}/excluir" class="inline" data-confirmar="Enviar esta conta recorrente para a lixeira?"><input type="hidden" name="volta" value="{{ volta }}"><button class="claro pequeno">Excluir recorrência</button></form>
-  </div>
-  {% endfor %}
 </div>
 {% endif %}
 

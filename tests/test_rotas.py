@@ -337,17 +337,19 @@ def test_financeiro_card_de_contas_parecidas_ligar_e_descartar(cliente_http):
                                                   "descricao": desc, "pago_em": hoje.isoformat()}, follow_redirects=False)
     a, b = [r[0] for r in con.execute("SELECT id FROM lancamentos ORDER BY id")]
     tela = http.get(f"/financeiro?mes={mes}").text
-    assert "2 contas lançadas à mão parecem recorrentes" in tela and "talvez já pago" in tela
+    assert "2 coisas para conferir" in tela and "talvez já pago" in tela        # o livro-caixa só avisa; o cartão fica na tela Conferir
+    assert "2 contas lançadas à mão parecem recorrentes" in http.get("/financeiro/conferir").text
     http.post(f"/financeiro/lancamento/{a}/recorrencia", data={**base, "recorrencia_id": rid}, follow_redirects=False)
     assert con.execute("SELECT recorrencia_id FROM lancamentos WHERE id=?", (a,)).fetchone()[0] == rid
     # o outro agora é pagamento em dobro: sem Ligar, com Excluir; "Não é a mesma conta" tira da lista
-    tela = http.get(f"/financeiro?mes={mes}").text
+    tela = http.get("/financeiro/conferir").text
     assert "1 conta lançada à mão parece recorrente" in tela and "já foi paga pelo botão Pagar" in tela
     r = http.post(f"/financeiro/lancamento/{b}/recorrencia", data={**base, "recorrencia_id": rid}, follow_redirects=False)
     assert "erro=" in r.headers["location"]
     http.post(f"/financeiro/lancamento/{b}/nao-recorrente", data=base, follow_redirects=False)
     assert con.execute("SELECT sem_recorrencia FROM lancamentos WHERE id=?", (b,)).fetchone()[0] == 1
-    assert "lançada à mão parece" not in http.get(f"/financeiro?mes={mes}").text
+    assert "lançada à mão parece" not in http.get("/financeiro/conferir").text
+    assert "para conferir" not in http.get(f"/financeiro?mes={mes}").text
     con.close()
 
 
@@ -378,4 +380,32 @@ def test_financeiro_card_avisa_recorrencia_de_retirada_ja_cadastrada(cliente_htt
         con.execute("INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, fixo, inicio)"
                     " VALUES ('PJ','Salário','Retirada',3000,5,1,'2026-01')")
     con.close()
-    assert "Salário não é conta recorrente" in http.get("/financeiro").text
+    assert "1 coisa para conferir" in http.get("/financeiro").text
+    assert "Salário não é conta recorrente" in http.get("/financeiro/conferir").text
+
+
+def test_conferir_repetidos_manter_um_e_nao_e_repetido(cliente_http):
+    import datetime as dt
+    http, _ = cliente_http
+    hoje = dt.date.today().isoformat()
+    con = db.conectar()
+    with con:
+        ids = [con.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao) VALUES ('PJ','saida',?,?,89.9,'Software/Assinaturas','Spotify')",
+                           (hoje, hoje)).lastrowid for _ in range(3)]
+        x, y = [con.execute("INSERT INTO lancamentos (escopo, tipo, data, valor, categoria, descricao) VALUES ('PF','saida',?,40,'Lazer','Cinema')",
+                            (hoje,)).lastrowid for _ in range(2)]
+    tela = http.get("/financeiro/conferir").text
+    assert "Pode estar repetido (2)" in tela and "quase certo" in tela and "(sugerido)" in tela
+    assert "2 grupos de lançamentos do financeiro parecem repetido" in http.get("/financeiro").text      # alerta em toda página
+    # manter só o primeiro: os outros dois vão para a lixeira
+    r = http.post("/financeiro/duplicados/manter", data={"manter": ids[0], "ids": ids, "volta": "/financeiro/conferir"}, follow_redirects=False)
+    assert "2 lançamentos repetidos enviados para a lixeira" in unquote(r.headers["location"])
+    vivos = [r[0] for r in con.execute("SELECT id FROM lancamentos WHERE excluido_em IS NULL AND descricao='Spotify'")]
+    assert vivos == [ids[0]]
+    # "não é repetido" guarda o par e o grupo some
+    http.post("/financeiro/duplicados/nao-repetido", data={"ids": [x, y], "volta": "/financeiro/conferir"}, follow_redirects=False)
+    assert "Tudo certo" in http.get("/financeiro/conferir").text
+    # pedido torto: manter fora do grupo não exclui nada
+    r = http.post("/financeiro/duplicados/manter", data={"manter": 999, "ids": [x, y], "volta": "/financeiro/conferir"}, follow_redirects=False)
+    assert "erro=" in r.headers["location"] and con.execute("SELECT COUNT(*) FROM lancamentos WHERE excluido_em IS NOT NULL").fetchone()[0] == 2
+    con.close()

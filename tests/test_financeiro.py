@@ -649,3 +649,88 @@ def test_parece_emprestimo():
     assert financeiro.parece_emprestimo("capital de giro Dock")
     assert not financeiro.parece_emprestimo("PIX recebido Ana Souza")
     assert not financeiro.parece_emprestimo("CRÉDITO EM CONTA")      # extrato comum: não pode sugerir em toda entrada
+
+
+# ---------- Lançamentos repetidos ----------
+def lanc(con, valor=100, data="2026-10-05", tipo="saida", escopo="PJ", descricao=None, pago_em=None, **extra):
+    campos = {"escopo": escopo, "tipo": tipo, "data": data, "pago_em": pago_em, "valor": valor, "categoria": "Outros",
+              "descricao": descricao, **extra}
+    with con:
+        return con.execute(f"INSERT INTO lancamentos ({', '.join(campos)}) VALUES ({', '.join('?' * len(campos))})",
+                           tuple(campos.values())).lastrowid
+
+
+def test_duplicados_mesmo_dia_e_descricao_e_quase_certo(con_temp):
+    a = lanc(con_temp, 89.9, descricao="Spotify", pago_em="2026-10-05")
+    b = lanc(con_temp, 89.9, descricao="spotify ", pago_em="2026-10-05", conta="Inter", forma="PIX")
+    (g,) = financeiro.duplicados(con_temp)
+    assert g["certeza"] == "quase certo" and set(g["ids"]) == {a, b}
+    assert g["manter"] == b                        # o mais completo fica; o outro vai para a lixeira
+    assert [i["manter"] for i in g["itens"]] == [True, False]
+
+
+def test_duplicados_dias_perto_ou_descricao_diferente_e_talvez(con_temp):
+    lanc(con_temp, 50, data="2026-10-05", descricao="Uber")
+    lanc(con_temp, 50, data="2026-10-07", descricao="Uber centro")
+    (g,) = financeiro.duplicados(con_temp)
+    assert g["certeza"] == "talvez"
+    lanc(con_temp, 50, data="2026-10-20", descricao="Uber")             # longe demais: outro lançamento
+    assert len(financeiro.duplicados(con_temp)) == 1
+
+
+def test_duplicados_tres_copias_viram_um_grupo(con_temp):
+    ids = [lanc(con_temp, 30, descricao="Café") for _ in range(3)]
+    (g,) = financeiro.duplicados(con_temp)
+    assert sorted(g["ids"]) == sorted(ids) and g["manter"] == min(ids)     # empate: o mais antigo
+
+
+def test_duplicados_o_que_prova_que_sao_dois(con_temp):
+    lanc(con_temp, 200, descricao="Parcela", parcela_num=1, parcela_total=3)
+    lanc(con_temp, 200, descricao="Parcela", parcela_num=2, parcela_total=3)       # parcelas diferentes
+    lanc(con_temp, 400, tipo="entrada", cliente_id=None, contraparte="Ana Souza")
+    lanc(con_temp, 400, tipo="entrada", contraparte="Bia Lima")                    # quem pagou é outro
+    lanc(con_temp, 70, conta="Inter")
+    lanc(con_temp, 70, conta="Itaú")                                               # conta diferente
+    lanc(con_temp, 10, escopo="PF")
+    lanc(con_temp, 10, escopo="PJ")                                                # escopo diferente
+    lanc(con_temp, 10, tipo="entrada", escopo="PJ")                                # tipo diferente
+    assert financeiro.duplicados(con_temp) == []
+
+
+def test_duplicados_alunos_diferentes_e_mesma_recorrencia_em_meses_diferentes(con_temp):
+    with con_temp:
+        a = con_temp.execute("INSERT INTO clientes (nome, valor, status) VALUES ('Ana', 400, 'ativo')").lastrowid
+        b = con_temp.execute("INSERT INTO clientes (nome, valor, status) VALUES ('Bia', 400, 'ativo')").lastrowid
+    lanc(con_temp, 400, tipo="entrada", cliente_id=a, pago_em="2026-10-05")
+    lanc(con_temp, 400, tipo="entrada", cliente_id=b, pago_em="2026-10-05")
+    rid = recorrencia(con_temp, valor=1000)
+    lanc(con_temp, 1000, data="2026-09-30", recorrencia_id=rid, competencia="2026-09", pago_em="2026-09-30")
+    lanc(con_temp, 1000, data="2026-10-01", recorrencia_id=rid, competencia="2026-10", pago_em="2026-10-01")
+    assert financeiro.duplicados(con_temp) == []
+
+
+def test_duplicados_excluido_some_e_nao_e_repetido_nao_volta(con_temp):
+    a, b = lanc(con_temp, 60, descricao="Água"), lanc(con_temp, 60, descricao="Água")
+    assert len(financeiro.duplicados(con_temp)) == 1
+    with con_temp:
+        con_temp.execute("INSERT INTO duplicados_ok (a, b) VALUES (?, ?)", (a, b))
+    assert financeiro.duplicados(con_temp) == []
+    c = lanc(con_temp, 60, descricao="Água")                  # um terceiro igual: avisa só dos pares novos
+    (g,) = financeiro.duplicados(con_temp)
+    assert c in g["ids"]
+    with con_temp:
+        con_temp.execute("UPDATE lancamentos SET excluido_em='x' WHERE id=?", (c,))
+    assert financeiro.duplicados(con_temp) == []
+
+
+def test_duplicados_nao_repete_o_aviso_de_conta_parecida_com_recorrente(con_temp):
+    rid = recorrencia(con_temp, valor=1000)
+    financeiro.baixar_recorrencia(con_temp, rid, "2026-10", 1000, "2026-10-06")
+    paga_a_mao(con_temp)                       # já aparece em saidas_parecidas
+    assert financeiro.saidas_parecidas(con_temp) and financeiro.duplicados(con_temp) == []
+
+
+def test_duplicados_data_ruim_nao_quebra(con_temp):
+    lanc(con_temp, 5, data="2026-13-45")
+    lanc(con_temp, 5, data="2026-10-01")
+    assert financeiro.duplicados(con_temp) == []

@@ -304,3 +304,10 @@ CREATE TABLE IF NOT EXISTS saldos (
     excluido_em TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_saldos_conta ON saldos (conta, data);
+
+-- pares de lançamentos que o usuário disse "não é repetido" (a < b): a tela Conferir não avisa de novo
+CREATE TABLE IF NOT EXISTS duplicados_ok (
+    a INTEGER NOT NULL,
+    b INTEGER NOT NULL,
+    PRIMARY KEY (a, b)
+);

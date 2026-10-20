@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block titulo %}Conferir · Financeiro · VFITCOACH CRM{% endblock %}
+{% macro ids_do_grupo(g) %}{% for x in g.ids %}<input type="hidden" name="ids" value="{{ x }}">{% endfor %}{% endmacro %}
+{% block conteudo %}
+<div class="linha topo">
+  <h1 style="margin:0">Conferir</h1>
+  <a class="btn claro" href="/financeiro">Voltar ao Financeiro</a>
+</div>
+<p class="muted">O CRM procurou sozinho o que pode estar errado. É uma decisão por cartão. O que você exclui vai para a lixeira e dá para restaurar em Dados.</p>
+
+{% if not repetidos and not parecidas and not recs_retirada %}
+<div class="card mt"><strong>Tudo certo.</strong> <span class="muted">Nenhum lançamento repetido e nenhuma conta parecida com recorrente.</span></div>
+{% endif %}
+
+{% if repetidos %}
+<h2 class="mt">Pode estar repetido ({{ repetidos|length }})</h2>
+{% for g in repetidos %}
+<div class="card mt atencao">
+  <div class="linha topo">
+    <strong>{{ g.valor|moeda }} · {{ 'entrada' if g.tipo == 'entrada' else 'saída' }} {{ g.escopo }}</strong>
+    <span class="tag {{ 'vermelho' if g.certeza == 'quase certo' else 'amarelo' }}">{{ g.certeza }}</span>
+  </div>
+  {% for i in g.itens %}
+  <div class="item-ligar">
+    <div class="linha" style="justify-content:space-between"><strong>{{ i.descricao or i.categoria }}</strong><span>{{ i.quando|data }}</span></div>
+    <div class="muted">{{ i.categoria }}{% if i.aluno %} · {{ i.aluno }}{% endif %}{% if i.contraparte %} · {{ i.contraparte }}{% endif %}{% if i.conta %} · {{ i.conta }}{% endif %}
+      <span class="tag {{ 'verde' if i.pago_em else 'amarelo' }}">{{ 'pago' if i.pago_em else 'em aberto' }}</span>{% if i.recorrencia_id %} <span class="tag azul">conta recorrente</span>{% endif %}</div>
+    <form method="post" action="/financeiro/duplicados/manter" class="inline"><input type="hidden" name="volta" value="{{ volta }}">{{ ids_do_grupo(g) }}<input type="hidden" name="manter" value="{{ i.id }}">
+      <button class="{{ 'verde' if i.manter else 'claro' }} pequeno">Manter este, excluir {{ 'o outro' if g.itens|length == 2 else 'os outros' }}{{ ' (sugerido)' if i.manter }}</button></form>
+  </div>
+  {% endfor %}
+  <form method="post" action="/financeiro/duplicados/nao-repetido" class="inline"><input type="hidden" name="volta" value="{{ volta }}">{{ ids_do_grupo(g) }}<button class="claro pequeno">Não é repetido</button></form>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if parecidas or recs_retirada %}
+<div class="card mt atencao">
+  {% if parecidas %}
+  <h3 style="margin-top:0">{{ parecidas|length }} conta{{ 's' if parecidas|length > 1 }} lançada{{ 's' if parecidas|length > 1 }} à mão parece{{ 'm' if parecidas|length > 1 }} recorrente{{ 's' if parecidas|length > 1 }}</h3>
+  <p class="muted">Ligue o lançamento à conta recorrente: senão ela continua aparecendo como atrasada, o Saldo livre desconta duas vezes e o botão Pagar lançaria de novo. Não é a mesma conta? Diga que não.</p>
+  {% for s in parecidas %}
+  <div class="item-ligar">
+    <div class="linha" style="justify-content:space-between"><strong>{{ s.descricao }} <span class="tag neutro">{{ s.escopo }}</span></strong><strong>{{ s.valor|moeda }}</strong></div>
+    <div class="muted">{{ s.data|data }} · <span class="tag {{ 'verde' if s.pago_em else 'amarelo' }}">{{ 'pago' if s.pago_em else 'em aberto' }}</span></div>
+    {% set livres = s.candidatos|rejectattr('ja_baixada')|list %}
+    {% if livres %}
+    <form method="post" action="/financeiro/lancamento/{{ s.id }}/recorrencia" class="linha"><input type="hidden" name="volta" value="{{ volta }}">
+      <select name="recorrencia_id" required aria-label="Conta recorrente" style="width:auto;flex:1">{% if livres|length > 1 %}<option value="">Escolha a conta recorrente</option>{% endif %}{% for c in livres %}<option value="{{ c.id }}">{{ c.descricao }} · dia {{ c.dia_vencimento }} · {{ c.valor|moeda }}</option>{% endfor %}</select>
+      <button class="pequeno">Ligar</button></form>
+    {% else %}
+    <p class="muted" style="margin:6px 0">{{ s.candidatos[0].descricao }} deste mês já foi paga pelo botão Pagar. Se é o mesmo pagamento, exclua um dos dois.</p>
+    <form method="post" action="/financeiro/lancamento/{{ s.id }}/excluir" class="inline" data-confirmar="Enviar este lançamento para a lixeira?"><input type="hidden" name="volta" value="{{ volta }}"><button class="claro pequeno">Excluir este lançamento</button></form>
+    {% endif %}
+    <form method="post" action="/financeiro/lancamento/{{ s.id }}/nao-recorrente" class="inline"><input type="hidden" name="volta" value="{{ volta }}"><button class="claro pequeno">Não é a mesma conta</button></form>
+  </div>
+  {% endfor %}
+  {% endif %}
+  {% for r in recs_retirada %}
+  <div class="item-ligar">
+    <div class="linha" style="justify-content:space-between"><strong>{{ r.descricao }} <span class="tag neutro">{{ r.escopo }}</span></strong><strong>{{ r.valor|moeda }}</strong></div>
+    <p class="muted" style="margin:6px 0">Salário não é conta recorrente: ele já tem o botão "Pagar salário". Exclua esta recorrência para o custo do mês e o ponto de equilíbrio ficarem certos.</p>
+    <form method="post" action="/financeiro/recorrencia/{{ r.id }}/excluir" class="inline" data-confirmar="Enviar esta conta recorrente para a lixeira?"><input type="hidden" name="volta" value="{{ volta }}"><button class="claro pequeno">Excluir recorrência</button></form>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

@@ -320,6 +320,93 @@ def saidas_parecidas(con: sqlite3.Connection) -> list[dict]:
     return list(achados.values())
 
 
+JANELA_REPETIDO = 3   # dias entre dois lançamentos iguais para ainda parecerem o mesmo
+
+
+def _dias_entre(a: str, b: str) -> int:
+    """Dias entre duas datas ISO; data inválida nunca é "perto" (a tela não pode quebrar por causa de uma linha ruim)."""
+    try:
+        return abs((dt.date.fromisoformat(b) - dt.date.fromisoformat(a)).days)
+    except (TypeError, ValueError):
+        return 10_000
+
+
+def _mesma_descricao(a: dict, b: dict) -> bool:
+    """Descrições iguais sem acento nem maiúscula (vazia não conta: não diz nada)."""
+    pa, pb = _palavras(a["descricao"]), _palavras(b["descricao"])
+    return bool(pa) and pa == pb
+
+
+def _diferentes(a, b) -> bool:
+    """Os dois campos estão preenchidos e não batem (campo vazio não prova nada)."""
+    return a not in (None, "") and b not in (None, "") and a != b
+
+
+def _pode_ser_o_mesmo(x: dict, y: dict) -> bool:
+    """Dois lançamentos de mesmo escopo, tipo e valor que nada separa: parcela, aluno, conta, quem pagou e conta recorrente
+    diferentes provam que são dois lançamentos de verdade."""
+    if any(_diferentes(x[k], y[k]) for k in ("parcela_num", "cliente_id", "conta", "recorrencia_id")):
+        return False
+    if x["recorrencia_id"] and x["recorrencia_id"] == y["recorrencia_id"] and x["competencia"] != y["competencia"]:
+        return False
+    if (x["sem_recorrencia"] and y["recorrencia_id"]) or (y["sem_recorrencia"] and x["recorrencia_id"]):
+        return False   # "não é a mesma conta" já foi respondido para este par
+    return not _diferentes(_palavras(x["contraparte"]) or None, _palavras(y["contraparte"]) or None)
+
+
+def duplicados(con: sqlite3.Connection) -> list[dict]:
+    """Grupos de lançamentos que parecem o mesmo lançamento feito duas vezes (digitado e importado, ou lançado em dobro).
+    Parecido = mesmo escopo, tipo e valor, com datas (pago_em, ou a data) até JANELA_REPETIDO dias uma da outra, sem nada que os
+    distinga (ver _pode_ser_o_mesmo). Pares já marcados "não é repetido" e saídas que já aparecem em saidas_parecidas ficam fora.
+    Só sugere: quem exclui é o usuário. Três cópias viram um grupo só.
+    Cada grupo: {ids, certeza ('quase certo' = mesma data e mesma descrição; senão 'talvez'), manter (id), itens (o 'manter' primeiro)}."""
+    ok = {(r["a"], r["b"]) for r in con.execute("SELECT a, b FROM duplicados_ok")}
+    ja_avisadas = {s["id"] for s in saidas_parecidas(con)}
+    linhas = [dict(r) for r in con.execute(
+        """SELECT l.*, COALESCE(l.pago_em, l.data) AS quando, c.nome AS aluno FROM lancamentos l
+           LEFT JOIN clientes c ON c.id = l.cliente_id WHERE l.excluido_em IS NULL AND l.categoria != ?
+           ORDER BY l.escopo, l.tipo, ROUND(l.valor * 100), quando, l.id""", (RETIRADA,))]
+    pai = {l["id"]: l["id"] for l in linhas}
+
+    def raiz(i):
+        while pai[i] != i:
+            pai[i] = pai[pai[i]]
+            i = pai[i]
+        return i
+
+    for k, x in enumerate(linhas):
+        for j in range(k + 1, len(linhas)):
+            y = linhas[j]
+            if (x["escopo"], x["tipo"], round(x["valor"] * 100)) != (y["escopo"], y["tipo"], round(y["valor"] * 100)):
+                break   # ordenado por escopo, tipo e valor: o resto é de outro grupo
+            if _dias_entre(x["quando"], y["quando"]) > JANELA_REPETIDO:
+                break
+            if (x["id"], y["id"]) in ok or x["id"] in ja_avisadas or y["id"] in ja_avisadas or not _pode_ser_o_mesmo(x, y):
+                continue
+            pai[raiz(y["id"])] = raiz(x["id"])
+    grupos: dict[int, list[dict]] = {}
+    for l in linhas:
+        grupos.setdefault(raiz(l["id"]), []).append(l)
+
+    def peso(l):   # o que se mantém: ligado a conta recorrente, aluno ou baixa; depois o mais completo; empate: o mais antigo
+        campos = sum(l[k] not in (None, "") for k in ("descricao", "contraparte", "conta", "forma", "cliente_id", "observacao"))
+        return (sum(l[k] is not None for k in ("recorrencia_id", "cliente_id", "pago_em")), campos, -l["id"])
+
+    out = []
+    for g in grupos.values():
+        if len(g) < 2:
+            continue
+        manter = max(g, key=peso)
+        resto = sorted((l for l in g if l is not manter), key=lambda l: (l["quando"], l["id"]))
+        quase = all(l["quando"] == manter["quando"] and _mesma_descricao(l, manter) for l in resto)
+        out.append({"ids": [l["id"] for l in [manter, *resto]], "manter": manter["id"], "certeza": "quase certo" if quase else "talvez",
+                    "valor": manter["valor"], "escopo": manter["escopo"], "tipo": manter["tipo"],
+                    "itens": [dict(l, manter=l is manter) for l in [manter, *resto]]})
+    out.sort(key=lambda g: g["itens"][0]["quando"], reverse=True)   # mais recentes primeiro...
+    out.sort(key=lambda g: g["certeza"] != "quase certo")             # ...e os quase certos antes dos "talvez"
+    return out
+
+
 def recorrencias_retirada(con: sqlite3.Connection) -> list:
     """Recorrências ativas cadastradas como Retirada: salário não é conta recorrente (usa 'Pagar salário')."""
     return con.execute("SELECT * FROM recorrencias WHERE excluido_em IS NULL AND categoria=? ORDER BY escopo, descricao",
