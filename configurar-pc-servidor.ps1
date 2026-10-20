@@ -161,6 +161,12 @@ if ($valores['CRM_AUTOATUALIZAR'] -eq '0') {
 } elseif (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     Aviso 'O git nao esta instalado: o CRM nao vai se atualizar sozinho.'
 } else {
+    # o repositorio foi renomeado (claude-code-crm -> vfitcoach-crm): aponta o origin para o nome novo
+    $origem = (& git -C $pasta remote get-url origin 2>$null)
+    if ($origem -like '*claude-code-crm*') {
+        & git -C $pasta remote set-url origin 'https://github.com/UziCelli/vfitcoach-crm.git'
+        Ok 'Endereco do GitHub atualizado para UziCelli/vfitcoach-crm.'
+    }
     $ramo = (& git -C $pasta rev-parse --abbrev-ref HEAD 2>$null)
     if ($ramo -ne 'main') {
         Aviso "A pasta do CRM esta no ramo '$ramo'. Para se atualizar sozinho, ela precisa estar na main: git checkout main"
