@@ -734,3 +734,78 @@ def test_duplicados_data_ruim_nao_quebra(con_temp):
     lanc(con_temp, 5, data="2026-13-45")
     lanc(con_temp, 5, data="2026-10-01")
     assert financeiro.duplicados(con_temp) == []
+
+
+# ---------- Fila de pagamento ----------
+def fila(con, hoje="2026-10-16"):
+    livre = financeiro.saldo_livre(con, hoje)
+    return financeiro.fila_pagamentos(con, livre, hoje), livre
+
+
+def rec_pj(con, descricao, categoria, valor, dia, prioridade=None):
+    with con:
+        return con.execute("INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, fixo, inicio, prioridade)"
+                           " VALUES ('PJ',?,?,?,?,1,'2026-10',?)", (descricao, categoria, valor, dia, prioridade)).lastrowid
+
+
+def test_fila_ordena_por_impacto_e_corta_onde_o_dinheiro_acaba(con_temp):
+    saldo(con_temp, "Contabilizei Bank", 1000, "2026-10-16")
+    lancar(con_temp, "saida", 600, "2026-10-20", categoria="Aluguel")                      # 40 + 4 + 33 = 77
+    lancar(con_temp, "saida", 300, "2026-10-18", categoria="Marketing/Divulgação")         # 0 + 7 + 0 = 7
+    lancar(con_temp, "saida", 200, "2026-10-30", categoria="Software/Assinaturas")         # 40 + 0 + 6 = 46
+    q, livre = fila(con_temp)
+    pj = q["PJ"]
+    assert [(i["categoria"], i["nota"]) for i in pj["itens"]] == [("Aluguel", 77), ("Software/Assinaturas", 46), ("Marketing/Divulgação", 7)]
+    assert [i["coberto"] for i in pj["itens"]] == [True, True, False] and pj["cobertos"] == 2
+    assert not pj["tudo_coberto"] and pj["sobra"] == 200 and livre["PJ"]["livre"] == -100
+    assert pj["itens"][0]["esta_semana"] and not pj["itens"][1]["esta_semana"]            # vence em 4 dias / em 14
+    assert pj["itens"][0]["custo_atraso"] == 66 and "essencial" in pj["itens"][0]["motivo"] and "vence em 4 dias" in pj["itens"][0]["motivo"]
+
+
+def test_fila_conta_vencida_sobe_e_diz_ha_quantos_dias(con_temp):
+    saldo(con_temp, "Contabilizei Bank", 5000, "2026-10-01")
+    lancar(con_temp, "saida", 100, "2026-10-10", categoria="Material de Trabalho")        # 30 + 10 + 0
+    lancar(con_temp, "saida", 100, "2026-10-17", categoria="Material de Trabalho")        # 30 + 7 + 0
+    a, b = fila(con_temp)[0]["PJ"]["itens"]
+    assert (a["nota"], b["nota"]) == (40, 37) and "atrasada há 6 dias" in a["motivo"]
+
+
+def test_fila_escolha_manual_vence_o_automatico(con_temp):
+    saldo(con_temp, "Contabilizei Bank", 5000, "2026-10-01")
+    rid = rec_pj(con_temp, "Aluguel", "Aluguel", 600, 20)
+    lancar(con_temp, "saida", 300, "2026-10-18", categoria="Marketing/Divulgação")
+    assert fila(con_temp)[0]["PJ"]["itens"][0]["descricao"] == "Aluguel"
+    with con_temp:
+        con_temp.execute("UPDATE recorrencias SET prioridade=-1 WHERE id=?", (rid,))      # "pode esperar"
+    itens = fila(con_temp)[0]["PJ"]["itens"]
+    assert [i["descricao"] for i in itens] == ["Marketing/Divulgação", "Aluguel"] and "pode esperar" in itens[1]["motivo"]
+    with con_temp:
+        con_temp.execute("UPDATE recorrencias SET prioridade=1 WHERE id=?", (rid,))       # "sempre primeiro"
+        con_temp.execute("UPDATE lancamentos SET categoria='Aluguel'")                    # até o outro virar aluguel: a escolha pesa mais
+    assert fila(con_temp)[0]["PJ"]["itens"][0]["descricao"] == "Aluguel"
+
+
+def test_fila_inclui_das_e_salario_e_bate_com_o_saldo_livre(con_temp):
+    saldo(con_temp, "Contabilizei Bank", 100, "2026-10-01")
+    ligar_salario(con_temp, valor=1000, dia=5)
+    lancar(con_temp, "entrada", 1000, "2026-09-10", pago_em="2026-09-10")               # receita de setembro: DAS de outubro = 60
+    lancar(con_temp, "saida", 50, "2026-10-25", categoria="Aluguel")
+    q, livre = fila(con_temp)
+    pj, l = q["PJ"], livre["PJ"]
+    nomes = [i["descricao"] for i in pj["itens"]]
+    assert "Guardar o DAS de 10/2026" in nomes and "Salário 10/2026 para a PF" in nomes
+    assert round(sum(i["valor"] for i in pj["itens"]), 2) == round(l["comprometido"] + l["imposto"] + l["salario"], 2)
+    assert pj["tudo_coberto"] == (l["livre"] >= 0)
+
+
+def test_fila_sem_saldo_digitado_nao_da_nada_como_coberto(con_temp):
+    lancar(con_temp, "saida", 10, "2026-10-20", categoria="Aluguel")
+    pj = fila(con_temp)[0]["PJ"]
+    assert pj["sem_saldo"] and pj["cobertos"] == 0 and not any(i["coberto"] for i in pj["itens"])
+
+
+def test_fila_categoria_sem_padrao_usa_20_e_2_por_cento(con_temp):
+    saldo(con_temp, "Contabilizei Bank", 5000, "2026-10-01")
+    lancar(con_temp, "saida", 1000, "2026-10-30", categoria="Categoria Nova")
+    (i,) = fila(con_temp)[0]["PJ"]["itens"]
+    assert (i["nota"], i["custo_atraso"]) == (20 + 0 + 6, 20)

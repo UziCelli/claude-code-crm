@@ -1694,12 +1694,13 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", con=
     talvez = {(c["id"], s["data"][:7]) for s in parecidas for c in s["candidatos"] if not c["ja_baixada"]}
     for p in pend:
         p["talvez_pago"] = p["origem"] == "recorrencia" and (p["id"], p["competencia"]) in talvez
+    livre = financeiro.saldo_livre(con, h)
     recs = con.execute(f"SELECT * FROM recorrencias WHERE excluido_em IS NULL AND escopo IN ({qs}) ORDER BY escopo, dia_vencimento, descricao", lista).fetchall()
     clientes_ = con.execute("SELECT id, nome FROM clientes WHERE excluido_em IS NULL ORDER BY nome").fetchall()
     return render(request, "financeiro.html", con, mes=mes, escopo=escopo, lancs=lancs, entradas=entradas, saidas=saidas,
                   saldo=round(entradas - saidas, 2), transferencia=round(sum(l["valor"] for l in transf if l["tipo"] == "saida"), 2),
                   emprestado=emprestado, devolvido=devolvido, pend=pend, recs=recs, clientes_=clientes_, volta=f"mes={mes}&escopo={escopo}",
-                  livre=financeiro.saldo_livre(con, h), saldos=financeiro.saldos_atuais(con), frentes=financeiro.FRENTES,
+                  livre=livre, fila=financeiro.fila_pagamentos(con, livre, h), saldos=financeiro.saldos_atuais(con), frentes=financeiro.FRENTES,
                   salario=financeiro.salario_mes(con, h[:7], h), potes=financeiro.potes_mes(con, mes),
                   parecidas=parecidas, n_conferir=len(financeiro.duplicados(con)) + len(parecidas) + len(financeiro.recorrencias_retirada(con)),
                   recs_todas=con.execute("SELECT * FROM recorrencias WHERE excluido_em IS NULL ORDER BY escopo, descricao").fetchall())
@@ -1957,18 +1958,20 @@ async def financeiro_recorrencia(request: Request, con=Depends(get_db)):
         if not 1 <= int(f.get("dia_vencimento") or 0) <= 31:
             raise ValueError("O dia de vencimento vai de 1 a 31.")
         rid = int(f["id"]) if f.get("id") else None
+        if f.get("prioridade", "") not in ("", "1", "-1"):
+            raise ValueError("Prioridade inválida.")
     except ValueError as e:
         return _fin_voltar(volta, erro=str(e))
     campos = [f["escopo"], f["descricao"].strip(), f["categoria"], valor, int(f["dia_vencimento"]), 1 if f.get("fixo") == "1" else 0,
-              f.get("conta") or None, f["inicio"], fim]
+              f.get("conta") or None, f["inicio"], fim, int(f["prioridade"]) if f.get("prioridade") else None]
     try:
         with con:
             if rid:
                 con.execute("""UPDATE recorrencias SET escopo=?, descricao=?, categoria=?, valor=?, dia_vencimento=?, fixo=?, conta=?, inicio=?,
-                               fim=? WHERE id=?""", (*campos, rid))
+                               fim=?, prioridade=? WHERE id=?""", (*campos, rid))
             else:
-                con.execute("""INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, fixo, conta, inicio, fim)
-                               VALUES (?,?,?,?,?,?,?,?,?)""", campos)
+                con.execute("""INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, fixo, conta, inicio, fim, prioridade)
+                               VALUES (?,?,?,?,?,?,?,?,?,?)""", campos)
     except sqlite3.IntegrityError:
         return _fin_voltar(volta, erro="Não foi possível salvar: confira os campos.")
     return _fin_voltar(volta, msg="Conta recorrente salva.")
@@ -2037,7 +2040,9 @@ GRUPOS_CONFIG = [("imposto", "Imposto (DAS)", "pct"), ("taxa_pagamento", "Taxas 
                  ("funil_chance", "Chance de fechar por etapa do funil", "pct"),
                  ("fiscal", "Fiscal: salário mínimo (R$), pró-labore e INSS (frações, ex.: 0,28 = 28%)", "num"),
                  ("salario", "Salário fixo da PJ para a PF: valor (R$ por mês; 0 = desligado) e dia do pagamento", "num"),
-                 ("colchao", "Colchão: meta em meses de custo fixo (0 = sem meta)", "num")]
+                 ("colchao", "Colchão: meta em meses de custo fixo (0 = sem meta)", "num"),
+                 ("impacto_curto", "Fila de pagamento: o quanto atrasar atrapalha agora (0 a 40; quanto maior, mais cedo na fila)", "num"),
+                 ("impacto_juros", "Fila de pagamento: juros e multa por mês de atraso (quanto maior, mais cedo na fila)", "pct")]
 
 
 @app.get("/configuracoes", response_class=HTMLResponse)

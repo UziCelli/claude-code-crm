@@ -59,7 +59,7 @@ def _recorrencias_abertas(con: sqlite3.Connection, comp: str, hoje: str) -> list
         data = vencimento(r["dia_vencimento"], comp)
         itens.append({"origem": "recorrencia", "id": r["id"], "escopo": r["escopo"], "tipo": "saida", "data": data,
                       "descricao": r["descricao"], "categoria": r["categoria"], "valor": r["valor"], "competencia": comp,
-                      "status": status({"pago_em": None, "data": data}, hoje)})
+                      "prioridade": r["prioridade"], "status": status({"pago_em": None, "data": data}, hoje)})
     return itens
 
 
@@ -93,12 +93,13 @@ def em_aberto_ate(con: sqlite3.Connection, ate: str, hoje: str) -> list[dict]:
     da competência de 3 meses atrás até a de 'ate'. Pago com data no futuro (agendado) ainda está na conta:
     conta como aberto, na data do pagamento."""
     itens = []
-    for r in con.execute("""SELECT * FROM lancamentos WHERE (pago_em IS NULL OR pago_em > ?) AND excluido_em IS NULL
-                            AND COALESCE(pago_em, data) <= ?""", (hoje, ate)):
+    for r in con.execute("""SELECT l.*, rc.prioridade AS prioridade FROM lancamentos l LEFT JOIN recorrencias rc ON rc.id = l.recorrencia_id
+                            WHERE (l.pago_em IS NULL OR l.pago_em > ?) AND l.excluido_em IS NULL
+                            AND COALESCE(l.pago_em, l.data) <= ?""", (hoje, ate)):
         data = r["pago_em"] or r["data"]
         itens.append({"origem": "lancamento", "id": r["id"], "escopo": r["escopo"], "tipo": r["tipo"], "data": data,
                       "descricao": r["descricao"] or r["categoria"], "categoria": r["categoria"], "valor": r["valor"],
-                      "status": status({"pago_em": None, "data": data}, hoje)})
+                      "prioridade": r["prioridade"], "status": status({"pago_em": None, "data": data}, hoje)})
     comp, fim = somar_meses(hoje[:7], -3), ate[:7]
     while comp <= fim:
         itens += [i for i in _recorrencias_abertas(con, comp, hoje) if i["data"] <= ate]
@@ -181,13 +182,15 @@ def saldo_livre(con: sqlite3.Connection, hoje: str, dias: int = 30) -> dict:
     saldos = saldos_atuais(con)
     abertos = [i for i in em_aberto_ate(con, ate, hoje) if i["tipo"] == "saida"]
     mes, das_pct = hoje[:7], db.parametros(con, "imposto").get("DAS", 0.06)
-    das = (_das_a_guardar(con, somar_meses(mes, 1), abertos, _receita_pj(con, mes), das_pct)
-           + _das_a_guardar(con, mes, abertos, _receita_pj(con, somar_meses(mes, -1)), das_pct))
+    dias_das = {mes: _das_a_guardar(con, mes, abertos, _receita_pj(con, somar_meses(mes, -1)), das_pct),
+                somar_meses(mes, 1): _das_a_guardar(con, somar_meses(mes, 1), abertos, _receita_pj(con, mes), das_pct)}
+    das = sum(dias_das.values())
     sal_valor, sal_dia = _salario_parametros(con)
-    salario, m = 0.0, mes
+    salario, m, salarios = 0.0, mes, {}
     while m <= ate[:7]:
         if vencimento(sal_dia, m) <= ate:
-            salario += _salario_falta(con, m, sal_valor)
+            salarios[m] = _salario_falta(con, m, sal_valor)
+            salario += salarios[m]
         m = somar_meses(m, 1)
     out = {}
     for frente in ("PF", "PJ"):
@@ -196,16 +199,108 @@ def saldo_livre(con: sqlite3.Connection, hoje: str, dias: int = 30) -> dict:
         tem = _tem(con, contas, frente, hoje)
         comprometido = sum(i["valor"] for i in abertos if i["escopo"] == frente)
         imposto, sal = (das, salario) if frente == "PJ" else (0, 0)
+        extras = _itens_virtuais(con, hoje, dias_das, salarios) if frente == "PJ" else []
         dias_velho = (dt.date.fromisoformat(hoje) - dt.date.fromisoformat(min(datas))).days if datas else None
         out[frente] = {
             "tem": round(tem, 2), "comprometido": round(comprometido, 2), "imposto": round(imposto, 2), "salario": round(sal, 2),
             "livre": round(tem - comprometido - imposto - sal, 2), "ate": ate,
-            "itens": [i for i in abertos if i["escopo"] == frente],
+            "itens": [i for i in abertos if i["escopo"] == frente], "extras": extras,   # extras: DAS a guardar e salário (fila de pagamento)
             "sem_saldo": not datas,   # nenhuma conta da frente com saldo digitado: o número não vale
             "dias_velho": dias_velho, "desatualizado": dias_velho is not None and dias_velho > DIAS_SALDO_VELHO,
         }
     out["reserva"] = round(sum(v["saldo"] for v in saldos.values() if v["escopo"] == "Reserva" and v["saldo"] is not None), 2)
     out["sem_frente"] = [c for c, v in saldos.items() if v["escopo"] is None]
+    return out
+
+
+def _itens_virtuais(con: sqlite3.Connection, hoje: str, das: dict, salarios: dict) -> list[dict]:
+    """O que o saldo livre separa sem ser uma conta lançada: o DAS a guardar (por mês) e o salário ainda não tirado da PJ.
+    Entram na fila de pagamento como os outros itens."""
+    dia_das = int(db.parametros(con, "previsao").get("dia_das") or 20)
+    sal_dia = _salario_parametros(con)[1]
+    out = []
+    for comp, valor in das.items():
+        if valor > 0:
+            data = vencimento(dia_das, comp)
+            out.append({"origem": "virtual", "id": None, "escopo": "PJ", "tipo": "saida", "data": data, "valor": round(valor, 2),
+                        "descricao": f"Guardar o DAS de {comp[5:]}/{comp[:4]}", "categoria": "Impostos/Taxas", "prioridade": None,
+                        "status": status({"pago_em": None, "data": data}, hoje)})
+    for comp, valor in salarios.items():
+        if valor > 0:
+            data = vencimento(sal_dia, comp)
+            out.append({"origem": "virtual", "id": None, "escopo": "PJ", "tipo": "saida", "data": data, "valor": round(valor, 2),
+                        "descricao": f"Salário {comp[5:]}/{comp[:4]} para a PF", "categoria": RETIRADA, "prioridade": None,
+                        "status": status({"pago_em": None, "data": data}, hoje)})
+    return out
+
+
+# ---------- Fila de pagamento ----------
+IMPACTO_PADRAO = (20, 0.02)   # categoria sem padrão: do lado seguro (nem some da fila, nem manda em tudo)
+
+
+def nota_impacto(item: dict, curto: dict, juros: dict, hoje: str) -> dict:
+    """Nota de quanto pagar esta conta já pesa, somando:
+    curto prazo (0 a 40, parâmetro impacto_curto: o que acontece se atrasar agora) + urgência (atrasada +10, vence em até 3 dias +7,
+    em até 7 dias +4) + longo prazo (3 × juros e multa por mês em pontos percentuais, no máximo 50; parâmetro impacto_juros)
+    + escolha manual (prioridade da conta recorrente: sempre primeiro +100, pode esperar −100).
+    Devolve a nota, o custo em R$ de atrasar 1 mês e o motivo em poucas palavras."""
+    chave = f"{item['escopo']} {item['categoria']}"
+    c = curto.get(chave, IMPACTO_PADRAO[0])
+    j = juros.get(chave, IMPACTO_PADRAO[1])
+    dias = _dias_com_sinal(item["data"], hoje)
+    urgencia = 10 if dias < 0 else 7 if dias <= 3 else 4 if dias <= 7 else 0
+    longo = min(50, round(300 * j))
+    manual = 100 * (item.get("prioridade") or 0)
+    motivo = []
+    if manual:
+        motivo.append("você pediu: primeiro" if manual > 0 else "você disse: pode esperar")
+    if c >= 40:
+        motivo.append("essencial")
+    if j >= 0.08:
+        motivo.append(f"juros e multa altos (~{round(100 * j)}% ao mês)")
+    elif j >= 0.02:
+        motivo.append("tem multa")
+    motivo.append("atrasada há %d dia%s" % (-dias, "s" if dias < -1 else "") if dias < 0 else "vence hoje" if dias == 0
+                  else "vence amanhã" if dias == 1 else f"vence em {dias} dias" if dias <= 7 else "")
+    if not manual and c < 20 and j < 0.02:
+        motivo.append("pode esperar")
+    return {"nota": c + urgencia + longo + manual, "custo_atraso": round(item["valor"] * j, 2),
+            "motivo": " · ".join(m for m in motivo if m)[:140]}
+
+
+def _dias_com_sinal(data: str, hoje: str) -> int:
+    """Dias de hoje até a data (negativo = já passou). Data inválida conta como longe, sem urgência."""
+    try:
+        return (dt.date.fromisoformat(data) - dt.date.fromisoformat(hoje)).days
+    except (TypeError, ValueError):
+        return 10_000
+
+
+def fila_pagamentos(con: sqlite3.Connection, livre: dict, hoje: str) -> dict:
+    """Em que ordem pagar, por frente (PF e PJ), a partir do resultado de saldo_livre.
+    Ordena o que está comprometido (contas em aberto, DAS a guardar e salário a tirar) pela nota de impacto e vai gastando o 'tem':
+    cada item vem com 'coberto' (o dinheiro dá) e, no primeiro que não cabe, a fila corta: dali para baixo falta dinheiro,
+    mesmo que sobre troco para um item pequeno (o dinheiro vai para o que pesa mais).
+    Devolve {frente: {itens, cobertos, tudo_coberto, sobra}}; sem saldo digitado ninguém é dado como coberto."""
+    curto, juros = db.parametros(con, "impacto_curto"), db.parametros(con, "impacto_juros")
+    semana = (dt.date.fromisoformat(hoje) + dt.timedelta(days=7)).isoformat()
+    out = {}
+    for f in ("PF", "PJ"):
+        l = livre[f]
+        itens = [dict(i) for i in l["itens"] + l.get("extras", [])]
+        for i in itens:
+            i.update(nota_impacto(i, curto, juros, hoje))
+        itens.sort(key=lambda i: (-i["nota"], i["data"], -i["valor"]))
+        resto, cortou = l["tem"], l["sem_saldo"]
+        for i in itens:
+            i["coberto"] = not cortou and resto + 0.005 >= i["valor"]
+            if i["coberto"]:
+                resto -= i["valor"]
+            else:
+                cortou = True
+            i["esta_semana"] = i["coberto"] and i["data"] <= semana
+        out[f] = {"itens": itens, "cobertos": sum(i["coberto"] for i in itens), "sem_saldo": l["sem_saldo"],
+                  "tudo_coberto": bool(itens) and all(i["coberto"] for i in itens), "sobra": round(max(resto, 0), 2)}
     return out
 
 

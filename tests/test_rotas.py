@@ -409,3 +409,30 @@ def test_conferir_repetidos_manter_um_e_nao_e_repetido(cliente_http):
     r = http.post("/financeiro/duplicados/manter", data={"manter": 999, "ids": [x, y], "volta": "/financeiro/conferir"}, follow_redirects=False)
     assert "erro=" in r.headers["location"] and con.execute("SELECT COUNT(*) FROM lancamentos WHERE excluido_em IS NOT NULL").fetchone()[0] == 2
     con.close()
+
+
+def test_financeiro_mostra_fila_de_pagamento_com_corte_e_salva_prioridade(cliente_http):
+    import datetime as dt
+    http, _ = cliente_http
+    hoje = dt.date.today()
+    con = db.conectar()
+    with con:
+        con.execute("INSERT INTO saldos (conta, saldo, data) VALUES ('Contabilizei Bank', 1000, ?)", (hoje.isoformat(),))
+        for k, (cat, valor) in enumerate([("Aluguel", 600), ("Software/Assinaturas", 200), ("Marketing/Divulgação", 300),
+                                          ("Outros", 10), ("Outros", 11), ("Outros", 12), ("Outros", 13)]):
+            con.execute("INSERT INTO lancamentos (escopo, tipo, data, valor, categoria, descricao) VALUES ('PJ','saida',?,?,?,?)",
+                        ((hoje + dt.timedelta(days=2 + k)).isoformat(), valor, cat, f"Conta {k}"))
+    tela = http.get("/financeiro").text
+    assert "Pague nesta ordem" in tela and "Conta 0" in tela and "pague esta semana" in tela
+    assert "o dinheiro da PJ dá até aqui" in tela and "falta dinheiro" in tela
+    assert "Ver os outros 2" in tela                                  # 7 itens: 5 à vista, 2 recolhidos
+    assert tela.index("Conta 0") < tela.index("Conta 2")              # aluguel antes do marketing
+    # prioridade na conta recorrente: salva, aparece na lista e some do automático
+    base = {"escopo": "PJ", "descricao": "Internet", "categoria": "Internet/Telefone", "valor": "120", "dia_vencimento": "10", "fixo": "1",
+            "inicio": f"{hoje:%Y-%m}", "volta": f"mes={hoje:%Y-%m}&escopo=todos"}
+    http.post("/financeiro/recorrencia", data={**base, "prioridade": "1"}, follow_redirects=False)
+    assert con.execute("SELECT prioridade FROM recorrencias WHERE descricao='Internet'").fetchone()[0] == 1
+    assert "sempre primeiro" in http.get("/financeiro").text
+    r = http.post("/financeiro/recorrencia", data={**base, "descricao": "Outra", "prioridade": "5"}, follow_redirects=False)
+    assert "erro=" in r.headers["location"] and con.execute("SELECT COUNT(*) FROM recorrencias").fetchone()[0] == 1
+    con.close()

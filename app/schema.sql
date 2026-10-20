@@ -262,7 +262,8 @@ CREATE TABLE IF NOT EXISTS recorrencias (
     inicio TEXT NOT NULL,                             -- AAAA-MM
     fim TEXT,                                         -- AAAA-MM; NULL = sem fim
     origem TEXT UNIQUE,                               -- ID da planilha: CEF-001, CPV-002...
-    excluido_em TEXT
+    excluido_em TEXT,
+    prioridade INTEGER                                -- fila de pagamento: 1 = sempre primeiro, -1 = pode esperar, NULL = automática
 );
 
 CREATE TABLE IF NOT EXISTS lancamentos (

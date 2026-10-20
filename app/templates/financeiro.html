@@ -35,10 +35,29 @@
       <div class="valor">{{ l.livre|moeda }}</div>
       <div class="meta">Tem {{ l.tem|moeda }} · já comprometido {{ l.comprometido|moeda }}{% if f == 'PJ' %} · imposto a guardar {{ l.imposto|moeda }}{% if l.salario %} · salário a pagar {{ l.salario|moeda }}{% endif %}{% endif %}</div>
       {% if l.desatualizado %}<div class="meta"><span class="tag amarelo">saldo de {{ l.dias_velho }} dias atrás: atualize</span></div>{% endif %}
-      {% if l.itens %}
-      <details class="mt"><summary class="muted">O que já está comprometido ({{ l.itens|length }})</summary>
-        <table><tbody>{% for i in l.itens %}<tr><td>{{ i.data|data }}</td><td>{{ i.descricao }}</td><td class="num">{{ i.valor|moeda }}</td></tr>{% endfor %}</tbody></table>
-      </details>
+      {% set q = fila[f] %}
+      {% if q.itens %}
+      <div class="fila mt">
+        <strong>Pague nesta ordem</strong>
+        {% if q.tudo_coberto %}<div class="muted">O dinheiro dá para tudo{% if q.sobra %} e ainda sobra {{ q.sobra|moeda }}{% endif %}.</div>{% endif %}
+        {% macro item_fila(i, n) %}
+        {% if n == q.cobertos and n > 0 and not q.tudo_coberto %}<div class="fila-corte">↑ o dinheiro da {{ f }} dá até aqui</div>{% endif %}
+        <div class="fila-item {{ 'ok' if i.coberto else 'sem' }}">
+          <span class="fila-n">{{ n + 1 }}</span>
+          <div style="flex:1">
+            <div class="linha" style="justify-content:space-between"><strong>{{ i.descricao }}</strong><strong>{{ i.valor|moeda }}</strong></div>
+            <div class="muted">{{ i.data|data }}{% if i.motivo %} · {{ i.motivo }}{% endif %}{% if i.custo_atraso >= 1 %} · atrasar 1 mês custa ~{{ i.custo_atraso|moeda }}{% endif %}</div>
+            {% if i.esta_semana %}<span class="tag verde">pague esta semana</span>{% elif not i.coberto %}<span class="tag vermelho">falta dinheiro</span>{% endif %}
+          </div>
+        </div>
+        {% endmacro %}
+        {% for i in q.itens[:5] %}{{ item_fila(i, loop.index0) }}{% endfor %}
+        {% if q.itens|length > 5 %}
+        <details class="mt"><summary class="muted">Ver os outros {{ q.itens|length - 5 }}</summary>
+          {% for i in q.itens[5:] %}{{ item_fila(i, loop.index0 + 5) }}{% endfor %}
+        </details>
+        {% endif %}
+      </div>
       {% endif %}
       {% endif %}
     </div>
@@ -181,13 +200,13 @@
     {% for r in recs %}
     <tr>
       <td class="num">{{ r.dia_vencimento }}</td>
-      <td>{{ r.descricao }} <span class="tag neutro">{{ r.escopo }}</span> {% if r.fixo %}<span class="tag azul">fixa</span>{% endif %}</td>
+      <td>{{ r.descricao }} <span class="tag neutro">{{ r.escopo }}</span> {% if r.fixo %}<span class="tag azul">fixa</span>{% endif %}{% if r.prioridade == 1 %} <span class="tag verde">sempre primeiro</span>{% elif r.prioridade == -1 %} <span class="tag neutro">pode esperar</span>{% endif %}</td>
       <td>{{ r.categoria }}</td>
       <td>{{ r.conta or '—' }}</td>
       <td class="num">{{ r.valor|moeda }}</td>
       <td>{{ r.inicio }}{{ ' a ' ~ r.fim if r.fim else ' em diante' }}</td>
       <td class="linha" style="flex-wrap:nowrap">
-        <button class="claro pequeno" data-abrir="dlg-rec" data-titulo="Editar conta recorrente" data-id="{{ r.id }}" data-escopo="{{ r.escopo }}" data-descricao="{{ r.descricao }}" data-categoria="{{ r.categoria }}" data-valor="{{ valor_txt(r.valor) }}" data-dia_vencimento="{{ r.dia_vencimento }}" data-fixo="{{ r.fixo }}" data-conta="{{ r.conta or '' }}" data-inicio="{{ r.inicio }}" data-fim="{{ r.fim or '' }}">Editar</button>
+        <button class="claro pequeno" data-abrir="dlg-rec" data-titulo="Editar conta recorrente" data-id="{{ r.id }}" data-escopo="{{ r.escopo }}" data-descricao="{{ r.descricao }}" data-categoria="{{ r.categoria }}" data-valor="{{ valor_txt(r.valor) }}" data-dia_vencimento="{{ r.dia_vencimento }}" data-fixo="{{ r.fixo }}" data-conta="{{ r.conta or '' }}" data-inicio="{{ r.inicio }}" data-fim="{{ r.fim or '' }}" data-prioridade="{{ r.prioridade or '' }}">Editar</button>
         <form method="post" action="/financeiro/recorrencia/{{ r.id }}/excluir" class="inline" data-confirmar="Enviar esta conta recorrente para a lixeira?"><input type="hidden" name="volta" value="{{ volta }}"><button class="claro pequeno" aria-label="Excluir conta recorrente">x</button></form>
       </td>
     </tr>
@@ -271,6 +290,7 @@
       <div class="campo largo"><label>Conta ou cartão</label><select name="conta"><option value="">—</option>{% for k in listas.lista_contas %}<option>{{ k }}</option>{% endfor %}</select></div>
       <div class="campo"><label>Começa em</label><input name="inicio" type="month" value="{{ mes }}" required></div>
       <div class="campo"><label>Termina em (opcional)</label><input name="fim" type="month"></div>
+      <div class="campo largo"><label>Prioridade de pagamento</label><select name="prioridade"><option value="">Automática (o CRM decide pelo impacto)</option><option value="1">Sempre primeiro</option><option value="-1">Pode esperar</option></select></div>
     </div>
     <div class="linha"><button>Salvar</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
   </form>
