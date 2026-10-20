@@ -436,3 +436,26 @@ def test_financeiro_mostra_fila_de_pagamento_com_corte_e_salva_prioridade(client
     r = http.post("/financeiro/recorrencia", data={**base, "descricao": "Outra", "prioridade": "5"}, follow_redirects=False)
     assert "erro=" in r.headers["location"] and con.execute("SELECT COUNT(*) FROM recorrencias").fetchone()[0] == 1
     con.close()
+
+
+def test_linha_do_tempo_e_banco_x_crm_nas_telas(cliente_http):
+    import datetime as dt
+    http, _ = cliente_http
+    hoje = dt.date.today()
+    d1, d2 = (hoje - dt.timedelta(days=9)).isoformat(), (hoje - dt.timedelta(days=1)).isoformat()
+    con = db.conectar()
+    with con:
+        con.execute("INSERT INTO saldos (conta, saldo, data) VALUES ('Inter', 1000, ?)", (d1,))
+        con.execute("INSERT INTO saldos (conta, saldo, data) VALUES ('Inter', 1500, ?)", (hoje.isoformat(),))
+        con.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao, conta) VALUES ('PF','entrada',?,?,900,'Outros','Freela','Inter')", (d2, d2))
+    tela = http.get("/financeiro/conferir").text
+    assert "Banco × CRM" in tela and "banco tem R$ 400,00 a menos" in tela
+    assert "Falta lançar uma saída, ou tem uma entrada lançada a mais" in tela
+    t = http.get("/financeiro/linha-do-tempo").text
+    assert "Linha do tempo" in t and "Hoje" in t and "Ontem" in t and "Freela" in t and "Saldo digitado: Inter" in t
+    so_inter = http.get("/financeiro/linha-do-tempo?dias=7&conta=Inter").text
+    assert "Freela" in so_inter and ">7 dias<" in so_inter
+    # parâmetro torto cai no padrão, sem erro
+    assert http.get("/financeiro/linha-do-tempo?dias=999&conta=Banco%20Fantasma").status_code == 200
+    assert "Linha do tempo" in http.get("/financeiro").text
+    con.close()

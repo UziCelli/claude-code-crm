@@ -9,6 +9,7 @@
 <div class="linha topo">
   <h1 style="margin:0">Financeiro</h1>
   <div class="linha">
+    <a class="btn claro" href="/financeiro/linha-do-tempo">Linha do tempo</a>
     <a class="btn claro" href="/financeiro/conferir">Conferir{% if n_conferir %} ({{ n_conferir }}){% endif %}</a>
     <a class="btn claro" href="/financeiro/mensalidades?mes={{ mes }}">Mensalidades</a>
     <a class="btn claro" href="/financeiro/previsao">Próximos 90 dias</a>
@@ -46,7 +47,8 @@
           <span class="fila-n">{{ n + 1 }}</span>
           <div style="flex:1">
             <div class="linha" style="justify-content:space-between"><strong>{{ i.descricao }}</strong><strong>{{ i.valor|moeda }}</strong></div>
-            <div class="muted">{{ i.data|data }}{% if i.motivo %} · {{ i.motivo }}{% endif %}{% if i.custo_atraso >= 1 %} · atrasar 1 mês custa ~{{ i.custo_atraso|moeda }}{% endif %}</div>
+            <div class="muted">{{ i.data|data }}{% if i.motivo %} · {{ i.motivo }}{% endif %}</div>
+            {% if i.custo_atraso >= 1 %}<div class="muted">Atrasar 1 mês custa ~{{ i.custo_atraso|moeda }}</div>{% endif %}
             {% if i.esta_semana %}<span class="tag verde">pague esta semana</span>{% elif not i.coberto %}<span class="tag vermelho">falta dinheiro</span>{% endif %}
           </div>
         </div>

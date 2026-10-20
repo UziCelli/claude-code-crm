@@ -257,7 +257,7 @@ def nota_impacto(item: dict, curto: dict, juros: dict, hoje: str) -> dict:
     if c >= 40:
         motivo.append("essencial")
     if j >= 0.08:
-        motivo.append(f"juros e multa altos (~{round(100 * j)}% ao mês)")
+        motivo.append(f"multa alta (~{round(100 * j)}%/mês)")
     elif j >= 0.02:
         motivo.append("tem multa")
     motivo.append("atrasada há %d dia%s" % (-dias, "s" if dias < -1 else "") if dias < 0 else "vence hoje" if dias == 0
@@ -500,6 +500,85 @@ def duplicados(con: sqlite3.Connection) -> list[dict]:
     out.sort(key=lambda g: g["itens"][0]["quando"], reverse=True)   # mais recentes primeiro...
     out.sort(key=lambda g: g["certeza"] != "quase certo")             # ...e os quase certos antes dos "talvez"
     return out
+
+
+# ---------- Conferir com o banco e linha do tempo ----------
+def conferencia_contas(con: sqlite3.Connection) -> list[dict]:
+    """Banco × CRM, uma linha por conta com pelo menos 2 fotos de saldo (cartão fica de fora).
+    esperado = saldo da foto anterior + entradas − saídas pagas nessa conta depois dela, até a foto mais nova;
+    diferença = saldo que você digitou − esperado. Zero = o CRM tem tudo que mexeu na conta.
+    Se a diferença é igual a um lançamento repetido daquela conta, aponta o suspeito. Lançamento pago sem conta não dá para
+    conferir: vem contado em 'sem_conta' (os da mesma frente da conta)."""
+    frentes = frentes_contas(con)
+    fotos: dict[str, list] = {}
+    for r in con.execute("SELECT conta, saldo, data FROM saldos WHERE excluido_em IS NULL ORDER BY data, id"):
+        fotos.setdefault(r["conta"], []).append(r)
+    repetidos = duplicados(con)
+    out = []
+    for conta, lista in fotos.items():
+        frente = frentes.get(conta)
+        if len(lista) < 2 or frente == "Fora":
+            continue
+        antes, depois = lista[-2], lista[-1]
+        if antes["data"] == depois["data"]:
+            continue
+        mov = {tipo: total for tipo, total in con.execute(
+            """SELECT tipo, COALESCE(SUM(valor), 0) FROM lancamentos WHERE excluido_em IS NULL AND conta=? AND pago_em > ? AND pago_em <= ?
+               GROUP BY tipo""", (conta, antes["data"], depois["data"]))}
+        entradas, saidas = round(mov.get("entrada", 0), 2), round(mov.get("saida", 0), 2)
+        esperado = round(antes["saldo"] + entradas - saidas, 2)
+        dif = round(depois["saldo"] - esperado, 2)
+        sem_conta = con.execute(
+            """SELECT COUNT(*) FROM lancamentos WHERE excluido_em IS NULL AND conta IS NULL AND escopo=? AND pago_em > ? AND pago_em <= ?""",
+            (frente, antes["data"], depois["data"])).fetchone()[0] if frente in ("PF", "PJ") else 0
+        suspeito = None
+        if abs(dif) >= 0.01:
+            for g in repetidos:   # saída em dobro deixa o banco com MAIS que o esperado; entrada em dobro, com menos
+                extras = len(g["itens"]) - 1
+                if (g["tipo"] == "saida") == (dif > 0) and abs(abs(dif) - extras * g["valor"]) < 0.01 and any(
+                        i["conta"] == conta and i["pago_em"] and antes["data"] < i["pago_em"] <= depois["data"] for i in g["itens"]):
+                    suspeito = {"valor": g["valor"], "descricao": g["itens"][0]["descricao"] or g["itens"][0]["categoria"], "ids": g["ids"]}
+                    break
+        out.append({"conta": conta, "frente": frente, "de": antes["data"], "ate": depois["data"], "saldo_antes": antes["saldo"],
+                    "saldo_depois": depois["saldo"], "entradas": entradas, "saidas": saidas, "esperado": esperado, "diferenca": dif,
+                    "bate": abs(dif) < 0.01, "sem_conta": sem_conta, "repetido": suspeito})
+    out.sort(key=lambda c: (c["bate"], c["conta"]))   # o que não bate primeiro
+    return out
+
+
+DIAS_SEMANA = ("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
+
+
+def linha_do_tempo(con: sqlite3.Connection, hoje: str, dias: int = 30, conta: str | None = None) -> dict:
+    """O que aconteceu nos últimos `dias`, do mais novo ao mais antigo e agrupado por dia: lançamentos pagos e as fotos de saldo
+    (marcos). Cada movimento vem com etiquetas: empréstimo, repetido?, sem conta. `conta` filtra por conta."""
+    h = dt.date.fromisoformat(hoje)
+    de = (h - dt.timedelta(days=dias)).isoformat()
+    ids_repetidos = {i for g in duplicados(con) for i in g["ids"]}
+    filtro, args = (" AND conta=?", (conta,)) if conta else ("", ())
+    por_dia: dict[str, list[dict]] = {}
+    for r in con.execute(f"""SELECT * FROM lancamentos WHERE excluido_em IS NULL AND pago_em >= ? AND pago_em <= ?{filtro}
+                             ORDER BY pago_em DESC, id DESC""", (de, hoje, *args)):
+        por_dia.setdefault(r["pago_em"], []).append({
+            "tipo": r["tipo"], "valor": r["valor"], "escopo": r["escopo"], "id": r["id"], "conta": r["conta"],
+            "descricao": r["descricao"] or r["categoria"], "categoria": r["categoria"],
+            "etiquetas": [t for t, ok in (
+                ("empréstimo", r["categoria"].startswith(EMPRESTIMO)),
+                ("parece empréstimo", r["escopo"] == "PJ" and r["tipo"] == "entrada" and not r["categoria"].startswith(EMPRESTIMO)
+                 and parece_emprestimo(f"{r['descricao'] or ''} {r['contraparte'] or ''}")),
+                ("repetido?", r["id"] in ids_repetidos), ("sem conta", not r["conta"])) if ok]})
+    for r in con.execute(f"""SELECT * FROM saldos WHERE excluido_em IS NULL AND data >= ? AND data <= ?{filtro}
+                             ORDER BY data DESC, id DESC""", (de, hoje, *args)):
+        por_dia.setdefault(r["data"], []).insert(0, {"tipo": "saldo", "valor": r["saldo"], "conta": r["conta"], "escopo": None, "id": None,
+                                                     "descricao": f"Saldo digitado: {r['conta']}", "categoria": "", "etiquetas": []})
+    def rotulo(iso):
+        d = dt.date.fromisoformat(iso)
+        return "Hoje" if d == h else "Ontem" if d == h - dt.timedelta(days=1) else f"{DIAS_SEMANA[d.weekday()]} {d:%d/%m}"
+    contas = [r[0] for r in con.execute(
+        """SELECT conta FROM lancamentos WHERE excluido_em IS NULL AND conta IS NOT NULL AND pago_em >= ?
+           UNION SELECT conta FROM saldos WHERE excluido_em IS NULL AND data >= ? ORDER BY 1""", (de, de))]
+    return {"de": de, "ate": hoje, "dias": dias, "conta": conta, "contas": contas,
+            "dias_lista": [{"dia": d, "rotulo": rotulo(d), "itens": por_dia[d]} for d in sorted(por_dia, reverse=True)]}
 
 
 def recorrencias_retirada(con: sqlite3.Connection) -> list:

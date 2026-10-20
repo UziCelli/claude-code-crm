@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block titulo %}Linha do tempo · Financeiro · VFITCOACH CRM{% endblock %}
+{% block conteudo %}
+<div class="linha topo">
+  <h1 style="margin:0">Linha do tempo</h1>
+  <a class="btn claro" href="/financeiro">Voltar ao Financeiro</a>
+</div>
+<p class="muted">O que entrou e saiu das contas, do mais novo ao mais antigo. As faixas azuis são os saldos que você digitou.</p>
+
+<div class="linha mt">
+  {% for d in (7, 30, 90) %}<a class="btn pequeno {{ '' if linha.dias == d else 'claro' }}" href="?dias={{ d }}{% if linha.conta %}&conta={{ linha.conta|urlencode }}{% endif %}">{{ d }} dias</a>{% endfor %}
+</div>
+{% if linha.contas %}
+<div class="linha mt">
+  <a class="btn pequeno {{ '' if not linha.conta else 'claro' }}" href="?dias={{ linha.dias }}">Todas as contas</a>
+  {% for c in linha.contas %}<a class="btn pequeno {{ '' if linha.conta == c else 'claro' }}" href="?dias={{ linha.dias }}&conta={{ c|urlencode }}">{{ c }}</a>{% endfor %}
+</div>
+{% endif %}
+
+{% for d in linha.dias_lista %}
+<h3 class="mt">{{ d.rotulo }}{% if d.rotulo in ('Hoje', 'Ontem') %} <span class="muted">{{ d.dia|data }}</span>{% endif %}</h3>
+<div class="card">
+  {% for i in d.itens %}
+  <div class="tempo-item {{ 'saldo' if i.tipo == 'saldo' }}">
+    <div style="flex:1">
+      <strong>{{ i.descricao }}</strong>
+      <div class="muted">{% if i.tipo != 'saldo' %}{{ i.categoria }} · {{ i.escopo }}{% if i.conta %} · {{ i.conta }}{% endif %}{% endif %}
+        {% for t in i.etiquetas %}<span class="tag {{ 'azul' if 'empréstimo' in t else 'amarelo' }}">{{ t }}</span> {% endfor %}</div>
+    </div>
+    {% if i.tipo == 'saldo' %}<strong>{{ i.valor|moeda }}</strong>
+    {% else %}<strong class="v-{{ i.tipo }}">{{ '+' if i.tipo == 'entrada' else '−' }} {{ i.valor|moeda }}</strong>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card mt"><span class="muted">Nada pago nos últimos {{ linha.dias }} dias{% if linha.conta %} em {{ linha.conta }}{% endif %}.</span></div>
+{% endfor %}
+{% endblock %}

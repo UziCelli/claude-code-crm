@@ -18,7 +18,7 @@
 <div class="card mt atencao">
   <div class="linha topo">
     <strong>{{ g.valor|moeda }} · {{ 'entrada' if g.tipo == 'entrada' else 'saída' }} {{ g.escopo }}</strong>
-    <span class="tag {{ 'vermelho' if g.certeza == 'quase certo' else 'amarelo' }}">{{ g.certeza }}</span>
+    <span class="tag {{ 'vermelho' if g.certeza == 'quase certo' else 'neutro' }}">{{ g.certeza }}</span>
   </div>
   {% for i in g.itens %}
   <div class="item-ligar">
@@ -30,6 +30,27 @@
   </div>
   {% endfor %}
   <form method="post" action="/financeiro/duplicados/nao-repetido" class="inline"><input type="hidden" name="volta" value="{{ volta }}">{{ ids_do_grupo(g) }}<button class="claro pequeno">Não é repetido</button></form>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if bancos %}
+<h2 class="mt">Banco × CRM</h2>
+<p class="muted">Compara o saldo que você digitou com o que o CRM esperava. Se não bate, falta lançar algo ou tem algo a mais.</p>
+{% for b in bancos %}
+<div class="card mt {{ '' if b.bate else 'atencao' }}">
+  <div class="linha topo">
+    <strong>{{ b.conta }}</strong>
+    {% if b.bate %}<span class="tag verde">bate</span>{% else %}<span class="tag amarelo">banco tem {{ b.diferenca|abs|moeda }} {{ 'a mais' if b.diferenca > 0 else 'a menos' }}</span>{% endif %}
+  </div>
+  {% if not b.bate %}
+  <p style="margin:6px 0">{% if b.diferenca > 0 %}Falta lançar uma entrada, ou tem uma saída lançada a mais.{% else %}Falta lançar uma saída, ou tem uma entrada lançada a mais.{% endif %}</p>
+  {% if b.repetido %}<p style="margin:6px 0"><span class="tag vermelho">pista</span> Pode ser o lançamento repetido "{{ b.repetido.descricao }}" de {{ b.repetido.valor|moeda }} (veja em "Pode estar repetido").</p>{% endif %}
+  {% endif %}
+  {% if b.sem_conta %}<p class="muted" style="margin:6px 0">{{ b.sem_conta }} lançamento{{ 's' if b.sem_conta > 1 }} pago{{ 's' if b.sem_conta > 1 }} sem conta neste período: escolha a conta neles para eu conseguir conferir.</p>{% endif %}
+  <details><summary class="muted">Ver a conta</summary>
+    <div class="muted">De {{ b.de|data }} a {{ b.ate|data }}: {{ b.saldo_antes|moeda }} + entradas {{ b.entradas|moeda }} − saídas {{ b.saidas|moeda }} = esperado {{ b.esperado|moeda }}. O banco mostra {{ b.saldo_depois|moeda }}.</div>
+  </details>
 </div>
 {% endfor %}
 {% endif %}

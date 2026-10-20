@@ -1893,7 +1893,15 @@ def financeiro_emprestimo(lid: int, volta: str = Form(""), con=Depends(get_db)):
 def financeiro_conferir(request: Request, con=Depends(get_db)):
     """Tudo que o app acha que precisa de um olhar: lançamentos repetidos e contas lançadas à mão que parecem recorrentes."""
     return render(request, "financeiro_conferir.html", con, repetidos=financeiro.duplicados(con), parecidas=financeiro.saidas_parecidas(con),
-                  recs_retirada=financeiro.recorrencias_retirada(con), volta="/financeiro/conferir")
+                  recs_retirada=financeiro.recorrencias_retirada(con), bancos=financeiro.conferencia_contas(con), volta="/financeiro/conferir")
+
+
+@app.get("/financeiro/linha-do-tempo", response_class=HTMLResponse)
+def financeiro_linha_do_tempo(request: Request, dias: int = 30, conta: str = "", con=Depends(get_db)):
+    """O que aconteceu nas contas nos últimos 7, 30 ou 90 dias, dia a dia."""
+    dias = dias if dias in (7, 30, 90) else 30
+    conta = conta if conta in db.lista(con, "lista_contas") else None
+    return render(request, "financeiro_linha.html", con, linha=financeiro.linha_do_tempo(con, dt.date.today().isoformat(), dias, conta))
 
 
 @app.post("/financeiro/duplicados/manter")
