@@ -145,6 +145,32 @@ def test_ligar_entrada_sem_aluno_e_falta_por_aluno(cliente_http):
     con.close()
 
 
+def test_marcar_entrada_como_emprestimo_tira_da_receita_e_da_lista_de_sem_aluno(cliente_http):
+    import datetime as dt
+    http, cid = cliente_http
+    hoje = dt.date.today().isoformat()
+    volta = f"/financeiro/mensalidades?mes={hoje[:7]}"
+    con = db.conectar()
+    with con:
+        lid = con.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao) VALUES ('PJ','entrada',?,?,4000,'Outros',?)",
+                          (hoje, hoje, "Empréstimo Dock")).lastrowid
+        pf = con.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria) VALUES ('PF','entrada',?,?,10,'Outros')",
+                         (hoje, hoje)).lastrowid
+    tela = http.get(volta).text
+    assert "1 entrada sem aluno" in tela and "parece empréstimo" in tela and "É empréstimo" in tela
+    r = http.post(f"/financeiro/lancamento/{lid}/emprestimo", data={"volta": volta}, follow_redirects=False)
+    assert "Marcado como empréstimo" in unquote(r.headers["location"])
+    assert con.execute("SELECT categoria FROM lancamentos WHERE id=?", (lid,)).fetchone()[0] == "Empréstimo"
+    assert "sem aluno" not in http.get(volta).text
+    livro = http.get(f"/financeiro?mes={hoje[:7]}").text
+    assert "Sem empréstimo (R$ 4.000,00)" in livro and ">empréstimo</span>" in livro
+    # PF não pode ser empréstimo da PJ: nada muda e volta com erro
+    r = http.post(f"/financeiro/lancamento/{pf}/emprestimo", data={"volta": volta}, follow_redirects=False)
+    assert "Só uma entrada da PJ" in unquote(r.headers["location"])
+    assert con.execute("SELECT categoria FROM lancamentos WHERE id=?", (pf,)).fetchone()[0] == "Outros"
+    con.close()
+
+
 @pytest.mark.parametrize("valor,esperado", [("1.500", 1500), ("1.500,50", 1500.5), ("10.5", 10.5), ("1.234.567", 1234567)])
 def test_num_br_milhar_sem_centavos(valor, esperado):
     assert main._num_br(valor) == esperado
@@ -311,17 +337,19 @@ def test_financeiro_card_de_contas_parecidas_ligar_e_descartar(cliente_http):
                                                   "descricao": desc, "pago_em": hoje.isoformat()}, follow_redirects=False)
     a, b = [r[0] for r in con.execute("SELECT id FROM lancamentos ORDER BY id")]
     tela = http.get(f"/financeiro?mes={mes}").text
-    assert "2 contas lançadas à mão parecem recorrentes" in tela and "talvez já pago" in tela
+    assert "2 coisas para conferir" in tela and "talvez já pago" in tela        # o livro-caixa só avisa; o cartão fica na tela Conferir
+    assert "2 contas lançadas à mão parecem recorrentes" in http.get("/financeiro/conferir").text
     http.post(f"/financeiro/lancamento/{a}/recorrencia", data={**base, "recorrencia_id": rid}, follow_redirects=False)
     assert con.execute("SELECT recorrencia_id FROM lancamentos WHERE id=?", (a,)).fetchone()[0] == rid
     # o outro agora é pagamento em dobro: sem Ligar, com Excluir; "Não é a mesma conta" tira da lista
-    tela = http.get(f"/financeiro?mes={mes}").text
+    tela = http.get("/financeiro/conferir").text
     assert "1 conta lançada à mão parece recorrente" in tela and "já foi paga pelo botão Pagar" in tela
     r = http.post(f"/financeiro/lancamento/{b}/recorrencia", data={**base, "recorrencia_id": rid}, follow_redirects=False)
     assert "erro=" in r.headers["location"]
     http.post(f"/financeiro/lancamento/{b}/nao-recorrente", data=base, follow_redirects=False)
     assert con.execute("SELECT sem_recorrencia FROM lancamentos WHERE id=?", (b,)).fetchone()[0] == 1
-    assert "lançada à mão parece" not in http.get(f"/financeiro?mes={mes}").text
+    assert "lançada à mão parece" not in http.get("/financeiro/conferir").text
+    assert "para conferir" not in http.get(f"/financeiro?mes={mes}").text
     con.close()
 
 
@@ -352,4 +380,82 @@ def test_financeiro_card_avisa_recorrencia_de_retirada_ja_cadastrada(cliente_htt
         con.execute("INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, fixo, inicio)"
                     " VALUES ('PJ','Salário','Retirada',3000,5,1,'2026-01')")
     con.close()
-    assert "Salário não é conta recorrente" in http.get("/financeiro").text
+    assert "1 coisa para conferir" in http.get("/financeiro").text
+    assert "Salário não é conta recorrente" in http.get("/financeiro/conferir").text
+
+
+def test_conferir_repetidos_manter_um_e_nao_e_repetido(cliente_http):
+    import datetime as dt
+    http, _ = cliente_http
+    hoje = dt.date.today().isoformat()
+    con = db.conectar()
+    with con:
+        ids = [con.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao) VALUES ('PJ','saida',?,?,89.9,'Software/Assinaturas','Spotify')",
+                           (hoje, hoje)).lastrowid for _ in range(3)]
+        x, y = [con.execute("INSERT INTO lancamentos (escopo, tipo, data, valor, categoria, descricao) VALUES ('PF','saida',?,40,'Lazer','Cinema')",
+                            (hoje,)).lastrowid for _ in range(2)]
+    tela = http.get("/financeiro/conferir").text
+    assert "Pode estar repetido (2)" in tela and "quase certo" in tela and "(sugerido)" in tela
+    assert "2 grupos de lançamentos do financeiro parecem repetido" in http.get("/financeiro").text      # alerta em toda página
+    # manter só o primeiro: os outros dois vão para a lixeira
+    r = http.post("/financeiro/duplicados/manter", data={"manter": ids[0], "ids": ids, "volta": "/financeiro/conferir"}, follow_redirects=False)
+    assert "2 lançamentos repetidos enviados para a lixeira" in unquote(r.headers["location"])
+    vivos = [r[0] for r in con.execute("SELECT id FROM lancamentos WHERE excluido_em IS NULL AND descricao='Spotify'")]
+    assert vivos == [ids[0]]
+    # "não é repetido" guarda o par e o grupo some
+    http.post("/financeiro/duplicados/nao-repetido", data={"ids": [x, y], "volta": "/financeiro/conferir"}, follow_redirects=False)
+    assert "Tudo certo" in http.get("/financeiro/conferir").text
+    # pedido torto: manter fora do grupo não exclui nada
+    r = http.post("/financeiro/duplicados/manter", data={"manter": 999, "ids": [x, y], "volta": "/financeiro/conferir"}, follow_redirects=False)
+    assert "erro=" in r.headers["location"] and con.execute("SELECT COUNT(*) FROM lancamentos WHERE excluido_em IS NOT NULL").fetchone()[0] == 2
+    con.close()
+
+
+def test_financeiro_mostra_fila_de_pagamento_com_corte_e_salva_prioridade(cliente_http):
+    import datetime as dt
+    http, _ = cliente_http
+    hoje = dt.date.today()
+    con = db.conectar()
+    with con:
+        con.execute("INSERT INTO saldos (conta, saldo, data) VALUES ('Contabilizei Bank', 1000, ?)", (hoje.isoformat(),))
+        for k, (cat, valor) in enumerate([("Aluguel", 600), ("Software/Assinaturas", 200), ("Marketing/Divulgação", 300),
+                                          ("Outros", 10), ("Outros", 11), ("Outros", 12), ("Outros", 13)]):
+            con.execute("INSERT INTO lancamentos (escopo, tipo, data, valor, categoria, descricao) VALUES ('PJ','saida',?,?,?,?)",
+                        ((hoje + dt.timedelta(days=2 + k)).isoformat(), valor, cat, f"Conta {k}"))
+    tela = http.get("/financeiro").text
+    assert "Pague nesta ordem" in tela and "Conta 0" in tela and "pague esta semana" in tela
+    assert "o dinheiro da PJ dá até aqui" in tela and "falta dinheiro" in tela
+    assert "Ver os outros 2" in tela                                  # 7 itens: 5 à vista, 2 recolhidos
+    assert tela.index("Conta 0") < tela.index("Conta 2")              # aluguel antes do marketing
+    # prioridade na conta recorrente: salva, aparece na lista e some do automático
+    base = {"escopo": "PJ", "descricao": "Internet", "categoria": "Internet/Telefone", "valor": "120", "dia_vencimento": "10", "fixo": "1",
+            "inicio": f"{hoje:%Y-%m}", "volta": f"mes={hoje:%Y-%m}&escopo=todos"}
+    http.post("/financeiro/recorrencia", data={**base, "prioridade": "1"}, follow_redirects=False)
+    assert con.execute("SELECT prioridade FROM recorrencias WHERE descricao='Internet'").fetchone()[0] == 1
+    assert "sempre primeiro" in http.get("/financeiro").text
+    r = http.post("/financeiro/recorrencia", data={**base, "descricao": "Outra", "prioridade": "5"}, follow_redirects=False)
+    assert "erro=" in r.headers["location"] and con.execute("SELECT COUNT(*) FROM recorrencias").fetchone()[0] == 1
+    con.close()
+
+
+def test_linha_do_tempo_e_banco_x_crm_nas_telas(cliente_http):
+    import datetime as dt
+    http, _ = cliente_http
+    hoje = dt.date.today()
+    d1, d2 = (hoje - dt.timedelta(days=9)).isoformat(), (hoje - dt.timedelta(days=1)).isoformat()
+    con = db.conectar()
+    with con:
+        con.execute("INSERT INTO saldos (conta, saldo, data) VALUES ('Inter', 1000, ?)", (d1,))
+        con.execute("INSERT INTO saldos (conta, saldo, data) VALUES ('Inter', 1500, ?)", (hoje.isoformat(),))
+        con.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao, conta) VALUES ('PF','entrada',?,?,900,'Outros','Freela','Inter')", (d2, d2))
+    tela = http.get("/financeiro/conferir").text
+    assert "Banco × CRM" in tela and "banco tem R$ 400,00 a menos" in tela
+    assert "Falta lançar uma saída, ou tem uma entrada lançada a mais" in tela
+    t = http.get("/financeiro/linha-do-tempo").text
+    assert "Linha do tempo" in t and "Hoje" in t and "Ontem" in t and "Freela" in t and "Saldo digitado: Inter" in t
+    so_inter = http.get("/financeiro/linha-do-tempo?dias=7&conta=Inter").text
+    assert "Freela" in so_inter and ">7 dias<" in so_inter
+    # parâmetro torto cai no padrão, sem erro
+    assert http.get("/financeiro/linha-do-tempo?dias=999&conta=Banco%20Fantasma").status_code == 200
+    assert "Linha do tempo" in http.get("/financeiro").text
+    con.close()

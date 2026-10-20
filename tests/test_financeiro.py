@@ -598,3 +598,281 @@ def test_retirada_recorrente_nao_deixa_custo_negativo(con_temp):
     resumo = financeiro.resumo_mes(con_temp, "2026-10")
     assert (resumo["custos_fixos"], resumo["custos_variaveis"], resumo["retirada"], resumo["lucro"]) == (0, 0, 3000, 10000)
     assert [r["id"] for r in financeiro.recorrencias_retirada(con_temp)] == [rid]
+
+
+# ---------- Empréstimo da PJ não é receita ----------
+EMP = financeiro.EMPRESTIMO
+
+
+def test_emprestimo_nao_paga_das_nem_entra_no_lucro(con_temp):
+    saldo(con_temp, "Contabilizei Bank", 0, "2026-10-01")
+    lancar(con_temp, "entrada", 1000, "2026-10-05", pago_em="2026-10-05")                         # mensalidade
+    lancar(con_temp, "entrada", 5000, "2026-10-06", pago_em="2026-10-06", categoria=EMP)         # empréstimo
+    lancar(con_temp, "saida", 700, "2026-10-08", pago_em="2026-10-08", categoria=financeiro.DEVOLUCAO)
+    assert financeiro._receita_pj(con_temp, "2026-10") == 1000
+    r = financeiro.resumo_mes(con_temp, "2026-10")
+    assert (r["receita"], r["custos_variaveis"], r["lucro"]) == (1000, 0, 1000)
+    assert (r["emprestimos"], r["devolucoes"]) == (5000, 700)
+    # o dinheiro está na conta: o "tem" conta o empréstimo, o DAS (6%) só a mensalidade
+    pj = financeiro.saldo_livre(con_temp, "2026-10-16")["PJ"]
+    assert pj["imposto"] == 60 and pj["tem"] == 5300
+
+
+def test_emprestimo_vai_inteiro_para_as_contas_da_pj(con_temp):
+    with con_temp:
+        con_temp.execute("UPDATE recorrencias SET excluido_em='x'")
+    lancar(con_temp, "entrada", 3000, "2026-10-02", pago_em="2026-10-02", categoria=EMP)
+    (e,) = financeiro.potes_mes(con_temp, "2026-10")["entradas"]
+    assert e["divisao"] == {"imposto": 0, "contas": 3000, "salario": 0, "colchao": 0}
+    assert financeiro.texto_divisao(e["divisao"]) == "R$ 3.000,00 contas da pj"
+
+
+def test_emprestimo_nao_pede_aluno_nem_desconta_mensalidade(con_temp):
+    with con_temp:
+        con_temp.execute("INSERT INTO clientes (nome, valor, status) VALUES ('Ana', 500, 'ativo')")
+    lancar(con_temp, "entrada", 2000, "2026-10-05", pago_em="2026-10-05", categoria=EMP)
+    assert financeiro.entradas_sem_aluno(con_temp, "2026-10") == []
+    falta, sem = financeiro._mensalidades_a_receber(con_temp, "2026-10")
+    assert falta == 500 and sem == []      # sem a regra, os 2000 zerariam a mensalidade da Ana
+
+
+def test_previsao_ignora_emprestimo_na_base_do_das(con_temp):
+    financeiro.salvar_saldos(con_temp, "2026-10-16", {"Contabilizei Bank": 0}, {})
+    lancar(con_temp, "entrada", 10000, "2026-10-05", pago_em="2026-10-05", categoria=EMP)
+    lancar(con_temp, "entrada", 1000, "2026-10-06", pago_em="2026-10-06")
+    descr = {i["descricao"]: i["valor"] for s in financeiro.previsao(con_temp, "2026-10-16")["semanas"] for i in s["itens"]}
+    assert descr["DAS estimado (10/2026)"] == 60      # 6% de 1000, não de 11000
+
+
+def test_parece_emprestimo():
+    assert financeiro.parece_emprestimo("PIX recebido - Empréstimo Banco X")
+    assert financeiro.parece_emprestimo("capital de giro Dock")
+    assert not financeiro.parece_emprestimo("PIX recebido Ana Souza")
+    assert not financeiro.parece_emprestimo("CRÉDITO EM CONTA")      # extrato comum: não pode sugerir em toda entrada
+
+
+# ---------- Lançamentos repetidos ----------
+def lanc(con, valor=100, data="2026-10-05", tipo="saida", escopo="PJ", descricao=None, pago_em=None, **extra):
+    campos = {"escopo": escopo, "tipo": tipo, "data": data, "pago_em": pago_em, "valor": valor, "categoria": "Outros",
+              "descricao": descricao, **extra}
+    with con:
+        return con.execute(f"INSERT INTO lancamentos ({', '.join(campos)}) VALUES ({', '.join('?' * len(campos))})",
+                           tuple(campos.values())).lastrowid
+
+
+def test_duplicados_mesmo_dia_e_descricao_e_quase_certo(con_temp):
+    a = lanc(con_temp, 89.9, descricao="Spotify", pago_em="2026-10-05")
+    b = lanc(con_temp, 89.9, descricao="spotify ", pago_em="2026-10-05", conta="Inter", forma="PIX")
+    (g,) = financeiro.duplicados(con_temp)
+    assert g["certeza"] == "quase certo" and set(g["ids"]) == {a, b}
+    assert g["manter"] == b                        # o mais completo fica; o outro vai para a lixeira
+    assert [i["manter"] for i in g["itens"]] == [True, False]
+
+
+def test_duplicados_dias_perto_ou_descricao_diferente_e_talvez(con_temp):
+    lanc(con_temp, 50, data="2026-10-05", descricao="Uber")
+    lanc(con_temp, 50, data="2026-10-07", descricao="Uber centro")
+    (g,) = financeiro.duplicados(con_temp)
+    assert g["certeza"] == "talvez"
+    lanc(con_temp, 50, data="2026-10-20", descricao="Uber")             # longe demais: outro lançamento
+    assert len(financeiro.duplicados(con_temp)) == 1
+
+
+def test_duplicados_tres_copias_viram_um_grupo(con_temp):
+    ids = [lanc(con_temp, 30, descricao="Café") for _ in range(3)]
+    (g,) = financeiro.duplicados(con_temp)
+    assert sorted(g["ids"]) == sorted(ids) and g["manter"] == min(ids)     # empate: o mais antigo
+
+
+def test_duplicados_o_que_prova_que_sao_dois(con_temp):
+    lanc(con_temp, 200, descricao="Parcela", parcela_num=1, parcela_total=3)
+    lanc(con_temp, 200, descricao="Parcela", parcela_num=2, parcela_total=3)       # parcelas diferentes
+    lanc(con_temp, 400, tipo="entrada", cliente_id=None, contraparte="Ana Souza")
+    lanc(con_temp, 400, tipo="entrada", contraparte="Bia Lima")                    # quem pagou é outro
+    lanc(con_temp, 70, conta="Inter")
+    lanc(con_temp, 70, conta="Itaú")                                               # conta diferente
+    lanc(con_temp, 10, escopo="PF")
+    lanc(con_temp, 10, escopo="PJ")                                                # escopo diferente
+    lanc(con_temp, 10, tipo="entrada", escopo="PJ")                                # tipo diferente
+    assert financeiro.duplicados(con_temp) == []
+
+
+def test_duplicados_alunos_diferentes_e_mesma_recorrencia_em_meses_diferentes(con_temp):
+    with con_temp:
+        a = con_temp.execute("INSERT INTO clientes (nome, valor, status) VALUES ('Ana', 400, 'ativo')").lastrowid
+        b = con_temp.execute("INSERT INTO clientes (nome, valor, status) VALUES ('Bia', 400, 'ativo')").lastrowid
+    lanc(con_temp, 400, tipo="entrada", cliente_id=a, pago_em="2026-10-05")
+    lanc(con_temp, 400, tipo="entrada", cliente_id=b, pago_em="2026-10-05")
+    rid = recorrencia(con_temp, valor=1000)
+    lanc(con_temp, 1000, data="2026-09-30", recorrencia_id=rid, competencia="2026-09", pago_em="2026-09-30")
+    lanc(con_temp, 1000, data="2026-10-01", recorrencia_id=rid, competencia="2026-10", pago_em="2026-10-01")
+    assert financeiro.duplicados(con_temp) == []
+
+
+def test_duplicados_excluido_some_e_nao_e_repetido_nao_volta(con_temp):
+    a, b = lanc(con_temp, 60, descricao="Água"), lanc(con_temp, 60, descricao="Água")
+    assert len(financeiro.duplicados(con_temp)) == 1
+    with con_temp:
+        con_temp.execute("INSERT INTO duplicados_ok (a, b) VALUES (?, ?)", (a, b))
+    assert financeiro.duplicados(con_temp) == []
+    c = lanc(con_temp, 60, descricao="Água")                  # um terceiro igual: avisa só dos pares novos
+    (g,) = financeiro.duplicados(con_temp)
+    assert c in g["ids"]
+    with con_temp:
+        con_temp.execute("UPDATE lancamentos SET excluido_em='x' WHERE id=?", (c,))
+    assert financeiro.duplicados(con_temp) == []
+
+
+def test_duplicados_nao_repete_o_aviso_de_conta_parecida_com_recorrente(con_temp):
+    rid = recorrencia(con_temp, valor=1000)
+    financeiro.baixar_recorrencia(con_temp, rid, "2026-10", 1000, "2026-10-06")
+    paga_a_mao(con_temp)                       # já aparece em saidas_parecidas
+    assert financeiro.saidas_parecidas(con_temp) and financeiro.duplicados(con_temp) == []
+
+
+def test_duplicados_data_ruim_nao_quebra(con_temp):
+    lanc(con_temp, 5, data="2026-13-45")
+    lanc(con_temp, 5, data="2026-10-01")
+    assert financeiro.duplicados(con_temp) == []
+
+
+# ---------- Fila de pagamento ----------
+def fila(con, hoje="2026-10-16"):
+    livre = financeiro.saldo_livre(con, hoje)
+    return financeiro.fila_pagamentos(con, livre, hoje), livre
+
+
+def rec_pj(con, descricao, categoria, valor, dia, prioridade=None):
+    with con:
+        return con.execute("INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, fixo, inicio, prioridade)"
+                           " VALUES ('PJ',?,?,?,?,1,'2026-10',?)", (descricao, categoria, valor, dia, prioridade)).lastrowid
+
+
+def test_fila_ordena_por_impacto_e_corta_onde_o_dinheiro_acaba(con_temp):
+    saldo(con_temp, "Contabilizei Bank", 1000, "2026-10-16")
+    lancar(con_temp, "saida", 600, "2026-10-20", categoria="Aluguel")                      # 40 + 4 + 33 = 77
+    lancar(con_temp, "saida", 300, "2026-10-18", categoria="Marketing/Divulgação")         # 0 + 7 + 0 = 7
+    lancar(con_temp, "saida", 200, "2026-10-30", categoria="Software/Assinaturas")         # 40 + 0 + 6 = 46
+    q, livre = fila(con_temp)
+    pj = q["PJ"]
+    assert [(i["categoria"], i["nota"]) for i in pj["itens"]] == [("Aluguel", 77), ("Software/Assinaturas", 46), ("Marketing/Divulgação", 7)]
+    assert [i["coberto"] for i in pj["itens"]] == [True, True, False] and pj["cobertos"] == 2
+    assert not pj["tudo_coberto"] and pj["sobra"] == 200 and livre["PJ"]["livre"] == -100
+    assert pj["itens"][0]["esta_semana"] and not pj["itens"][1]["esta_semana"]            # vence em 4 dias / em 14
+    assert pj["itens"][0]["custo_atraso"] == 66 and "essencial" in pj["itens"][0]["motivo"] and "vence em 4 dias" in pj["itens"][0]["motivo"]
+
+
+def test_fila_conta_vencida_sobe_e_diz_ha_quantos_dias(con_temp):
+    saldo(con_temp, "Contabilizei Bank", 5000, "2026-10-01")
+    lancar(con_temp, "saida", 100, "2026-10-10", categoria="Material de Trabalho")        # 30 + 10 + 0
+    lancar(con_temp, "saida", 100, "2026-10-17", categoria="Material de Trabalho")        # 30 + 7 + 0
+    a, b = fila(con_temp)[0]["PJ"]["itens"]
+    assert (a["nota"], b["nota"]) == (40, 37) and "atrasada há 6 dias" in a["motivo"]
+
+
+def test_fila_escolha_manual_vence_o_automatico(con_temp):
+    saldo(con_temp, "Contabilizei Bank", 5000, "2026-10-01")
+    rid = rec_pj(con_temp, "Aluguel", "Aluguel", 600, 20)
+    lancar(con_temp, "saida", 300, "2026-10-18", categoria="Marketing/Divulgação")
+    assert fila(con_temp)[0]["PJ"]["itens"][0]["descricao"] == "Aluguel"
+    with con_temp:
+        con_temp.execute("UPDATE recorrencias SET prioridade=-1 WHERE id=?", (rid,))      # "pode esperar"
+    itens = fila(con_temp)[0]["PJ"]["itens"]
+    assert [i["descricao"] for i in itens] == ["Marketing/Divulgação", "Aluguel"] and "pode esperar" in itens[1]["motivo"]
+    with con_temp:
+        con_temp.execute("UPDATE recorrencias SET prioridade=1 WHERE id=?", (rid,))       # "sempre primeiro"
+        con_temp.execute("UPDATE lancamentos SET categoria='Aluguel'")                    # até o outro virar aluguel: a escolha pesa mais
+    assert fila(con_temp)[0]["PJ"]["itens"][0]["descricao"] == "Aluguel"
+
+
+def test_fila_inclui_das_e_salario_e_bate_com_o_saldo_livre(con_temp):
+    saldo(con_temp, "Contabilizei Bank", 100, "2026-10-01")
+    ligar_salario(con_temp, valor=1000, dia=5)
+    lancar(con_temp, "entrada", 1000, "2026-09-10", pago_em="2026-09-10")               # receita de setembro: DAS de outubro = 60
+    lancar(con_temp, "saida", 50, "2026-10-25", categoria="Aluguel")
+    q, livre = fila(con_temp)
+    pj, l = q["PJ"], livre["PJ"]
+    nomes = [i["descricao"] for i in pj["itens"]]
+    assert "Guardar o DAS de 10/2026" in nomes and "Salário 10/2026 para a PF" in nomes
+    assert round(sum(i["valor"] for i in pj["itens"]), 2) == round(l["comprometido"] + l["imposto"] + l["salario"], 2)
+    assert pj["tudo_coberto"] == (l["livre"] >= 0)
+
+
+def test_fila_sem_saldo_digitado_nao_da_nada_como_coberto(con_temp):
+    lancar(con_temp, "saida", 10, "2026-10-20", categoria="Aluguel")
+    pj = fila(con_temp)[0]["PJ"]
+    assert pj["sem_saldo"] and pj["cobertos"] == 0 and not any(i["coberto"] for i in pj["itens"])
+
+
+def test_fila_categoria_sem_padrao_usa_20_e_2_por_cento(con_temp):
+    saldo(con_temp, "Contabilizei Bank", 5000, "2026-10-01")
+    lancar(con_temp, "saida", 1000, "2026-10-30", categoria="Categoria Nova")
+    (i,) = fila(con_temp)[0]["PJ"]["itens"]
+    assert (i["nota"], i["custo_atraso"]) == (20 + 0 + 6, 20)
+
+
+# ---------- Banco × CRM e linha do tempo ----------
+def test_conferencia_bate_quando_o_crm_tem_tudo(con_temp):
+    saldo(con_temp, "Inter", 1000, "2026-10-01")
+    saldo(con_temp, "Inter", 1500, "2026-10-10")
+    lancar(con_temp, "entrada", 700, "2026-10-05", pago_em="2026-10-05", escopo="PF", conta="Inter")
+    lancar(con_temp, "saida", 200, "2026-10-07", pago_em="2026-10-07", escopo="PF", conta="Inter")
+    lancar(con_temp, "saida", 999, "2026-10-01", pago_em="2026-10-01", escopo="PF", conta="Inter")      # no dia da foto: já está nela
+    lancar(con_temp, "saida", 50, "2026-10-08", pago_em="2026-10-08", escopo="PF", conta="Itaú")        # outra conta
+    (c,) = financeiro.conferencia_contas(con_temp)
+    assert (c["conta"], c["esperado"], c["diferenca"], c["bate"]) == ("Inter", 1500, 0, True)
+    assert (c["de"], c["ate"], c["entradas"], c["saidas"]) == ("2026-10-01", "2026-10-10", 700, 200)
+
+
+def test_conferencia_diz_para_que_lado_a_diferenca_aponta(con_temp):
+    saldo(con_temp, "Inter", 1000, "2026-10-01")
+    saldo(con_temp, "Inter", 1500, "2026-10-10")
+    lancar(con_temp, "entrada", 900, "2026-10-05", pago_em="2026-10-05", escopo="PF", conta="Inter")     # esperado 1900
+    (c,) = financeiro.conferencia_contas(con_temp)
+    assert c["diferenca"] == -400 and not c["bate"] and c["repetido"] is None
+
+
+def test_conferencia_aponta_o_lancamento_repetido_como_pista(con_temp):
+    saldo(con_temp, "Inter", 1000, "2026-10-01")
+    saldo(con_temp, "Inter", 1500, "2026-10-10")
+    lancar(con_temp, "entrada", 700, "2026-10-05", pago_em="2026-10-05", escopo="PF", conta="Inter")
+    for _ in range(2):                                                        # a mesma saída de 200 lançada duas vezes
+        lanc(con_temp, 200, "2026-10-07", escopo="PF", pago_em="2026-10-07", descricao="Mercado", conta="Inter")
+    (c,) = financeiro.conferencia_contas(con_temp)
+    assert c["diferenca"] == 200 and c["repetido"]["valor"] == 200 and c["repetido"]["descricao"] == "Mercado"
+
+
+def test_conferencia_conta_o_que_esta_sem_conta_e_ignora_cartao_e_foto_unica(con_temp):
+    saldo(con_temp, "Inter", 1000, "2026-10-01")
+    saldo(con_temp, "Inter", 900, "2026-10-10")
+    saldo(con_temp, "Itaú", 300, "2026-10-10")                                # uma foto só: não dá para conferir
+    saldo(con_temp, "Cartão Inter", 100, "2026-10-01")
+    saldo(con_temp, "Cartão Inter", 200, "2026-10-10")                        # cartão (Fora): fora
+    lancar(con_temp, "saida", 100, "2026-10-05", pago_em="2026-10-05", escopo="PF")                        # sem conta
+    lancar(con_temp, "saida", 100, "2026-10-05", pago_em="2026-10-05", escopo="PJ")                        # sem conta, mas é da PJ
+    (c,) = financeiro.conferencia_contas(con_temp)
+    assert c["conta"] == "Inter" and c["sem_conta"] == 1 and c["diferenca"] == -100
+
+
+def test_linha_do_tempo_agrupa_por_dia_e_etiqueta(con_temp):
+    saldo(con_temp, "Inter", 800, "2026-10-16")
+    lancar(con_temp, "saida", 60, "2026-10-16", pago_em="2026-10-16", escopo="PF", conta="Inter", categoria="Lazer")
+    lancar(con_temp, "entrada", 3000, "2026-10-15", pago_em="2026-10-15", categoria=financeiro.EMPRESTIMO)
+    for _ in range(2):
+        lancar(con_temp, "saida", 40, "2026-10-10", pago_em="2026-10-10", escopo="PF", conta="Inter", categoria="Lazer")
+    lancar(con_temp, "saida", 1, "2026-08-01", pago_em="2026-08-01")                  # fora dos 30 dias
+    lancar(con_temp, "saida", 5, "2026-10-17")                                         # em aberto: não é movimento
+    t = financeiro.linha_do_tempo(con_temp, "2026-10-16", dias=30)
+    assert [d["rotulo"] for d in t["dias_lista"]] == ["Hoje", "Ontem", "sáb 10/10"]
+    hoje, ontem, sabado = t["dias_lista"]
+    assert [i["tipo"] for i in hoje["itens"]] == ["saldo", "saida"]                  # o marco de saldo abre o dia
+    assert ontem["itens"][0]["etiquetas"] == ["empréstimo", "sem conta"]
+    lancar(con_temp, "entrada", 800, "2026-10-14", pago_em="2026-10-14", conta="Inter")
+    with con_temp:
+        con_temp.execute("UPDATE lancamentos SET descricao='PIX capital de giro' WHERE valor=800")
+    quarta = financeiro.linha_do_tempo(con_temp, "2026-10-16", dias=30)["dias_lista"][-2]
+    assert quarta["itens"][0]["etiquetas"] == ["parece empréstimo"]
+    assert all("repetido?" in i["etiquetas"] for i in sabado["itens"]) and len(sabado["itens"]) == 2
+    assert t["contas"] == ["Inter"]
+    so_inter = financeiro.linha_do_tempo(con_temp, "2026-10-16", dias=30, conta="Inter")
+    assert [d["rotulo"] for d in so_inter["dias_lista"]] == ["Hoje", "qua 14/10", "sáb 10/10"]      # sem o empréstimo (sem conta)

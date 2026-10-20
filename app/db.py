@@ -85,6 +85,19 @@ PARAMETROS_INICIAIS = [
     ("conta_escopo", "Cartão Inter", None, "Fora", 6),
     ("conta_escopo", "Cartão Itaú", None, "Fora", 7),
 ]
+# Fila de pagamento (nota de impacto). Chave = "frente categoria". curto = o quanto atrasar atrapalha agora (0 a 40);
+# juros = multa + juros por mês de atraso. Categoria sem padrão: 20 e 2%. Editáveis em Configurações.
+_IMPACTO = [
+    ("PJ Aluguel", 40, 0.11), ("PJ Internet/Telefone", 40, 0.03), ("PJ Software/Assinaturas", 40, 0.02),
+    ("PJ Material de Trabalho", 30, 0), ("PJ Transporte", 30, 0), ("PJ Retirada", 30, 0), ("PJ Manutenção", 20, 0.02),
+    ("PJ Impostos/Taxas", 20, 0.11), ("PJ Empréstimo (devolução)", 20, 0.08), ("PJ Alimentação", 10, 0),
+    ("PJ Marketing/Divulgação", 0, 0), ("PJ Outros", 0, 0),
+    ("PF Moradia", 40, 0.11), ("PF Saúde", 40, 0.02), ("PF Alimentação", 40, 0), ("PF Fatura", 20, 0.15), ("PF Dívidas", 20, 0.08),
+    ("PF Transporte", 20, 0), ("PF Educação", 10, 0.02), ("PF Pessoal", 0, 0), ("PF Lazer", 0, 0), ("PF Vestuário", 0, 0),
+    ("PF Outros", 0, 0),
+]
+PARAMETROS_INICIAIS += [("impacto_curto", k, c, None, i) for i, (k, c, _) in enumerate(_IMPACTO, 1)]
+PARAMETROS_INICIAIS += [("impacto_juros", k, j, None, i) for i, (k, _, j) in enumerate(_IMPACTO, 1)]
 LISTAS_INICIAIS = {
     "lista_canais": ["Indicação", "Parceria (síndico/academia)", "WhatsApp", "Google", "Instagram orgânico",
                      "Instagram Ads", "Stadami", "Conecta Fitness", "TreinarMe", "PersonalGo", "Outro"],
@@ -94,7 +107,8 @@ LISTAS_INICIAIS = {
     "lista_formas_pagamento": ["PIX", "Cartão 1x", "Cartão 3x", "Cartão 6x", "Cartão 12x"],
     # financeiro (lista_formas_pagamento acima é de preço; não reaproveitar)
     "lista_categorias_pj": ["Pacotes de Aulas", "Mensalidade (Aulas Presenciais)", "Consultoria Online",
-                            "Consultoria Híbrida", "Retirada", "Aluguel", "Internet/Telefone", "Material de Trabalho",
+                            "Consultoria Híbrida", "Empréstimo", "Retirada", "Empréstimo (devolução)", "Aluguel",
+                            "Internet/Telefone", "Material de Trabalho",
                             "Transporte", "Marketing/Divulgação", "Impostos/Taxas", "Alimentação",
                             "Software/Assinaturas", "Manutenção", "Outros"],
     "lista_categorias_pf": ["Alimentação", "Moradia", "Transporte", "Pessoal", "Lazer", "Educação", "Vestuário",
@@ -155,6 +169,7 @@ def iniciar_banco(caminho: Path = None) -> None:
             )
         _garantir_coluna(con, "campanha_checkpoints", "excluido_em", "TEXT")   # banco de antes de dar para excluir
         _garantir_coluna(con, "lancamentos", "sem_recorrencia", "INTEGER")     # banco de antes de ligar saída à recorrência
+        _garantir_coluna(con, "recorrencias", "prioridade", "INTEGER")         # banco de antes da fila de pagamento
         _garantir_coluna(con, "cliente_eventos", "hora", "INTEGER")            # banco de antes da Agenda
         _garantir_coluna(con, "agenda_avulsas", "reposicao", "INTEGER DEFAULT 0")   # banco de antes do controle de reposições
         if con.execute("SELECT COUNT(*) FROM campanha_checkpoints").fetchone()[0] == 0:

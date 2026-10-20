@@ -275,6 +275,10 @@ def alertas(con):
     if venc:
         add("vermelho" if any(p["status"] == "atrasado" for p in venc) else "amarelo",
             f"{len(venc)} conta{s(len(venc))} vencida{s(len(venc))} ou vencendo em 3 dias", "/financeiro")
+    rep = financeiro.duplicados(con)
+    if rep:
+        add("amarelo", f"{len(rep)} {'grupos' if len(rep) > 1 else 'grupo'} de lançamentos do financeiro {'parecem' if len(rep) > 1 else 'parece'} "
+                       "repetido: confira e exclua", "/financeiro/conferir")
     livre = financeiro.saldo_livre(con, h)
     for frente in ("PF", "PJ"):
         if not livre[frente]["sem_saldo"] and livre[frente]["livre"] < 0:
@@ -1674,9 +1678,14 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", con=
     # PJ e PF juntos: o salário (Retirada da PJ + Salário na PF) é só transferência e não entra nas somas
     transf = [l for l in lancs if escopo == "todos" and ((l["escopo"] == "PJ" and l["tipo"] == "saida" and l["categoria"] == financeiro.RETIRADA)
                                                          or (l["escopo"] == "PF" and l["tipo"] == "entrada" and l["categoria"] == "Salário"))]
+    # empréstimo da PJ (e a devolução) também não é receita nem custo: fica fora das somas, com o valor avisado
+    empr = [l for l in lancs if l["escopo"] == "PJ" and l["categoria"] in (financeiro.EMPRESTIMO, financeiro.DEVOLUCAO)]
     transf_ids = {l["id"] for l in transf}
-    entradas = round(sum(l["valor"] for l in lancs if l["tipo"] == "entrada" and l["id"] not in transf_ids), 2)
-    saidas = round(sum(l["valor"] for l in lancs if l["tipo"] == "saida" and l["id"] not in transf_ids), 2)
+    fora_ids = transf_ids | {l["id"] for l in empr}
+    entradas = round(sum(l["valor"] for l in lancs if l["tipo"] == "entrada" and l["id"] not in fora_ids), 2)
+    saidas = round(sum(l["valor"] for l in lancs if l["tipo"] == "saida" and l["id"] not in fora_ids), 2)
+    emprestado = round(sum(l["valor"] for l in empr if l["tipo"] == "entrada"), 2)
+    devolvido = round(sum(l["valor"] for l in empr if l["tipo"] == "saida"), 2)
     pend = [p for p in financeiro.pendencias(con, mes, h) if p["escopo"] in lista]
     for p in pend:
         p["dias"] = (dt.date.fromisoformat(h) - dt.date.fromisoformat(p["data"])).days if p["status"] == "atrasado" else 0
@@ -1685,13 +1694,15 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", con=
     talvez = {(c["id"], s["data"][:7]) for s in parecidas for c in s["candidatos"] if not c["ja_baixada"]}
     for p in pend:
         p["talvez_pago"] = p["origem"] == "recorrencia" and (p["id"], p["competencia"]) in talvez
+    livre = financeiro.saldo_livre(con, h)
     recs = con.execute(f"SELECT * FROM recorrencias WHERE excluido_em IS NULL AND escopo IN ({qs}) ORDER BY escopo, dia_vencimento, descricao", lista).fetchall()
     clientes_ = con.execute("SELECT id, nome FROM clientes WHERE excluido_em IS NULL ORDER BY nome").fetchall()
     return render(request, "financeiro.html", con, mes=mes, escopo=escopo, lancs=lancs, entradas=entradas, saidas=saidas,
-                  saldo=round(entradas - saidas, 2), transferencia=round(sum(l["valor"] for l in transf if l["tipo"] == "saida"), 2), pend=pend, recs=recs, clientes_=clientes_, volta=f"mes={mes}&escopo={escopo}",
-                  livre=financeiro.saldo_livre(con, h), saldos=financeiro.saldos_atuais(con), frentes=financeiro.FRENTES,
+                  saldo=round(entradas - saidas, 2), transferencia=round(sum(l["valor"] for l in transf if l["tipo"] == "saida"), 2),
+                  emprestado=emprestado, devolvido=devolvido, pend=pend, recs=recs, clientes_=clientes_, volta=f"mes={mes}&escopo={escopo}",
+                  livre=livre, fila=financeiro.fila_pagamentos(con, livre, h), saldos=financeiro.saldos_atuais(con), frentes=financeiro.FRENTES,
                   salario=financeiro.salario_mes(con, h[:7], h), potes=financeiro.potes_mes(con, mes),
-                  parecidas=parecidas, recs_retirada=financeiro.recorrencias_retirada(con),
+                  parecidas=parecidas, n_conferir=len(financeiro.duplicados(con)) + len(parecidas) + len(financeiro.recorrencias_retirada(con)),
                   recs_todas=con.execute("SELECT * FROM recorrencias WHERE excluido_em IS NULL ORDER BY escopo, descricao").fetchall())
 
 
@@ -1839,6 +1850,8 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
         return _fin_voltar(volta, erro=str(e))
     except sqlite3.IntegrityError:
         return _fin_voltar(volta, erro="Não foi possível salvar: confira o aluno e os campos.")
+    if f["escopo"] == "PJ" and f["tipo"] == "entrada" and f["categoria"] == financeiro.EMPRESTIMO:
+        return _fin_voltar(volta, msg=(aviso or "Lançamento salvo. ") + "É empréstimo: não paga DAS e não conta como receita.")
     if f["escopo"] == "PJ" and f["tipo"] == "entrada" and pago_em:
         # dinheiro que entrou na PJ: diz na hora quanto vai para cada pote
         div = next((e["divisao"] for e in financeiro.potes_mes(con, pago_em[:7])["entradas"] if e["id"] == lid), None)
@@ -1863,6 +1876,53 @@ def financeiro_ligar_aluno(lid: int, cliente_id: int = Form(0), volta: str = For
     with con:
         con.execute("UPDATE lancamentos SET cliente_id=? WHERE id=? AND cliente_id IS NULL AND excluido_em IS NULL", (cliente_id, lid))
     return _fin_voltar(volta, msg=f"Entrada ligada a {c['nome']}.")
+
+
+@app.post("/financeiro/lancamento/{lid}/emprestimo")
+def financeiro_emprestimo(lid: int, volta: str = Form(""), con=Depends(get_db)):
+    """'É empréstimo': a entrada PJ deixa de ser receita (DAS, lucro, mensalidades) e passa a pagar as contas da PJ."""
+    with con:
+        n = con.execute("""UPDATE lancamentos SET categoria=?, cliente_id=NULL WHERE id=? AND escopo='PJ' AND tipo='entrada'
+                           AND excluido_em IS NULL""", (financeiro.EMPRESTIMO, lid)).rowcount
+    if not n:
+        return _fin_voltar(volta, erro="Só uma entrada da PJ pode ser empréstimo.")
+    return _fin_voltar(volta, msg="Marcado como empréstimo: não paga DAS e não conta como receita nem como mensalidade.")
+
+
+@app.get("/financeiro/conferir", response_class=HTMLResponse)
+def financeiro_conferir(request: Request, con=Depends(get_db)):
+    """Tudo que o app acha que precisa de um olhar: lançamentos repetidos e contas lançadas à mão que parecem recorrentes."""
+    return render(request, "financeiro_conferir.html", con, repetidos=financeiro.duplicados(con), parecidas=financeiro.saidas_parecidas(con),
+                  recs_retirada=financeiro.recorrencias_retirada(con), bancos=financeiro.conferencia_contas(con), volta="/financeiro/conferir")
+
+
+@app.get("/financeiro/linha-do-tempo", response_class=HTMLResponse)
+def financeiro_linha_do_tempo(request: Request, dias: int = 30, conta: str = "", con=Depends(get_db)):
+    """O que aconteceu nas contas nos últimos 7, 30 ou 90 dias, dia a dia."""
+    dias = dias if dias in (7, 30, 90) else 30
+    conta = conta if conta in db.lista(con, "lista_contas") else None
+    return render(request, "financeiro_linha.html", con, linha=financeiro.linha_do_tempo(con, dt.date.today().isoformat(), dias, conta))
+
+
+@app.post("/financeiro/duplicados/manter")
+def financeiro_duplicados_manter(manter: int = Form(...), ids: list[int] = Form(...), volta: str = Form(""), con=Depends(get_db)):
+    """'Manter só este': os outros do grupo vão para a lixeira (restaurável em Dados)."""
+    outros = [i for i in dict.fromkeys(ids) if i != manter]
+    if manter not in ids or not outros:
+        return _fin_voltar(volta, erro="Escolha qual lançamento manter.")
+    with con:
+        n = sum(con.execute("UPDATE lancamentos SET excluido_em=datetime('now','localtime') WHERE id=? AND excluido_em IS NULL", (i,)).rowcount
+                for i in outros)
+    return _fin_voltar(volta, msg=f"{n} lançamento{'s' if n != 1 else ''} repetido{'s' if n != 1 else ''} enviado{'s' if n != 1 else ''} para a lixeira (restaurável em Dados).")
+
+
+@app.post("/financeiro/duplicados/nao-repetido")
+def financeiro_duplicados_nao_repetido(ids: list[int] = Form(...), volta: str = Form(""), con=Depends(get_db)):
+    """'Não é repetido': guarda os pares do grupo e a tela Conferir não avisa deles de novo."""
+    ids = sorted(set(ids))
+    with con:
+        con.executemany("INSERT OR IGNORE INTO duplicados_ok (a, b) VALUES (?, ?)", [(a, b) for k, a in enumerate(ids) for b in ids[k + 1:]])
+    return _fin_voltar(volta, msg="Combinado: esses lançamentos não são repetidos.")
 
 
 @app.post("/financeiro/lancamento/{lid}/recorrencia")
@@ -1906,18 +1966,20 @@ async def financeiro_recorrencia(request: Request, con=Depends(get_db)):
         if not 1 <= int(f.get("dia_vencimento") or 0) <= 31:
             raise ValueError("O dia de vencimento vai de 1 a 31.")
         rid = int(f["id"]) if f.get("id") else None
+        if f.get("prioridade", "") not in ("", "1", "-1"):
+            raise ValueError("Prioridade inválida.")
     except ValueError as e:
         return _fin_voltar(volta, erro=str(e))
     campos = [f["escopo"], f["descricao"].strip(), f["categoria"], valor, int(f["dia_vencimento"]), 1 if f.get("fixo") == "1" else 0,
-              f.get("conta") or None, f["inicio"], fim]
+              f.get("conta") or None, f["inicio"], fim, int(f["prioridade"]) if f.get("prioridade") else None]
     try:
         with con:
             if rid:
                 con.execute("""UPDATE recorrencias SET escopo=?, descricao=?, categoria=?, valor=?, dia_vencimento=?, fixo=?, conta=?, inicio=?,
-                               fim=? WHERE id=?""", (*campos, rid))
+                               fim=?, prioridade=? WHERE id=?""", (*campos, rid))
             else:
-                con.execute("""INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, fixo, conta, inicio, fim)
-                               VALUES (?,?,?,?,?,?,?,?,?)""", campos)
+                con.execute("""INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, fixo, conta, inicio, fim, prioridade)
+                               VALUES (?,?,?,?,?,?,?,?,?,?)""", campos)
     except sqlite3.IntegrityError:
         return _fin_voltar(volta, erro="Não foi possível salvar: confira os campos.")
     return _fin_voltar(volta, msg="Conta recorrente salva.")
@@ -1956,7 +2018,8 @@ def financeiro_mensalidades(request: Request, mes: str = "", con=Depends(get_db)
     # falta por aluno: quem pagou a mais não cobre quem não pagou
     falta = round(sum(max(i["previsto"] - i["recebido"], 0) for i in itens), 2)
     alunos = con.execute("SELECT id, nome FROM clientes WHERE excluido_em IS NULL ORDER BY status != 'ativo', nome").fetchall()
-    sem_aluno = [dict(e, sugestao=financeiro.sugerir_aluno(f"{e['descricao'] or ''} {e['contraparte'] or ''}", alunos))
+    sem_aluno = [dict(e, sugestao=financeiro.sugerir_aluno(f"{e['descricao'] or ''} {e['contraparte'] or ''}", alunos),
+                      parece_emprestimo=financeiro.parece_emprestimo(f"{e['descricao'] or ''} {e['contraparte'] or ''}"))
                  for e in financeiro.entradas_sem_aluno(con, mes)]
     return render(request, "financeiro_mensalidades.html", con, mes=mes, itens=itens, previsto=previsto, recebido=recebido, falta=falta,
                   sem_aluno=sem_aluno, alunos=alunos, volta=f"/financeiro/mensalidades?mes={mes}")
@@ -1985,7 +2048,9 @@ GRUPOS_CONFIG = [("imposto", "Imposto (DAS)", "pct"), ("taxa_pagamento", "Taxas 
                  ("funil_chance", "Chance de fechar por etapa do funil", "pct"),
                  ("fiscal", "Fiscal: salário mínimo (R$), pró-labore e INSS (frações, ex.: 0,28 = 28%)", "num"),
                  ("salario", "Salário fixo da PJ para a PF: valor (R$ por mês; 0 = desligado) e dia do pagamento", "num"),
-                 ("colchao", "Colchão: meta em meses de custo fixo (0 = sem meta)", "num")]
+                 ("colchao", "Colchão: meta em meses de custo fixo (0 = sem meta)", "num"),
+                 ("impacto_curto", "Fila de pagamento: o quanto atrasar atrapalha agora (0 a 40; quanto maior, mais cedo na fila)", "num"),
+                 ("impacto_juros", "Fila de pagamento: juros e multa por mês de atraso (quanto maior, mais cedo na fila)", "pct")]
 
 
 @app.get("/configuracoes", response_class=HTMLResponse)

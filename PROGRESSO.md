@@ -80,7 +80,10 @@ Plano completo em `C:\Users\victo\.claude\plans\a-gente-vai-come-ar-functional-t
 A auditoria financeira de 16/10 tinha 5 PRs: os 5 estão na `main` (#26 a #30). Não há PR da auditoria aberto.
 
 **Para o usuário (nada disso o Claude faz por você)**
-- [ ] `/financeiro`: resolver o card "contas lançadas à mão parecem recorrentes" (PR 4). Item por item: Ligar ou Não é a mesma conta; se o mês já foi pago pelo botão, Excluir um dos dois.
+- [ ] `/financeiro/conferir` (botão **Conferir** no Financeiro): resolver o que o CRM achou. Lançamentos que parecem repetidos ("Manter este" ou "Não é repetido") e contas lançadas à mão que parecem recorrentes (o card de antes, PR 4: Ligar ou Não é a mesma conta). Tudo que você exclui vai para a lixeira.
+- [ ] **Empréstimos da PJ:** em `/financeiro/mensalidades`, nas "entradas sem aluno", aperte **É empréstimo** nas que foram empréstimo (ou, ao lançar, escolha a categoria "Empréstimo"). Elas deixam de contar como receita, de pagar DAS e de baixar as mensalidades previstas. A parcela que você paga de volta vai na categoria "Empréstimo (devolução)" (os juros, em "Impostos/Taxas" ou "Outros", para contarem como custo).
+- [ ] **Fila de pagamento:** em Configurações, confira "Fila de pagamento" (o quanto atrasar atrapalha e os juros por categoria; os números iniciais são estimativas). Em cada conta recorrente, escolha a **Prioridade de pagamento** (automática, sempre primeiro ou pode esperar).
+- [ ] **Banco × CRM:** para funcionar, atualize os saldos em pelo menos 2 datas e escolha a **Conta** nos lançamentos pagos. Quem não tem conta não dá para conferir.
 - [ ] `/financeiro/mensalidades`: ligar à ficha as entradas "sem aluno" (PR 1), para a previsão não descontar à toa.
 - [ ] Conferir o painel depois do PR 5: lucro/h e Nível mudam (o histórico já gravado não muda). Se achar o custo errado, a decisão está abaixo.
 - [ ] Atualizar os saldos das contas (Atualizar saldos, 1x por semana) e dar a frente (PF, PJ, Reserva, Fora) às contas novas.
@@ -106,6 +109,14 @@ A auditoria financeira de 16/10 tinha 5 PRs: os 5 estão na `main` (#26 a #30). 
 
 **Decisões de projeto já registradas (não são bug)**
 - Só a fatura do cartão é registrada; compra no cartão fica para depois (D16). Saldo livre não conta entrada prevista. Recorrência some depois de 3 meses sem baixa (D19). Saldos de contas da planilha (`tblSaldosContas`) não foram migrados.
+
+## Financeiro que pensa por você (PR `claude/financeiro-conferir`, 20/10/2026)
+Feito para quem tem dificuldade de leitura e de número: menos conta de cabeça, uma decisão por cartão.
+- **Empréstimo da PJ não é receita** (`financeiro.EMPRESTIMO` e `DEVOLUCAO`): fora do DAS, do lucro, da sugestão de salário e das mensalidades; o dinheiro conta no saldo e vai inteiro para o pote "Contas da PJ".
+- **Repetidos** (`financeiro.duplicados`): mesmo escopo, tipo e valor, até 3 dias de diferença, sem nada que os distinga (parcela, aluno, conta, quem pagou, conta recorrente). "Quase certo" = mesmo dia e mesma descrição. Só sugere: quem exclui é você (lixeira). "Não é repetido" grava em `duplicados_ok`. Há um alerta em toda página.
+- **Fila de pagamento** (`financeiro.nota_impacto`, `fila_pagamentos`): nota = impacto no curto prazo (0 a 40) + urgência (+10 atrasada, +7 até 3 dias, +4 até 7 dias) + longo prazo (3 × juros % ao mês, máx. 50) + escolha manual (±100). Gasta o saldo de cima para baixo e marca onde o dinheiro acaba. DAS a guardar e salário entram como itens. Padrões por categoria em Configurações (`impacto_curto`, `impacto_juros`).
+- **Banco × CRM** (`conferencia_contas`) e **linha do tempo** (`linha_do_tempo`, tela `/financeiro/linha-do-tempo`).
+- Ideias que ficaram de fora: prioridade manual em lançamento avulso (hoje só na conta recorrente); alerta quando o banco não bate (ficaria ligado por causa de tarifa e rendimento); importar extrato OFX/CSV, que daria o rastreio completo.
 
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.
