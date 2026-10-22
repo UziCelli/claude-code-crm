@@ -118,6 +118,15 @@ Feito para quem tem dificuldade de leitura e de número: menos conta de cabeça,
 - **Banco × CRM** (`conferencia_contas`) e **linha do tempo** (`linha_do_tempo`, tela `/financeiro/linha-do-tempo`).
 - Ideias que ficaram de fora: prioridade manual em lançamento avulso (hoje só na conta recorrente); alerta quando o banco não bate (ficaria ligado por causa de tarifa e rendimento); importar extrato OFX/CSV, que daria o rastreio completo.
 
+## Repositório público (auditoria de 22/10/2026)
+
+- **Por quê:** acabaram os 2.000 min do GitHub Actions da conta. Este repo nunca teve workflow (só o Dependabot rodou nele); o gasto veio de outro repo. Público = Actions grátis, mas só vale para o repo que for aberto.
+- **Auditoria (histórico inteiro, 33 branches):** nenhuma chave, `.env` ou banco foi versionado; nomes/telefones dos testes são fictícios.
+- **Corrigido:** POST de outro site no navegador do PC passava na portaria de `localhost`; agora `Origin`/`Referer` estranho é recusado (`acesso.py`). Nome real do time do Cloudflare saiu do `.env.example`, README e `configurar-pc-servidor.ps1`. Novos: `SECURITY.md`, `tests/test_seguranca.py`.
+- **Falta (só o dono, no GitHub), nesta ordem:** 1) travar a `main` (exigir PR, sem force push: o PC se atualiza sozinho dela); 2) Settings › Actions › exigir aprovação de colaboradores externos e permissão só de leitura; 3) Code security: Secret scanning, Push protection, Private vulnerability reporting; 4) github.com/settings/emails: manter e-mail privado + bloquear push que expõe e-mail; 5) tornar público (e renomear para `vfitcoach-crm`).
+- **Deixado de fora:** apagar os e-mails dos 87 commits (reescreveria a história e quebraria a atualização do PC).
+- **Descobrir quem gastou os minutos:** github.com/settings/billing › Usage, por repositório.
+
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.
 - Nomes de serviço no CRM: Pacote de Aulas, Mensalidade, Consultoria Online, Consultoria Híbrida, Avaliação Física.

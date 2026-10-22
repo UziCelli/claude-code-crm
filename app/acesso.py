@@ -74,11 +74,21 @@ def pode_encerrar(alvo) -> bool:
     return not LIGADO and local(alvo)
 
 
+def _origem_estranha(cabecalhos) -> bool:
+    """POST que diz vir de outro site (Origin ou Referer com outro endereço): CSRF. Sem nenhum dos dois não há como saber."""
+    origem = cabecalhos.get("origin") or cabecalhos.get("referer")
+    return origem is not None and urlparse(origem).netloc != cabecalhos.get("host")
+
+
 def motivo_bloqueio(metodo: str, caminho: str, cabecalhos, cookies) -> str | None:
     """None = pode passar; senão, a chave de MENSAGENS que explica o bloqueio.
-    No Render tudo passa pela portaria; no PC, só o que chega de fora (túnel)."""
-    if caminho in LIVRES or (not LIGADO and local(cabecalhos)):
+    No Render tudo passa pela portaria; no PC, só o que chega de fora (túnel).
+    Em qualquer lugar, um POST vindo de outro site é recusado (uma página aberta no navegador não pode apagar
+    ou mudar dados do CRM em localhost:8765)."""
+    if caminho in LIVRES:
         return None
+    if not LIGADO and local(cabecalhos):
+        return "origem" if metodo == "POST" and _origem_estranha(cabecalhos) else None
     if not (EQUIPE and AUD):
         return "config"
     token = cabecalhos.get("cf-access-jwt-assertion") or cookies.get("CF_Authorization")
@@ -88,8 +98,6 @@ def motivo_bloqueio(metodo: str, caminho: str, cabecalhos, cookies) -> str | Non
         verificar(token)
     except Exception:
         return "invalido"
-    if metodo == "POST":   # outro site não pode enviar formulário usando o login do Cloudflare (CSRF)
-        origem = cabecalhos.get("origin") or cabecalhos.get("referer") or ""
-        if urlparse(origem).netloc != cabecalhos.get("host"):
-            return "origem"
+    if metodo == "POST" and (_origem_estranha(cabecalhos) or not (cabecalhos.get("origin") or cabecalhos.get("referer"))):
+        return "origem"   # pela internet o POST sem Origin/Referer também é recusado (como antes)
     return None

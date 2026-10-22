@@ -123,7 +123,7 @@ if ($faltam) {
     Linha '  1. Abra o arquivo .env da pasta do CRM no Bloco de Notas.'
     Linha '     (Se nao existir: copie o .env.example e renomeie a copia para .env.)'
     Linha '  2. Deixe estas duas linhas assim:'
-    Linha '       CF_ACCESS_TEAM_DOMAIN=summer-scene-f0e8.cloudflareaccess.com'
+    Linha '       CF_ACCESS_TEAM_DOMAIN=SEU-TIME.cloudflareaccess.com'
     Linha '       CF_ACCESS_AUD=(o codigo "Application Audience (AUD) Tag")'
     Linha '  3. O AUD esta no Render: servico claude-code-crm > Environment > CF_ACCESS_AUD.'
     Linha '     Ou no Cloudflare Zero Trust: Access > Applications > CRM (procure "AUD").'
@@ -131,7 +131,7 @@ if ($faltam) {
 } else {
     Ok 'CF_ACCESS_TEAM_DOMAIN e CF_ACCESS_AUD preenchidos.'
     if ($valores['CF_ACCESS_TEAM_DOMAIN'] -notlike '*cloudflareaccess.com*') {
-        Aviso 'CF_ACCESS_TEAM_DOMAIN parece errado. O certo: summer-scene-f0e8.cloudflareaccess.com'
+        Aviso 'CF_ACCESS_TEAM_DOMAIN parece errado. O certo termina em .cloudflareaccess.com (o nome do seu time, igual ao do Render)'
     }
 }
 $turso = @('TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN') | Where-Object {

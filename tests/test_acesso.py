@@ -190,3 +190,21 @@ def test_no_pc_saude_livre_pelo_tunel(no_pc, monkeypatch, caminho):
     assert no_pc.get(caminho, headers=TUNEL).text == "ok"
     monkeypatch.setattr(acesso, "AUD", "")
     assert no_pc.head(caminho, headers=TUNEL).status_code == 200
+
+
+# ---------- site aberto no navegador tentando mexer no CRM do PC ----------
+def test_no_pc_post_de_outro_site_e_recusado(no_pc):
+    for origem in ("https://site-malicioso.com", "null"):
+        r = no_pc.post("/backup", headers={"origin": origem}, follow_redirects=False)
+        assert r.status_code == 403 and "não veio de uma tela do próprio CRM" in r.text
+    r = no_pc.post("/backup", headers={"referer": "https://site-malicioso.com/pagina"}, follow_redirects=False)
+    assert r.status_code == 403
+
+
+@pytest.mark.parametrize("host", ["localhost:8765", "127.0.0.1:8765"])
+def test_no_pc_post_da_propria_tela_ou_de_script_passa(no_pc, host):
+    r = no_pc.post("/backup", headers={"host": host, "origin": f"http://{host}"}, follow_redirects=False)
+    assert r.status_code == 303
+    r = no_pc.post("/backup", headers={"host": host, "referer": f"http://{host}/financeiro"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert no_pc.post("/backup", follow_redirects=False).status_code == 303   # script do próprio PC: sem Origin
