@@ -83,7 +83,7 @@ Os nomes dos botões no Cloudflare e no Render podem mudar um pouco.
 1. Na pasta do CRM: `git pull`.
 2. Abra o `.env` no Bloco de Notas e acrescente as duas linhas (copie os valores de Render › Environment):
    ```
-   CF_ACCESS_TEAM_DOMAIN=summer-scene-f0e8.cloudflareaccess.com
+   CF_ACCESS_TEAM_DOMAIN=SEU-TIME.cloudflareaccess.com
    CF_ACCESS_AUD=cole-aqui-o-AUD
    ```
    O AUD é o "Application Audience (AUD) Tag" do app CRM no Zero Trust.
@@ -107,6 +107,10 @@ Os nomes dos botões no Cloudflare e no Render podem mudar um pouco.
 - **"A portaria do Cloudflare Access ainda não foi configurada"**: faltam as linhas `CF_ACCESS_*` no `.env`.
   Preencha e rode `configurar-pc-servidor.ps1` de novo.
 - Cada mudança juntada na `main` do GitHub vai sozinha para a reserva e para o PC (veja "Como atualizar o CRM").
+
+## Repositório público: o que nunca vai para o GitHub
+
+O código é público; os dados não. Nunca versionar: `.env` (chaves do Turso e do Cloudflare), `data/` (banco e backups), qualquer `*.db`. O `.gitignore` já bloqueia e o `pytest` (`tests/test_seguranca.py`) falha se algum aparecer ou se um arquivo tiver cara de chave. Se uma chave vazar mesmo assim: gere outra (Turso, Cloudflare) antes de apagar o commit. Falhas de segurança: ver `SECURITY.md`.
 
 ## Backup e restauração
 - **Dados › Fazer backup agora**: cria uma cópia imediata.
