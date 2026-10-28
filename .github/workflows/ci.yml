@@ -1,0 +1,38 @@
+name: CI
+
+# Testes e vulnerabilidades das bibliotecas a cada mudança e toda segunda-feira (biblioteca nova com falha aparece sem ninguém mexer).
+# Na segunda, vulnerabilidade vira uma Issue com @UziCelli.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 11 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: pip install -r requirements.txt pip-audit
+      - name: Testes
+        run: python -m pytest -q
+      - name: Vulnerabilidades das bibliotecas
+        run: pip-audit -r requirements.txt
+      - name: Abrir Issue
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          titulo="🚨 CRM: testes ou bibliotecas com problema"
+          existe=$(gh api --paginate "repos/${{ github.repository }}/issues?state=open&per_page=100" --jq ".[] | select(.pull_request | not) | select(.title == \"$titulo\") | .number" | head -1)
+          [ -n "$existe" ] || gh api "repos/${{ github.repository }}/issues" -f title="$titulo" \
+            -f body="A checagem semanal falhou: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}. Chame o Claude para ver."$'\n\n@UziCelli' > /dev/null
