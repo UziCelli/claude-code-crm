@@ -18,9 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # endereço|código esperado|texto que precisa aparecer na resposta (cabeçalho ou página)
+      # crm-reserva fica de fora até existir o CNAME no Cloudflare (README, passo 4 da reserva); depois, acrescente aqui.
       ENDERECOS: |
         https://crm.vfitcoachapp.com|302|cloudflareaccess.com
-        https://crm-reserva.vfitcoachapp.com|302|cloudflareaccess.com
     steps:
       - name: Conferir endereços
         env:
