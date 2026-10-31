@@ -532,9 +532,7 @@ def clientes(request: Request, status: str = "ativo", busca: str = "", ids: str 
     if filtro:
         sql += f" AND id IN ({','.join('?' * len(filtro))})"
         args += filtro
-        if motivo == "sem-aula":
-            sql += " AND COALESCE(tipo_servico, '') != 'Consultoria Online'"
-        elif motivo == "incompleto":
+        if motivo == "incompleto":
             sql += " AND status='ativo' AND (telefone IS NULL OR telefone='' OR data_renovacao IS NULL)"
     else:
         if status != "todos":
@@ -544,6 +542,9 @@ def clientes(request: Request, status: str = "ativo", busca: str = "", ids: str 
             sql += " AND nome LIKE ?"
             args.append(f"%{busca}%")
     rows = con.execute(sql + " ORDER BY status='ativo' DESC, nome", args).fetchall()
+    if filtro and motivo == "sem-aula":   # quem virou consultoria sem horário fixo já não tem aula: sai da lista (mesma regra dos alertas)
+        com_horario = alunos_com_horario(con)
+        rows = [c for c in rows if tem_aulas(c, com_horario)]
     hoje = dt.date.today()
     ren = financeiro.renovacoes(con)
     itens = []

@@ -187,6 +187,7 @@ def test_nao_tem_aula_muda_o_tipo_de_servico_e_o_aluno_sai_da_lista(con_temp, ht
     assert not [x for x in main.alertas(con_temp) if "Ana" in x["texto"]]
     http.post(f"/clientes/{b_id}/consultoria", data={"tipo_servico": "Consultoria Híbrida", "voltar": lista})
     assert con_temp.execute("SELECT tipo_servico FROM clientes WHERE id=?", (b_id,)).fetchone()[0] == "Consultoria Híbrida"
+    assert "Bruno</strong>" not in http.get(lista).text   # Híbrida sem horário fixo também não tem aula (mesma regra tem_aulas)
 
 
 @pytest.mark.parametrize("valor", ["Pacote de Aulas", "Mensalidade", "", "consultoria online", "Consultoria Online; DROP"])
