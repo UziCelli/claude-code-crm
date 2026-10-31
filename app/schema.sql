@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS clientes (
 CREATE TABLE IF NOT EXISTS cliente_eventos (
     id INTEGER PRIMARY KEY,
     cliente_id INTEGER NOT NULL REFERENCES clientes(id),
-    tipo TEXT NOT NULL,              -- pagamento | renovacao | pausa | anotacao | status | aula | falta | desmarcou
+    tipo TEXT NOT NULL,              -- pagamento | renovacao | pausa | anotacao | status | aula | falta | desmarcou | cancelada (não repõe)
     data TEXT NOT NULL,              -- pausa: a renovação que foi pulada
     valor REAL,
     descricao TEXT,
@@ -218,6 +218,7 @@ CREATE TABLE IF NOT EXISTS agenda_avulsas (   -- aula só num dia (reposição, 
     hora INTEGER NOT NULL,           -- 5..23
     local TEXT NOT NULL,
     reposicao INTEGER DEFAULT 0,     -- 1 = reposição de uma aula desmarcada (conta no saldo do aluno quando fica Feita ou Faltou)
+    repoe_evento_id INTEGER,         -- reposição: o cliente_eventos 'desmarcou' que ela repõe (só informativo; o saldo não depende dele)
     criado_em TEXT DEFAULT (datetime('now','localtime')),
     excluido_em TEXT
 );

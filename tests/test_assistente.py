@@ -476,6 +476,114 @@ def test_registrar_no_aluno_usa_as_regras_da_ficha(con_temp):
     assert "precisa ser um destes" in falha(con_temp, "registrar_no_aluno", {"cliente_id": cid, "tipo": "pagamento"})
 
 
+def test_registrar_no_aluno_so_anota_e_manda_a_aula_para_marcar_aula(con_temp):
+    with con_temp:
+        cid = con_temp.execute("INSERT INTO clientes (nome) VALUES ('Ana')").lastrowid
+    for tipo in ("aula", "falta", "desmarcou", "cancelada"):
+        msg = falha(con_temp, "registrar_no_aluno", {"cliente_id": cid, "tipo": tipo})
+        assert "precisa ser um destes: pausa, anotacao" in msg and "marcar_aula" in msg, tipo
+    assert "precisa ser um destes" in falha(con_temp, "registrar_no_aluno", {"cliente_id": cid, "tipo": "renovacao"})
+    assert con_temp.execute("SELECT COUNT(*) FROM cliente_eventos").fetchone()[0] == 0
+    ok(con_temp, "registrar_no_aluno", {"cliente_id": cid, "tipo": "anotacao", "descricao": "Voltou de viagem"})
+    assert [tuple(r) for r in con_temp.execute("SELECT tipo, descricao FROM cliente_eventos")] == [("anotacao", "Voltou de viagem")]
+    enum = next(f for f in assistente.FERRAMENTAS if f["name"] == "registrar_no_aluno")["input_schema"]["properties"]["tipo"]["enum"]
+    assert enum == ["pausa", "anotacao"]
+
+
+def test_marcar_aula_entra_no_fim_das_ferramentas_de_escrita_e_no_prompt():
+    nomes = [f["name"] for f in assistente.FERRAMENTAS]
+    assert nomes[-2:] == ["registrar_no_aluno", "marcar_aula"]   # ordem estável: a nova vai no fim
+    assert "marcar_aula" in assistente.EXECUTORES and assistente.rotulo("marcar_aula") != "marcar_aula"
+    assert "marcar_aula" in assistente.SISTEMA and "não repõe" in assistente.SISTEMA
+    schema = next(f for f in assistente.FERRAMENTAS if f["name"] == "marcar_aula")["input_schema"]
+    assert schema["required"] == ["aluno", "data", "estado"]
+    assert schema["properties"]["estado"]["enum"] == ["feita", "faltou", "desmarcou", "cancelada"] and "hora" in schema["properties"]
+
+
+def _aluno_com_aula(con, nome="Ana Silva", horarios=((2, 7),), status="ativo"):
+    with con:
+        cid = con.execute("INSERT INTO clientes (nome, status, tipo_servico) VALUES (?, ?, 'Pacote de Aulas')", (nome, status)).lastrowid
+        for dia_, hora in horarios:
+            con.execute("INSERT INTO agenda_fixos (cliente_id, dia, hora, local) VALUES (?, ?, ?, 'CIA')", (cid, dia_, hora))
+    return cid
+
+
+def _marcas(con, cid):
+    return [tuple(r) for r in con.execute("SELECT tipo, data, hora, descricao FROM cliente_eventos WHERE cliente_id=? AND excluido_em IS NULL ORDER BY id", (cid,))]
+
+
+TER = "2026-10-13"   # terça; a aula fixa do teste é Ter 07h
+
+
+def test_marcar_aula_marca_pela_agenda_com_a_hora_da_aula(con_temp):
+    cid = _aluno_com_aula(con_temp)
+    r = ok(con_temp, "marcar_aula", {"aluno": "ana silva", "data": TER, "estado": "feita"})
+    assert r["aluno"] == "Ana Silva" and r["aula"] == "13/10 às 07h" and "aula feita" in r["mensagem"] and "reposicoes_a_fazer" not in r
+    assert _marcas(con_temp, cid) == [("aula", TER, 7, "Agenda — Ter 07h CIA")]   # com hora, como se marcada na Agenda
+    ok(con_temp, "marcar_aula", {"aluno": str(cid), "data": TER, "estado": "faltou"})   # pelo id; a marcação nova substitui a anterior
+    assert [m[0] for m in _marcas(con_temp, cid)] == ["falta"]
+    r = ok(con_temp, "marcar_aula", {"aluno": "ANA", "data": TER, "estado": "desmarcou"})   # pedaço do nome, sem acento nem maiúscula
+    assert r["reposicoes_a_fazer"] == 1 and [m[0] for m in _marcas(con_temp, cid)] == ["desmarcou"]
+    r = ok(con_temp, "marcar_aula", {"aluno": cid, "data": TER, "estado": "cancelada"})
+    assert r["reposicoes_a_fazer"] == 0 and "não repõe" in r["mensagem"] and [m[0] for m in _marcas(con_temp, cid)] == ["cancelada"]
+    assert main.saldos_reposicao(con_temp, [cid])[cid]["devidas"] == 0   # cancelada nunca vira reposição
+
+
+def test_marcar_aula_acha_a_avulsa_e_a_reposicao_e_marca_o_dia_futuro(con_temp):
+    cid = _aluno_com_aula(con_temp, horarios=())
+    with con_temp:
+        con_temp.execute("INSERT INTO agenda_avulsas (cliente_id, data, hora, local, reposicao) VALUES (?, '2026-10-15', 9, 'CIA', 1)", (cid,))
+    ok(con_temp, "marcar_aula", {"aluno": "Ana", "data": "2026-10-15", "estado": "feita"})
+    assert _marcas(con_temp, cid) == [("aula", "2026-10-15", 9, "Agenda — Qui 09h CIA (reposição)")]
+    assert main.saldos_reposicao(con_temp, [cid], dt.date(2026, 10, 20))[cid]["usadas"] == 1
+
+
+def test_marcar_aula_com_duas_aulas_no_dia_pergunta_qual_e_aceita_a_hora(con_temp):
+    cid = _aluno_com_aula(con_temp, horarios=((2, 7), (2, 18)))
+    msg = falha(con_temp, "marcar_aula", {"aluno": "Ana", "data": TER, "estado": "feita"})
+    assert "2 aulas (07h, 18h)" in msg and "hora" in msg and _marcas(con_temp, cid) == []
+    ok(con_temp, "marcar_aula", {"aluno": "Ana", "data": TER, "estado": "faltou", "hora": 18})
+    assert _marcas(con_temp, cid) == [("falta", TER, 18, "Agenda — Ter 18h CIA")]   # a das 7h não é mexida
+    assert "não tem aula às 09h (tem 07h, 18h)" in falha(con_temp, "marcar_aula", {"aluno": "Ana", "data": TER, "estado": "feita", "hora": 9})
+    ok(con_temp, "marcar_aula", {"aluno": "Ana", "data": TER, "estado": "feita", "hora": 7})
+    assert sorted((m[0], m[2]) for m in _marcas(con_temp, cid)) == [("aula", 7), ("falta", 18)]
+    assert "hora precisa" in falha(con_temp, "marcar_aula", {"aluno": "Ana", "data": TER, "estado": "feita", "hora": 25})
+
+
+def test_marcar_aula_sem_aula_no_dia_manda_incluir_na_agenda_primeiro(con_temp):
+    _aluno_com_aula(con_temp)
+    for dia_ in ("2026-10-14", "2026-10-18"):   # quarta (outro dia da semana) e domingo
+        msg = falha(con_temp, "marcar_aula", {"aluno": "Ana", "data": dia_, "estado": "feita"})
+        assert "não tem aula na Agenda" in msg and "Inclua a aula na Agenda primeiro" in msg
+    inativo = _aluno_com_aula(con_temp, "Beto Inativo", status="inativo")
+    assert "não tem aula na Agenda" in falha(con_temp, "marcar_aula", {"aluno": inativo, "data": TER, "estado": "feita"})
+    assert con_temp.execute("SELECT COUNT(*) FROM cliente_eventos").fetchone()[0] == 0
+
+
+def test_marcar_aula_aluno_estado_e_data_invalidos(con_temp):
+    _aluno_com_aula(con_temp, "Ana Silva")
+    _aluno_com_aula(con_temp, "Ana Lima")
+    _aluno_com_aula(con_temp, "Caio Santos")
+    assert "Mais de um aluno" in falha(con_temp, "marcar_aula", {"aluno": "Ana", "data": TER, "estado": "feita"})
+    assert "Ana Silva (id 1)" in falha(con_temp, "marcar_aula", {"aluno": "ana", "data": TER, "estado": "feita"})
+    ok(con_temp, "marcar_aula", {"aluno": "ana silva", "data": TER, "estado": "feita"})   # o nome inteiro resolve a dúvida
+    for aluno_ in ("Zeca", "999", "0", "x" * 50, "12345678901234567890"):
+        assert "não encontrado" in falha(con_temp, "marcar_aula", {"aluno": aluno_, "data": TER, "estado": "feita"}), aluno_
+    assert "precisa ser um destes" in falha(con_temp, "marcar_aula", {"aluno": "Caio", "data": TER, "estado": "talvez"})
+    assert "data AAAA-MM-DD" in falha(con_temp, "marcar_aula", {"aluno": "Caio", "data": "ontem", "estado": "feita"})
+    assert "Falta o campo aluno" in falha(con_temp, "marcar_aula", {"data": TER, "estado": "feita"})
+    assert "Falta o campo estado" in falha(con_temp, "marcar_aula", {"aluno": "Caio", "data": TER})
+    assert con_temp.execute("SELECT COUNT(*) FROM cliente_eventos").fetchone()[0] == 1
+
+
+def test_marcar_aula_aluno_excluido_nao_e_achado(con_temp):
+    cid = _aluno_com_aula(con_temp)
+    with con_temp:
+        con_temp.execute("UPDATE clientes SET excluido_em=datetime('now') WHERE id=?", (cid,))
+    assert "não encontrado" in falha(con_temp, "marcar_aula", {"aluno": "Ana", "data": TER, "estado": "feita"})
+    assert "não encontrado" in falha(con_temp, "marcar_aula", {"aluno": cid, "data": TER, "estado": "feita"})
+
+
 def test_entrada_estranha_nao_derruba(con_temp):
     assert "objeto JSON" in falha(con_temp, "ver_painel", "texto")
     assert "desconhecida" in falha(con_temp, "apagar_tudo", {})

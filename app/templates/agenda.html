@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block titulo %}Agenda · VFITCOACH CRM{% endblock %}
 {% block conteudo %}
-{% set ROT = {'feita': 'feita', 'faltou': 'faltou', 'desmarcou': 'desmarcou', 'pendente': 'sem marcar', 'futura': '', 'agendada': 'agendada'} %}
-{% set COR = {'feita': 'verde', 'faltou': 'vermelho', 'desmarcou': 'amarelo', 'agendada': 'azul'} %}
+{% set ROT = {'feita': 'feita', 'faltou': 'faltou', 'desmarcou': 'desmarcou', 'cancelada': 'cancelada', 'pausa': 'pausa', 'pendente': 'sem marcar', 'futura': '', 'agendada': 'agendada'} %}
+{% set COR = {'feita': 'verde', 'faltou': 'vermelho', 'desmarcou': 'amarelo', 'cancelada': 'neutro', 'agendada': 'azul'} %}
 {# aluno do painel de controle: vai escondido em todos os formulários e junto nos links, para o painel continuar aberto #}
 {% set ctl %}{% if controle %}<input type="hidden" name="aluno" value="{{ controle.id }}"><input type="hidden" name="mes" value="{{ controle.mes }}">{% endif %}{% endset %}
 <div class="linha topo">
@@ -13,13 +13,44 @@
   </div>
 </div>
 
-<div class="card controle">
+{% if atual %}
+<div class="card card-hoje" id="hoje">
+  <h2>Hoje — {{ hoje_d.isoweekday()|dia }} {{ hoje_d.strftime('%d/%m') }}</h2>
+  {% for a in hoje_aulas %}
+  <div class="aula-hoje {{ a.estado or '' }}" data-marca='{{ a.marca|tojson }}'>
+    <div class="quem">
+      <span class="hora">{{ '%02d'|format(a.hora) }}h</span><strong>{{ a.nome }}</strong> <span class="tag estado-lote" hidden></span>
+      <div class="muted">{{ a.local }}{% if a.reposicao %} <span class="tag azul">reposição</span>{% elif a.avulsa %} <span class="tag azul">avulsa</span>{% endif %}{% if a.pausa and not a.estado %} <span class="tag neutro">pausa</span>{% endif %}</div>
+      {% if a.bloqueio and not a.estado %}<div class="dica-bloq">Dia de bloqueio: use Cancelada (não repõe)</div>{% endif %}
+    </div>
+    <form method="post" action="/agenda/marcar">
+      <input type="hidden" name="cliente_id" value="{{ a.cliente_id }}"><input type="hidden" name="data" value="{{ a.data }}"><input type="hidden" name="hora" value="{{ a.hora }}">
+      <input type="hidden" name="local" value="{{ a.local }}"><input type="hidden" name="avulsa" value="{{ 1 if a.avulsa else 0 }}"><input type="hidden" name="reposicao" value="{{ 1 if a.reposicao else 0 }}">
+      <input type="hidden" name="semana" value="{{ segunda }}"><input type="hidden" name="todas" value="{{ todas }}"><input type="hidden" name="ancora" value="hoje">{{ ctl }}
+      {% if a.estado %}
+      <span class="tag {{ COR[a.estado] }}">{{ ROT[a.estado] }}</span>
+      <button name="estado" value="" class="claro btn-estado">Desfazer</button>
+      {% else %}
+      <button name="estado" value="feita" class="btn-estado feita">Feita</button>
+      <button name="estado" value="faltou" class="btn-estado faltou">Faltou</button>
+      <button name="estado" value="desmarcou" class="btn-estado desmarcou">Desmarcou (repõe)</button>
+      <button name="estado" value="cancelada" class="btn-estado cancelada">Cancelada (não repõe)</button>
+      {% endif %}
+    </form>
+  </div>
+  {% else %}
+  <p class="muted" style="margin:0">{{ 'Domingo: sem aulas na agenda.' if hoje_d.isoweekday() == 7 else 'Nenhuma aula hoje.' }}</p>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card controle{{ ' mt' if atual }}">
   <form method="get" action="/agenda" class="linha controle-form" id="f-controle">
     <input type="hidden" name="semana" value="{{ segunda }}">{% if todas %}<input type="hidden" name="todas" value="1">{% endif %}
     <div class="campo"><label for="sel-aluno">Controle do aluno</label>
       <select name="aluno" id="sel-aluno"><option value="">Escolha um aluno</option>
-        {%- for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if controle and controle.id == c.id }}>{{ c.nome }}</option>{% endfor %}
-        {%- if controle and controle.id not in clientes|map(attribute='id') %}<option value="{{ controle.id }}" selected>{{ controle.nome }} ({{ controle.status }})</option>{% endif -%}
+        {%- for c in com_aulas %}<option value="{{ c.id }}" {{ 'selected' if controle and controle.id == c.id }}>{{ c.nome }}</option>{% endfor %}
+        {%- if controle and controle.id not in com_aulas|map(attribute='id') %}<option value="{{ controle.id }}" selected>{{ controle.nome }} ({{ controle.status }})</option>{% endif -%}
       </select></div>
     <button class="claro">Ver</button>
   </form>
@@ -39,13 +70,24 @@
       <div class="contador feita"><b>{{ controle.feitas }}</b><span>Feitas</span></div>
       <div class="contador faltou"><b>{{ controle.faltou }}</b><span>Faltou</span></div>
       <div class="contador desmarcou"><b>{{ controle.desmarcou }}</b><span>Desmarcou</span></div>
+      <div class="contador cancelada"><b>{{ controle.canceladas }}</b><span>Canceladas</span></div>
       <div class="contador reposta"><b>{{ controle.repostas }}</b><span>Repostas</span></div>
     </div>
     <ul class="aulas-aluno">
       {% for l in controle.linhas %}
       <li class="aula-linha {{ l.estado }}"><span class="quando">{{ l.dia }} {{ l.data_br }}{% if l.hora is not none %} · {{ '%02d'|format(l.hora) }}h{% endif %}</span>
         <span class="tag {{ COR[l.estado] }}">{{ ROT[l.estado] }}</span>{% if l.reposicao %} <span class="tag neutro">reposição</span>{% endif %}
-        {% if l.local %}<span class="muted">{{ l.local }}</span>{% endif %}</li>
+        {% if l.repoe_br %}<span class="muted">repõe a de {{ l.repoe_br }}</span>{% endif %}
+        {% if l.local %}<span class="muted">{{ l.local }}</span>{% endif %}
+        {% if l.estado == 'desmarcou' %}
+        <div class="acoes-linha">
+          <button type="button" class="claro pequeno btn-repor-evento" data-aluno="{{ controle.id }}" data-evento="{{ l.eid }}" data-quando="{{ l.data_br }}">Agendar reposição</button>
+          <form method="post" action="/agenda/evento/{{ l.eid }}/nao-repoe" class="inline" data-confirmar="A aula de {{ l.data_br }} não será reposta: ela sai das reposições a fazer. Continuar?">
+            <input type="hidden" name="semana" value="{{ segunda }}"><input type="hidden" name="todas" value="{{ todas }}">{{ ctl }}<button class="claro pequeno">Não repõe</button></form>
+          <form method="post" action="/agenda/evento/{{ l.eid }}/excluir" class="inline" data-confirmar="Desfazer a marcação de {{ l.data_br }}? Dá para restaurar em Dados.">
+            <input type="hidden" name="semana" value="{{ segunda }}"><input type="hidden" name="todas" value="{{ todas }}">{{ ctl }}<button class="claro pequeno">Desfazer</button></form>
+        </div>
+        {% endif %}</li>
       {% else %}
       <li class="muted">Nenhuma aula marcada neste mês.</li>
       {% endfor %}
@@ -77,38 +119,9 @@
 </div>
 {% endif %}
 
-{% if atual %}
-<div class="card card-hoje mt">
-  <h2>Hoje — {{ hoje_d.isoweekday()|dia }} {{ hoje_d.strftime('%d/%m') }}</h2>
-  {% for a in hoje_aulas %}
-  <div class="aula-hoje {{ a.estado or '' }}" data-marca='{{ a.marca|tojson }}'>
-    <div class="quem">
-      <span class="hora">{{ '%02d'|format(a.hora) }}h</span><strong>{{ a.nome }}</strong> <span class="tag estado-lote" hidden></span>
-      <div class="muted">{{ a.local }}{% if a.reposicao %} <span class="tag azul">reposição</span>{% elif a.avulsa %} <span class="tag azul">avulsa</span>{% endif %}</div>
-    </div>
-    <form method="post" action="/agenda/marcar">
-      <input type="hidden" name="cliente_id" value="{{ a.cliente_id }}"><input type="hidden" name="data" value="{{ a.data }}"><input type="hidden" name="hora" value="{{ a.hora }}">
-      <input type="hidden" name="local" value="{{ a.local }}"><input type="hidden" name="avulsa" value="{{ 1 if a.avulsa else 0 }}"><input type="hidden" name="reposicao" value="{{ 1 if a.reposicao else 0 }}">
-      <input type="hidden" name="semana" value="{{ segunda }}"><input type="hidden" name="todas" value="{{ todas }}">{{ ctl }}
-      {% if a.estado %}
-      <span class="tag {{ COR[a.estado] }}">{{ ROT[a.estado] }}</span>
-      <button name="estado" value="" class="claro btn-estado">Desfazer</button>
-      {% else %}
-      <button name="estado" value="feita" class="btn-estado feita">Feita</button>
-      <button name="estado" value="faltou" class="btn-estado faltou">Faltou</button>
-      <button name="estado" value="desmarcou" class="btn-estado desmarcou">Desmarcou</button>
-      {% endif %}
-    </form>
-  </div>
-  {% else %}
-  <p class="muted" style="margin:0">{{ 'Domingo: sem aulas na agenda.' if hoje_d.isoweekday() == 7 else 'Nenhuma aula hoje.' }}</p>
-  {% endfor %}
-</div>
-{% endif %}
-
 <div class="legenda mt">
-  <span><i class="l-feita"></i> feita</span><span><i class="l-faltou"></i> faltou</span><span><i class="l-desmarcou"></i> desmarcou</span>
-  <span><i class="l-pendente"></i> passou sem marcar</span><span><i class="l-futura"></i> ainda vai acontecer</span>
+  <span><i class="l-feita"></i> feita</span><span><i class="l-faltou"></i> faltou</span><span><i class="l-desmarcou"></i> desmarcou (repõe)</span><span><i class="l-cancelada"></i> cancelada (não repõe)</span>
+  <span><i class="l-pausa"></i> mês pulado</span><span><i class="l-pendente"></i> passou sem marcar</span><span><i class="l-futura"></i> ainda vai acontecer</span>
 </div>
 <p class="muted lote-info" hidden>Escolha o pincel na barra de baixo e toque nos nomes da grade ou nas aulas de hoje. Nada é salvo até apertar Salvar.</p>
 {% if not tem_aulas %}<p class="muted" style="margin:6px 0 0">Nenhuma aula nesta semana. Use <b>+ Incluir aula</b> ou toque em um horário para escolher o aluno.</p>{% endif %}
@@ -162,6 +175,8 @@
   <h2 data-titulo>Incluir aula</h2>
   <form method="post" action="/agenda/incluir" id="f-incluir">
     <input type="hidden" name="semana" value="{{ segunda }}"><input type="hidden" name="todas" value="{{ todas }}">{{ ctl }}
+    <input type="hidden" name="repoe_evento_id" value="">
+    <p class="muted" id="repoe-aviso" hidden></p>
     <div class="campo"><label>Aluno</label>
       <select name="cliente_id" required><option value="">—</option>{% for c in clientes %}<option value="{{ c.id }}" data-local="{{ c.local or '' }}">{{ c.nome }}</option>{% endfor %}</select></div>
     <div class="campo opcoes">
@@ -202,6 +217,7 @@
       <button type="button" class="btn-estado feita" data-pincel="feita" aria-pressed="true">Feita</button>
       <button type="button" class="btn-estado faltou" data-pincel="faltou" aria-pressed="false">Faltou</button>
       <button type="button" class="btn-estado desmarcou" data-pincel="desmarcou" aria-pressed="false">Desmarcou</button>
+      <button type="button" class="btn-estado cancelada" data-pincel="cancelada" aria-pressed="false">Cancelada</button>
       <button type="button" class="btn-estado claro" data-pincel="" aria-pressed="false">Limpar</button>
     </div>
     <div class="acoes-lote">
@@ -218,7 +234,7 @@
   // Abre aqui mesmo (sem data-abrir): o app.js zeraria o 1º formulário depois do preenchimento.
   var dlg = document.getElementById("dlg-horario"), lista = document.getElementById("h-alunos"), titulo = document.getElementById("h-titulo");
   var fh = document.getElementById("f-horario"), a1 = fh.elements.aluno1, a2 = fh.elements.aluno2, loc = fh.elements.local;
-  var COR = {feita: "verde", faltou: "vermelho", desmarcou: "amarelo"};
+  var COR = {feita: "verde", faltou: "vermelho", desmarcou: "amarelo", cancelada: "neutro"};
   var localMexido = false;
 
   function el(tag, cls, texto) {
@@ -246,6 +262,7 @@
     quem.appendChild(el("strong", null, a.nome));
     if (a.reposicao) quem.appendChild(el("span", "tag azul", "reposição"));
     else if (a.avulsa) quem.appendChild(el("span", "tag azul", "avulsa"));
+    if (a.repoe) quem.appendChild(el("span", "muted", "repõe a de " + a.repoe));
     if (a.local) quem.appendChild(el("span", "muted", a.local));
     bloco.appendChild(quem);
     var estado = el("p", "muted estado-atual");
@@ -260,8 +277,9 @@
     if (marcada) {
       var tag = el("span", "tag " + COR[a.estado], a.estado);
       estado.append("Marcada como: ", tag);
-    } else estado.textContent = "Ainda não marcada";
+    } else estado.textContent = a.pausa ? "Ainda não marcada (mês pulado)" : "Ainda não marcada";
     bloco.appendChild(estado);
+    if (a.bloqueio && !marcada) bloco.appendChild(el("p", "dica-bloq", "Dia de bloqueio: use Cancelada (não repõe)"));
     var f = el("form", "botoes-estado" + (marcada ? "" : " sem-desfazer"));
     f.method = "post"; f.action = "/agenda/marcar";
     oculto(f, "cliente_id", a.cliente_id); oculto(f, "data", info.data); oculto(f, "hora", info.hora);
@@ -269,7 +287,8 @@
     oculto(f, "semana", fh.elements.semana.value); oculto(f, "todas", fh.elements.todas.value); contexto(f);
     f.appendChild(botao("Feita", "btn-estado feita", "feita"));
     f.appendChild(botao("Faltou", "btn-estado faltou", "faltou"));
-    f.appendChild(botao("Desmarcou", "btn-estado desmarcou", "desmarcou"));
+    f.appendChild(botao("Desmarcou (repõe)", "btn-estado desmarcou", "desmarcou"));
+    f.appendChild(botao("Cancelada (não repõe)", "btn-estado cancelada", "cancelada"));
     if (marcada) f.appendChild(botao("Desfazer", "claro btn-estado", ""));
     bloco.appendChild(f);
     var acoes = el("div", "linha mt-p");
@@ -419,12 +438,34 @@
     document.getElementById("dlg-incluir").showModal();
   });
 
+  // "Agendar reposição" de uma aula desmarcada (linha do painel): o mesmo incluir, já com o aluno e a desmarcação que ela repõe.
+  // O id vai num campo escondido que volta a ficar vazio quando a janelinha fecha (o reset não limpa campo escondido).
+  var dlgIncluir = document.getElementById("dlg-incluir"), aviso_repoe = document.getElementById("repoe-aviso");
+  function limpaRepoe() { f.elements.repoe_evento_id.value = ""; aviso_repoe.hidden = true; }
+  dlgIncluir.addEventListener("close", limpaRepoe);
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest(".btn-repor-evento");
+    if (!b) return;
+    f.reset();
+    f.elements.cliente_id.value = b.dataset.aluno;
+    f.elements.repetir.value = "0";
+    modo();
+    f.elements.reposicao.checked = true;
+    localDoAluno();
+    f.elements.repoe_evento_id.value = b.dataset.evento;
+    aviso_repoe.textContent = "Repõe a aula desmarcada de " + b.dataset.quando + ".";
+    aviso_repoe.hidden = false;
+    var t = document.querySelector("#dlg-incluir [data-titulo]");
+    if (t) t.textContent = "Agendar reposição";
+    dlgIncluir.showModal();
+  });
+
   // trocar o aluno do controle já abre o painel
   document.getElementById("sel-aluno").addEventListener("change", function () { this.form.requestSubmit(); });
 
   // ===== Marcar várias: pinta aulas só na tela (sem falar com o servidor) e grava tudo com um Salvar =====
-  var CORES = ["feita", "faltou", "desmarcou"], TIRAR = CORES.concat(["futura", "pendente", "bloq"]);
-  var ROTULO = {feita: "feita", faltou: "faltou", desmarcou: "desmarcou", "": "desfazer"};
+  var CORES = ["feita", "faltou", "desmarcou", "cancelada"], TIRAR = CORES.concat(["futura", "pendente", "bloq", "pausa"]);
+  var ROTULO = {feita: "feita", faltou: "faltou", desmarcou: "desmarcou (repõe)", cancelada: "cancelada (não repõe)", "": "desfazer"};
   var barra = document.getElementById("barra-lote"), btnLote = document.getElementById("btn-lote");
   var btnSalvar = document.getElementById("lote-salvar"), aviso = document.getElementById("lote-aviso");
   var ligado = false, pincel = "feita", mud = new Map(), porChave = new Map(), enviando = false;
@@ -465,7 +506,7 @@
         var tag = e.querySelector(".estado-lote");
         if (tag) {
           tag.hidden = !mudou;
-          tag.className = "tag estado-lote " + ({feita: "verde", faltou: "vermelho", desmarcou: "amarelo"}[est] || "neutro");
+          tag.className = "tag estado-lote " + ({feita: "verde", faltou: "vermelho", desmarcou: "amarelo"}[est] || "neutro");   // cancelada: neutro, como a tag de fora do lote
           tag.textContent = (ROTULO[est] || "desfazer") + " (não salva)";
         }
       }

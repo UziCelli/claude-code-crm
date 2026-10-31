@@ -360,9 +360,10 @@ dialog [hidden] { display: none !important; }
 .btn-estado.faltou:hover { background: #f9d2cf; }
 .btn-estado.desmarcou { background: var(--amarelo-f); color: #7a5300; }
 .btn-estado.desmarcou:hover { background: #ffecb0; }
-.botoes-estado { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.btn-estado.cancelada { background: #e9ecf1; color: #4a5468; }   /* cinza: a aula não vai ser reposta */
+.btn-estado.cancelada:hover { background: #dde2ea; }
+.botoes-estado { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }   /* Feita | Faltou / Desmarcou | Cancelada / Desfazer */
 .botoes-estado .btn-estado { min-height: 52px; }
-.botoes-estado.sem-desfazer .desmarcou { grid-column: 1 / -1; }   /* sem o Desfazer, o Desmarcou ocupa a linha toda */
 .estado-atual { margin: -4px 0 12px; }
 
 /* card "Hoje": uma linha por aula, estado na borda da esquerda */
@@ -371,9 +372,12 @@ dialog [hidden] { display: none !important; }
 .aula-hoje.feita { border-left-color: var(--verde); }
 .aula-hoje.faltou { border-left-color: var(--vermelho); }
 .aula-hoje.desmarcou { border-left-color: var(--amarelo); }
+.aula-hoje.cancelada { border-left-color: #8c97aa; }
+#hoje { scroll-margin-top: 64px; }   /* o menu fixo não cobre o card quando o endereço termina em #hoje */
 .aula-hoje .quem { flex: 1 1 180px; min-width: 0; }
 .aula-hoje .hora { font-weight: 700; color: var(--aco); font-variant-numeric: tabular-nums; margin-right: 8px; }
-.aula-hoje form { display: flex; gap: 6px; align-items: center; }
+.aula-hoje form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.dica-bloq { margin-top: 4px; font-size: 13px; font-weight: 600; color: #4a5468; }
 
 /* semana: cada aula é um botão colorido pelo estado */
 .grade.agenda { table-layout: fixed; }   /* colunas do mesmo tamanho; nome comprido quebra em vez de alargar o dia */
@@ -395,14 +399,18 @@ dialog [hidden] { display: none !important; }
 .cel.aula.feita { background: var(--verde-f); color: #14663a; box-shadow: inset 5px 0 0 var(--verde); }
 .cel.aula.faltou { background: var(--vermelho-f); color: #8f1d17; box-shadow: inset 5px 0 0 var(--vermelho); }
 .cel.aula.desmarcou { background: var(--amarelo-f); color: #7a5300; box-shadow: inset 5px 0 0 var(--amarelo); }
-.cel.aula.feita, .cel.aula.faltou, .cel.aula.desmarcou { padding-left: 12px; }
-.cel.aula.feita .av, .cel.aula.faltou .av, .cel.aula.desmarcou .av { color: inherit; }
+.cel.aula.cancelada { background: #e9ecf1; color: #4a5468; box-shadow: inset 5px 0 0 #8c97aa; }
+.cel.aula.pausa { background: #fff; color: var(--cinza); box-shadow: inset 0 0 0 1px #b8c2d3; }   /* mês pulado: fica de fora das cobranças */
+.cel.aula.feita, .cel.aula.faltou, .cel.aula.desmarcou, .cel.aula.cancelada { padding-left: 12px; }
+.cel.aula.feita .av, .cel.aula.faltou .av, .cel.aula.desmarcou .av, .cel.aula.cancelada .av { color: inherit; }
 .cel.aula.bloq { background: #eef0f4; color: var(--cinza); }
 .cel.vazio { background: transparent; color: #a3aec2; text-align: center; font-size: 18px; font-weight: 400; box-shadow: inset 0 0 0 1px #e3eaf4; }
 .cel.vazio:hover { background: var(--azul-f); color: var(--aco); }
 .legenda .l-feita { background: var(--verde-f); box-shadow: inset 4px 0 0 var(--verde); }
 .legenda .l-faltou { background: var(--vermelho-f); box-shadow: inset 4px 0 0 var(--vermelho); }
 .legenda .l-desmarcou { background: var(--amarelo-f); box-shadow: inset 4px 0 0 var(--amarelo); }
+.legenda .l-cancelada { background: #e9ecf1; box-shadow: inset 4px 0 0 #8c97aa; }
+.legenda .l-pausa { background: #fff; box-shadow: inset 0 0 0 1px #b8c2d3; }
 .legenda .l-pendente { background: #fff; box-shadow: inset 0 0 0 2px var(--aco); }
 .legenda .l-futura { background: #f4f7fc; box-shadow: inset 0 0 0 1px var(--borda); }
 /* card com 2 alunos ("Ana + Bruno"): o card fica neutro e cada nome leva a cor do seu estado */
@@ -416,6 +424,8 @@ dialog [hidden] { display: none !important; }
 .cel.aula.dupla .n.feita { background: var(--verde-f); color: #14663a; box-shadow: inset 3px 0 0 var(--verde); padding-left: 9px; }
 .cel.aula.dupla .n.faltou { background: var(--vermelho-f); color: #8f1d17; box-shadow: inset 3px 0 0 var(--vermelho); padding-left: 9px; }
 .cel.aula.dupla .n.desmarcou { background: var(--amarelo-f); color: #7a5300; box-shadow: inset 3px 0 0 var(--amarelo); padding-left: 9px; }
+.cel.aula.dupla .n.cancelada { background: #e9ecf1; color: #4a5468; box-shadow: inset 3px 0 0 #8c97aa; padding-left: 9px; }
+.cel.aula.dupla .n.pausa { background: #fff; color: var(--cinza); box-shadow: inset 0 0 0 1px #b8c2d3; }
 .cel.aula.dupla .n.bloq { background: #eef0f4; color: var(--cinza); }
 .cel.aula.dupla .n .av { color: inherit; }
 .copiar-grade p { margin: 0 0 12px; }
@@ -425,10 +435,8 @@ dialog [hidden] { display: none !important; }
 .h-quem { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .h-quem strong { font-size: 16px; color: var(--marinho); }
 .h-aluno .estado-atual { margin: 4px 0 8px; }
-.h-aluno .botoes-estado { grid-template-columns: repeat(3, 1fr); }
-.h-aluno .botoes-estado .btn-estado { min-height: 48px; padding: 8px 4px; }
+.h-aluno .botoes-estado .btn-estado { min-height: 48px; padding: 8px 6px; }
 .h-aluno .botoes-estado .claro { grid-column: 1 / -1; min-height: 40px; }
-.h-aluno .botoes-estado.sem-desfazer .desmarcou { grid-column: auto; }
 .h-aluno .linha { margin-top: 10px; }
 .h-fixo { padding: 14px; background: var(--azul-f); border-radius: 10px; }
 #h-alunos:not([hidden]) + .h-fixo { margin-top: 16px; }
@@ -436,7 +444,7 @@ dialog [hidden] { display: none !important; }
 @media (max-width: 760px) {
   .agenda-nav .btn { font-size: 13px; padding: 10px 4px; }
   .aula-hoje form { flex: 1 1 100%; }
-  .aula-hoje form .btn-estado { flex: 1; padding-left: 6px; padding-right: 6px; }
+  .aula-hoje form .btn-estado { flex: 1 1 calc(50% - 6px); padding-left: 6px; padding-right: 6px; }   /* 4 botões: 2 por linha, o rótulo inteiro cabe */
   .aula-hoje form .tag { flex: 0 0 auto; }
   .grade td.hora { width: 38px; }
 }
@@ -460,6 +468,7 @@ dialog [hidden] { display: none !important; }
 .contador.feita { background: var(--verde-f); box-shadow: inset 4px 0 0 var(--verde); }
 .contador.faltou { background: var(--vermelho-f); box-shadow: inset 4px 0 0 var(--vermelho); }
 .contador.desmarcou { background: var(--amarelo-f); box-shadow: inset 4px 0 0 var(--amarelo); }
+.contador.cancelada { background: #e9ecf1; box-shadow: inset 4px 0 0 #8c97aa; }
 .contador.reposta { background: var(--azul-f); box-shadow: inset 4px 0 0 var(--aco); }
 .aulas-aluno { list-style: none; margin: 12px 0 0; padding: 0; }
 .aula-linha { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 8px 10px; margin-top: 6px; background: #fff; border: 1px solid var(--borda);
@@ -467,6 +476,10 @@ dialog [hidden] { display: none !important; }
 .aula-linha.feita { border-left-color: var(--verde); }
 .aula-linha.faltou { border-left-color: var(--vermelho); }
 .aula-linha.desmarcou { border-left-color: var(--amarelo); }
+.aula-linha.cancelada { border-left-color: #8c97aa; }
+.acoes-linha { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }   /* Agendar reposição · Não repõe · Desfazer, numa linha só deles */
+.acoes-linha form { display: contents; }
+.acoes-linha button { min-height: 36px; }
 .aula-linha.agendada { border-left-color: var(--aco); }
 .aula-linha .quando { font-weight: 600; font-variant-numeric: tabular-nums; }
 .mt-p { margin-top: 12px; }
@@ -486,7 +499,7 @@ dialog [hidden] { display: none !important; }
 
 /* Marcar várias: barra fixa embaixo, o pincel e o que ainda não foi salvo */
 .lote-info { margin: 8px 0 0; }
-body.modo-lote main { padding-bottom: 160px; }
+body.modo-lote main { padding-bottom: 200px; }
 body.modo-lote #btn-lote, body.modo-lote .topo-acoes [data-abrir] { display: none; }
 body.modo-lote .aula-hoje form { display: none; }
 body.modo-lote .cel .rots { display: none; }
@@ -495,9 +508,13 @@ body.modo-lote .cel.aula, body.modo-lote .aula-hoje[data-marca] { cursor: pointe
 .barra-lote { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--branco);
   border-top: 1px solid var(--borda); box-shadow: 0 -6px 20px rgba(11,30,61,.12); }
 .barra-lote .interno { max-width: 1400px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.barra-lote .pinceis { flex: 1 1 320px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.barra-lote .pinceis { flex: 1 1 320px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
 .barra-lote .pinceis button { min-height: 44px; padding: 8px 2px; font-size: 13px; }
 .barra-lote .pinceis button[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--aco); }
+@media (max-width: 480px) {   /* celular: 3 pincéis em cima, Cancelada e Limpar embaixo (o "Desmarcou" inteiro cabe) */
+  .barra-lote .pinceis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .barra-lote .pinceis button[data-pincel=""] { grid-column: span 2; }
+}
 .barra-lote .acoes-lote { flex: 1 1 200px; display: flex; gap: 8px; }
 .barra-lote .acoes-lote button { min-height: 44px; }
 .barra-lote #lote-salvar { flex: 1; }

@@ -178,6 +178,7 @@ def iniciar_banco(caminho: Path = None) -> None:
         _garantir_coluna(con, "recorrencias", "prioridade", "INTEGER")         # banco de antes da fila de pagamento
         _garantir_coluna(con, "cliente_eventos", "hora", "INTEGER")            # banco de antes da Agenda
         _garantir_coluna(con, "agenda_avulsas", "reposicao", "INTEGER DEFAULT 0")   # banco de antes do controle de reposições
+        _garantir_coluna(con, "agenda_avulsas", "repoe_evento_id", "INTEGER")  # banco de antes de ligar a reposição à desmarcação
         _garantir_coluna(con, "clientes", "renovacao_em", "TEXT")              # banco de antes da renovação pelo pagamento
         _garantir_coluna(con, "cliente_eventos", "ate", "TEXT")                # banco de antes do "pulou o mês"
         if con.execute("SELECT COUNT(*) FROM campanha_checkpoints").fetchone()[0] == 0:
