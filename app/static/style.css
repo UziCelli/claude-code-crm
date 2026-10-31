@@ -57,6 +57,11 @@ main { padding: 20px 24px 60px; max-width: 1400px; margin: 0 auto; }
 .fila-n { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--azul-f); color: var(--aco); font-weight: 700; text-align: center; line-height: 24px; }
 .fila-item.ok .fila-n { background: var(--verde-f); color: #14663a; }
 .fila-item.sem .fila-n { background: var(--vermelho-f); color: #8f1d17; }
+/* Contas a pagar: uma conta por bloco, os botões embaixo (cabe em 390px) */
+.conta-item { padding: 10px 0; border-top: 1px solid var(--borda); }
+.conta-item:first-child { border-top: 0; padding-top: 0; }
+.conta-item .linha:last-child { margin-top: 8px; gap: 8px; }
+.conta-item.atrasada > .muted { color: #8f1d17; }
 .tempo-item { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--borda); }
 .tempo-item:first-child { border-top: 0; }
 .tempo-item.saldo { background: var(--azul-f); margin: 0 -8px; padding: 8px; border-radius: 8px; border-top: 0; }

@@ -316,6 +316,14 @@ CREATE TABLE IF NOT EXISTS duplicados_ok (
     PRIMARY KEY (a, b)
 );
 
+-- "Só este mês": a conta recorrente não aparece em aberto nesta competência (AAAA-MM). Os outros meses seguem normais.
+CREATE TABLE IF NOT EXISTS recorrencia_pulos (
+    recorrencia_id INTEGER NOT NULL REFERENCES recorrencias(id),
+    competencia TEXT NOT NULL,
+    criado_em TEXT DEFAULT (datetime('now','localtime')),
+    PRIMARY KEY (recorrencia_id, competencia)
+);
+
 -- Assistente (chat com o Claude). A conversa só cresce: o que já foi mandado para a API nunca é editado.
 CREATE TABLE IF NOT EXISTS assistente_conversas (
     id INTEGER PRIMARY KEY,

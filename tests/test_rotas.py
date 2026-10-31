@@ -229,7 +229,7 @@ def test_restaurar_backup_antigo_recria_tabelas_novas(cliente_http):
     assert http.get("/dados").status_code == 200
 
 
-def test_atualizar_saldos_e_ver_saldo_livre(cliente_http):
+def test_atualizar_saldos_e_ver_quanto_tem_nas_contas(cliente_http):
     import datetime as dt
     http, _ = cliente_http
     hoje = dt.date.today()
@@ -243,8 +243,8 @@ def test_atualizar_saldos_e_ver_saldo_livre(cliente_http):
     assert db.parametros(con, "conta_escopo")["Caixa"] == "Reserva"
     con.close()
     pagina = http.get("/financeiro").text
-    assert "Quanto dá para gastar" in pagina and "R$ 1.200,00" in pagina
-    assert "Saldo livre PF negativo" in http.get("/").text
+    assert f"Nas contas: R$ 1.150,00 (atualizado em {hoje:%d/%m})" in pagina      # −50 (PF) + 1.200 (PJ)
+    assert "Quanto dá para gastar" not in pagina and "Saldo livre" not in http.get("/").text
     r = http.post("/financeiro/saldos", data={"data": "ontem", "conta_1": "Inter", "saldo_1": "10"}, follow_redirects=False)
     assert "erro=" in r.headers["location"]
 
@@ -437,7 +437,7 @@ def test_conferir_repetidos_manter_um_e_nao_e_repetido(cliente_http):
     con.close()
 
 
-def test_financeiro_mostra_fila_de_pagamento_com_corte_e_salva_prioridade(cliente_http):
+def test_financeiro_ordena_contas_a_pagar_por_impacto_e_salva_prioridade(cliente_http):
     import datetime as dt
     http, _ = cliente_http
     hoje = dt.date.today()
@@ -448,11 +448,11 @@ def test_financeiro_mostra_fila_de_pagamento_com_corte_e_salva_prioridade(client
                                           ("Outros", 10), ("Outros", 11), ("Outros", 12), ("Outros", 13)]):
             con.execute("INSERT INTO lancamentos (escopo, tipo, data, valor, categoria, descricao) VALUES ('PJ','saida',?,?,?,?)",
                         ((hoje + dt.timedelta(days=2 + k)).isoformat(), valor, cat, f"Conta {k}"))
-    tela = http.get("/financeiro").text
-    assert "Pague nesta ordem" in tela and "Conta 0" in tela and "pague esta semana" in tela
-    assert "o dinheiro da PJ dá até aqui" in tela and "falta dinheiro" in tela
-    assert "Ver os outros 2" in tela                                  # 7 itens: 5 à vista, 2 recolhidos
-    assert tela.index("Conta 0") < tela.index("Conta 2")              # aluguel antes do marketing
+    tela = http.get(f"/financeiro?mes={hoje - dt.timedelta(days=400):%Y-%m}").text   # livro-caixa de outro mês: a conta só aparece na lista
+    assert tela.count("Contas a pagar</h2>") == 1 and all(tela.count(f"Conta {k}<") == 1 for k in range(7))
+    assert "Pague nesta ordem" not in tela and "falta dinheiro" not in tela and "pague esta semana" not in tela
+    assert tela.index("Conta 0<") < tela.index("Conta 2<")              # aluguel antes do marketing
+    assert "Atrasar 1 mês custa" in tela
     # prioridade na conta recorrente: salva, aparece na lista e some do automático
     base = {"escopo": "PJ", "descricao": "Internet", "categoria": "Internet/Telefone", "valor": "120", "dia_vencimento": "10", "fixo": "1",
             "inicio": f"{hoje:%Y-%m}", "volta": f"mes={hoje:%Y-%m}&escopo=todos"}
