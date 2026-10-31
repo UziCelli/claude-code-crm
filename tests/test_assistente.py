@@ -37,11 +37,11 @@ def con_temp(tmp_path, monkeypatch):
     con.close()
 
 
-def resposta(conteudo, stop="end_turn", modelo="claude-opus-5-5"):
+def resposta(conteudo, stop="end_turn", modelo="claude-haiku-5-5", entrada=1000):
     return construct_type(type_=ParsedBetaMessage, value={
         "id": "msg_teste", "type": "message", "role": "assistant", "model": modelo, "content": conteudo, "stop_reason": stop,
         "stop_sequence": None,
-        "usage": {"input_tokens": 1000, "output_tokens": 200, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 5000}})
+        "usage": {"input_tokens": entrada, "output_tokens": 200, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 5000}})
 
 
 def texto(t):
@@ -157,12 +157,23 @@ def test_pedido_completo_na_api_direta(con_temp):
     rodar(c, "oi")
     p = c.pedidos[0]
     assert c.qual == ["beta"]
-    assert p["model"] == "claude-opus-5-5" and p["max_tokens"] >= 16000
+    assert p["model"] == "claude-haiku-5-5" and p["max_tokens"] >= 16000
     assert p["thinking"] == {"type": "adaptive", "block_binding": {"prefix_mismatch_behavior": "drop_block"}}
-    assert p["fallbacks"] == "default" and p["output_config"] == {"effort": "medium"}
-    assert set(p["betas"]) == {"thinking-binding-controls-2026-08-01", "server-side-fallback-2026-07-01"}
+    assert "fallbacks" not in p and p["output_config"] == {"effort": "medium"}   # o modelo padrão não tem troca no servidor
+    assert p["betas"] == ["thinking-binding-controls-2026-08-01"]
     assert p["cache_control"] == {"type": "ephemeral"} and p["system"][0]["cache_control"] == {"type": "ephemeral"}
-    assert "tool_choice" not in p   # ferramenta forçada dá erro neste modelo
+    assert "tool_choice" not in p   # ferramenta forçada: erro em alguns modelos; no padrão, pula o raciocínio
+    assert not {"temperature", "top_p", "top_k"} & set(p)
+
+
+def test_modelo_com_troca_no_servidor_manda_fallbacks(con_temp, monkeypatch):
+    monkeypatch.setenv("ASSISTENTE_MODELO", "claude-opus-5-5")
+    c = ClienteFalso([resposta([texto("Oi")], modelo="claude-opus-5-5")])
+    rodar(c, "oi")
+    p = c.pedidos[0]
+    assert p["model"] == "claude-opus-5-5" and p["fallbacks"] == "default"
+    assert set(p["betas"]) == {"thinking-binding-controls-2026-08-01", "server-side-fallback-2026-07-01"}
+    assert p["thinking"]["block_binding"] == {"prefix_mismatch_behavior": "drop_block"} and "tool_choice" not in p
 
 
 def test_modelo_e_esforco_pelo_env(con_temp, monkeypatch):
@@ -330,6 +341,30 @@ def test_custo_estimado():
     uso = {"modelo": "claude-opus-5-5", "entrada": 1_000_000, "saida": 100_000, "cache_leitura": 1_000_000, "cache_gravacao": 0}
     assert assistente.custo(uso) == pytest.approx(4 + 2 + 0.2)
     assert assistente.custo(dict(uso, modelo="modelo-desconhecido")) is None
+
+
+def test_custo_estimado_haiku_por_faixa_do_pedido():
+    h = {"modelo": "claude-haiku-5-5", "entrada": 50_000, "saida": 10_000, "cache_leitura": 40_000, "cache_gravacao": 0}
+    assert assistente.custo(h) == pytest.approx(0.0104)   # prompt de 90 mil: faixa barata
+    longo = dict(h, entrada=60_000, cache_leitura=50_000)
+    assert assistente.custo(longo) == pytest.approx(0.0575)   # prompt de 110 mil: faixa cara
+    exato = dict(h, entrada=50_000, saida=0, cache_leitura=50_000)
+    assert assistente.custo(exato) == pytest.approx(0.0055)   # exatamente 100 mil ainda é a faixa barata
+    assert assistente.custo(dict(exato, cache_gravacao=1)) > 0.0275   # 100 mil e 1: faixa cara
+    assert assistente.custo(dict(h, entrada=1, saida=0, cache_leitura=0)) == pytest.approx(1e-7)
+
+
+def test_custo_br():
+    assert main._custo_br(0.033) == "≈ US$ 0,03"
+    assert main._custo_br(0.000825) == "< US$ 0,01"
+    assert main._custo_br(None) == "" and main._custo_br(0) == ""
+
+
+def test_aviso_de_conversa_longa(con_temp):
+    c = ClienteFalso([resposta([texto("Oi")], entrada=assistente.CONVERSA_LONGA - 4999)])   # mais 5.000 no cache: 80.001
+    assert any(e["tipo"] == "aviso" and "ficou longa" in e["texto"] for e in rodar(c, "oi"))
+    c = ClienteFalso([resposta([texto("Oi")], entrada=assistente.CONVERSA_LONGA - 6000)])   # mais 5.000 gravados no cache: 79.000
+    assert not any(e["tipo"] == "aviso" for e in rodar(c, "oi"))
 
 
 # ---------- ferramentas ----------
@@ -512,7 +547,7 @@ def test_conversa_pela_tela(http, con_temp, monkeypatch):
     cid = ev[0]["id"]
     frag = http.get(f"/assistente/conversa/{cid}")
     assert "<strong>R$ 10,00</strong>" in frag.text and "quanto tenho?" in frag.text and "(Hoje:" not in frag.text
-    assert unquote(frag.headers["X-Custo"]) == "≈ US$ 0,03"   # 1.000 de entrada, 200 de saída e 5.000 gravados no cache
+    assert unquote(frag.headers["X-Custo"]) == "< US$ 0,01"   # 1.000 de entrada, 200 de saída, 5.000 no cache: US$ 0,000825
     tela = http.get(f"/assistente?c={cid}")
     assert tela.status_code == 200 and "quanto tenho?" in tela.text and "nesta conversa" in tela.text
     http.post(f"/assistente/{cid}/excluir")
