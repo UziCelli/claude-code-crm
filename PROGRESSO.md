@@ -136,6 +136,16 @@ Pedido: o Painel de 31/10 mostrava renovação vencida de quem já tinha pagado 
 - **Revisão**: "sem aula" não conta dias de bloqueio (viagem) nem de mês pulado; "sem nenhuma aula" mostra até 3 nomes e ignora quem começou há menos de 14 dias (35 na Híbrida); contas vencidas mostram o total. Os outros alertas foram conferidos e ficaram como estavam.
 - **Não feito (decisão do dono)**: empurrar as renovações pelos 9 dias da viagem.
 
+## Assistente: chat com o Claude dentro do CRM (PR `claude/assistente-chat`, 31/10/2026)
+Pedido: "um chat completo para usar você direto por lá e ajudar a editar e visualizar as contas, financeiros e tarefas".
+- **Tela** `/assistente` (menu, logo depois do Painel): resposta aos pedaços, linha cinza com cada ação ("✓ Dando baixa"), sugestões de pergunta, lista de conversas, custo estimado em US$. Conversa excluída vai para a lixeira (Dados).
+- **Como liga**: `ANTHROPIC_API_KEY` no `.env` do PC (ou no Render). A API cobra por uso, à parte da assinatura do Claude. Opcionais: `ASSISTENTE_MODELO` (padrão `claude-opus-5-5`), `ASSISTENTE_ESFORCO` (padrão `medium`), `ANTHROPIC_BASE_URL` para mandar pelo OmniRoute (só os parâmetros básicos).
+- **O que ele faz** (`app/assistente.py`, 27 ferramentas): lê Painel, mês, livro-caixa, contas a pagar e saldo livre, previsão de caixa, mensalidades, saldos, contas recorrentes, alunos (ficha, renovação, cobrança), tarefas (rotina, leads, checkpoints, campanha) e consulta livre só de leitura. Grava: lançamento (com a mesma regra do "já estava em aberto" da tela), edição (devolve o antes), baixa (avulsa ou da conta recorrente do mês), lixeira e restaurar, conta recorrente, saldo, salário, tarefa da rotina, item de campanha, próxima ação do lead, checkpoint e registro na ficha (`main.registrar_evento`, as regras da ficha).
+- **Regras da API seguidas**: histórico só cresce (nada já mandado é editado; a data vai na mensagem, não nas instruções); raciocínio devolvido como veio, com `drop_block` se o histórico não bater; `fallbacks: "default"` para outro modelo responder quando um recusa; cache automático; recusa não entra no histórico; pedido cortado no meio ganha resultado de erro e não roda; cada resultado é guardado assim que a ação roda (tela fechada no meio não repete ação). Se a conta não aceitar os recursos novos, segue só com o básico.
+- **Banco**: tabelas `assistente_conversas` e `assistente_mensagens`. A conexão só abre para ler e gravar, nunca enquanto o modelo pensa (no Turso a conexão é uma só). Sinal de vida a cada 15 s para o Cloudflare não cortar a resposta.
+- **Segurança**: consulta livre roda dentro de `SELECT * FROM (...)` (escrita vira erro de sintaxe), sem `;` nem comentário. O texto do modelo é escapado; link só para telas do próprio CRM.
+- **Ideias que ficaram de fora**: mostrar as notas do raciocínio entre as ações (`display: "updates"`); anexar foto de comprovante; limite de gasto por mês.
+
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.
 - Nomes de serviço no CRM: Pacote de Aulas, Mensalidade, Consultoria Online, Consultoria Híbrida, Avaliação Física.

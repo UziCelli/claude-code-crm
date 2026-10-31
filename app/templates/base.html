@@ -17,6 +17,7 @@
   </a>
   {% set p = request.url.path %}
   <a href="/" class="{{ 'ativo' if p == '/' }}">Painel</a>
+  <a href="/assistente" class="{{ 'ativo' if p.startswith('/assistente') }}">Assistente</a>
   <a href="/clientes" class="{{ 'ativo' if p.startswith('/clientes') }}">Clientes</a>
   <a href="/leads" class="{{ 'ativo' if p.startswith('/leads') }}">Leads</a>
   <a href="/grade" class="{{ 'ativo' if p.startswith('/grade') }}">Grade</a>

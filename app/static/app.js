@@ -119,3 +119,136 @@ document.querySelectorAll("table.grade").forEach(function (g) {
   (g.closest(".rolagem") || g).before(abas);
   escolher(hoje >= 1 && hoje <= nomes.length ? hoje : 1);
 });
+
+// Assistente: manda a mensagem e mostra a resposta chegando aos pedaços (cada linha "data:" do fluxo é um evento JSON).
+// No fim troca tudo pela versão formatada que o servidor guardou; erro que não foi guardado continua à vista.
+(function () {
+  var form = document.querySelector("form[data-chat]");
+  if (!form) return;
+  var lista = document.getElementById("chat-mensagens");
+  var texto = form.querySelector("textarea");
+  var botao = form.querySelector("button");
+  var campo = form.querySelector("[name=conversa]");
+  var rolar = function () { lista.scrollTop = lista.scrollHeight; };
+  var novo = function (tag, classe, conteudo) {
+    var e = document.createElement(tag);
+    if (classe) e.className = classe;
+    if (conteudo != null) e.textContent = conteudo;
+    return e;
+  };
+  var crescer = function () { texto.style.height = "auto"; texto.style.height = Math.min(texto.scrollHeight, 160) + "px"; };
+  // enquanto chega: escapa tudo e só troca **negrito**, títulos e marcadores (no fim vem a versão formatada do servidor)
+  var formatar = function (t) {
+    return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/^#{1,6} +(.*)$/gm, "<strong>$1</strong>")
+      .replace(/^(\s*)[-*•] +/gm, "$1• ");
+  };
+  // o chat ocupa o que sobra da tela (com ou sem a faixa de alertas): só as mensagens rolam, a página não
+  var chat = form.closest(".chat");
+  var ajustar = function () {
+    chat.style.height = Math.max(360, window.innerHeight - (chat.getBoundingClientRect().top + window.scrollY) - 12) + "px";
+  };
+  ajustar();
+  window.addEventListener("resize", ajustar);
+  document.querySelectorAll(".alertas-topo").forEach(function (d) { d.addEventListener("toggle", ajustar); });
+  rolar();
+  // a fonte chega depois e aumenta o texto: desce de novo até a última mensagem
+  if (document.fonts) document.fonts.ready.then(function () { ajustar(); rolar(); });
+  window.addEventListener("load", function () { ajustar(); rolar(); });
+  texto.addEventListener("input", crescer);
+  lista.addEventListener("click", function (e) {
+    var s = e.target.closest("[data-sugestao]");
+    if (!s || botao.disabled) return;
+    texto.value = s.dataset.sugestao;
+    form.requestSubmit();
+  });
+  // computador: Enter envia e Shift+Enter quebra a linha; no celular o Enter só quebra a linha (envia pelo botão)
+  texto.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing && window.matchMedia("(pointer: fine)").matches) {
+      e.preventDefault();
+      form.requestSubmit();
+    }
+  });
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();   // o envio é pelo fetch abaixo (e o aviso de botão ocupado do resto do CRM não entra)
+    var msg = texto.value.trim();
+    if (!msg || botao.disabled) return;
+    var vazio = lista.querySelector(".chat-vazio");
+    if (vazio) vazio.remove();
+    var eu = novo("div", "msg eu");
+    eu.appendChild(novo("div", "balao", msg));
+    lista.appendChild(eu);
+    var ele = novo("div", "msg ele"), balao = novo("div", "balao"), pensando = novo("div", "acao pensando", "Pensando");
+    balao.appendChild(pensando);
+    ele.appendChild(balao);
+    lista.appendChild(ele);
+    var dados = new FormData(form);
+    texto.value = "";
+    crescer();
+    botao.disabled = true;
+    botao.setAttribute("aria-busy", "true");
+    rolar();
+    var cid = campo.value, atual = null, soltos = [];
+    var poe = function (el) { balao.insertBefore(el, pensando); };
+    var tratar = function (ev) {
+      if (ev.tipo === "conversa") {
+        cid = String(ev.id);
+        campo.value = cid;
+        history.replaceState(null, "", "/assistente?c=" + cid);
+      } else if (ev.tipo === "texto") {
+        if (!atual) { atual = novo("div", "md chegando", ""); atual.bruto = ""; poe(atual); }
+        atual.bruto += ev.texto;
+        atual.innerHTML = formatar(atual.bruto);
+      } else if (ev.tipo === "ferramenta") {
+        atual = null;
+        poe(novo("div", "acao", "… " + ev.texto));
+      } else if (ev.tipo === "aviso" || ev.tipo === "erro") {
+        atual = null;
+        poe(novo("div", ev.tipo === "erro" ? "acao erro" : "acao aviso", ev.texto));
+        if (!ev.guardado) soltos.push(ev.texto);
+      }
+      rolar();
+    };
+    fetch(form.action, { method: "POST", body: dados, headers: { Accept: "text/event-stream" } })
+      .then(function (r) {
+        if (!r.ok || !r.body) throw new Error("HTTP " + r.status);
+        var leitor = r.body.getReader(), dec = new TextDecoder(), resto = "";
+        var ler = function () {
+          return leitor.read().then(function (p) {
+            resto += dec.decode(p.value || new Uint8Array(0), { stream: !p.done });
+            var blocos = resto.split("\n\n");
+            resto = p.done ? "" : blocos.pop();
+            blocos.forEach(function (b) {
+              b.split("\n").forEach(function (linha) {
+                if (linha.indexOf("data: ") !== 0) return;
+                try { tratar(JSON.parse(linha.slice(6))); } catch (err) { /* linha incompleta: ignora */ }
+              });
+            });
+            if (!p.done) return ler();
+          });
+        };
+        return ler();
+      })
+      .catch(function () { tratar({ tipo: "erro", texto: "Sem resposta do CRM. Confira a conexão e mande de novo." }); })
+      .then(function () {
+        pensando.remove();
+        botao.disabled = false;
+        botao.removeAttribute("aria-busy");
+        if (!cid) return;
+        return fetch("/assistente/conversa/" + cid).then(function (r) {
+          if (!r.ok) return;
+          var custo = decodeURIComponent(r.headers.get("X-Custo") || "");
+          var alvo = document.getElementById("custo-conversa");
+          if (alvo) alvo.textContent = custo ? custo + " nesta conversa" : "";
+          return r.text().then(function (html) {
+            lista.innerHTML = html;
+            soltos.forEach(function (t) { lista.appendChild(novo("div", "msg aviso-chat", t)); });
+            rolar();
+          });
+        });
+      })
+      .catch(function () { /* a resposta já está na tela; a versão formatada volta ao recarregar */ })
+      .then(function () { texto.focus({ preventScroll: true }); });
+  });
+})();

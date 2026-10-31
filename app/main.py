@@ -10,7 +10,7 @@ import signal
 import sqlite3
 import threading
 import unicodedata
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, closing
 from pathlib import Path
 from urllib.parse import quote
 
@@ -20,7 +20,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse,
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import acesso, atualizar, db, exportar, financeiro, importar, precos, vigia
+from . import acesso, assistente, atualizar, db, exportar, financeiro, importar, precos, vigia
 
 ROOT = Path(__file__).resolve().parent
 DIAS = {1: "Segunda", 2: "Terça", 3: "Quarta", 4: "Quinta", 5: "Sexta", 6: "Sábado", 7: "Domingo"}
@@ -127,6 +127,7 @@ def texto_cobranca(cob) -> dict:
 
 
 templates.env.filters["preencher"] = preencher
+templates.env.filters["markdown"] = assistente.markdown_simples   # respostas do assistente (escapa todo o resto)
 def versao(arquivo):
     """Etiqueta ?v= nos arquivos de /static: muda a cada atualização, então o navegador (celular) não usa o visual antigo do cache."""
     try:
@@ -556,6 +557,12 @@ def cliente_status(cid: int, status: str = Form(...), con=Depends(get_db)):
 @app.post("/clientes/{cid}/evento")
 def cliente_evento(cid: int, tipo: str = Form(...), data: str = Form(...), valor: str = Form(""), descricao: str = Form(""),
                    nova_renovacao: str = Form(""), con=Depends(get_db)):
+    msg, erro = registrar_evento(con, cid, tipo, data, valor, descricao, nova_renovacao)
+    return voltar(f"/clientes/{cid}", msg=msg, erro=erro)
+
+
+def registrar_evento(con, cid: int, tipo: str, data: str, valor="", descricao="", nova_renovacao="") -> tuple:
+    """Registra no histórico do aluno (ficha ou assistente). Devolve (mensagem, erro): um dos dois é None."""
     v = _num_br(valor) if valor else None
     nova = data_iso(nova_renovacao)
     antes = financeiro.renovacoes(con, cid).get(cid)
@@ -565,14 +572,14 @@ def cliente_evento(cid: int, tipo: str = Form(...), data: str = Form(...), valor
         pulada = pulada or data_iso(data) or dt.date.today().isoformat()
         volta = nova or financeiro.proxima_renovacao(pulada)
         if volta <= pulada:
-            return voltar(f"/clientes/{cid}", erro=f"A volta precisa ser depois de {data_br(pulada)} (a renovação que foi pulada).")
+            return None, f"A volta precisa ser depois de {data_br(pulada)} (a renovação que foi pulada)."
         texto = f"Renovação de {data_br(pulada)} sem cobrança; volta em {data_br(volta)}" + (f". {descricao}" if descricao else "")
         with con:
             con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, ate, descricao) VALUES (?,?,?,?,?)",
                         (cid, "pausa", pulada, volta, texto))
             con.execute("UPDATE clientes SET data_renovacao=?, renovacao_em=datetime('now','localtime'), status='ativo' WHERE id=?",
                         (volta, cid))
-        return voltar(f"/clientes/{cid}", msg=f"Mês pulado, sem cobrança. Próxima renovação: {data_br(volta)}.")
+        return f"Mês pulado, sem cobrança. Próxima renovação: {data_br(volta)}.", None
     with con:
         con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, valor, descricao) VALUES (?,?,?,?,?)", (cid, tipo, data, v, descricao or None))
         if tipo == "renovacao" and nova:
@@ -584,13 +591,13 @@ def cliente_evento(cid: int, tipo: str = Form(...), data: str = Form(...), valor
         elif tipo == "renovacao":
             con.execute("UPDATE clientes SET status='ativo' WHERE id=?", (cid,))
     if tipo != "renovacao":
-        return voltar(f"/clientes/{cid}", msg="Registrado.")
+        return "Registrado.", None
     depois = financeiro.renovacoes(con, cid).get(cid)
     proxima = data_br(depois["efetiva"]) if depois else "—"
     if nova or not antes or depois["efetiva"] != antes["efetiva"]:
-        return voltar(f"/clientes/{cid}", msg=f"Renovação registrada. Próxima: {proxima}.")
-    return voltar(f"/clientes/{cid}", msg=f"Registrado. A renovação continua em {proxima}: sem data, ela só anda quando faltam até "
-                                          f"{financeiro.ANTECEDENCIA} dias. Para outra data, preencha a nova data de renovação.")
+        return f"Renovação registrada. Próxima: {proxima}.", None
+    return (f"Registrado. A renovação continua em {proxima}: sem data, ela só anda quando faltam até {financeiro.ANTECEDENCIA} dias. "
+            "Para outra data, preencha a nova data de renovação."), None
 
 
 @app.post("/clientes/{cid}/excluir")
@@ -2149,6 +2156,58 @@ def financeiro_painel(request: Request, mes: str = "", con=Depends(get_db)):
 
 
 # =====================================================================
+# ASSISTENTE (chat com o Claude: lê e edita financeiro, contas e tarefas)
+# =====================================================================
+def _custo_br(v) -> str:
+    return f"≈ US$ {v:.2f}".replace(".", ",") if v else ""
+
+
+@app.get("/assistente", response_class=HTMLResponse)
+def assistente_tela(request: Request, c: int = 0, con=Depends(get_db)):
+    conversa = assistente.conversa(con, c) if c else None
+    if c and conversa is None:
+        return voltar("/assistente", erro="Conversa não encontrada.")
+    return render(request, "assistente.html", con, conversa=conversa, conversas=assistente.conversas(con), info=assistente.info(),
+                  turnos=assistente.para_tela(con, conversa["id"]) if conversa else [],
+                  custo=_custo_br(assistente.custo_conversa(con, conversa["id"])) if conversa else "")
+
+
+@app.get("/assistente/conversa/{cid}", response_class=HTMLResponse)
+def assistente_mensagens(request: Request, cid: int, con=Depends(get_db)):
+    """Só as mensagens (a tela troca o que chegou aos pedaços pela versão formatada)."""
+    if assistente.conversa(con, cid) is None:
+        return HTMLResponse("", status_code=404)
+    return templates.TemplateResponse(request, "_assistente_mensagens.html", {"turnos": assistente.para_tela(con, cid)},
+                                      headers={"X-Custo": quote(_custo_br(assistente.custo_conversa(con, cid)))})
+
+
+@app.post("/assistente/enviar")
+def assistente_enviar(texto: str = Form(""), conversa: str = Form("")):
+    """Resposta aos pedaços (text/event-stream): cada linha 'data:' é um evento JSON. O banco só fica aberto nos momentos
+    de ler e gravar, nunca enquanto o modelo pensa (no modo Turso a conexão é uma só)."""
+    def eventos():
+        if db.nuvem.ativo():
+            db.nuvem.sincronizar_se_velho(db.DB_PATH)   # traz o que foi lançado no outro aparelho
+        cid = None
+        with closing(assistente.responder(texto, int(conversa) if conversa.isdigit() else None)) as fluxo:
+            for ev in fluxo:
+                atualizar.registrar_uso()   # resposta longa também é uso: a atualização automática não reinicia no meio
+                if ev["tipo"] == "vivo":   # modelo pensando em silêncio: comentário só para a conexão não cair
+                    yield ": vivo\n\n"
+                    continue
+                cid = ev["id"] if ev["tipo"] == "conversa" else cid
+                yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+        yield f"data: {json.dumps({'tipo': 'fim', 'id': cid})}\n\n"
+    return StreamingResponse(eventos(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.post("/assistente/{cid}/excluir")
+def assistente_excluir(cid: int, con=Depends(get_db)):
+    assistente.excluir_conversa(con, cid)
+    return voltar("/assistente", msg="Conversa enviada para a lixeira (dá para restaurar em Dados).")
+
+
+# =====================================================================
 # CONFIGURAÇÕES + IMPORTAR
 # =====================================================================
 GRUPOS_CONFIG = [("imposto", "Imposto (DAS)", "pct"), ("taxa_pagamento", "Taxas por forma de pagamento", "pct"),
@@ -2248,6 +2307,7 @@ LIXEIRA = [("clientes", "Cliente", "nome"), ("leads", "Lead", "nome"), ("propost
            ("gastos_marketing", "Gasto de marketing", "canal"), ("campanha_itens", "Item de campanha", "texto"),
            ("campanha_checkpoints", "Checkpoint", "pergunta"), ("rotina_tarefas", "Tarefa da rotina", "texto"),
            ("lancamentos", "Lançamento", "COALESCE(descricao, categoria)"), ("recorrencias", "Conta recorrente", "descricao"),
+           ("assistente_conversas", "Conversa do assistente", "titulo"),
            ("agenda_avulsas", "Aula avulsa", "(SELECT nome FROM clientes WHERE clientes.id=agenda_avulsas.cliente_id) || ' ' || data"),
            ("agenda_fixos", "Horário fixo", "(SELECT nome FROM clientes WHERE clientes.id=agenda_fixos.cliente_id) || ' — ' || "
             "CASE dia WHEN 1 THEN 'Seg' WHEN 2 THEN 'Ter' WHEN 3 THEN 'Qua' WHEN 4 THEN 'Qui' WHEN 5 THEN 'Sex' WHEN 6 THEN 'Sáb' ELSE dia END || ' ' || "

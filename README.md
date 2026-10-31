@@ -110,7 +110,7 @@ Os nomes dos botões no Cloudflare e no Render podem mudar um pouco.
 
 ## Repositório público: o que nunca vai para o GitHub
 
-O código é público; os dados não. Nunca versionar: `.env` (chaves do Turso e do Cloudflare), `data/` (banco e backups), qualquer `*.db`. O `.gitignore` já bloqueia e o `pytest` (`tests/test_seguranca.py`) falha se algum aparecer ou se um arquivo tiver cara de chave. Se uma chave vazar mesmo assim: gere outra (Turso, Cloudflare) antes de apagar o commit. Falhas de segurança: ver `SECURITY.md`.
+O código é público; os dados não. Nunca versionar: `.env` (chaves do Turso, do Cloudflare e da API da Anthropic), `data/` (banco e backups), qualquer `*.db`. O `.gitignore` já bloqueia e o `pytest` (`tests/test_seguranca.py`) falha se algum aparecer ou se um arquivo tiver cara de chave. Se uma chave vazar mesmo assim: gere outra (Turso, Cloudflare) antes de apagar o commit. Falhas de segurança: ver `SECURITY.md`.
 
 ## Backup e restauração
 - **Dados › Fazer backup agora**: cria uma cópia imediata.
@@ -123,6 +123,13 @@ Leads (kanban; virar "Cliente" cria o cadastro) · Grade (segunda a sábado, 05h
 Agenda (1 card por horário com até 2 alunos, escolhidos num seletor com o local; avisa a Grade; Copiar da Grade uma vez; aulas avulsas; marcar Feita, Faltou ou Desmarcou com 1 toque, que vai para o histórico do aluno; controle de reposições por aluno; marcar várias aulas e vários horários de uma vez) ·
 Simulador (preço, margem, lucro/hora, preço mínimo, desconto máximo; bloqueio abaixo da margem) · Explorador (todas as combinações) ·
 Campanhas (fases, checklists, gastos por canal, checkpoints que você inclui e exclui) · Rotina (checklist semanal editável e lista de espera) · Configurações · Dados.
+
+## Assistente (chat com o Claude)
+A tela **Assistente** conversa com o Claude: ele lê o financeiro, as contas e as tarefas do CRM e também lança, dá baixa, edita e marca tarefas (pede confirmação antes de excluir ou mudar valor).
+- **Ligar**: crie uma chave em console.anthropic.com › API Keys e acrescente ao `.env` do PC a linha `ANTHROPIC_API_KEY=` seguida da chave; feche e abra o CRM. No Render, a mesma variável vai em Environment.
+- **Custo**: a API cobra por uso (a tela mostra uma estimativa em US$ por conversa), à parte da assinatura do Claude, e precisa de crédito em console.anthropic.com › Billing.
+- **Opcional**: `ASSISTENTE_MODELO`, `ASSISTENTE_ESFORCO` e `ANTHROPIC_BASE_URL` (OmniRoute). Ver `.env.example`.
+- As perguntas e os dados que ele lê vão para a API da Anthropic. A conversa fica guardada no banco do CRM.
 
 ## Como atualizar o CRM
 **Sozinho.** O CRM do PC confere o GitHub a cada 15 minutos. Se tiver versão nova, espera ficar 5 minutos sem ninguém usando,
