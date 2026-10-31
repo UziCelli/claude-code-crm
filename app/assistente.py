@@ -1,6 +1,6 @@
 """Assistente do CRM: chat com o Claude (API da Anthropic) que lê e edita o financeiro, as contas e as tarefas.
 
-Liga quando o .env (ou o Render) tem ANTHROPIC_API_KEY. A API cobra por uso, à parte da assinatura do Claude.
+Liga quando o .env (ou o Render) tem ANTHROPIC_API_KEY, ou com a chave colada em Configurações (tabela segredos). A API cobra por uso, à parte da assinatura do Claude.
 Com ANTHROPIC_BASE_URL (ex.: OmniRoute no PC) o pedido vai para esse endereço só com o básico, que proxy entende.
 O modelo lê os dados pelas ferramentas abaixo (nunca adivinha) e grava pelas mesmas regras das telas.
 
@@ -53,8 +53,51 @@ class ErroFerramenta(Exception):
 
 
 # ---------- configuração ----------
-def configurado() -> bool:
+CHAVE_SEGREDO = "anthropic_api_key"
+_chave_salva = {"valor": ""}   # chave colada em Configurações, lida do banco na partida (o _cliente() não abre o banco)
+
+
+def _chave_env() -> bool:
     return bool(os.environ.get("ANTHROPIC_API_KEY", "").strip() or os.environ.get("ANTHROPIC_AUTH_TOKEN", "").strip())
+
+
+def carregar_chave(con) -> None:
+    """Lê a chave salva no banco para a memória (banco sem a tabela = sem chave)."""
+    try:
+        row = con.execute("SELECT valor FROM segredos WHERE chave=?", (CHAVE_SEGREDO,)).fetchone()
+    except sqlite3.Error:
+        row = None
+    _chave_salva["valor"] = (row[0] or "").strip() if row else ""
+
+
+def salvar_chave(con, valor: str) -> None:
+    valor = valor.strip()
+    with con:
+        con.execute("""INSERT INTO segredos (chave, valor) VALUES (?, ?)
+                       ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor, atualizado_em=datetime('now','localtime')""",
+                    (CHAVE_SEGREDO, valor))
+    _chave_salva["valor"] = valor
+
+
+def remover_chave(con) -> None:
+    with con:
+        con.execute("DELETE FROM segredos WHERE chave=?", (CHAVE_SEGREDO,))
+    _chave_salva["valor"] = ""
+
+
+def origem_chave() -> str:
+    """De onde vem a chave: 'env' (.env/Render, vence), 'config' (salva em Configurações) ou ''."""
+    return "env" if _chave_env() else "config" if _chave_salva["valor"] else ""
+
+
+def _final_chave() -> str:
+    chave = (os.environ.get("ANTHROPIC_API_KEY", "").strip() or os.environ.get("ANTHROPIC_AUTH_TOKEN", "").strip()
+             if _chave_env() else _chave_salva["valor"])
+    return "…" + chave[-4:] if chave else ""
+
+
+def configurado() -> bool:
+    return bool(origem_chave())
 
 
 def modelo() -> str:
@@ -73,11 +116,14 @@ def compativel() -> bool:
 
 
 def info() -> dict:
-    return {"ligado": configurado(), "modelo": modelo(), "esforco": esforco(), "proxy": compativel()}
+    return {"ligado": configurado(), "modelo": modelo(), "esforco": esforco(), "proxy": compativel(),
+            "origem": origem_chave(), "final": _final_chave()}
 
 
 def _cliente():
     import anthropic   # só quando o assistente é usado (o CRM abre mesmo sem a biblioteca)
+    if origem_chave() == "config":   # a chave do .env o SDK lê sozinho; a salva vem da memória (sem abrir o banco)
+        return anthropic.Anthropic(api_key=_chave_salva["valor"], timeout=120, max_retries=2)
     return anthropic.Anthropic(timeout=120, max_retries=2)
 
 
@@ -595,6 +641,8 @@ def _consultar_banco(con, a):
         raise ErroFerramenta("Só consulta de leitura: comece com SELECT ou WITH.")
     if _SQL_PROIBIDO.search(sql):
         raise ErroFerramenta("Uma consulta só, sem ponto e vírgula e sem comentários (-- ou /*).")
+    if "segredos" in sql.lower():
+        raise ErroFerramenta("Essa tabela é reservada e não pode ser consultada.")
     try:
         # dentro de um SELECT * FROM (...) só cabe consulta: INSERT/UPDATE/DELETE (mesmo depois de um WITH) é erro de sintaxe
         cur = con.execute(f"SELECT * FROM ({sql}) LIMIT {LIMITE_LINHAS + 1}")
@@ -1176,7 +1224,7 @@ def explicar_erro(e) -> str:
         anthropic = None
     if anthropic is not None:
         if isinstance(e, anthropic.AuthenticationError):
-            return "A chave da API não foi aceita. Confira ANTHROPIC_API_KEY no .env (ou no Render) e reinicie o CRM."
+            return "A chave da API não foi aceita. Confira a chave em Configurações › Assistente (ou ANTHROPIC_API_KEY no .env/Render, que vence a salva)."
         if isinstance(e, anthropic.PermissionDeniedError):
             return "A chave da API não tem permissão para usar este modelo. Confira a conta em console.anthropic.com."
         if isinstance(e, anthropic.NotFoundError):
@@ -1199,8 +1247,8 @@ def explicar_erro(e) -> str:
     return f"Erro inesperado no assistente ({e.__class__.__name__}). Tente de novo."
 
 
-DESLIGADO = ("O assistente ainda não está ligado: falta a chave da API (ANTHROPIC_API_KEY) no .env do PC "
-             "ou nas configurações do Render. Veja o passo a passo nesta tela.")
+DESLIGADO = ("O assistente ainda não está ligado: falta a chave da API: cole em Configurações › Assistente, ou ponha "
+             "ANTHROPIC_API_KEY no .env do PC (ou no Render). Veja o passo a passo nesta tela.")
 
 
 def responder(texto, cid=None, conectar=None, cliente=None):

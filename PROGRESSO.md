@@ -153,6 +153,13 @@ Pedido: "deixe o agente mais barato por milhão de token".
 - **Custo na tela** com as duas faixas; conversa de menos de 1 centavo aparece como "< US$ 0,01" (o total da conversa é arredondado em 6 casas).
 - **Aviso de conversa longa** aos 80 mil tokens (antes eram 150 mil), antes de entrar na faixa cara. Outro modelo continua possível com `ASSISTENTE_MODELO`.
 
+## Chave do Assistente em Configurações (PR `claude/assistente-chave-config`, 31/10/2026)
+Pedido: colar a chave da API na tela, sem mexer no `.env`.
+- **Onde fica**: tabela `segredos` (linha `anthropic_api_key`), separada das tabelas comuns para o assistente e as telas nunca a listarem sem querer. Fica em memória (`assistente._chave_salva`), lida na partida; o `_cliente()` não abre o banco.
+- **Prioridade**: `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` do ambiente vencem a salva. A tela mostra só o final (`…abcd`) e o campo vem sempre vazio.
+- **`consultar_banco` bloqueado** para qualquer SQL com "segredos": o modelo não lê a chave.
+- **Render**: pega a chave pelo Turso (o banco é o mesmo); backups também a levam, então guarde-os como senha.
+
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.
 - Nomes de serviço no CRM: Pacote de Aulas, Mensalidade, Consultoria Online, Consultoria Híbrida, Avaliação Física.

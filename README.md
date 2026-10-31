@@ -126,7 +126,7 @@ Campanhas (fases, checklists, gastos por canal, checkpoints que você inclui e e
 
 ## Assistente (chat com o Claude)
 A tela **Assistente** conversa com o Claude: ele lê o financeiro, as contas e as tarefas do CRM e também lança, dá baixa, edita e marca tarefas (pede confirmação antes de excluir ou mudar valor).
-- **Ligar**: crie uma chave em console.anthropic.com › API Keys e acrescente ao `.env` do PC a linha `ANTHROPIC_API_KEY=` seguida da chave; feche e abra o CRM. No Render, a mesma variável vai em Environment.
+- **Ligar**: crie uma chave em console.anthropic.com › API Keys e cole em **Configurações › Assistente** (o jeito fácil: vale na hora e vai junto para o Render pelo Turso). Também dá para acrescentar ao `.env` do PC a linha `ANTHROPIC_API_KEY=` seguida da chave e reiniciar o CRM (ou usar Environment no Render); a chave do `.env` vence a salva em Configurações.
 - **Custo**: o modelo padrão é o mais barato (Haiku 5.5), em geral menos de 1 centavo de dólar por pergunta (a tela mostra uma estimativa em US$ por conversa); a API cobra por uso, à parte da assinatura do Claude, e precisa de crédito em console.anthropic.com › Billing.
 - **Opcional**: `ASSISTENTE_MODELO`, `ASSISTENTE_ESFORCO` e `ANTHROPIC_BASE_URL` (OmniRoute). Ver `.env.example`.
 - As perguntas e os dados que ele lê vão para a API da Anthropic. A conversa fica guardada no banco do CRM.

@@ -16,6 +16,27 @@
   </div>
 </div>
 
+<div class="card mt">
+  <h2>Assistente (chave da API)</h2>
+  {% if assistente.origem == 'env' %}
+  <p>Ligado pela chave do .env ({{ assistente.final }}). A chave do .env vence a salva aqui.</p>
+  {% elif assistente.origem == 'config' %}
+  <p>Ligado pela chave salva aqui ({{ assistente.final }}).</p>
+  {% else %}
+  <p>Desligado.</p>
+  {% endif %}
+  <form method="post" action="/configuracoes/assistente" class="linha">
+    <input type="password" name="chave" autocomplete="off" placeholder="sk-ant-..." style="flex:1">
+    <button type="submit">Salvar chave</button>
+  </form>
+  {% if assistente.origem == 'config' %}
+  <form method="post" action="/configuracoes/assistente/remover" data-confirmar="Remover a chave do Assistente?" class="mt">
+    <button class="perigo pequeno">Remover a chave</button>
+  </form>
+  {% endif %}
+  <p class="muted mt">A chave fica no banco do CRM (vai junto para o Turso e os backups). Crie em console.anthropic.com › API Keys.</p>
+</div>
+
 <form method="post" action="/configuracoes" class="mt">
   <div class="grid c2">
     {% for g in grupos %}
