@@ -333,3 +333,10 @@ CREATE TABLE IF NOT EXISTS assistente_mensagens (
     criado_em TEXT DEFAULT (datetime('now','localtime'))
 );
 CREATE INDEX IF NOT EXISTS idx_assistente_mensagens ON assistente_mensagens (conversa_id, id);
+
+-- Segredos do CRM (hoje só a chave do Assistente, linha 'anthropic_api_key'). O assistente nunca pode ler esta tabela.
+CREATE TABLE IF NOT EXISTS segredos (
+    chave TEXT PRIMARY KEY,
+    valor TEXT NOT NULL,
+    atualizado_em TEXT DEFAULT (datetime('now','localtime'))
+);

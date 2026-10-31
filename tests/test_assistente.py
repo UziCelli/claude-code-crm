@@ -25,6 +25,7 @@ def ambiente(monkeypatch):
     for k in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ASSISTENTE_MODELO", "ASSISTENTE_ESFORCO"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setitem(assistente._estado, "basico", False)
+    monkeypatch.setitem(assistente._chave_salva, "valor", "")
 
 
 @pytest.fixture
@@ -553,3 +554,77 @@ def test_conversa_pela_tela(http, con_temp, monkeypatch):
     http.post(f"/assistente/{cid}/excluir")
     assert http.get(f"/assistente/conversa/{cid}").status_code == 404
     assert "Conversa do assistente" in http.get("/dados").text   # dá para restaurar na lixeira
+
+
+# ---------- chave salva em Configurações ----------
+CHAVE = "sk-" + "ant-teste-1234567890abcd"   # montada aqui para o teste de segredos não achar chave no código
+
+
+def _stub_anthropic(monkeypatch):
+    achados = {}
+    monkeypatch.setattr(anthropic, "Anthropic", lambda **kw: achados.update(kw) or object())
+    return achados
+
+
+def test_salvar_chave_liga_o_assistente_e_o_cliente_recebe_a_chave(http, monkeypatch):
+    achados = _stub_anthropic(monkeypatch)
+    assert not assistente.configurado()
+    r = http.post("/configuracoes/assistente", data={"chave": f"  {CHAVE}  "}, follow_redirects=False)
+    assert r.status_code == 303 and "msg=" in r.headers["location"]
+    assert assistente.configurado() and assistente.origem_chave() == "config"
+    assistente._cliente()
+    assert achados["api_key"] == CHAVE
+
+
+def test_tela_mostra_so_o_final_da_chave(http):
+    http.post("/configuracoes/assistente", data={"chave": CHAVE})
+    r = http.get("/configuracoes")
+    assert "…abcd" in r.text and CHAVE not in r.text and "chave salva aqui" in r.text and "Remover a chave do Assistente?" in r.text
+    assert assistente.info()["final"] == "…abcd"
+
+
+def test_remover_chave_desliga(http, con_temp):
+    http.post("/configuracoes/assistente", data={"chave": CHAVE})
+    http.post("/configuracoes/assistente/remover")
+    assert not assistente.configurado() and assistente.origem_chave() == ""
+    assert con_temp.execute("SELECT COUNT(*) FROM segredos").fetchone()[0] == 0
+    assert "Desligado" in http.get("/configuracoes").text
+
+
+def test_chave_do_env_vence_a_salva(http, monkeypatch):
+    achados = _stub_anthropic(monkeypatch)
+    http.post("/configuracoes/assistente", data={"chave": CHAVE})
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-" + "ant-do-env-9999")
+    assert assistente.origem_chave() == "env" and assistente.info()["final"] == "…9999"
+    assistente._cliente()
+    assert "api_key" not in achados
+    assert "chave do .env" in http.get("/configuracoes").text
+
+
+def test_chave_invalida_e_recusada(http, con_temp):
+    for ruim in ("abc", "sk-" + "ant-curta", "x" * 30):
+        r = http.post("/configuracoes/assistente", data={"chave": ruim}, follow_redirects=False)
+        assert r.status_code == 303 and "erro=" in r.headers["location"]
+    assert not assistente.configurado()
+    assert con_temp.execute("SELECT COUNT(*) FROM segredos").fetchone()[0] == 0
+
+
+def test_consultar_banco_nao_le_segredos(http, con_temp):
+    http.post("/configuracoes/assistente", data={"chave": CHAVE})
+    for sql in ("SELECT * FROM segredos", "select valor from SEGREDOS"):
+        assert "reservada" in falha(con_temp, "consultar_banco", {"sql": sql})
+
+
+def test_carregar_chave_sem_a_tabela_nao_quebra(tmp_path):
+    import sqlite3
+    con = sqlite3.connect(tmp_path / "velho.db")
+    assistente.carregar_chave(con)
+    assert assistente._chave_salva["valor"] == "" and not assistente.configurado()
+    con.close()
+
+
+def test_carregar_chave_le_a_salva(con_temp):
+    assistente.salvar_chave(con_temp, CHAVE)
+    assistente._chave_salva["valor"] = ""
+    assistente.carregar_chave(con_temp)
+    assert assistente._chave_salva["valor"] == CHAVE

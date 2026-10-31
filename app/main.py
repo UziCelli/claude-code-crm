@@ -42,6 +42,14 @@ async def lifespan(app):
         # sem internet as gravações do Turso falham: abre com a réplica local (o banco já existe) em vez de cair e dar 502
         print(f"AVISO: não deu para atualizar o banco na nuvem ({e}); abrindo com a cópia local.", flush=True)
         db.nuvem.status["erro"] = f"banco na nuvem fora do ar ao ligar: {e}"
+    try:
+        con = db.conectar()
+        try:
+            assistente.carregar_chave(con)   # chave do Assistente salva em Configurações
+        finally:
+            con.close()
+    except Exception as e:  # o CRM abre mesmo sem ler a chave
+        print(f"AVISO: não deu para ler a chave do Assistente ({e}).", flush=True)
     if db.nuvem.ativo():
         db.nuvem.iniciar_sync_periodico(db.DB_PATH)
     try:
@@ -2240,7 +2248,7 @@ def configuracoes(request: Request, con=Depends(get_db)):
     ultima = con.execute("SELECT * FROM importacoes ORDER BY id DESC LIMIT 1").fetchone()
     msgs = con.execute("SELECT id, chave, valor_texto FROM parametros WHERE grupo='msg_whatsapp' ORDER BY ordem").fetchall()
     return render(request, "configuracoes.html", con, grupos=grupos, msgs=msgs, listas_cfg=listas_, precos=precos_, ultima=ultima,
-                  planilha=str(db.PLANILHA), planilha_existe=db.PLANILHA.exists())
+                  planilha=str(db.PLANILHA), planilha_existe=db.PLANILHA.exists(), assistente=assistente.info())
 
 
 @app.post("/configuracoes")
@@ -2256,6 +2264,21 @@ async def configuracoes_salvar(request: Request, con=Depends(get_db)):
             elif k.startswith("t_"):
                 con.execute("UPDATE parametros SET valor_texto=? WHERE id=? AND grupo='msg_whatsapp'", (v, int(k[2:])))
     return voltar("/configuracoes", msg="Parâmetros salvos.")
+
+
+@app.post("/configuracoes/assistente")
+def configuracoes_assistente(chave: str = Form(""), con=Depends(get_db)):
+    chave = chave.strip()
+    if not chave.startswith("sk-ant-") or len(chave) < 20:
+        return voltar("/configuracoes", erro="Chave inválida: ela começa com sk-ant- e é bem mais longa. Copie de novo em console.anthropic.com.")
+    assistente.salvar_chave(con, chave)
+    return voltar("/configuracoes", msg="Chave salva: o Assistente está ligado.")
+
+
+@app.post("/configuracoes/assistente/remover")
+def configuracoes_assistente_remover(con=Depends(get_db)):
+    assistente.remover_chave(con)
+    return voltar("/configuracoes", msg="Chave do Assistente removida.")
 
 
 @app.post("/configuracoes/lista")
