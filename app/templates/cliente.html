@@ -103,10 +103,13 @@
     </div>
 
     <div class="card mt">
-      <div class="linha topo" style="margin-bottom:8px"><h2 style="margin:0">Pagamentos</h2><a href="/financeiro/mensalidades">Mensalidades</a></div>
+      <div class="linha topo" style="margin-bottom:8px"><h2 style="margin:0">Pagamentos</h2>
+        <button class="verde pequeno" data-abrir="dlg-pgto" data-titulo="Registrar pagamento de {{ c.nome }}" data-cliente_id="{{ c.id }}" data-valor="{{ ('%.2f'|format(c.valor|float))|replace('.', ',') if c.valor else '' }}" data-descricao="Mensalidade {{ hoje()[5:7] }}/{{ hoje()[:4] }}" data-voltar="/clientes/{{ c.id }}">Registrar pagamento</button></div>
+      <p style="margin:0 0 8px">{% if pago_ate %}Pago até <strong>{{ pago_ate }}</strong>{% else %}<span class="muted">Sem pagamento registrado</span>{% endif %}{% if renovacao and data_iso(renovacao.efetiva) %} · próxima renovação <strong>{{ renovacao.efetiva|data }}</strong>{% endif %}</p>
       {% for p in pagamentos %}
       <div class="linha" style="justify-content:space-between;padding:4px 0"><span>{{ p.descricao or p.categoria }} <span class="tag {{ 'verde' if p.pago_em else 'amarelo' }}">{{ 'pago' if p.pago_em else 'pendente' }}</span></span><span class="muted">{{ p.data|data }} · <span class="v-{{ p.tipo }}">{{ p.valor|moeda }}</span></span></div>
-      {% else %}<p class="muted">Nenhum lançamento financeiro deste aluno. Em Mensalidades, use Registrar pagamento para lançar o primeiro.</p>{% endfor %}
+      {% else %}<p class="muted">Nenhum lançamento financeiro deste aluno. Use Registrar pagamento para lançar o primeiro.</p>{% endfor %}
+      <p class="muted" style="margin:8px 0 0"><a href="/financeiro/mensalidades">Mensalidades</a></p>
     </div>
 
     {% if propostas %}
@@ -117,4 +120,5 @@
   </div>
   {% endif %}
 </div>
+{% if c %}{% include "_dlg_pagamento.html" %}{% endif %}
 {% endblock %}

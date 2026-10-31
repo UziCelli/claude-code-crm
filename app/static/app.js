@@ -1,10 +1,11 @@
-// Abre o <dialog> indicado e copia os data-* do botão para os campos do formulário.
+// Abre o <dialog> indicado e copia os data-* do botão para os campos do formulário (data-acao troca a action).
 document.addEventListener("click", function (e) {
   var b = e.target.closest("[data-abrir]");
   if (!b) return;
   var d = document.getElementById(b.dataset.abrir);
   if (!d) return;
   var frm = d.querySelector("form"); if (frm) frm.reset();
+  if (frm && b.dataset.acao) frm.action = b.dataset.acao;   // diálogo que serve a vários registros (ex.: Dar baixa)
   // o reset volta ao atributo value: sem isto o id de uma edição anterior vazaria para o "Novo"
   d.querySelectorAll("input[type=hidden][name=id]").forEach(function (i) { i.value = ""; });
   Object.keys(b.dataset).forEach(function (k) {

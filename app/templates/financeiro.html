@@ -152,7 +152,7 @@
         {% if i.origem == 'recorrencia' %}
         <button class="verde pequeno" data-abrir="dlg-pagar" data-titulo="Pagar {{ i.descricao }}" data-rid="{{ i.id }}" data-competencia="{{ i.competencia }}" data-valor="{{ valor_txt(i.valor) }}">Pagar</button>
         {% else %}
-        <form method="post" action="/financeiro/lancamento/{{ i.id }}/baixa" class="inline"><input type="hidden" name="volta" value="{{ volta }}"><button class="verde pequeno">Dar baixa</button></form>
+        <button class="verde pequeno" data-abrir="dlg-baixa" data-acao="/financeiro/lancamento/{{ i.id }}/baixa" data-titulo="Dar baixa: {{ i.descricao }}" data-conta="{{ i.conta or '' }}">Dar baixa</button>
         {% endif %}
       </td>
     </tr>
@@ -179,7 +179,7 @@
       <td class="num v-{{ l.tipo }}">{{ '+' if l.tipo == 'entrada' else '−' }} {{ l.valor|moeda }}</td>
       <td><span class="tag {{ {'pago': 'verde', 'atrasado': 'vermelho', 'pendente': 'amarelo'}[l.status] }}">{{ l.status }}</span></td>
       <td class="linha" style="flex-wrap:nowrap">
-        {% if not l.pago_em %}<form method="post" action="/financeiro/lancamento/{{ l.id }}/baixa" class="inline"><input type="hidden" name="volta" value="{{ volta }}"><button class="verde pequeno">Dar baixa</button></form>{% endif %}
+        {% if not l.pago_em %}<button class="verde pequeno" data-abrir="dlg-baixa" data-acao="/financeiro/lancamento/{{ l.id }}/baixa" data-titulo="Dar baixa: {{ l.descricao or l.categoria }}" data-conta="{{ l.conta or '' }}">Dar baixa</button>{% endif %}
         <button class="claro pequeno" data-abrir="dlg-lanc" data-titulo="Editar lançamento" data-id="{{ l.id }}" data-escopo="{{ l.escopo }}" data-tipo="{{ l.tipo }}" data-data="{{ l.data }}" data-valor="{{ valor_txt(l.valor) }}" data-categoria="{{ l.categoria }}" data-descricao="{{ l.descricao or '' }}" data-contraparte="{{ l.contraparte or '' }}" data-cliente_id="{{ l.cliente_id or '' }}" data-conta="{{ l.conta or '' }}" data-forma="{{ l.forma or '' }}" data-parcela_num="{{ l.parcela_num or '' }}" data-parcela_total="{{ l.parcela_total or '' }}" data-recorrencia_id="{{ l.recorrencia_id or '' }}" data-pago_em="{{ l.pago_em or '' }}">Editar</button>
         <form method="post" action="/financeiro/lancamento/{{ l.id }}/excluir" class="inline" data-confirmar="Enviar este lançamento para a lixeira?"><input type="hidden" name="volta" value="{{ volta }}"><button class="claro pequeno" aria-label="Excluir lançamento">x</button></form>
       </td>
@@ -222,7 +222,7 @@
 <dialog id="dlg-lanc">
   <h2 data-titulo>Novo lançamento</h2>
   <form method="post" action="/financeiro/lancamento">
-    <input type="hidden" name="id" value=""><input type="hidden" name="volta" value="{{ volta }}">
+    <input type="hidden" name="id" value=""><input type="hidden" name="volta" value="{{ volta }}">{# conta recorrente se paga em "Pagar"; o campo escondido só impede que editar um lançamento já ligado solte o vínculo #}<input type="hidden" name="recorrencia_id" value="">
     <div class="form-grid">
       <div class="campo"><label>Escopo</label><select name="escopo" required>{% for k in ['PJ', 'PF'] %}<option {{ 'selected' if escopo == k }}>{{ k }}</option>{% endfor %}</select></div>
       <div class="campo"><label>Tipo</label><select name="tipo" required><option value="entrada">Entrada</option><option value="saida">Saída</option></select></div>
@@ -236,7 +236,6 @@
       <div class="campo"><label>Forma</label><select name="forma"><option value="">—</option>{% for k in listas.lista_formas_lancamento %}<option>{{ k }}</option>{% endfor %}</select></div>
       <div class="campo"><label>Parcela nº (opcional)</label><input name="parcela_num" type="number" min="1"></div>
       <div class="campo"><label>De quantas</label><input name="parcela_total" type="number" min="1"></div>
-      <div class="campo largo"><label>É uma conta recorrente? (só saída)</label><select name="recorrencia_id"><option value="">Não</option>{% for r in recs_todas %}<option value="{{ r.id }}">{{ r.descricao }} · {{ r.escopo }} · dia {{ r.dia_vencimento }}</option>{% endfor %}</select></div>
       <div class="campo largo"><label>Pago em (deixe vazio se ainda não foi pago)</label><input name="pago_em" type="date" max="{{ hoje() }}"></div>
     </div>
     <div class="linha"><button>Salvar</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
@@ -267,6 +266,8 @@
     <div class="linha mt"><button>Salvar saldos</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
   </form>
 </dialog>
+
+{% include "_dlg_baixa.html" %}
 
 <dialog id="dlg-pagar">
   <h2 data-titulo>Pagar conta</h2>

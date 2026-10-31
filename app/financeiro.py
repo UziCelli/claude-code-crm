@@ -33,7 +33,7 @@ def pendencias(con: sqlite3.Connection, mes: str, hoje: str) -> list[dict]:
     ):
         itens.append({"origem": "lancamento", "id": r["id"], "escopo": r["escopo"], "tipo": r["tipo"], "data": r["data"],
                       "descricao": r["descricao"] or r["categoria"], "categoria": r["categoria"], "valor": r["valor"],
-                      "status": status(r, hoje)})
+                      "conta": r["conta"], "status": status(r, hoje)})
     # ponytail: olha até 3 competências para trás (conta não paga não some na virada do mês); mais antigo que isso, só pelo livro-caixa
     for k in range(4):
         itens += _recorrencias_abertas(con, somar_meses(mes, -k), hoje)
@@ -633,7 +633,7 @@ def mensalidades(con: sqlite3.Connection, mes: str) -> list[dict]:
     Aluno que só começa depois do mês fica de fora. Situação: 'recebido' (recebido >= previsto), 'parcial' ou 'em aberto'.
     Mês pulado (evento 'pausa' da ficha, sem cobrança): previsto 0 e situação 'pulou o mês'."""
     abertos = {}
-    for r in con.execute("""SELECT id, cliente_id, data, valor, descricao, categoria FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
+    for r in con.execute("""SELECT id, cliente_id, data, valor, descricao, categoria, conta FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
                             AND excluido_em IS NULL AND pago_em IS NULL AND cliente_id IS NOT NULL AND substr(data,1,7)=? ORDER BY data, id""", (mes,)):
         abertos.setdefault(r["cliente_id"], []).append(dict(r))
     pulados = {r[0] for r in con.execute("""SELECT DISTINCT cliente_id FROM cliente_eventos WHERE tipo='pausa' AND excluido_em IS NULL
