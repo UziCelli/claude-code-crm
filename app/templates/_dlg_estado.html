@@ -1,0 +1,20 @@
+{# Diálogos das soluções do estado do aluno (app/alunos.py); vêm do base.html, em toda tela. Abrem por botão com data-abrir="dlg-credito" / "dlg-pulou",
+   data-acao (rota), data-titulo, data-voltar (para onde ir depois) e, no crédito, data-valor e data-mes. #}
+<dialog id="dlg-credito">
+  <h2>Crédito na próxima</h2>
+  <p class="muted" data-titulo></p>
+  <form method="post" action="">
+    <input type="hidden" name="voltar" value=""><input type="hidden" name="mes" value="">
+    <div class="campo"><label>Valor do crédito (R$)</label><input name="valor" inputmode="decimal" required></div>
+    <p class="muted">Sugerido pelas aulas não usadas; pode mudar. Sai sozinho do próximo pagamento do aluno.</p>
+    <div class="linha"><button class="verde">Dar crédito</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
+  </form>
+</dialog>
+<dialog id="dlg-pulou">
+  <h2>Pulou o mês</h2>
+  <p data-titulo></p>
+  <form method="post" action="">
+    <input type="hidden" name="voltar" value="">
+    <div class="linha"><button class="verde">Pulou o mês</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
+  </form>
+</dialog>

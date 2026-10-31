@@ -1,7 +1,11 @@
 {% extends "base.html" %}
+{% from "_acoes.html" import botoes with context %}
 {% block conteudo %}
 {# renovação efetiva: a data do cadastro andando com os pagamentos, as Renovações marcadas e os meses pulados #}
 {% set renova = ((renovacao.efetiva if renovacao else c.data_renovacao) or '') if c else '' %}
+{# crédito do aluno: o pagamento já vem com a mensalidade menos ele #}
+{% set cred = estado.credito if estado else 0 %}
+{% set a_pagar = [((c.valor or 0)|float) - cred, 0]|max if c else 0 %}
 <div class="linha topo">
   <h1 style="margin:0">{{ c.nome if c else 'Novo cliente' }}</h1>
   {% if c %}
@@ -24,6 +28,14 @@
   {% endif %}
 </div>
 
+{% if estado %}
+<div class="card borda-{{ estado.cor }}" id="situacao" style="margin-bottom:14px">
+  <div class="linha" style="justify-content:space-between"><h2 style="margin:0">Situação</h2><span class="tag {{ estado.cor }}">{{ estado.rotulo }}</span></div>
+  <p style="margin:8px 0">{{ estado.texto[:1]|upper ~ estado.texto[1:] }}.</p>
+  {% if estado.acoes %}<div class="acoes-alerta">{{ botoes(estado.acoes, estado, '/clientes/' ~ c.id) }}</div>{% endif %}
+</div>
+{% endif %}
+
 <div class="grid c2">
   <div>
   {% if c and data_iso(renova) %}
@@ -32,7 +44,7 @@
     <div class="linha" style="justify-content:space-between"><strong>{{ renova|data }}</strong>{% if cobranca %}<span class="tag vermelho">{{ cobranca.dias }} dias de atraso</span>{% endif %}</div>
     {% if renovacao and renovacao.ciclos %}<p class="muted">Andou com {{ {'pagamento': 'o pagamento', 'renovacao': 'a renovação marcada', 'pausa': 'o mês pulado'}[renovacao.motivo] }} de {{ renovacao.motivo_data|data }} (no cadastro: {{ renovacao.gravada|data }}).</p>{% endif %}
     {% if renovacao and renovacao.pendente %}<p class="muted">Renovação marcada, pagamento ainda não lançado: falta {{ renovacao.falta|moeda }}.</p>{% endif %}
-    <div class="linha" style="margin:8px 0"><button class="verde pequeno" data-abrir="dlg-pgto" data-titulo="Registrar pagamento de {{ c.nome }}" data-cliente_id="{{ c.id }}" data-valor="{{ ('%.2f'|format(c.valor|float))|replace('.', ',') if c.valor else '' }}" data-descricao="Mensalidade {{ data_iso(renova)[5:7] if data_iso(renova) else hoje()[5:7] }}/{{ data_iso(renova)[:4] if data_iso(renova) else hoje()[:4] }}" data-voltar="/clientes/{{ c.id }}">Registrar pagamento</button><span class="muted">a renovação anda sozinha</span></div>
+    <div class="linha" style="margin:8px 0"><button class="verde pequeno" data-abrir="dlg-pgto" data-titulo="Registrar pagamento de {{ c.nome }}" data-cliente_id="{{ c.id }}" data-valor="{{ ('%.2f'|format(a_pagar))|replace('.', ',') if a_pagar else '' }}"{% if cred %} data-nota="Crédito de {{ cred|moeda }} descontado"{% endif %} data-descricao="Mensalidade {{ data_iso(renova)[5:7] if data_iso(renova) else hoje()[5:7] }}/{{ data_iso(renova)[:4] if data_iso(renova) else hoje()[:4] }}" data-voltar="/clientes/{{ c.id }}">Registrar pagamento</button><span class="muted">a renovação anda sozinha</span></div>
     {% if cobranca %}<p class="muted">Com multa e juros: {{ cobranca.total|moeda }} ({{ cobranca.valor|moeda }} + multa {{ cobranca.multa|moeda }} + juros {{ cobranca.juros|moeda }}).</p>{% endif %}
     <form method="post" action="/clientes/{{ c.id }}/evento" class="linha" data-confirmar="Pular a renovação de {{ renova|data }} sem cobrança?">
       <input type="hidden" name="tipo" value="pausa"><input type="hidden" name="data" value="{{ hoje() }}">
@@ -94,7 +106,7 @@
       <h2>Histórico</h2>
       {% for e in eventos %}
       <div class="linha" style="justify-content:space-between;border-bottom:1px solid var(--borda);padding:6px 0">
-        <span><span class="tag {{ {'aula':'azul','falta':'vermelho','desmarcou':'amarelo','cancelada':'neutro','pagamento':'verde','renovacao':'amarelo','pausa':'azul','status':'neutro','anotacao':'neutro'}[e.tipo] }}">{{ {'aula':'aula dada','falta':'faltou','pausa':'pulou o mês','cancelada':'cancelada (não repõe)'}.get(e.tipo, e.tipo) }}</span> {{ e.descricao or '' }}</span>
+        <span><span class="tag {{ {'aula':'azul','falta':'vermelho','desmarcou':'amarelo','cancelada':'neutro','pagamento':'verde','renovacao':'amarelo','pausa':'azul','credito':'verde','status':'neutro','anotacao':'neutro'}[e.tipo] }}">{{ {'aula':'aula dada','falta':'faltou','pausa':'pulou o mês','cancelada':'cancelada (não repõe)','credito':'crédito'}.get(e.tipo, e.tipo) }}</span> {{ e.descricao or '' }}{% if e.tipo == 'credito' and e.usado_em %} <span class="muted">(já descontado em {{ e.usado_em|data }})</span>{% endif %}</span>
         <div class="linha" style="gap:8px"><span class="muted">{{ e.data|data }}{% if e.valor %} · {{ e.valor|moeda }}{% endif %}</span>
           <form method="post" action="/agenda/evento/{{ e.id }}/excluir" class="inline" data-confirmar="Excluir este registro do histórico? Dá para restaurar em Dados."><input type="hidden" name="destino" value="ficha"><button class="claro pequeno">excluir</button></form></div>
       </div>
@@ -103,11 +115,12 @@
 
     <div class="card mt">
       <div class="linha topo" style="margin-bottom:8px"><h2 style="margin:0">Pagamentos</h2>
-        <button class="verde pequeno" data-abrir="dlg-pgto" data-titulo="Registrar pagamento de {{ c.nome }}" data-cliente_id="{{ c.id }}" data-valor="{{ ('%.2f'|format(c.valor|float))|replace('.', ',') if c.valor else '' }}" data-descricao="Mensalidade {{ hoje()[5:7] }}/{{ hoje()[:4] }}" data-voltar="/clientes/{{ c.id }}">Registrar pagamento</button></div>
+        <button class="verde pequeno" data-abrir="dlg-pgto" data-titulo="Registrar pagamento de {{ c.nome }}" data-cliente_id="{{ c.id }}" data-valor="{{ ('%.2f'|format(a_pagar))|replace('.', ',') if a_pagar else '' }}"{% if cred %} data-nota="Crédito de {{ cred|moeda }} descontado"{% endif %} data-descricao="Mensalidade {{ hoje()[5:7] }}/{{ hoje()[:4] }}" data-voltar="/clientes/{{ c.id }}">Registrar pagamento</button></div>
       <p style="margin:0 0 8px">{% if pago_ate %}Pago até <strong>{{ pago_ate }}</strong>{% else %}<span class="muted">Sem pagamento registrado</span>{% endif %}{% if renovacao and data_iso(renovacao.efetiva) %} · próxima renovação <strong>{{ renovacao.efetiva|data }}</strong>{% endif %}</p>
       {% for p in pagamentos %}
       <div class="linha" style="justify-content:space-between;padding:4px 0"><span>{{ p.descricao or p.categoria }} <span class="tag {{ 'verde' if p.pago_em else 'amarelo' }}">{{ 'pago' if p.pago_em else 'pendente' }}</span></span><span class="muted">{{ p.data|data }} · <span class="v-{{ p.tipo }}">{{ p.valor|moeda }}</span></span></div>
       {% else %}<p class="muted">Nenhum lançamento financeiro deste aluno. Use Registrar pagamento para lançar o primeiro.</p>{% endfor %}
+      {% if estado and estado.credito_total %}<p style="margin:0 0 8px">Crédito disponível <strong>{{ estado.credito_total|moeda }}</strong> <span class="muted">· sai sozinho do próximo pagamento</span></p>{% endif %}
       <p class="muted" style="margin:8px 0 0"><a href="/financeiro/mensalidades">Mensalidades</a></p>
     </div>
 

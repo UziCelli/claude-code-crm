@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import acesso, assistente, atualizar, db, exportar, financeiro, importar, precos, vigia
+from . import alunos as alu   # estado de cada aluno (um algoritmo só); 'alunos' é nome de variável em várias rotas
 
 ROOT = Path(__file__).resolve().parent
 DIAS = {1: "Segunda", 2: "Terça", 3: "Quarta", 4: "Quinta", 5: "Sexta", 6: "Sábado", 7: "Domingo"}
@@ -247,21 +248,9 @@ GRAV = {"vermelho": 1, "amarelo": 2, "azul": 3}
 MAX_IDS = 200   # alunos de uma lista filtrada de /clientes?ids=
 
 
-def acao_pagamento(c, efetiva, valor) -> dict:
-    """Botão "Registrar pagamento" de um aluno: abre o diálogo único (dlg-pgto) com valor e mês da renovação já preenchidos."""
-    return {"rotulo": "Registrar pagamento", "dialogo": "dlg-pgto", "classe": "verde",
-            "dados": {"titulo": f"Registrar pagamento de {c['nome']}", "cliente_id": c["id"],
-                      "valor": f"{float(valor):.2f}".replace(".", ",") if valor else "", "descricao": f"Mensalidade {efetiva[5:7]}/{efetiva[:4]}"}}
-
-
 def acao_whatsapp(tel) -> list:
     """WhatsApp de um lead (não há modelo de mensagem para lead: abre a conversa sem texto). Sem telefone, nada."""
     return [{"rotulo": "WhatsApp", "href": wa(tel), "externo": True}] if tel else []
-
-
-def acao_agenda(cid) -> dict:
-    """Botão "Abrir agenda" já com o aluno no Controle do aluno."""
-    return {"rotulo": "Abrir agenda", "href": f"/agenda?aluno={cid}"}
 
 
 def contas_vencendo(con, h: str) -> list:
@@ -296,49 +285,17 @@ def alertas(con):
     def s(n):
         return "s" if n > 1 else ""
 
-    # renovação: a data do cadastro andando com os pagamentos, as Renovações marcadas e os meses pulados (financeiro.renovacoes)
-    ren = financeiro.renovacoes(con)
-    par_cob = db.parametros(con, "cobranca")
-    vencendo = []
-    for c in con.execute("""SELECT id, nome, telefone, valor, data_renovacao FROM clientes WHERE excluido_em IS NULL AND status='ativo'
-                            AND data_renovacao IS NOT NULL AND data_renovacao <= ?""", (lim7,)):   # a efetiva nunca é antes da gravada
-        efetiva = ren[c["id"]]["efetiva"] if c["id"] in ren else c["data_renovacao"]
-        if efetiva <= lim7:
-            vencendo.append((efetiva, c))
-    for efetiva, c in sorted(vencendo, key=lambda x: x[0]):
-        venceu = efetiva < h
-        cob = financeiro.cobranca(c["valor"], efetiva, h, par_cob) if venceu else None
-        pagar = acao_pagamento(c, efetiva, c["valor"])   # pagamento parcial já quita o mês: sempre a mensalidade cheia
-        pular = {"rotulo": "Pular mês", "href": f"/clientes/{c['id']}#renovacao"}
-        add("vermelho" if venceu else "amarelo", f"{c['nome']} — renovação {'venceu em' if venceu else 'em'} {data_br(efetiva)}",
-            f"/clientes/{c['id']}", c["telefone"], "cobranca" if cob else "renovacao", c["nome"], data_br(efetiva),
-            extra=texto_cobranca(cob) if cob else None, botao=f"Cobrar {moeda(cob['total'])}" if cob else None,
-            acoes=[pagar, {"wa": True}, pular] if venceu else [pagar])
-    # sem aula: os dias de bloqueio da agenda (viagem) e de mês pulado não contam
-    parados = [(i, f) for i, f in ((data_iso(a), data_iso(b)) for a, b in fases_bloqueio(con)) if i and f]
-    pausas = pausas_por_aluno(con)
-    nunca = []
-    com_horario = alunos_com_horario(con)
-    for c in con.execute("""SELECT c.id, c.nome, c.telefone, c.tipo_servico, c.plano, c.data_inicio, MAX(e.data) AS ultima FROM clientes c
-                            LEFT JOIN cliente_eventos e ON e.cliente_id=c.id AND e.tipo='aula' AND e.excluido_em IS NULL
-                            WHERE c.excluido_em IS NULL AND c.status='ativo'
-                            GROUP BY c.id ORDER BY ultima, c.nome"""):
-        if not tem_aulas(c, com_horario):   # consultoria sem horário fixo não tem aula para cobrar
+    # alunos: UM algoritmo (alu.estado) diz a situação de cada um e traz os botões; aqui só vira alerta
+    estados = alu.estado(con, hoje)
+    incompletos = []
+    for e in sorted(estados.values(), key=lambda e: (alu.ORDEM.index(e["situacao"]), e["ordem"])):
+        if e["situacao"] == "em_dia":
             continue
-        limite = 35 if c["tipo_servico"] == "Consultoria Híbrida" else 14
-        if c["ultima"] is None:
-            ini = data_iso(c["data_inicio"])
-            if not (ini and ini > (hoje - dt.timedelta(days=limite)).isoformat()):   # começou agora (ou vai começar): ainda não
-                nunca.append((c["id"], c["nome"]))
-        elif ultima := data_iso(c["ultima"]):
-            ultima = dt.date.fromisoformat(ultima)
-            if (hoje - ultima).days - dias_parados(ultima, hoje, parados + pausas.get(c["id"], [])) > limite:
-                add("vermelho", f"{c['nome']} — sem aula desde {data_br(c['ultima'])}", f"/clientes/{c['id']}", c["telefone"], "falta",
-                    c["nome"], data_br(c["ultima"]), acoes=[acao_agenda(c["id"])])
-    if nunca:
-        nomes = ", ".join(sorted(n for _, n in nunca)[:3]) + (f" e mais {len(nunca) - 3}" if len(nunca) > 3 else "")
-        add("amarelo", f"{len(nunca)} aluno{s(len(nunca))} sem nenhuma aula registrada: {nomes}",
-            "/clientes?ids=" + ",".join(str(i) for i, _ in nunca[:MAX_IDS]) + "&motivo=sem-aula")
+        if e["situacao"] == "cadastro_incompleto":
+            incompletos.append(e["id"])   # um alerta só para todos, no fim da lista
+            continue
+        add(e["cor"], alu.frase(e), f"/clientes/{e['id']}", e["tel"], e["modelo"], e["nome"], e["data_modelo"], extra=e["extra"],
+            botao=e["botao"], acoes=e["acoes"])
     n = aulas_sem_marcar(con, hoje)
     if n:
         add("azul", f"{n} aula{s(n)} da agenda sem marcar nesta semana", "/agenda")
@@ -383,8 +340,6 @@ def alertas(con):
     n = con.execute("SELECT COUNT(*) FROM propostas WHERE excluido_em IS NULL AND status='enviada'").fetchone()[0]
     if n:
         add("azul", f"{n} proposta{s(n)} enviada{s(n)} esperando resposta", "/simulador")
-    incompletos = [r[0] for r in con.execute("""SELECT id FROM clientes WHERE excluido_em IS NULL AND status='ativo'
-                                                AND (telefone IS NULL OR telefone='' OR data_renovacao IS NULL) ORDER BY nome""")]
     if n := len(incompletos):
         add("azul", f"{n} aluno{s(n)} ativo{s(n)} com cadastro incompleto (telefone ou renovação)",
             "/clientes?ids=" + ",".join(map(str, incompletos[:MAX_IDS])) + "&motivo=incompleto")
@@ -542,10 +497,10 @@ def clientes(request: Request, status: str = "ativo", busca: str = "", ids: str 
             sql += " AND nome LIKE ?"
             args.append(f"%{busca}%")
     rows = con.execute(sql + " ORDER BY status='ativo' DESC, nome", args).fetchall()
-    if filtro and motivo == "sem-aula":   # quem virou consultoria sem horário fixo já não tem aula: sai da lista (mesma regra dos alertas)
-        com_horario = alunos_com_horario(con)
-        rows = [c for c in rows if tem_aulas(c, com_horario)]
     hoje = dt.date.today()
+    estados = alu.estado(con, hoje, ids=[c["id"] for c in rows if c["status"] == "ativo"])   # a situação de cada aluno vem do algoritmo central
+    if filtro and motivo == "sem-aula":   # quem não está indo: sem aula registrada ou o mês pago/pulado sem aula (quem virou consultoria sai: mesma regra tem_aulas)
+        rows = [c for c in rows if c["id"] in estados and estados[c["id"]]["situacao"] in alu.SEM_AULA]
     ren = financeiro.renovacoes(con)
     itens = []
     for c in rows:
@@ -555,7 +510,7 @@ def clientes(request: Request, status: str = "ativo", busca: str = "", ids: str 
             dias = (dt.date.fromisoformat(data_iso(renova)) - hoje).days
             alerta = "vermelho" if dias < 0 else ("amarelo" if dias <= 7 else None)
         faltas = [t for t, falta in (("falta telefone", not c["telefone"]), ("falta data de renovação", not c["data_renovacao"])) if falta]
-        itens.append({**dict(c), "data_renovacao": renova, "alerta": alerta, "faltas": faltas})
+        itens.append({**dict(c), "data_renovacao": renova, "alerta": alerta, "faltas": faltas, "estado": estados.get(c["id"])})
     totais = {r[0]: r[1] for r in con.execute("SELECT status, COUNT(*) FROM clientes WHERE excluido_em IS NULL GROUP BY status")}
     return render(request, "clientes.html", con, clientes=itens, status=status, busca=busca, totais=totais, filtrado=bool(filtro),
                   motivo=motivo if motivo in MOTIVOS_LISTA else "", titulo_lista=MOTIVOS_LISTA.get(motivo, "Alunos selecionados"),
@@ -605,7 +560,8 @@ def cliente_ficha(request: Request, cid: int, con=Depends(get_db)):
         m = financeiro.proxima_renovacao(renovacao["efetiva"], -1)
         pago_ate = f"{m[5:7]}/{m[:4]}"
     return render(request, "cliente.html", con, c=c, eventos=eventos, estimativa=estimativa, propostas=propostas, pagamentos=pagamentos,
-                  renovacao=renovacao, cobranca=cob, texto_cob=texto_cobranca(cob) if cob else None, pago_ate=pago_ate)
+                  renovacao=renovacao, cobranca=cob, texto_cob=texto_cobranca(cob) if cob else None, pago_ate=pago_ate,
+                  estado=alu.estado_aluno(con, cid))
 
 
 @app.post("/clientes/{cid}")
@@ -683,6 +639,25 @@ def registrar_evento(con, cid: int, tipo: str, data: str, valor="", descricao=""
         return f"Renovação registrada. Próxima: {proxima}.", None
     return (f"Registrado. A renovação continua em {proxima}: sem data, ela só anda quando faltam até {financeiro.ANTECEDENCIA} dias. "
             "Para outra data, preencha a nova data de renovação."), None
+
+
+@app.post("/alunos/{cid}/credito")
+def aluno_credito(cid: int, valor: str = Form(""), mes: str = Form(""), destino: str = Form("", alias="voltar"), con=Depends(get_db)):
+    """Crédito do mês pago e não usado (valor vazio = o sugerido): vira desconto no próximo pagamento."""
+    url = _caminho_seguro(destino) or f"/clientes/{cid}"
+    try:
+        v = _num_br(valor) if valor.strip() else None
+    except ValueError:
+        return voltar(url, erro="Valor inválido.")
+    msg, erro = alu.dar_credito(con, cid, v, mes.strip() or None)
+    return voltar(url, msg=msg, erro=erro)
+
+
+@app.post("/alunos/{cid}/pulou")
+def aluno_pulou(cid: int, destino: str = Form("", alias="voltar"), con=Depends(get_db)):
+    """"Pulou o mês": a renovação anda um mês, sem cobrança."""
+    msg, erro = alu.pular_mes(con, cid)
+    return voltar(_caminho_seguro(destino) or f"/clientes/{cid}", msg=msg, erro=erro)
 
 
 @app.post("/clientes/{cid}/consultoria")
@@ -2142,6 +2117,10 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
         return _fin_voltar(volta, erro=str(e))
     except sqlite3.IntegrityError:
         return _fin_voltar(volta, erro="Não foi possível salvar: confira o aluno e os campos.")
+    if f["escopo"] == "PJ" and f["tipo"] == "entrada" and pago_em and cliente_id:
+        with con:
+            if desconto := financeiro.usar_credito(con, lid):   # o crédito do aluno foi descontado neste pagamento
+                aviso += f"Crédito de {financeiro.moeda_br(desconto)} descontado. "
     if f["escopo"] == "PJ" and f["tipo"] == "entrada" and f["categoria"] == financeiro.EMPRESTIMO:
         return _fin_voltar(volta, msg=(aviso or "Lançamento salvo. ") + "É empréstimo: não paga DAS e não conta como receita.")
     if f["escopo"] == "PJ" and f["tipo"] == "entrada" and pago_em:
@@ -2161,7 +2140,8 @@ def financeiro_baixa(lid: int, volta: str = Form(""), voltar_a: str = Form("", a
         return _fin_voltar(volta, erro="Confira a data do pagamento: não pode ser no futuro.")
     with con:
         con.execute("UPDATE lancamentos SET pago_em=?, conta=COALESCE(NULLIF(?, ''), conta) WHERE id=? AND pago_em IS NULL", (pago_em, conta.strip(), lid))
-    return _fin_voltar(volta, msg="Baixa registrada.")
+        desconto = financeiro.usar_credito(con, lid)   # pagamento de aluno: desconta o crédito dele
+    return _fin_voltar(volta, msg="Baixa registrada." + (f" Crédito de {financeiro.moeda_br(desconto)} descontado." if desconto else ""))
 
 
 @app.post("/financeiro/lancamento/{lid}/aluno")
@@ -2322,6 +2302,7 @@ def _fin_mes(mes):
 def financeiro_mensalidades(request: Request, mes: str = "", con=Depends(get_db)):
     mes = _fin_mes(mes)
     itens = financeiro.mensalidades(con, mes)
+    alunos_estado = alu.estado(con)   # a situação de cada aluno (hoje) vem do algoritmo central
     previsto, recebido = (round(sum(i[k] for i in itens), 2) for k in ("previsto", "recebido"))
     # falta: só quem ainda não pagou nada no mês (qualquer pagamento quita o mês)
     falta = round(sum(i["previsto"] for i in itens if not i["quitado"]), 2)
@@ -2330,7 +2311,8 @@ def financeiro_mensalidades(request: Request, mes: str = "", con=Depends(get_db)
                       parece_emprestimo=financeiro.parece_emprestimo(f"{e['descricao'] or ''} {e['contraparte'] or ''}"))
                  for e in financeiro.entradas_sem_aluno(con, mes)]
     return render(request, "financeiro_mensalidades.html", con, mes=mes, itens=itens, previsto=previsto, recebido=recebido, falta=falta,
-                  sem_aluno=sem_aluno, alunos=alunos, volta=f"/financeiro/mensalidades?mes={mes}")
+                  sem_aluno=sem_aluno, alunos=alunos, volta=f"/financeiro/mensalidades?mes={mes}",
+                  estados=alunos_estado)
 
 
 @app.get("/financeiro/painel", response_class=HTMLResponse)
@@ -2511,7 +2493,7 @@ def importar_planilha(con=Depends(get_db)):
 # =====================================================================
 LIXEIRA = [("clientes", "Cliente", "nome"), ("leads", "Lead", "nome"), ("propostas", "Proposta", "tipo_servico"),
            ("cliente_eventos", "Evento de cliente", "(SELECT nome FROM clientes WHERE clientes.id=cliente_eventos.cliente_id) || ' — ' || "
-            "CASE tipo WHEN 'aula' THEN 'aula feita' WHEN 'falta' THEN 'faltou' WHEN 'cancelada' THEN 'cancelada (não repõe)' ELSE tipo END || ' ' || data || "
+            "CASE tipo WHEN 'aula' THEN 'aula feita' WHEN 'falta' THEN 'faltou' WHEN 'cancelada' THEN 'cancelada (não repõe)' WHEN 'credito' THEN 'crédito' ELSE tipo END || ' ' || data || "
             "COALESCE(' — ' || descricao, '')"), ("lista_espera", "Lista de espera", "nome"),
            ("gastos_marketing", "Gasto de marketing", "canal"), ("campanha_itens", "Item de campanha", "texto"),
            ("campanha_checkpoints", "Checkpoint", "pergunta"), ("rotina_tarefas", "Tarefa da rotina", "texto"),

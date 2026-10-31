@@ -24,7 +24,7 @@ from contextlib import closing, contextmanager
 
 from markupsafe import Markup, escape
 
-from . import db, financeiro
+from . import alunos, db, financeiro
 
 MODELO_PADRAO = "claude-haiku-5-5"
 ESFORCOS = ("low", "medium", "high", "xhigh", "max")
@@ -156,7 +156,11 @@ Antes de mudar dados
 - Depois de mudar, diga em uma linha o que mudou e como desfazer.
 
 Aulas
-- Aula dada, falta e desmarcou se marcam com marcar_aula (a aula precisa estar na Agenda). Desmarcou gera reposição; Cancelada (não repõe) não gera."""
+- Aula dada, falta e desmarcou se marcam com marcar_aula (a aula precisa estar na Agenda). Desmarcou gera reposição; Cancelada (não repõe) não gera.
+
+Situação dos alunos
+- A situação de cada aluno (vencida, pagou sem aula, sem aula nem pagamento, vence logo, sem aula, cadastro incompleto, em dia) vem de um algoritmo central, o mesmo dos alertas, da lista de Clientes, da ficha e das Mensalidades: use situacao_alunos, nunca deduza por conta própria.
+- Pagou o mês e não teve aula: ou pulou o mês (registrar_no_aluno, pausa) ou fica com crédito para o próximo pagamento (dar_credito, que o desconta sozinho)."""
 
 
 # ---------- ferramentas (ordem fixa) ----------
@@ -272,6 +276,13 @@ FERRAMENTAS = [
         "estado": {"type": "string", "enum": ["feita", "faltou", "desmarcou", "cancelada"]},
         "hora": {"type": "integer", "description": "5 a 23; só quando o aluno tem mais de uma aula no dia"}},
        ["aluno", "data", "estado"]),
+    _f("situacao_alunos", "Situação de cada aluno ativo, calculada pelo algoritmo central (a mesma dos alertas, de Clientes, da ficha e das "
+                          "Mensalidades), com a frase, o crédito disponível e as soluções oferecidas. Sem filtro: só quem precisa de atenção.",
+       {"situacao": {"type": "string", "enum": list(alunos.ORDEM), "description": "só alunos nesta situação (em_dia lista quem está certo)"}}),
+    _f("dar_credito", "Dá crédito a um aluno que pagou um mês e não usou: vira desconto automático no próximo pagamento dele. "
+                      "Sem valor: o sugerido pelas aulas não usadas. Não passa da mensalidade; um crédito por mês.",
+       {"aluno": {"type": "string", "description": "nome ou id do aluno"}, "valor": {"type": "number"},
+        "mes": {"type": "string", "description": "AAAA-MM do mês não usado (vazio = o último mês pago sem aula)"}}, ["aluno"]),
 ]
 
 ROTULOS = {"ver_painel": "Lendo os alertas do Painel", "resumo_do_mes": "Somando o mês", "listar_lancamentos": "Buscando lançamentos",
@@ -285,7 +296,7 @@ ROTULOS = {"ver_painel": "Lendo os alertas do Painel", "resumo_do_mes": "Somando
            "atualizar_saldo": "Atualizando saldo", "pagar_salario": "Pagando o salário", "marcar_tarefa": "Marcando tarefa",
            "criar_tarefa": "Criando tarefa", "excluir_tarefa": "Tirando tarefa da rotina", "agendar_lead": "Agendando ação do lead",
            "responder_checkpoint": "Respondendo checkpoint", "registrar_no_aluno": "Registrando na ficha do aluno",
-           "marcar_aula": "Marcando a aula na Agenda"}
+           "marcar_aula": "Marcando a aula na Agenda", "situacao_alunos": "Vendo a situação dos alunos", "dar_credito": "Dando crédito ao aluno"}
 
 
 def rotulo(nome: str) -> str:
@@ -602,6 +613,12 @@ def _buscar_alunos(con, a):
     return {"alunos": out}
 
 
+def _situacao_do_aluno(con, cid):
+    e = alunos.estado_aluno(con, cid, _hoje())
+    return e and {"situacao": e["situacao"], "texto": e["texto"], "credito_a_descontar": e["credito"], "credito_sugerido": e["credito_sugerido"],
+                  "solucoes": [x.get("rotulo") or "WhatsApp" for x in e["acoes"]]}
+
+
 def _ver_aluno(con, a):
     cid = _inteiro(a, "cliente_id", True)
     c = con.execute("SELECT * FROM clientes WHERE id=? AND excluido_em IS NULL", (cid,)).fetchone()
@@ -614,7 +631,7 @@ def _ver_aluno(con, a):
                                   "dias_horarios", "data_inicio", "canal_origem", "observacoes") if c[k] not in (None, "")}
     return {"cadastro": cadastro,
             "renovacao": {k: ren[k] for k in ("efetiva", "gravada", "falta", "pendente", "motivo", "motivo_data")} if ren else None,
-            "cobranca": cob,
+            "cobranca": cob, "situacao": _situacao_do_aluno(con, cid),
             "historico": [{"data": e["data"], "tipo": e["tipo"], "valor": e["valor"], "descricao": e["descricao"]} for e in con.execute(
                 "SELECT * FROM cliente_eventos WHERE cliente_id=? AND excluido_em IS NULL ORDER BY data DESC, id DESC LIMIT 15", (cid,))],
             "pagamentos": [_linha_lanc(r, hoje) for r in con.execute(
@@ -722,6 +739,10 @@ def _criar_lancamento(con, a):
                                cid, conta, forma, num, total)).lastrowid
             msg = f"Lançamento {lid} salvo ({'pago' if pago_em else 'em aberto'})."
             desfazer = f"excluir_lancamento(id={lid})"
+    if escopo == "PJ" and tipo == "entrada" and pago_em and cid:
+        with con:
+            if desconto := financeiro.usar_credito(con, lid):
+                msg += f" Crédito de {financeiro.moeda_br(desconto)} do aluno descontado."
     if escopo == "PJ" and tipo == "entrada" and categoria == financeiro.EMPRESTIMO:
         msg += " É empréstimo: não paga DAS e não conta como receita."
     elif escopo == "PJ" and tipo == "entrada" and pago_em:
@@ -781,6 +802,9 @@ def _dar_baixa(con, a):
         with con:
             con.execute("UPDATE lancamentos SET pago_em=?, valor=COALESCE(?, valor) WHERE id=? AND pago_em IS NULL", (pago_em, valor, lid))
         msg = f"Baixa no lançamento {lid} em {pago_em}."
+        with con:
+            if desconto := financeiro.usar_credito(con, lid):
+                msg += f" Crédito de {financeiro.moeda_br(desconto)} do aluno descontado."
         if r["escopo"] == "PJ" and r["tipo"] == "entrada" and r["categoria"] != financeiro.EMPRESTIMO:
             msg += _separe_imposto(con, lid)
         return {"ok": True, "id": lid, "mensagem": msg, "para_desfazer": f"editar_lancamento(id={lid}, pago_em=\"\")"}
@@ -1042,6 +1066,27 @@ def _marcar_aula(con, a):
     return out
 
 
+def _situacao_alunos(con, a):
+    filtro = _opcao(a, "situacao", alunos.ORDEM)
+    est = alunos.estado(con, _hoje())
+    itens = sorted(est.values(), key=lambda e: (alunos.ORDEM.index(e["situacao"]), e["nome"]))
+    itens = [e for e in itens if e["situacao"] == filtro] if filtro else [e for e in itens if e["situacao"] != "em_dia"]
+    return {"hoje": _hoje(), "total_ativos": len(est),
+            "alunos": [{"cliente_id": e["id"], "nome": e["nome"], "situacao": e["situacao"], "gravidade": e["cor"], "texto": e["texto"],
+                        "credito_a_descontar": e["credito"], "credito_sugerido": e["credito_sugerido"],
+                        "solucoes": [x.get("rotulo") or "WhatsApp" for x in e["acoes"]]} for e in itens[:LIMITE_LINHAS]]}
+
+
+def _dar_credito(con, a):
+    aluno = _aluno_da_entrada(con, a)
+    valor = _valor(a, obrigatorio=False)
+    msg, erro = alunos.dar_credito(con, aluno["id"], valor, _mes(a, "mes"), _hoje())
+    if erro:
+        raise ErroFerramenta(erro)
+    return {"ok": True, "aluno": aluno["nome"], "mensagem": msg,
+            "para_desfazer": "apagar o crédito no histórico da ficha do aluno (ou em Dados > Lixeira, para restaurar)"}
+
+
 EXECUTORES = {"ver_painel": _ver_painel, "resumo_do_mes": _resumo_do_mes, "listar_lancamentos": _listar_lancamentos,
               "contas_a_pagar": _contas_a_pagar, "previsao_de_caixa": _previsao_de_caixa, "mensalidades_do_mes": _mensalidades_do_mes,
               "saldos_das_contas": _saldos_das_contas, "listar_contas_recorrentes": _listar_contas_recorrentes,
@@ -1052,7 +1097,7 @@ EXECUTORES = {"ver_painel": _ver_painel, "resumo_do_mes": _resumo_do_mes, "lista
               "atualizar_saldo": _atualizar_saldo, "pagar_salario": _pagar_salario, "marcar_tarefa": _marcar_tarefa,
               "criar_tarefa": _criar_tarefa, "excluir_tarefa": _excluir_tarefa, "agendar_lead": _agendar_lead,
               "responder_checkpoint": _responder_checkpoint, "registrar_no_aluno": _registrar_no_aluno,
-              "marcar_aula": _marcar_aula}
+              "marcar_aula": _marcar_aula, "situacao_alunos": _situacao_alunos, "dar_credito": _dar_credito}
 
 
 def executar(con, nome: str, entrada) -> tuple[str, bool]:
