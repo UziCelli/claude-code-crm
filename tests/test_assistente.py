@@ -397,7 +397,7 @@ def test_consulta_livre_so_le(con_temp):
     assert con_temp.execute("SELECT nome FROM clientes").fetchall()[0][0] == "Ana"
 
 
-def test_criar_lancamento_valida_e_avisa_os_potes(con_temp):
+def test_criar_lancamento_valida_e_avisa_o_imposto(con_temp):
     base = {"escopo": "PJ", "tipo": "entrada", "data": HOJE, "valor": 300, "categoria": "Pacotes de Aulas"}
     assert "não existe" in falha(con_temp, "criar_lancamento", dict(base, categoria="Inventada"))
     amanha = (dt.date.today() + dt.timedelta(days=1)).isoformat()
@@ -407,7 +407,7 @@ def test_criar_lancamento_valida_e_avisa_os_potes(con_temp):
     r = ok(con_temp, "criar_lancamento", dict(base, categoria="pacotes de aulas", pago_em=HOJE, conta="inter", valor="1.234,50"))
     l = con_temp.execute("SELECT * FROM lancamentos WHERE id=?", (r["id"],)).fetchone()
     assert (l["categoria"], l["conta"], l["valor"], l["pago_em"]) == ("Pacotes de Aulas", "Inter", 1234.5, HOJE)
-    assert "Separe:" in r["mensagem"] and r["para_desfazer"] == f"excluir_lancamento(id={r['id']})"
+    assert "Separe R$ 74,07 para o imposto (DAS 6%)." in r["mensagem"] and r["para_desfazer"] == f"excluir_lancamento(id={r['id']})"
 
 
 def test_pagamento_de_aluno_ja_lancado_em_aberto_vira_baixa(con_temp):

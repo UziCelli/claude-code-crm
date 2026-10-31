@@ -5,6 +5,7 @@ import math
 import re
 import sqlite3
 import unicodedata
+from urllib.parse import urlencode
 
 from . import db
 
@@ -64,7 +65,7 @@ def _recorrencias_abertas(con: sqlite3.Connection, comp: str, hoje: str) -> list
 
 
 # ---------- Saldo livre ----------
-FRENTES = ("PF", "PJ", "Reserva", "Fora")   # Reserva = colchão (fica fora do livre); Fora = cartão, não guarda dinheiro
+FRENTES = ("PF", "PJ", "Reserva", "Fora")   # Reserva = dinheiro guardado (fica fora do livre); Fora = cartão, não guarda dinheiro
 DIAS_SALDO_VELHO = 7
 
 
@@ -149,6 +150,41 @@ def _das_a_guardar(con: sqlite3.Connection, mes: str, abertos: list[dict], base:
     return 0.0 if real else max(das_pct * base - previsto, 0)
 
 
+def moeda_br(v: float) -> str:
+    """'R$ 1.234,50' (negativo: '−R$ 50,00'), igual ao filtro moeda das telas."""
+    v = round(float(v), 2) + 0.0
+    s = f"{abs(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"−R$ {s}" if v < 0 else f"R$ {s}"
+
+
+def pct_das(con: sqlite3.Connection) -> float:
+    """DAS% das Configurações, como fração (0,06 = 6%)."""
+    return db.parametros(con, "imposto").get("DAS", 0.06)
+
+
+def texto_pct(fracao: float) -> str:
+    """0,06 -> '6'; 0,045 -> '4,5'."""
+    return f"{fracao * 100:g}".replace(".", ",")
+
+
+def imposto_mes(con: sqlite3.Connection, mes: str, hoje: str | None = None, abertos: list[dict] | None = None) -> float:
+    """Imposto (DAS) a separar da receita PJ recebida em `mes`: DAS% × entradas pagas, sem empréstimo. Esse DAS vence no mês
+    seguinte. Menos o que a recorrência de DAS já prevê; 0 se o DAS desse vencimento já está lançado ou pago.
+    É a única conta do imposto: o saldo_livre soma estes valores e a tela mostra o do mês de hoje.
+    `abertos`: saídas em aberto (o saldo_livre já tem); sem elas, usa as dos próximos 30 dias a partir de `hoje`."""
+    if abertos is None:
+        hoje = hoje or dt.date.today().isoformat()
+        ate = (dt.date.fromisoformat(hoje) + dt.timedelta(days=30)).isoformat()
+        abertos = [i for i in em_aberto_ate(con, ate, hoje) if i["tipo"] == "saida"]
+    return round(_das_a_guardar(con, somar_meses(mes, 1), abertos, _receita_pj(con, mes), pct_das(con)), 2)
+
+
+def aviso_imposto(con: sqlite3.Connection, valor: float) -> str:
+    """'Separe R$ 60,00 para o imposto (DAS 6%).' ao receber uma entrada PJ; vazio se o DAS está em 0%."""
+    pct = pct_das(con)
+    return f"Separe {moeda_br(round(pct * valor, 2))} para o imposto (DAS {texto_pct(pct)}%)." if pct > 0 and valor > 0 else ""
+
+
 def _tem(con: sqlite3.Connection, contas: dict, frente: str, hoje: str) -> float:
     """Saldo de partida da frente: a foto mais recente de cada conta + entradas − saídas pagas depois dela, até hoje.
     Pago no dia da foto já está nela (por isso 'depois'); pago no futuro ainda não saiu da conta.
@@ -175,15 +211,15 @@ def saldo_livre(con: sqlite3.Connection, hoje: str, dias: int = 30) -> dict:
     """Quanto dá para gastar de verdade, por frente (PF e PJ).
     livre = tem nas contas − saídas em aberto até hoje+dias − imposto a guardar e salário ainda não pago (só PJ).
     Conservador: entrada prevista não conta; só o dinheiro que já está na conta (ver _tem).
-    Imposto a guardar = DAS do mês que vem (DAS% da receita PJ recebida neste mês) + DAS deste mês, enquanto não for
-    lançado (DAS% da receita do mês passado). DAS já em aberto está no comprometido e não conta duas vezes.
+    Imposto a guardar = imposto_mes deste mês (DAS do mês que vem) + o do mês passado (DAS deste mês), enquanto não for
+    lançado. DAS já em aberto está no comprometido e não conta duas vezes.
     Salário: o que falta tirar da PJ em cada salário que vence até hoje+dias (deste mês em diante)."""
     ate = (dt.date.fromisoformat(hoje) + dt.timedelta(days=dias)).isoformat()
     saldos = saldos_atuais(con)
     abertos = [i for i in em_aberto_ate(con, ate, hoje) if i["tipo"] == "saida"]
-    mes, das_pct = hoje[:7], db.parametros(con, "imposto").get("DAS", 0.06)
-    dias_das = {mes: _das_a_guardar(con, mes, abertos, _receita_pj(con, somar_meses(mes, -1)), das_pct),
-                somar_meses(mes, 1): _das_a_guardar(con, somar_meses(mes, 1), abertos, _receita_pj(con, mes), das_pct)}
+    mes = hoje[:7]
+    dias_das = {mes: imposto_mes(con, somar_meses(mes, -1), abertos=abertos),
+                somar_meses(mes, 1): imposto_mes(con, mes, abertos=abertos)}
     das = sum(dias_das.values())
     sal_valor, sal_dia = _salario_parametros(con)
     salario, m, salarios = 0.0, mes, {}
@@ -503,24 +539,49 @@ def duplicados(con: sqlite3.Connection) -> list[dict]:
 
 
 # ---------- Conferir com o banco e linha do tempo ----------
-def conferencia_contas(con: sqlite3.Connection) -> list[dict]:
+def _dd_mm(iso: str) -> str:
+    return f"{iso[8:10]}/{iso[5:7]}"
+
+
+def _fotos_conferidas(con: sqlite3.Connection) -> dict:
+    """{conta: (data da foto, saldo)} que você marcou como 'Está certo'. Vale só para aquela foto."""
+    return {r["chave"]: (r["valor_texto"], r["valor"]) for r in con.execute(
+        "SELECT chave, valor, valor_texto FROM parametros WHERE grupo='conferencia_ok'")}
+
+
+def marcar_conferido(con: sqlite3.Connection, conta: str) -> None:
+    """'Está certo': a conta some do Banco × CRM até você digitar um saldo novo. ValueError se a conta não tem saldo digitado."""
+    foto = con.execute("SELECT saldo, data FROM saldos WHERE conta=? AND excluido_em IS NULL ORDER BY data DESC, id DESC LIMIT 1",
+                       (conta,)).fetchone()
+    if foto is None:
+        raise ValueError("Essa conta não tem saldo digitado.")
+    with con:
+        con.execute("""INSERT INTO parametros (grupo, chave, valor, valor_texto, ordem) VALUES ('conferencia_ok', ?, ?, ?,
+                       (SELECT COALESCE(MAX(ordem), 0) + 1 FROM parametros WHERE grupo='conferencia_ok'))
+                       ON CONFLICT (grupo, chave) DO UPDATE SET valor=excluded.valor, valor_texto=excluded.valor_texto""",
+                    (conta, foto["saldo"], foto["data"]))
+
+
+def conferencia_contas(con: sqlite3.Connection, repetidos: list[dict] | None = None) -> list[dict]:
     """Banco × CRM, uma linha por conta com pelo menos 2 fotos de saldo (cartão fica de fora).
     esperado = saldo da foto anterior + entradas − saídas pagas nessa conta depois dela, até a foto mais nova;
     diferença = saldo que você digitou − esperado. Zero = o CRM tem tudo que mexeu na conta.
-    Se a diferença é igual a um lançamento repetido daquela conta, aponta o suspeito. Lançamento pago sem conta não dá para
-    conferir: vem contado em 'sem_conta' (os da mesma frente da conta)."""
+    Conta marcada 'Está certo' fica de fora até haver uma foto mais nova (ver marcar_conferido).
+    Cada linha traz o texto pronto: 'resumo' e uma 'causa' provável (saldo zero digitado; lançamento repetido; lançamentos pagos
+    sem conta; senão falta entrada ou saída), mais os links 'lancar_url' (Novo lançamento já preenchido) e 'ver_url' (livro-caixa da conta).
+    `repetidos`: o resultado de duplicados(), se quem chama já o tem (a conta é cara)."""
     frentes = frentes_contas(con)
     fotos: dict[str, list] = {}
     for r in con.execute("SELECT conta, saldo, data FROM saldos WHERE excluido_em IS NULL ORDER BY data, id"):
         fotos.setdefault(r["conta"], []).append(r)
-    repetidos = duplicados(con)
+    conferidas = _fotos_conferidas(con)
     out = []
     for conta, lista in fotos.items():
         frente = frentes.get(conta)
         if len(lista) < 2 or frente == "Fora":
             continue
         antes, depois = lista[-2], lista[-1]
-        if antes["data"] == depois["data"]:
+        if antes["data"] == depois["data"] or conferidas.get(conta) == (depois["data"], depois["saldo"]):
             continue
         mov = {tipo: total for tipo, total in con.execute(
             """SELECT tipo, COALESCE(SUM(valor), 0) FROM lancamentos WHERE excluido_em IS NULL AND conta=? AND pago_em > ? AND pago_em <= ?
@@ -533,15 +594,39 @@ def conferencia_contas(con: sqlite3.Connection) -> list[dict]:
             (frente, antes["data"], depois["data"])).fetchone()[0] if frente in ("PF", "PJ") else 0
         suspeito = None
         if abs(dif) >= 0.01:
+            if repetidos is None:
+                repetidos = duplicados(con)
             for g in repetidos:   # saída em dobro deixa o banco com MAIS que o esperado; entrada em dobro, com menos
                 extras = len(g["itens"]) - 1
                 if (g["tipo"] == "saida") == (dif > 0) and abs(abs(dif) - extras * g["valor"]) < 0.01 and any(
                         i["conta"] == conta and i["pago_em"] and antes["data"] < i["pago_em"] <= depois["data"] for i in g["itens"]):
                     suspeito = {"valor": g["valor"], "descricao": g["itens"][0]["descricao"] or g["itens"][0]["categoria"], "ids": g["ids"]}
                     break
+        bate, zero = abs(dif) < 0.01, depois["saldo"] == 0
+        if bate:
+            causa = ""
+        elif zero:   # 0 digitado quase sempre é campo não preenchido
+            causa = f"Você digitou {moeda_br(0)} — foi isso mesmo?"
+        elif suspeito:
+            causa = f'Pode ser o lançamento repetido "{suspeito["descricao"]}" de {moeda_br(suspeito["valor"])} (veja em "Pode estar repetido").'
+        elif sem_conta:
+            causa = (f"{sem_conta} lançamentos pagos sem conta podem explicar." if sem_conta > 1
+                     else "1 lançamento pago sem conta pode explicar.")
+        elif dif > 0:
+            causa = f"Falta lançar uma entrada de {moeda_br(dif)}."
+        else:
+            causa = f"Falta lançar uma saída de {moeda_br(-dif)}, ou tem entrada a mais."
+        # Novo lançamento já preenchido, na data da foto: assim ele entra na conta que está sendo conferida
+        lancar = urlencode({"novo": 1, "conta": conta, "tipo": "entrada" if dif > 0 else "saida", "escopo": "PJ" if frente == "PJ" else "PF",
+                            "valor": f"{abs(dif):.2f}".replace(".", ","), "data": depois["data"],
+                            "descricao": f"Diferença do saldo de {_dd_mm(depois['data'])} ({conta})"})
         out.append({"conta": conta, "frente": frente, "de": antes["data"], "ate": depois["data"], "saldo_antes": antes["saldo"],
                     "saldo_depois": depois["saldo"], "entradas": entradas, "saidas": saidas, "esperado": esperado, "diferenca": dif,
-                    "bate": abs(dif) < 0.01, "sem_conta": sem_conta, "repetido": suspeito})
+                    "bate": bate, "zero": zero, "sem_conta": sem_conta, "repetido": suspeito, "causa": causa,
+                    "resumo": f"{conta}: você digitou {moeda_br(depois['saldo'])} em {_dd_mm(depois['data'])}. "
+                              f"Pelos lançamentos, devia ter {moeda_br(esperado)}. Diferença: {moeda_br(dif)}.",
+                    "lancar_url": f"/financeiro?{lancar}",
+                    "ver_url": f"/financeiro?{urlencode({'conta': conta, 'mes': depois['data'][:7]})}"})
     out.sort(key=lambda c: (c["bate"], c["conta"]))   # o que não bate primeiro
     return out
 
@@ -862,21 +947,32 @@ def salario_mes(con: sqlite3.Connection, mes: str, hoje: str) -> dict:
 
 
 def sugestao_salario(con: sqlite3.Connection, mes: str) -> float:
-    """80% do lucro PJ médio dos 3 meses fechados antes de 'mes' (os 20% restantes vão para o colchão), em múltiplos de 50."""
+    """80% do lucro PJ médio dos 3 meses fechados antes de 'mes' (os 20% restantes ficam na empresa), em múltiplos de 50."""
     lucros = [resumo_mes(con, somar_meses(mes, -k))["lucro"] for k in (1, 2, 3)]
     media = sum(lucros) / 3
     return max(0, math.floor(0.8 * media / 50) * 50)
 
 
+def conta_pf_salario(con: sqlite3.Connection) -> str | None:
+    """Conta PF onde o salário cai: a conta PF com a foto de saldo mais recente (None se nenhuma conta PF tem saldo digitado).
+    Sem conta, a entrada do salário nunca bate no Banco × CRM."""
+    frentes = frentes_contas(con)
+    for r in con.execute("SELECT conta FROM saldos WHERE excluido_em IS NULL ORDER BY data DESC, id DESC"):
+        if frentes.get(r["conta"]) == "PF":
+            return r["conta"]
+    return None
+
+
 def pagar_salario(con: sqlite3.Connection, mes: str, pago_em: str) -> None:
-    """Saída PJ (Retirada) + entrada PF (Salário) do mês, numa transação. ValueError se desligado ou já pago
-    (pelo botão ou com Retirada lançada à mão no mês)."""
+    """Saída PJ (Retirada) + entrada PF (Salário, na conta PF de conta_pf_salario) do mês, numa transação.
+    ValueError se desligado ou já pago (pelo botão ou com Retirada lançada à mão no mês)."""
     valor = round(db.parametros(con, "salario").get("valor") or 0, 2)
     if valor <= 0:
         raise ValueError("Defina o valor do salário em Configurações.")
     if _retiradas_mes(con, mes):
         raise ValueError("O salário deste mês já foi pago (tem Retirada lançada no mês).")
     nome = f"Salário {mes[5:]}/{mes[:4]}"
+    conta_pf = conta_pf_salario(con)
     antigo = con.execute("SELECT id FROM lancamentos WHERE origem=?", (f"SAL:{mes}:PJ",)).fetchone()
     try:
         with con:
@@ -885,69 +981,28 @@ def pagar_salario(con: sqlite3.Connection, mes: str, pago_em: str) -> None:
                                      WHERE origem IN (?, ?) AND excluido_em IS NOT NULL""", (valor, pago_em, pago_em, f"SAL:{mes}:PJ", f"SAL:{mes}:PF"))
                 if cur.rowcount == 0:   # as duas linhas estão ativas: já pago
                     raise sqlite3.IntegrityError
+                con.execute("UPDATE lancamentos SET conta=? WHERE origem=? AND conta IS NULL", (conta_pf, f"SAL:{mes}:PF"))
                 return
             con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao, conta, origem)
                            VALUES ('PJ','saida',?,?,?,?,?, 'Contabilizei Bank', ?)""", (pago_em, pago_em, valor, RETIRADA, nome, f"SAL:{mes}:PJ"))
-            con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao, origem)
-                           VALUES ('PF','entrada',?,?,?, 'Salário', ?, ?)""", (pago_em, pago_em, valor, nome, f"SAL:{mes}:PF"))
+            con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao, conta, origem)
+                           VALUES ('PF','entrada',?,?,?, 'Salário', ?, ?, ?)""", (pago_em, pago_em, valor, nome, conta_pf, f"SAL:{mes}:PF"))
     except sqlite3.IntegrityError:
         raise ValueError("O salário deste mês já foi pago.") from None
 
 
-# ---------- Potes ----------
-POTES = (("imposto", "Imposto"), ("contas", "Contas da PJ"), ("salario", "Salário PF"), ("colchao", "Colchão"))
-
-
+# ---------- Reserva ----------
 def _fixos_mes(con: sqlite3.Connection, mes: str, escopo: str, so_fixos: bool) -> float:
     """Soma prevista das recorrências ativas do escopo na competência, sem a Retirada e sem o DAS
-    (o DAS já sai do pote Imposto e, sem receita, não existe: não é conta a cobrir nem custo do colchão)."""
+    (o DAS depende da receita e é guardado à parte, em imposto_mes: não é custo fixo da reserva)."""
     return sum(r["valor"] for r in con.execute(
         f"""SELECT valor, descricao, categoria FROM recorrencias WHERE excluido_em IS NULL AND escopo=? AND categoria != ?
             AND inicio <= ? AND (fim IS NULL OR fim >= ?){' AND fixo=1' if so_fixos else ''}""", (escopo, RETIRADA, mes, mes))
         if not eh_das(r["descricao"], r["categoria"]))
 
 
-def potes_mes(con: sqlite3.Connection, mes: str) -> dict:
-    """Divide cada entrada PJ recebida no mês em cascata: imposto (DAS% de cada entrada, sempre primeiro),
-    contas da PJ (até as recorrências PJ do mês), salário da PF (até o salário fixo) e o resto no colchão."""
-    das = db.parametros(con, "imposto").get("DAS", 0.06)
-    alvo = {"contas": _fixos_mes(con, mes, "PJ", False), "salario": db.parametros(con, "salario").get("valor") or 0}
-    cheio = dict.fromkeys(dict(POTES), 0.0)
-    entradas = []
-    for e in con.execute("""SELECT id, valor, descricao, categoria, contraparte, pago_em FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
-                            AND excluido_em IS NULL AND pago_em IS NOT NULL AND substr(pago_em,1,7)=? ORDER BY pago_em, id""", (mes,)):
-        resto = e["valor"]
-        if e["categoria"] == EMPRESTIMO:   # empréstimo: sem imposto e tudo para as contas da PJ (é para isso que ele serve)
-            div = {"imposto": 0.0, "contas": round(resto, 2), "salario": 0.0, "colchao": 0.0}
-        else:
-            div = {"imposto": round(das * resto, 2)}
-            resto -= div["imposto"]
-            for k in ("contas", "salario"):
-                div[k] = round(max(0, min(resto, alvo[k] - cheio[k])), 2)
-                resto -= div[k]
-            div["colchao"] = round(max(resto, 0), 2)
-        for k, v in div.items():
-            cheio[k] += v
-        entradas.append({"id": e["id"], "valor": e["valor"], "descricao": e["descricao"] or e["contraparte"] or e["categoria"],
-                         "pago_em": e["pago_em"], "divisao": div})
-    alvo["imposto"] = cheio["imposto"]   # imposto não tem teto: é sempre a fração da entrada
-    alvo["colchao"] = None               # colchão não tem teto no mês
-    potes = [{"chave": k, "nome": nome, "alvo": round(alvo[k], 2) if alvo[k] is not None else None, "cheio": round(cheio[k], 2),
-              "falta": round(max(alvo[k] - cheio[k], 0), 2) if alvo[k] is not None else 0,
-              "pct": min(100, round(100 * cheio[k] / alvo[k])) if alvo[k] else (100 if cheio[k] else 0)}
-             for k, nome in POTES if k != "salario" or alvo["salario"]]
-    return {"mes": mes, "potes": potes, "entradas": entradas}
-
-
-def texto_divisao(div: dict) -> str:
-    """'R$ 30,00 imposto · R$ 400,00 contas da PJ · ...', só os potes com valor."""
-    nomes = dict(POTES)
-    return " · ".join(f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") + " " + nomes[k].lower()
-                      for k, v in div.items() if v > 0)
-
-
 def colchao(con: sqlite3.Connection, mes: str) -> dict:
-    """Custo fixo de 1 mês para o colchão: recorrências fixas da PJ + o salário da PF
+    """Custo fixo de 1 mês para a reserva: recorrências fixas da PJ + o salário da PF
     (sem salário fixo, as recorrências fixas da PF). Mostra 1 e 3 meses, o guardado e a meta."""
     sal = db.parametros(con, "salario").get("valor") or 0
     mensal = _fixos_mes(con, mes, "PJ", True) + (sal if sal > 0 else _fixos_mes(con, mes, "PF", True))

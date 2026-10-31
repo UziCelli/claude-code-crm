@@ -1,4 +1,6 @@
 """Testes da lógica pura do financeiro (banco temporário)."""
+from urllib.parse import parse_qs, urlsplit
+
 import pytest
 
 from app import db, financeiro
@@ -297,6 +299,28 @@ def test_salario_excluido_pode_ser_pago_de_novo(con_temp):
     assert [r[0] for r in con_temp.execute("SELECT valor FROM lancamentos WHERE excluido_em IS NULL")] == [1800, 1800]
 
 
+def test_pagar_salario_lanca_a_entrada_na_conta_pf_mais_recente(con_temp):
+    ligar_salario(con_temp)
+    assert financeiro.conta_pf_salario(con_temp) is None                       # nenhuma conta com saldo: fica sem conta
+    saldo(con_temp, "Inter", 100, "2026-10-01")
+    saldo(con_temp, "Itaú", 50, "2026-10-04")                                  # a PF com a foto mais recente
+    saldo(con_temp, "Contabilizei Bank", 9, "2026-10-05")                      # mais nova ainda, mas é da PJ
+    financeiro.pagar_salario(con_temp, "2026-10", "2026-10-05")
+    contas = dict(con_temp.execute("SELECT origem, conta FROM lancamentos WHERE origem LIKE 'SAL:%'").fetchall())
+    assert contas == {"SAL:2026-10:PF": "Itaú", "SAL:2026-10:PJ": "Contabilizei Bank"}
+
+
+def test_salario_sem_saldo_digitado_fica_sem_conta_e_volta_da_lixeira_com_conta(con_temp):
+    ligar_salario(con_temp)
+    financeiro.pagar_salario(con_temp, "2026-10", "2026-10-05")
+    assert con_temp.execute("SELECT conta FROM lancamentos WHERE origem='SAL:2026-10:PF'").fetchone()[0] is None
+    with con_temp:
+        con_temp.execute("UPDATE lancamentos SET excluido_em='2026-10-06' WHERE origem LIKE 'SAL:2026-10:%'")
+    saldo(con_temp, "Inter", 100, "2026-10-06")
+    financeiro.pagar_salario(con_temp, "2026-10", "2026-10-07")
+    assert con_temp.execute("SELECT conta FROM lancamentos WHERE origem='SAL:2026-10:PF'").fetchone()[0] == "Inter"
+
+
 def test_gasto_pf_contra_salario_e_sugestao(con_temp):
     ligar_salario(con_temp, valor=1000)
     lancar(con_temp, "saida", 950, "2026-10-03", pago_em="2026-10-03", escopo="PF")
@@ -338,29 +362,46 @@ def test_retirada_a_mao_conta_como_salario_pago(con_temp):
     assert financeiro.saldo_livre(con_temp, "2026-10-20")["PJ"]["salario"] == 0
 
 
-# ---------- Potes e colchão ----------
-def test_potes_em_cascata(con_temp):
-    ligar_salario(con_temp, valor=1000)
+# ---------- Imposto em uma frase ----------
+def test_imposto_mes_e_so_das_sobre_a_receita_paga_sem_emprestimo(con_temp):
+    lancar(con_temp, "entrada", 400, "2026-10-02", pago_em="2026-10-02")
+    lancar(con_temp, "entrada", 1000, "2026-10-05", pago_em="2026-10-05")
+    lancar(con_temp, "entrada", 3000, "2026-10-06", pago_em="2026-10-06", categoria=financeiro.EMPRESTIMO)   # empréstimo: sem imposto
+    lancar(con_temp, "entrada", 999, "2026-10-20")                                                           # não recebida: fora
+    lancar(con_temp, "entrada", 700, "2026-11-02", pago_em="2026-11-02")                                     # outro mês
+    assert financeiro.imposto_mes(con_temp, "2026-10", "2026-10-16") == 84                                   # 6% de 1.400
+    assert financeiro.imposto_mes(con_temp, "2026-12", "2026-10-16") == 0
+
+
+def test_imposto_mes_zera_com_das_lancado_e_desconta_a_recorrencia(con_temp):
     with con_temp:
         con_temp.execute("UPDATE recorrencias SET excluido_em='x'")
-    recorrencia(con_temp, valor=500, dia=10)                                     # contas da PJ: 500
-    lancar(con_temp, "entrada", 400, "2026-10-02", pago_em="2026-10-02")         # 24 imposto, 376 contas
-    lancar(con_temp, "entrada", 1000, "2026-10-05", pago_em="2026-10-05")        # 60 imposto, 124 contas, 816 salário
-    lancar(con_temp, "entrada", 500, "2026-10-09", pago_em="2026-10-09")         # 30 imposto, 184 salário, 286 colchão
-    lancar(con_temp, "entrada", 999, "2026-10-20")                               # não recebida: fora
-    p = financeiro.potes_mes(con_temp, "2026-10")
-    divs = [e["divisao"] for e in p["entradas"]]
-    assert divs[0] == {"imposto": 24, "contas": 376, "salario": 0, "colchao": 0}
-    assert divs[1] == {"imposto": 60, "contas": 124, "salario": 816, "colchao": 0}
-    assert divs[2] == {"imposto": 30, "contas": 0, "salario": 184, "colchao": 286}
-    potes = {x["chave"]: x for x in p["potes"]}
-    assert potes["contas"]["falta"] == 0 and potes["salario"]["cheio"] == 1000 and potes["colchao"]["cheio"] == 286
-    assert financeiro.texto_divisao(divs[2]) == "R$ 30,00 imposto · R$ 184,00 salário pf · R$ 286,00 colchão"
+    lancar(con_temp, "entrada", 2000, "2026-10-05", pago_em="2026-10-05")
+    recorrencia_imposto(con_temp, "DAS", 100, inicio="2026-11")                      # a recorrência já prevê 100 do DAS de novembro (dia 20)
+    assert financeiro.imposto_mes(con_temp, "2026-10", "2026-10-25") == 20           # 6% de 2.000 − 100
+    saida(con_temp, 120, "2026-11-10", "DAS 10/2026")                                # DAS de novembro lançado: nada a separar
+    assert financeiro.imposto_mes(con_temp, "2026-10", "2026-10-25") == 0
 
 
-def test_potes_sem_salario_pula_o_pote(con_temp):
-    lancar(con_temp, "entrada", 100, "2026-10-02", pago_em="2026-10-02")
-    assert "salario" not in [x["chave"] for x in financeiro.potes_mes(con_temp, "2026-10")["potes"]]
+def test_saldo_livre_usa_o_mesmo_imposto_mes(con_temp):
+    saldo(con_temp, "Contabilizei Bank", 20000, "2026-10-16")
+    lancar(con_temp, "entrada", 1000, "2026-09-10", pago_em="2026-09-10")            # DAS de outubro, ainda não lançado
+    lancar(con_temp, "entrada", 2000, "2026-10-06", pago_em="2026-10-06")            # DAS de novembro
+    pj = financeiro.saldo_livre(con_temp, "2026-10-16")["PJ"]
+    assert financeiro.imposto_mes(con_temp, "2026-10", "2026-10-16") == 120
+    assert pj["imposto"] == financeiro.imposto_mes(con_temp, "2026-09", "2026-10-16") + financeiro.imposto_mes(con_temp, "2026-10", "2026-10-16") == 180
+    assert pj["livre"] == 20000 - 180
+
+
+def test_aviso_imposto(con_temp):
+    assert financeiro.aviso_imposto(con_temp, 1000) == "Separe R$ 60,00 para o imposto (DAS 6%)."
+    assert financeiro.aviso_imposto(con_temp, 1234.5) == "Separe R$ 74,07 para o imposto (DAS 6%)."
+    with con_temp:
+        con_temp.execute("UPDATE parametros SET valor=0.045 WHERE grupo='imposto' AND chave='DAS'")
+    assert financeiro.aviso_imposto(con_temp, 1000) == "Separe R$ 45,00 para o imposto (DAS 4,5%)."
+    with con_temp:
+        con_temp.execute("UPDATE parametros SET valor=0 WHERE grupo='imposto' AND chave='DAS'")
+    assert financeiro.aviso_imposto(con_temp, 1000) == ""
 
 
 def test_colchao(con_temp):
@@ -494,15 +535,12 @@ def test_saldo_livre_darf_nao_abate_reserva_do_das(con_temp):
     assert (pj["imposto"], pj["comprometido"]) == (300, 290.52)                   # antes: imposto 9,48
 
 
-def test_potes_e_colchao_sem_o_das_recorrente(con_temp):
+def test_reserva_sem_o_das_recorrente(con_temp):
     with con_temp:
         con_temp.execute("UPDATE recorrencias SET excluido_em='x'")
     recorrencia(con_temp, valor=1000)
-    recorrencia_imposto(con_temp, "DAS", 600, inicio="2026-01")                  # o pote Imposto já guarda o DAS
+    recorrencia_imposto(con_temp, "DAS", 600, inicio="2026-01")                  # o DAS é guardado à parte (imposto_mes)
     recorrencia_imposto(con_temp, "DARF", 200, inicio="2026-01")                 # DARF continua nas contas
-    lancar(con_temp, "entrada", 10000, "2026-10-02", pago_em="2026-10-02")
-    contas = next(p for p in financeiro.potes_mes(con_temp, "2026-10")["potes"] if p["chave"] == "contas")
-    assert contas["alvo"] == 1200
     assert financeiro.colchao(con_temp, "2026-10")["mensal"] == 1200
 
 
@@ -618,13 +656,9 @@ def test_emprestimo_nao_paga_das_nem_entra_no_lucro(con_temp):
     assert pj["imposto"] == 60 and pj["tem"] == 5300
 
 
-def test_emprestimo_vai_inteiro_para_as_contas_da_pj(con_temp):
-    with con_temp:
-        con_temp.execute("UPDATE recorrencias SET excluido_em='x'")
+def test_emprestimo_nao_gera_imposto_a_separar(con_temp):
     lancar(con_temp, "entrada", 3000, "2026-10-02", pago_em="2026-10-02", categoria=EMP)
-    (e,) = financeiro.potes_mes(con_temp, "2026-10")["entradas"]
-    assert e["divisao"] == {"imposto": 0, "contas": 3000, "salario": 0, "colchao": 0}
-    assert financeiro.texto_divisao(e["divisao"]) == "R$ 3.000,00 contas da pj"
+    assert financeiro.imposto_mes(con_temp, "2026-10", "2026-10-16") == 0
 
 
 def test_emprestimo_nao_pede_aluno_nem_desconta_mensalidade(con_temp):
@@ -852,6 +886,85 @@ def test_conferencia_conta_o_que_esta_sem_conta_e_ignora_cartao_e_foto_unica(con
     lancar(con_temp, "saida", 100, "2026-10-05", pago_em="2026-10-05", escopo="PJ")                        # sem conta, mas é da PJ
     (c,) = financeiro.conferencia_contas(con_temp)
     assert c["conta"] == "Inter" and c["sem_conta"] == 1 and c["diferenca"] == -100
+
+
+def test_conferencia_texto_quando_o_banco_tem_a_mais(con_temp):
+    saldo(con_temp, "Inter", 1000, "2026-10-01")
+    saldo(con_temp, "Inter", 1500, "2026-10-10")
+    lancar(con_temp, "entrada", 300, "2026-10-05", pago_em="2026-10-05", escopo="PF", conta="Inter")          # esperado 1.300
+    (c,) = financeiro.conferencia_contas(con_temp)
+    assert c["resumo"] == "Inter: você digitou R$ 1.500,00 em 10/10. Pelos lançamentos, devia ter R$ 1.300,00. Diferença: R$ 200,00."
+    assert c["causa"] == "Falta lançar uma entrada de R$ 200,00."
+    assert parse_qs(urlsplit(c["lancar_url"]).query) == {"novo": ["1"], "conta": ["Inter"], "tipo": ["entrada"], "escopo": ["PF"], "valor": ["200,00"],
+                                                         "data": ["2026-10-10"], "descricao": ["Diferença do saldo de 10/10 (Inter)"]}
+    assert c["ver_url"] == "/financeiro?conta=Inter&mes=2026-10"
+
+
+def test_conferencia_texto_quando_o_banco_tem_a_menos(con_temp):
+    saldo(con_temp, "Contabilizei Bank", 1000, "2026-10-01")
+    saldo(con_temp, "Contabilizei Bank", 1500, "2026-10-10")
+    lancar(con_temp, "entrada", 900, "2026-10-05", pago_em="2026-10-05", conta="Contabilizei Bank")           # esperado 1.900
+    (c,) = financeiro.conferencia_contas(con_temp)
+    assert c["resumo"].endswith("devia ter R$ 1.900,00. Diferença: −R$ 400,00.")
+    assert c["causa"] == "Falta lançar uma saída de R$ 400,00, ou tem entrada a mais."
+    q = parse_qs(urlsplit(c["lancar_url"]).query)
+    assert (q["tipo"], q["escopo"], q["valor"]) == (["saida"], ["PJ"], ["400,00"])
+
+
+def test_conferencia_saldo_zero_digitado_pergunta_se_foi_isso_mesmo(con_temp):
+    saldo(con_temp, "Inter", 1000, "2026-10-01")
+    saldo(con_temp, "Inter", 0, "2026-10-10")
+    (c,) = financeiro.conferencia_contas(con_temp)
+    assert c["zero"] and c["diferenca"] == -1000
+    assert c["causa"] == "Você digitou R$ 0,00 — foi isso mesmo?"
+    assert c["resumo"].startswith("Inter: você digitou R$ 0,00 em 10/10.")
+
+
+def test_conferencia_causa_sem_conta_e_repetido(con_temp):
+    saldo(con_temp, "Inter", 1000, "2026-10-01")
+    saldo(con_temp, "Inter", 900, "2026-10-10")
+    lancar(con_temp, "saida", 100, "2026-10-05", pago_em="2026-10-05", escopo="PF")                           # sem conta
+    (c,) = financeiro.conferencia_contas(con_temp)
+    assert c["causa"] == "1 lançamento pago sem conta pode explicar."
+    lancar(con_temp, "saida", 30, "2026-10-06", pago_em="2026-10-06", escopo="PF")
+    (c,) = financeiro.conferencia_contas(con_temp)
+    assert c["causa"] == "2 lançamentos pagos sem conta podem explicar."
+    saldo(con_temp, "Itaú", 1000, "2026-10-01")
+    saldo(con_temp, "Itaú", 1500, "2026-10-10")
+    lancar(con_temp, "entrada", 700, "2026-10-05", pago_em="2026-10-05", escopo="PF", conta="Itaú")
+    for _ in range(2):
+        lanc(con_temp, 200, "2026-10-07", escopo="PF", pago_em="2026-10-07", descricao="Mercado", conta="Itaú")
+    itau = next(x for x in financeiro.conferencia_contas(con_temp) if x["conta"] == "Itaú")
+    assert itau["causa"] == 'Pode ser o lançamento repetido "Mercado" de R$ 200,00 (veja em "Pode estar repetido").'
+
+
+def test_esta_certo_esconde_a_conta_ate_haver_uma_foto_nova(con_temp):
+    saldo(con_temp, "Inter", 1000, "2026-10-01")
+    saldo(con_temp, "Inter", 1500, "2026-10-10")
+    lancar(con_temp, "entrada", 900, "2026-10-05", pago_em="2026-10-05", escopo="PF", conta="Inter")
+    assert len(financeiro.conferencia_contas(con_temp)) == 1
+    financeiro.marcar_conferido(con_temp, "Inter")
+    financeiro.marcar_conferido(con_temp, "Inter")                                   # de novo: não duplica
+    assert financeiro.conferencia_contas(con_temp) == []
+    assert tuple(con_temp.execute("SELECT valor_texto, COUNT(*) FROM parametros WHERE grupo='conferencia_ok' AND chave='Inter'").fetchone()) == ("2026-10-10", 1)
+    saldo(con_temp, "Inter", 1700, "2026-10-10")                                     # digitou outro valor no mesmo dia: o "certo" era da foto antiga
+    assert [c["diferenca"] for c in financeiro.conferencia_contas(con_temp)] == [-200]
+    financeiro.marcar_conferido(con_temp, "Inter")
+    assert financeiro.conferencia_contas(con_temp) == []
+    saldo(con_temp, "Inter", 1800, "2026-10-12")                                     # foto mais nova: volta a conferir (de 10/10 a 12/10)
+    (c,) = financeiro.conferencia_contas(con_temp)
+    assert (c["de"], c["ate"], c["diferenca"]) == ("2026-10-10", "2026-10-12", 100)
+    with pytest.raises(ValueError):
+        financeiro.marcar_conferido(con_temp, "Itaú")                                # sem saldo digitado
+
+
+def test_salario_pago_pelo_botao_nao_da_falso_alarme_no_banco_x_crm(con_temp):
+    ligar_salario(con_temp, valor=2000)
+    saldo(con_temp, "Inter", 1000, "2026-10-01")
+    financeiro.pagar_salario(con_temp, "2026-10", "2026-10-05")
+    saldo(con_temp, "Inter", 3000, "2026-10-10")                                      # o salário caiu na Inter
+    (c,) = financeiro.conferencia_contas(con_temp)
+    assert c["bate"] and c["entradas"] == 2000 and c["sem_conta"] == 0
 
 
 def test_linha_do_tempo_agrupa_por_dia_e_etiqueta(con_temp):

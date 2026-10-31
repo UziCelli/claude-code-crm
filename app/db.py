@@ -81,8 +81,8 @@ PARAMETROS_INICIAIS = [
     ("salario", "dia", 5, None, 2),                # dia do mês do pagamento
     ("previsao", "dia_recebimento", 10, None, 1),  # dia em que a previsão põe as mensalidades que faltam receber
     ("previsao", "dia_das", 20, None, 2),          # vencimento do DAS (sobre a receita do mês anterior)
-    ("colchao", "meses", 0, None, 1),              # meta do colchão em meses de custo fixo; 0 = sem meta ainda
-    # frente de cada conta no Saldo livre: PF, PJ, Reserva (colchão, fica fora do livre) ou Fora (cartões)
+    ("colchao", "meses", 0, None, 1),              # meta da Reserva em meses de custo fixo; 0 = sem meta ainda
+    # frente de cada conta no Saldo livre: PF, PJ, Reserva (dinheiro guardado, fica fora do livre) ou Fora (cartões)
     ("conta_escopo", "Contabilizei Bank", None, "PJ", 1),
     ("conta_escopo", "Inter", None, "PF", 2),
     ("conta_escopo", "Itaú", None, "PF", 3),

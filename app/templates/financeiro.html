@@ -89,12 +89,14 @@
     {% if salario.sugestao is not none and salario.sugestao < salario.valor %}<p class="muted">O salário passa da sugestão ({{ salario.sugestao|moeda }}, 80% do lucro médio dos últimos 3 meses{% if not salario.sugestao %}: nos últimos 3 meses a PJ não teve lucro{% endif %}). Nos meses fracos pode faltar na PJ.</p>{% endif %}
     {% endif %}
   </div>
-  {% if livre.reserva %}<p class="muted">Guardado no colchão (contas Reserva): {{ livre.reserva|moeda }}. Não entra no livre.</p>{% endif %}
+  <p class="mt"><strong>Imposto a separar este mês: {{ imposto|moeda }}</strong> <span class="muted">(DAS {{ das_txt }}%)</span></p>
+  {% if livre.reserva %}<p class="muted">Reserva: {{ livre.reserva|moeda }}. Não entra no livre.</p>{% endif %}
 </section>
 
 <h2 class="mt">Mês</h2>
 <form class="linha" method="get">
   <input type="month" name="mes" value="{{ mes }}" aria-label="Mês" style="width:auto" required>
+  {% if conta %}<input type="hidden" name="conta" value="{{ conta }}">{% endif %}
   <select name="escopo" aria-label="Escopo" style="width:auto">
     {% for k, r in [('todos', 'PJ e PF'), ('PJ', 'Só PJ'), ('PF', 'Só PF')] %}<option value="{{ k }}" {{ 'selected' if escopo == k }}>{{ r }}</option>{% endfor %}
   </select>
@@ -106,35 +108,6 @@
   <div class="kpi vermelho"><div class="rotulo">Saídas</div><div class="valor">{{ saidas|moeda }}</div>{% if transferencia %}<div class="meta">Sem o salário PJ→PF ({{ transferencia|moeda }}): é só transferência.</div>{% endif %}{% if devolvido %}<div class="meta">Sem devolução de empréstimo ({{ devolvido|moeda }}).</div>{% endif %}</div>
   <div class="kpi {{ 'verde' if saldo >= 0 else 'vermelho' }}"><div class="rotulo">Saldo do mês</div><div class="valor">{{ saldo|moeda }}</div><div class="meta">Só lançamentos do mês (pagos e em aberto). Recorrência que ainda não virou lançamento não entra.</div></div>
 </div>
-
-<div class="card mt">
-  <h3>Potes do mês</h3>
-  <p class="muted">Cada entrada da PJ enche os potes nesta ordem: imposto, contas da PJ, salário da PF e, por último, o colchão. Ao receber, separe o dinheiro nas caixinhas do banco.</p>
-  {% if potes.entradas %}
-  <div class="grid c4">
-    {% for p in potes.potes %}
-    <div>
-      <div class="linha topo"><strong>{{ p.nome }}</strong><span class="muted">{{ p.cheio|moeda }}{% if p.alvo is not none and p.chave != 'imposto' %} de {{ p.alvo|moeda }}{% endif %}</span></div>
-      {% if p.chave not in ('imposto', 'colchao') %}<div class="barra"><i style="width:{{ p.pct }}%"></i></div>
-      <div class="muted">{{ 'cheio' if not p.falta else 'falta ' ~ (p.falta|moeda) }}</div>{% endif %}
-    </div>
-    {% endfor %}
-  </div>
-  <details class="mt"><summary class="muted">Divisão de cada entrada ({{ potes.entradas|length }})</summary>
-    <table class="divisao"><tbody>{% for e in potes.entradas %}<tr><td>{{ e.pago_em|data }}</td><td>{{ e.descricao }}</td><td class="num">{{ e.valor|moeda }}</td>
-      <td class="muted">{% for k, v in e.divisao.items() if v > 0 %}{{ v|moeda }} {{ {'imposto': 'imposto', 'contas': 'contas', 'salario': 'salário', 'colchao': 'colchão'}[k] }}{{ ' · ' if not loop.last }}{% endfor %}</td></tr>{% endfor %}</tbody></table>
-  </details>
-  {% else %}<p class="muted">Nenhuma entrada da PJ recebida neste mês.</p>{% endif %}
-</div>
-
-{% if n_conferir %}
-<div class="card mt atencao">
-  <div class="linha topo">
-    <div><strong>{{ n_conferir }} coisa{{ 's' if n_conferir > 1 }} para conferir</strong><div class="muted">Lançamentos que parecem repetidos e contas lançadas à mão que parecem recorrentes.</div></div>
-    <a class="btn" href="/financeiro/conferir">Conferir</a>
-  </div>
-</div>
-{% endif %}
 
 <div class="card mt">
   <h3>A pagar e a receber</h3>
@@ -163,8 +136,9 @@
   </table>
 </div>
 
-<div class="card mt">
+<div class="card mt" id="livro-caixa">
   <h3>Livro-caixa</h3>
+  {% if conta %}<p class="muted">Só da conta {{ conta }}. <a href="/financeiro?mes={{ mes }}&escopo={{ escopo }}#livro-caixa">Ver todas</a></p>{% endif %}
   <table>
     <thead><tr><th>Data</th><th>Descrição</th><th class="sec">Categoria</th><th class="sec">Contraparte</th><th class="sec">Conta</th><th class="sec">Forma</th><th class="num dest">Valor</th><th>Situação</th><th></th></tr></thead>
     <tbody>
@@ -244,7 +218,7 @@
 
 <dialog id="dlg-saldos">
   <h2 data-titulo>Atualizar saldos</h2>
-  <p class="muted">Abra o app de cada banco e copie o saldo de hoje. Deixe vazio o que não quiser mudar. Reserva = caixinha do colchão; Fora = cartão.</p>
+  <p class="muted">Abra o app de cada banco e copie o saldo de hoje. Deixe vazio o que não quiser mudar. Reserva = dinheiro guardado; Fora = cartão.</p>
   <form method="post" action="/financeiro/saldos">
     <input type="hidden" name="volta" value="{{ volta }}">
     <div class="campo"><label>Data dos saldos</label><input name="data" type="date" value="{{ hoje() }}" max="{{ hoje() }}" required></div>
@@ -298,4 +272,21 @@
     <div class="linha"><button>Salvar</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
   </form>
 </dialog>
+<script>
+// /financeiro?novo=1&conta=...&valor=...: abre o Novo lançamento já preenchido (link "Lançar a diferença" do Conferir)
+document.addEventListener("DOMContentLoaded", function () {
+  var q = new URLSearchParams(location.search);
+  if (!q.get("novo")) return;
+  var b = document.createElement("button");
+  b.dataset.abrir = "dlg-lanc"; b.dataset.titulo = "Lançar a diferença";
+  ["escopo", "tipo", "data", "valor", "conta", "descricao"].forEach(function (k) { if (q.get(k)) b.dataset[k] = q.get(k); });
+  if (q.get("data")) b.dataset.pago_em = q.get("data");
+  document.body.appendChild(b); b.click(); b.remove();
+  // categoria "Outros" do mesmo escopo (PJ e PF têm uma cada)
+  [].forEach.call(document.querySelectorAll("#dlg-lanc [name=categoria] option"), function (o) {
+    if (o.textContent == "Outros" && o.parentNode.label == (q.get("escopo") || "PJ")) o.selected = true;
+  });
+  history.replaceState(null, "", "/financeiro");
+});
+</script>
 {% endblock %}
