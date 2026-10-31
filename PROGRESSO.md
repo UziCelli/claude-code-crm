@@ -127,6 +127,15 @@ Feito para quem tem dificuldade de leitura e de número: menos conta de cabeça,
 - **Deixado de fora:** apagar os e-mails dos 87 commits (reescreveria a história e quebraria a atualização do PC).
 - **Descobrir quem gastou os minutos:** github.com/settings/billing › Usage, por repositório.
 
+## Alertas do Painel revisados (PR `claude/alertas-renovacao`, 31/10/2026)
+Pedido: o Painel de 31/10 mostrava renovação vencida de quem já tinha pagado e de quem tinha a renovação marcada.
+- **Renovação anda sozinha** (`financeiro.renovacoes`, só leitura): a data do cadastro anda 1 mês a cada pagamento do aluno (entrada PJ paga ligada a ele), Renovação marcada no histórico (se vence em até 7 dias) ou mês pulado. Parcial também renova; o resto não anda outro mês. Renovação marcada + pagamento = 1 mês só. 90% do valor ou mais = mês inteiro (taxa do cartão); 2 mensalidades de uma vez = 2 meses. Vale no alerta, na lista de clientes e na ficha (cartão "Renovação" mostra de onde veio a data e o que falta).
+- **Data trocada à mão manda**: `clientes.renovacao_em` guarda quando; o que foi lançado antes não mexe mais nela. Salvar a ficha sem mexer na data não conta como troca.
+- **Pulou o mês** (ficha › cartão Renovação › "Pular sem cobrança"): evento `pausa` (`data` = renovação pulada, `ate` = volta). O mês sai de Mensalidades ("pulou o mês", previsto 0) e da previsão de caixa; os dias não contam no "sem aula".
+- **Cobrança**: renovação vencida com valor mensal ganha o botão "Cobrar R$ X" (alerta e ficha), com multa e juros (`financeiro.cobranca`; Configurações › Cobrança: multa 2% uma vez, juros 1% ao mês por dia). Modelo de WhatsApp `cobranca` editável. Só cobrar multa se estiver no contrato.
+- **Revisão**: "sem aula" não conta dias de bloqueio (viagem) nem de mês pulado; "sem nenhuma aula" mostra até 3 nomes e ignora quem começou há menos de 14 dias (35 na Híbrida); contas vencidas mostram o total. Os outros alertas foram conferidos e ficaram como estavam.
+- **Não feito (decisão do dono)**: empurrar as renovações pelos 9 dias da viagem.
+
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.
 - Nomes de serviço no CRM: Pacote de Aulas, Mensalidade, Consultoria Online, Consultoria Híbrida, Avaliação Física.

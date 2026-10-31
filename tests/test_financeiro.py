@@ -123,9 +123,9 @@ def test_mensalidades_em_aberto_falta_e_inicio(con_temp):
 
 
 def test_sugerir_aluno():
-    alunos = [{"id": 1, "nome": "Giuliana Souza"}, {"id": 2, "nome": "Ana Lima"}, {"id": 3, "nome": "Ana Costa"}, {"id": 4, "nome": "Bia"}]
-    assert financeiro.sugerir_aluno("10 aulas Giuliana", alunos) == 1
-    assert financeiro.sugerir_aluno("PIX GIULIÂNA", alunos) == 1
+    alunos = [{"id": 1, "nome": "Elisa Souza"}, {"id": 2, "nome": "Ana Lima"}, {"id": 3, "nome": "Ana Costa"}, {"id": 4, "nome": "Bia"}]
+    assert financeiro.sugerir_aluno("10 aulas Elisa", alunos) == 1
+    assert financeiro.sugerir_aluno("PIX ÉLÍSA", alunos) == 1
     assert financeiro.sugerir_aluno("Mensalidade Ana", alunos) is None        # duas Anas: não chuta
     assert financeiro.sugerir_aluno("Ana Costa pix", alunos) == 3             # nome completo desempata
     assert financeiro.sugerir_aluno("Bianca", alunos) is None                 # palavra inteira, não pedaço
@@ -416,22 +416,22 @@ def test_previsao_mensalidades_salario_e_das(con_temp):
 
 
 def test_previsao_entrada_sem_aluno_nao_conta_duas_vezes(con_temp):
-    """O caso do print: '10 aulas Giuliana' em aberto sem ligar à aluna não pode entrar de novo em 'Mensalidades a receber'."""
+    """O caso do print: '10 aulas Elisa' em aberto sem ligar à aluna não pode entrar de novo em 'Mensalidades a receber'."""
     with con_temp:
         con_temp.execute("UPDATE parametros SET valor=0 WHERE grupo='imposto' AND chave='DAS'")   # sem DAS para isolar
-        con_temp.execute("INSERT INTO clientes (nome, valor, status) VALUES ('Giuliana', 1123.37, 'ativo')")
+        con_temp.execute("INSERT INTO clientes (nome, valor, status) VALUES ('Elisa', 1123.37, 'ativo')")
         con_temp.execute("INSERT INTO clientes (nome, valor, status) VALUES ('Ana', 500, 'ativo')")
         con_temp.execute("INSERT INTO lancamentos (escopo, tipo, data, valor, categoria, descricao)"
-                         " VALUES ('PJ','entrada','2026-10-05',1123.37,'Pacotes de Aulas','10 aulas Giuliana')")
+                         " VALUES ('PJ','entrada','2026-10-05',1123.37,'Pacotes de Aulas','10 aulas Elisa')")
     financeiro.salvar_saldos(con_temp, "2026-10-16", {"Contabilizei Bank": 0}, {})
     p = financeiro.previsao(con_temp, "2026-10-16")
     entradas = {i["descricao"]: i["valor"] for i in p["semanas"][0]["itens"] if i["tipo"] == "entrada"}
-    assert entradas == {"10 aulas Giuliana": 1123.37, "Mensalidades a receber": 500}   # só a Ana falta
+    assert entradas == {"10 aulas Elisa": 1123.37, "Mensalidades a receber": 500}   # só a Ana falta
     assert p["semanas"][0]["PJ"]["entradas"] == 1623.37
-    assert [e["descricao"] for e in p["sem_aluno"]] == ["10 aulas Giuliana"] and p["sem_aluno_total"] == 1123.37
+    assert [e["descricao"] for e in p["sem_aluno"]] == ["10 aulas Elisa"] and p["sem_aluno_total"] == 1123.37
     # ligada à aluna: mesmo resultado, e o aviso some
     with con_temp:
-        con_temp.execute("UPDATE lancamentos SET cliente_id=(SELECT id FROM clientes WHERE nome='Giuliana')")
+        con_temp.execute("UPDATE lancamentos SET cliente_id=(SELECT id FROM clientes WHERE nome='Elisa')")
     p = financeiro.previsao(con_temp, "2026-10-16")
     assert p["semanas"][0]["PJ"]["entradas"] == 1623.37 and p["sem_aluno"] == []
 
@@ -876,3 +876,140 @@ def test_linha_do_tempo_agrupa_por_dia_e_etiqueta(con_temp):
     assert t["contas"] == ["Inter"]
     so_inter = financeiro.linha_do_tempo(con_temp, "2026-10-16", dias=30, conta="Inter")
     assert [d["rotulo"] for d in so_inter["dias_lista"]] == ["Hoje", "qua 14/10", "sáb 10/10"]      # sem o empréstimo (sem conta)
+
+
+# ---------- renovação que anda com o pagamento (alertas do Painel de 31/10) ----------
+def aluno_renova(con, nome, renova, valor=400, renovacao_em=None):
+    with con:
+        return con.execute("INSERT INTO clientes (nome, valor, status, data_renovacao, renovacao_em) VALUES (?,?,'ativo',?,?)",
+                           (nome, valor, renova, renovacao_em)).lastrowid
+
+
+def pagou(con, cid, valor, data, criado_em=None):
+    with con:
+        con.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, cliente_id, criado_em)"
+                    " VALUES ('PJ','entrada',?,?,?,'Pacotes de Aulas',?, COALESCE(?, datetime('now','localtime')))",
+                    (data, data, valor, cid, criado_em))
+
+
+def evento(con, cid, tipo, data, criado_em=None):
+    with con:
+        con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, criado_em) VALUES (?,?,?, COALESCE(?, datetime('now','localtime')))",
+                    (cid, tipo, data, criado_em))
+
+
+def efetiva(con, cid):
+    return financeiro.renovacoes(con, cid)[cid]["efetiva"]
+
+
+def test_pagamento_parcial_renova_e_o_resto_nao_anda_outro_mes(con_temp):
+    """Bruno: pagou parte das aulas depois do vencimento de 05/10. Renova para 05/11; o resto só completa outubro."""
+    a = aluno_renova(con_temp, "Bruno", "2026-10-05")
+    assert efetiva(con_temp, a) == "2026-10-05"
+    pagou(con_temp, a, 200, "2026-10-28")
+    r = financeiro.renovacoes(con_temp, a)[a]
+    assert (r["efetiva"], r["falta"], r["motivo"], r["motivo_data"]) == ("2026-11-05", 200, "pagamento", "2026-10-28")
+    pagou(con_temp, a, 200, "2026-11-02")             # o resto de outubro, já perto do vencimento de novembro
+    assert (efetiva(con_temp, a), financeiro.renovacoes(con_temp, a)[a]["falta"]) == ("2026-11-05", 0)
+    pagou(con_temp, a, 400, "2026-11-06")             # novembro
+    assert efetiva(con_temp, a) == "2026-12-05"
+
+
+def test_renovacao_marcada_e_pagamento_contam_uma_vez(con_temp):
+    """Caio: pagou (até a mais) e a renovação foi marcada sem data. Anda um mês só, nas duas ordens."""
+    v = aluno_renova(con_temp, "Caio", "2026-10-25")
+    pagou(con_temp, v, 500, "2026-10-20")
+    evento(con_temp, v, "renovacao", "2026-10-31")
+    assert efetiva(con_temp, v) == "2026-11-25"
+    w = aluno_renova(con_temp, "Outro", "2026-10-25")
+    evento(con_temp, w, "renovacao", "2026-10-31")
+    r = financeiro.renovacoes(con_temp, w)[w]
+    assert (r["efetiva"], r["pendente"], r["falta"]) == ("2026-11-25", True, 400)   # renovou e ainda não pagou
+    pagou(con_temp, w, 500, "2026-11-01")             # o pagamento é dessa renovação
+    r = financeiro.renovacoes(con_temp, w)[w]
+    assert (r["efetiva"], r["pendente"], r["falta"]) == ("2026-11-25", False, 0)
+
+
+def test_renovacao_marcada_logo_depois_do_pagamento_so_confirma(con_temp):
+    a = aluno_renova(con_temp, "Bruno", "2026-10-05")
+    pagou(con_temp, a, 400, "2026-10-28")             # atrasado: o próximo vencimento (05/11) já está perto
+    evento(con_temp, a, "renovacao", "2026-10-31")    # confirma a de outubro
+    assert efetiva(con_temp, a) == "2026-11-05"
+    evento(con_temp, a, "renovacao", "2026-11-05")    # no dia do vencimento de novembro: é a de novembro
+    assert efetiva(con_temp, a) == "2026-12-05"
+
+
+def test_renovacao_longe_do_vencimento_nao_anda(con_temp):
+    a = aluno_renova(con_temp, "Ana", "2026-11-25")
+    evento(con_temp, a, "renovacao", "2026-10-31")    # faltam 25 dias: não pula um mês sozinho
+    assert efetiva(con_temp, a) == "2026-11-25"
+
+
+def test_pagamento_com_taxa_atrasado_e_de_varios_meses(con_temp):
+    t = aluno_renova(con_temp, "Dora", "2026-10-11")
+    pagou(con_temp, t, 400, "2026-11-08")             # 28 dias de atraso: paga outubro, não novembro
+    assert efetiva(con_temp, t) == "2026-11-11"
+    c = aluno_renova(con_temp, "Cartão", "2026-10-05")
+    for d in ("2026-10-05", "2026-11-05", "2026-12-04"):
+        pagou(con_temp, c, 388, d)                    # líquido da taxa do cartão: mês inteiro
+    assert efetiva(con_temp, c) == "2027-01-05"
+    d = aluno_renova(con_temp, "Dois meses", "2026-10-05")
+    pagou(con_temp, d, 800, "2026-10-04")
+    assert efetiva(con_temp, d) == "2026-12-05"
+
+
+def test_pagamento_extra_antigo_ou_de_antes_da_troca_nao_renova(con_temp):
+    a = aluno_renova(con_temp, "Extra", "2026-10-05")
+    pagou(con_temp, a, 400, "2026-10-05")
+    pagou(con_temp, a, 50, "2026-10-12")              # aula avulsa longe do vencimento
+    assert efetiva(con_temp, a) == "2026-11-05"
+    b = aluno_renova(con_temp, "Antigo", "2026-10-05")
+    pagou(con_temp, b, 400, "2026-09-05")             # é de setembro: a data do cadastro já conta com ele
+    assert efetiva(con_temp, b) == "2026-10-05"
+    c = aluno_renova(con_temp, "Trocada", "2026-10-05", renovacao_em="2026-10-30 10:00:00")
+    pagou(con_temp, c, 400, "2026-10-28", criado_em="2026-10-29 09:00:00")   # lançado antes de trocar a data à mão
+    assert efetiva(con_temp, c) == "2026-10-05"
+    pagou(con_temp, c, 400, "2026-10-31", criado_em="2026-10-31 09:00:00")
+    assert efetiva(con_temp, c) == "2026-11-05"
+
+
+def test_pagamento_antigo_da_ficha_conta_uma_vez_e_dia_31(con_temp):
+    a = aluno_renova(con_temp, "Ficha", "2026-10-05")
+    pagou(con_temp, a, 400, "2026-10-05")
+    evento(con_temp, a, "pagamento", "2026-10-06")    # o mesmo pagamento, lançado também na ficha antiga
+    assert efetiva(con_temp, a) == "2026-11-05"
+    b = aluno_renova(con_temp, "Fim do mês", "2027-01-31")
+    pagou(con_temp, b, 400, "2027-01-31")
+    assert efetiva(con_temp, b) == "2027-02-28"
+    pagou(con_temp, b, 400, "2027-02-28")
+    assert efetiva(con_temp, b) == "2027-03-31"
+    c = aluno_renova(con_temp, "Data torta", "05/10/2026")
+    pagou(con_temp, c, 400, "2026-10-05")
+    assert efetiva(con_temp, c) == "05/10/2026"       # não inventa: fica como está
+
+
+def test_mes_pulado_nao_cobra_e_sai_das_mensalidades(con_temp):
+    g = aluno_renova(con_temp, "Elisa", "2026-11-01", renovacao_em="2026-10-31 12:00:00")
+    with con_temp:
+        con_temp.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, ate, criado_em) VALUES (?,'pausa','2026-10-06','2026-11-01',"
+                         "'2026-10-31 12:00:00')", (g,))
+    assert efetiva(con_temp, g) == "2026-11-01"
+    out = {i["nome"]: i for i in financeiro.mensalidades(con_temp, "2026-10")}
+    assert (out["Elisa"]["previsto"], out["Elisa"]["falta"], out["Elisa"]["situacao"]) == (0, 0, "pulou o mês")
+    assert financeiro._mensalidades_a_receber(con_temp, "2026-10")[0] == 0   # a previsão de caixa não conta outubro
+    nov = {i["nome"]: i for i in financeiro.mensalidades(con_temp, "2026-11")}
+    assert (nov["Elisa"]["previsto"], nov["Elisa"]["situacao"]) == (400, "em aberto")
+    pagou(con_temp, g, 400, "2026-10-20")             # pagou no mês pulado mesmo assim: aparece como recebido
+    assert {i["nome"]: i for i in financeiro.mensalidades(con_temp, "2026-10")}["Elisa"]["situacao"] == "recebido"
+
+
+def test_cobranca_multa_e_juros(con_temp):
+    par = db.parametros(con_temp, "cobranca")
+    assert par == {"multa": 0.02, "juros_ao_mes": 0.01}
+    c = financeiro.cobranca(400, "2026-10-11", "2026-10-31", par)        # Dora: 20 dias
+    assert (c["meses"], c["dias"], c["valor"], c["multa"], c["juros"], c["total"]) == (1, 20, 400, 8, 2.67, 410.67)
+    c = financeiro.cobranca(400, "2026-09-11", "2026-10-31", par)        # 2 meses: cada um com seus dias
+    assert (c["meses"], c["dias"], c["valor"], c["multa"], c["juros"], c["total"]) == (2, 50, 800, 16, 9.33, 825.33)
+    assert financeiro.cobranca(0, "2026-10-11", "2026-10-31", par) is None              # sem valor mensal
+    assert financeiro.cobranca(400, "2026-10-31", "2026-10-31", par) is None            # vence hoje: ainda não está atrasado
+    assert financeiro.cobranca(400, "11/10/2026", "2026-10-31", par) is None

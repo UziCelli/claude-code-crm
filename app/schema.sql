@@ -32,19 +32,21 @@ CREATE TABLE IF NOT EXISTS clientes (
     lead_id INTEGER,
     criado_em TEXT DEFAULT (datetime('now','localtime')),
     atualizado_em TEXT DEFAULT (datetime('now','localtime')),
-    excluido_em TEXT
+    excluido_em TEXT,
+    renovacao_em TEXT                -- quando a data de renovação foi trocada à mão (o que foi lançado antes já está nela)
 );
 
 CREATE TABLE IF NOT EXISTS cliente_eventos (
     id INTEGER PRIMARY KEY,
     cliente_id INTEGER NOT NULL REFERENCES clientes(id),
-    tipo TEXT NOT NULL,              -- pagamento | renovacao | anotacao | status | aula | falta | desmarcou
-    data TEXT NOT NULL,
+    tipo TEXT NOT NULL,              -- pagamento | renovacao | pausa | anotacao | status | aula | falta | desmarcou
+    data TEXT NOT NULL,              -- pausa: a renovação que foi pulada
     valor REAL,
     descricao TEXT,
     criado_em TEXT DEFAULT (datetime('now','localtime')),
     excluido_em TEXT,
-    hora INTEGER                     -- aula marcada pela Agenda (5..23); NULL = lançada pela ficha
+    hora INTEGER,                    -- aula marcada pela Agenda (5..23); NULL = lançada pela ficha
+    ate TEXT                         -- pausa: dia da volta
 );
 
 CREATE TABLE IF NOT EXISTS leads (
