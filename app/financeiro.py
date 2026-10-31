@@ -630,11 +630,14 @@ def resumo_mes(con: sqlite3.Connection, mes: str, escopo: str = "PJ") -> dict:
 def mensalidades(con: sqlite3.Connection, mes: str) -> list[dict]:
     """Alunos ativos: previsto = clientes.valor; recebido = entradas PJ pagas do cliente no mês;
     abertos = entradas PJ do cliente no mês já lançadas e ainda sem baixa; falta = previsto − recebido − em aberto (nem foi lançado).
-    Aluno que só começa depois do mês fica de fora. Situação: 'recebido' (recebido >= previsto), 'parcial' ou 'em aberto'."""
+    Aluno que só começa depois do mês fica de fora. Situação: 'recebido' (recebido >= previsto), 'parcial' ou 'em aberto'.
+    Mês pulado (evento 'pausa' da ficha, sem cobrança): previsto 0 e situação 'pulou o mês'."""
     abertos = {}
     for r in con.execute("""SELECT id, cliente_id, data, valor, descricao, categoria FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
                             AND excluido_em IS NULL AND pago_em IS NULL AND cliente_id IS NOT NULL AND substr(data,1,7)=? ORDER BY data, id""", (mes,)):
         abertos.setdefault(r["cliente_id"], []).append(dict(r))
+    pulados = {r[0] for r in con.execute("""SELECT DISTINCT cliente_id FROM cliente_eventos WHERE tipo='pausa' AND excluido_em IS NULL
+                                            AND substr(data,1,7)=?""", (mes,))}
     itens = []
     for c in con.execute(
         """SELECT c.id, c.nome, c.data_inicio, COALESCE(c.valor, 0) AS previsto,
@@ -645,14 +648,137 @@ def mensalidades(con: sqlite3.Connection, mes: str) -> list[dict]:
         if ISO_DATA.fullmatch(ini) and ini[:7] > mes:   # começa depois do mês: não deve nada nele
             continue
         previsto, recebido = round(c["previsto"], 2), round(c["recebido"], 2)
+        pulou = c["id"] in pulados
         if previsto <= 0 and recebido <= 0:
             continue
-        sit = "recebido" if recebido >= previsto else ("parcial" if recebido > 0 else "em aberto")
+        if pulou:   # combinou de pular o mês: não deve nada nele (se pagou mesmo assim, aparece como recebido)
+            previsto = 0.0
+        if pulou and recebido <= 0:
+            sit = "pulou o mês"
+        else:
+            sit = "recebido" if recebido >= previsto else ("parcial" if recebido > 0 else "em aberto")
         meus = abertos.get(c["id"], [])
         aberto = round(sum(a["valor"] for a in meus), 2)
         itens.append({"id": c["id"], "nome": c["nome"], "previsto": previsto, "recebido": recebido, "situacao": sit,
                       "abertos": meus, "aberto": aberto, "falta": round(max(previsto - recebido - aberto, 0), 2)})
     return itens
+
+
+# ---------- Renovação dos alunos ----------
+ANTECEDENCIA = 7   # dias: pagamento ou renovação lançados até 7 dias antes do vencimento já valem para ele
+CHEIO = 0.9        # pagamento de 90% do valor mensal ou mais é mês inteiro (taxa do cartão, desconto combinado)
+CONFIRMA = 15      # Renovação marcada até 15 dias depois de renovar, antes do vencimento seguinte, só confirma a renovação
+
+
+def proxima_renovacao(data: str, n: int = 1) -> str:
+    """A data mais n meses, sempre no mesmo dia (dia 31 vira o último dia nos meses curtos)."""
+    return vencimento(int(data[8:10]), somar_meses(data[:7], n))
+
+
+def _dias_antes(data: str, dias: int) -> str:
+    return (dt.date.fromisoformat(data) - dt.timedelta(days=dias)).isoformat()
+
+
+def renovacoes(con: sqlite3.Connection, cliente_id: int | None = None) -> dict[int, dict]:
+    """Renovação efetiva de cada aluno: {cliente_id: {gravada, efetiva, ciclos, falta, pendente, motivo, motivo_data}}. Não grava nada.
+    Parte da data de renovação do cadastro e anda um mês a cada:
+      - pagamento do aluno (entrada PJ paga ligada a ele; o evento antigo 'pagamento' da ficha também vale, uma vez por mês);
+      - Renovação marcada no histórico, se o próximo vencimento está a até 7 dias (ou já passou);
+      - mês pulado ('pausa').
+    Pagamento parcial também renova, e o resto fica devendo: pagamento menor que um mês, depois dele, só completa esse mês.
+    Renovação marcada sem pagamento fica pendente: o pagamento seguinte é dela (não anda outro mês).
+    Valor de 2 mensalidades de uma vez anda 2 meses. Pagamento pequeno longe do vencimento (aula extra, taxa) não renova.
+    Só conta o que é de até 7 dias antes da data gravada em diante e, se a data foi trocada à mão (renovacao_em),
+    só o que foi lançado depois da troca."""
+    filtro, args = ("AND id=?", (cliente_id,)) if cliente_id else ("", ())
+    alunos = con.execute(f"""SELECT id, valor, data_renovacao, renovacao_em FROM clientes WHERE excluido_em IS NULL
+                             AND data_renovacao IS NOT NULL {filtro}""", args).fetchall()
+    filtro = "AND cliente_id=?" if cliente_id else "AND cliente_id IS NOT NULL"
+    pagos, eventos = {}, {}
+    for r in con.execute(f"""SELECT cliente_id, data, valor, criado_em FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
+                             AND pago_em IS NOT NULL AND excluido_em IS NULL {filtro}""", args):
+        pagos.setdefault(r["cliente_id"], []).append(r)
+    for r in con.execute(f"""SELECT cliente_id, tipo, data, valor, criado_em FROM cliente_eventos WHERE excluido_em IS NULL
+                             AND tipo IN ('pagamento','renovacao','pausa') {filtro}""", args):
+        eventos.setdefault(r["cliente_id"], []).append(r)
+    return {c["id"]: _renovacao(c, pagos.get(c["id"], []), eventos.get(c["id"], [])) for c in alunos}
+
+
+def _renovacao(c, pagos: list, eventos: list) -> dict:
+    gravada = str(c["data_renovacao"] or "").strip()[:10]
+    out = {"gravada": c["data_renovacao"], "efetiva": c["data_renovacao"], "ciclos": 0, "falta": 0.0, "pendente": False,
+           "motivo": None, "motivo_data": None}
+    try:
+        dt.date.fromisoformat(gravada)
+    except ValueError:
+        return out   # data torta no cadastro: fica como está
+    valor = float(c["valor"] or 0)
+    desde, trocada = _dias_antes(gravada, ANTECEDENCIA), c["renovacao_em"]
+    meses_pagos = {str(p["data"])[:7] for p in pagos}
+    itens = [("pagamento", p["data"], p["valor"], p["criado_em"]) for p in pagos]
+    itens += [(e["tipo"], e["data"], e["valor"], e["criado_em"]) for e in eventos
+              if not (e["tipo"] == "pagamento" and str(e["data"])[:7] in meses_pagos)]   # já lançado no financeiro: conta uma vez
+    k, falta, pendente, ultimo = 0, 0.0, False, None
+    for tipo, data, v, criado in sorted(itens, key=lambda i: (str(i[1]), str(i[3] or ""))):
+        data = str(data or "").strip()[:10]
+        if not ISO_DATA.fullmatch(data) or data < desde or (trocada and str(criado or "") <= trocada):
+            continue   # é de antes da data gravada (ou da troca à mão): já está nela
+        try:
+            dt.date.fromisoformat(data)
+        except ValueError:
+            continue
+        vence = proxima_renovacao(gravada, k)   # próximo mês ainda sem renovação
+        perto = data >= _dias_antes(vence, ANTECEDENCIA)
+        anda = 0
+        if tipo == "pagamento":
+            v = float(v or 0)
+            meses = int(v / valor + (1 - CHEIO) + 1e-9) if valor > 0 else 0   # mensalidades inteiras neste pagamento
+            if pendente:   # paga a Renovação marcada; mensalidade a mais adianta
+                pendente, anda = False, max(meses - 1, 0)
+                falta = round(valor - v, 2) if meses == 0 else 0.0
+            elif meses:
+                anda, falta = meses, 0.0
+            elif falta > 0:   # o resto do mês que ficou parcial
+                falta = round(max(falta - v, 0), 2)
+            elif perto:   # parcial (ou cadastro sem valor mensal): renova e fica devendo o resto
+                anda, falta = 1, round(max(valor - v, 0), 2)
+        elif tipo == "renovacao":
+            confirma = ultimo is not None and data < vence and (
+                dt.date.fromisoformat(data) - dt.date.fromisoformat(ultimo)).days <= CONFIRMA
+            if perto and not confirma:   # renovou e ainda não pagou: o próximo pagamento é desta renovação
+                anda, pendente, falta = 1, valor > 0, 0.0
+        elif perto:   # mês pulado: não deve nada
+            anda, pendente, falta = 1, False, 0.0
+        if anda:
+            k, ultimo = k + anda, data
+            out.update(motivo=tipo, motivo_data=data)
+    out.update(efetiva=proxima_renovacao(gravada, k) if k else gravada, ciclos=k, pendente=pendente,
+               falta=valor if pendente else falta)
+    return out
+
+
+def cobranca(valor, vencida: str, hoje: str, par: dict) -> dict | None:
+    """Cobrança de quem está com a renovação vencida: cada mês vencido até hoje com multa (uma vez) e juros ao mês
+    proporcional aos dias de atraso dele. par = parâmetros 'cobranca' (multa, juros_ao_mes). None sem valor mensal ou sem atraso."""
+    valor = float(valor or 0)
+    try:
+        dt.date.fromisoformat(str(vencida))
+    except ValueError:
+        return None
+    if valor <= 0 or vencida >= hoje:
+        return None
+    multa_pct, juros_mes = float(par.get("multa") or 0), float(par.get("juros_ao_mes") or 0)
+    h = dt.date.fromisoformat(hoje)
+    meses, multa, juros, data = 0, 0.0, 0.0, vencida
+    while data < hoje and meses < 24:
+        dias = (h - dt.date.fromisoformat(data)).days
+        multa += valor * multa_pct
+        juros += valor * juros_mes * dias / 30
+        meses += 1
+        data = proxima_renovacao(vencida, meses)
+    principal = valor * meses
+    return {"meses": meses, "dias": (h - dt.date.fromisoformat(vencida)).days, "valor": round(principal, 2),
+            "multa": round(multa, 2), "juros": round(juros, 2), "total": round(principal + multa + juros, 2)}
 
 
 def entradas_sem_aluno(con: sqlite3.Connection, mes: str) -> list[dict]:

@@ -112,8 +112,18 @@ def wa(tel, texto=""):
     return f"https://wa.me/{n}?text={quote(texto or '', safe='')}"
 
 
-def preencher(texto, nome="", data=""):
-    return (texto or "").replace("{nome}", nome or "").replace("{data}", data or "")
+def preencher(texto, nome="", data="", extra=None):
+    """Troca {nome} e {data} na mensagem; na cobrança também {valor}, {dias}, {multa}, {juros} e {total} (extra)."""
+    texto = (texto or "").replace("{nome}", nome or "").replace("{data}", data or "")
+    for k, v in (extra or {}).items():
+        texto = texto.replace("{" + k + "}", str(v))
+    return texto
+
+
+def texto_cobranca(cob) -> dict:
+    """Valores da cobrança (financeiro.cobranca) já escritos para a mensagem do WhatsApp."""
+    return {"valor": moeda(cob["valor"]), "dias": cob["dias"], "multa": moeda(cob["multa"]), "juros": moeda(cob["juros"]),
+            "total": moeda(cob["total"])}
 
 
 templates.env.filters["preencher"] = preencher
@@ -221,30 +231,49 @@ def alertas(con):
     lim7 = (hoje + dt.timedelta(days=7)).isoformat()
     out = []
 
-    def add(cor, texto, url, tel=None, modelo=None, nome=None, data=None):
-        out.append(dict(grav=GRAV[cor], cor=cor, texto=texto, url=url, tel=tel, modelo=modelo, nome=nome, data=data))
+    def add(cor, texto, url, tel=None, modelo=None, nome=None, data=None, extra=None, botao=None):
+        out.append(dict(grav=GRAV[cor], cor=cor, texto=texto, url=url, tel=tel, modelo=modelo, nome=nome, data=data,
+                        extra=extra, botao=botao))
 
     def s(n):
         return "s" if n > 1 else ""
 
-    for c in con.execute("""SELECT id, nome, telefone, data_renovacao FROM clientes WHERE excluido_em IS NULL AND status='ativo'
-                            AND data_renovacao IS NOT NULL AND data_renovacao <= ? ORDER BY data_renovacao""", (lim7,)):
-        venceu = c["data_renovacao"] < h
-        add("vermelho" if venceu else "amarelo",
-            f"{c['nome']} — renovação {'venceu em' if venceu else 'em'} {data_br(c['data_renovacao'])}",
-            f"/clientes/{c['id']}", c["telefone"], "renovacao", c["nome"], data_br(c["data_renovacao"]))
-    nunca = 0
-    for c in con.execute("""SELECT c.id, c.nome, c.telefone, c.tipo_servico, MAX(e.data) AS ultima FROM clientes c
+    # renovação: a data do cadastro andando com os pagamentos, as Renovações marcadas e os meses pulados (financeiro.renovacoes)
+    ren = financeiro.renovacoes(con)
+    par_cob = db.parametros(con, "cobranca")
+    vencendo = []
+    for c in con.execute("""SELECT id, nome, telefone, valor, data_renovacao FROM clientes WHERE excluido_em IS NULL AND status='ativo'
+                            AND data_renovacao IS NOT NULL AND data_renovacao <= ?""", (lim7,)):   # a efetiva nunca é antes da gravada
+        efetiva = ren[c["id"]]["efetiva"] if c["id"] in ren else c["data_renovacao"]
+        if efetiva <= lim7:
+            vencendo.append((efetiva, c))
+    for efetiva, c in sorted(vencendo, key=lambda x: x[0]):
+        venceu = efetiva < h
+        cob = financeiro.cobranca(c["valor"], efetiva, h, par_cob) if venceu else None
+        add("vermelho" if venceu else "amarelo", f"{c['nome']} — renovação {'venceu em' if venceu else 'em'} {data_br(efetiva)}",
+            f"/clientes/{c['id']}", c["telefone"], "cobranca" if cob else "renovacao", c["nome"], data_br(efetiva),
+            extra=texto_cobranca(cob) if cob else None, botao=f"Cobrar {moeda(cob['total'])}" if cob else None)
+    # sem aula: os dias de bloqueio da agenda (viagem) e de mês pulado não contam
+    parados = [(i, f) for i, f in ((data_iso(a), data_iso(b)) for a, b in fases_bloqueio(con)) if i and f]
+    pausas = pausas_por_aluno(con)
+    nunca = []
+    for c in con.execute("""SELECT c.id, c.nome, c.telefone, c.tipo_servico, c.data_inicio, MAX(e.data) AS ultima FROM clientes c
                             LEFT JOIN cliente_eventos e ON e.cliente_id=c.id AND e.tipo='aula' AND e.excluido_em IS NULL
                             WHERE c.excluido_em IS NULL AND c.status='ativo' AND c.tipo_servico != 'Consultoria Online'
-                            GROUP BY c.id ORDER BY ultima"""):
-        corte = (hoje - dt.timedelta(days=35 if c["tipo_servico"] == "Consultoria Híbrida" else 14)).isoformat()
+                            GROUP BY c.id ORDER BY ultima, c.nome"""):
+        limite = 35 if c["tipo_servico"] == "Consultoria Híbrida" else 14
         if c["ultima"] is None:
-            nunca += 1
-        elif c["ultima"] < corte:
-            add("vermelho", f"{c['nome']} — sem aula desde {data_br(c['ultima'])}", f"/clientes/{c['id']}", c["telefone"], "falta", c["nome"], data_br(c["ultima"]))
+            ini = data_iso(c["data_inicio"])
+            if not (ini and ini > (hoje - dt.timedelta(days=limite)).isoformat()):   # começou agora (ou vai começar): ainda não
+                nunca.append(c["nome"])
+        elif ultima := data_iso(c["ultima"]):
+            ultima = dt.date.fromisoformat(ultima)
+            if (hoje - ultima).days - dias_parados(ultima, hoje, parados + pausas.get(c["id"], [])) > limite:
+                add("vermelho", f"{c['nome']} — sem aula desde {data_br(c['ultima'])}", f"/clientes/{c['id']}", c["telefone"], "falta",
+                    c["nome"], data_br(c["ultima"]))
     if nunca:
-        add("amarelo", f"{nunca} aluno{s(nunca)} sem nenhuma aula registrada", "/clientes")
+        nomes = ", ".join(sorted(nunca)[:3]) + (f" e mais {len(nunca) - 3}" if len(nunca) > 3 else "")
+        add("amarelo", f"{len(nunca)} aluno{s(len(nunca))} sem nenhuma aula registrada: {nomes}", "/clientes")
     n = aulas_sem_marcar(con, hoje)
     if n:
         add("azul", f"{n} aula{s(n)} da agenda sem marcar nesta semana", "/agenda")
@@ -274,7 +303,8 @@ def alertas(con):
                 venc.append(p)
     if venc:
         add("vermelho" if any(p["status"] == "atrasado" for p in venc) else "amarelo",
-            f"{len(venc)} conta{s(len(venc))} vencida{s(len(venc))} ou vencendo em 3 dias", "/financeiro")
+            f"{len(venc)} conta{s(len(venc))} vencida{s(len(venc))} ou vencendo em 3 dias ({moeda(sum(p['valor'] for p in venc))})",
+            "/financeiro")
     rep = financeiro.duplicados(con)
     if rep:
         add("amarelo", f"{len(rep)} {'grupos' if len(rep) > 1 else 'grupo'} de lançamentos do financeiro {'parecem' if len(rep) > 1 else 'parece'} "
@@ -442,13 +472,15 @@ def clientes(request: Request, status: str = "ativo", busca: str = "", con=Depen
         args.append(f"%{busca}%")
     rows = con.execute(sql + " ORDER BY status='ativo' DESC, nome", args).fetchall()
     hoje = dt.date.today()
+    ren = financeiro.renovacoes(con)
     itens = []
     for c in rows:
         alerta = None
-        if c["data_renovacao"] and c["status"] == "ativo":
-            dias = (dt.date.fromisoformat(c["data_renovacao"]) - hoje).days
+        renova = ren[c["id"]]["efetiva"] if c["id"] in ren else c["data_renovacao"]   # andou com os pagamentos
+        if data_iso(renova) and c["status"] == "ativo":
+            dias = (dt.date.fromisoformat(data_iso(renova)) - hoje).days
             alerta = "vermelho" if dias < 0 else ("amarelo" if dias <= 7 else None)
-        itens.append({**dict(c), "alerta": alerta})
+        itens.append({**dict(c), "data_renovacao": renova, "alerta": alerta})
     totais = {r[0]: r[1] for r in con.execute("SELECT status, COUNT(*) FROM clientes WHERE excluido_em IS NULL GROUP BY status")}
     return render(request, "clientes.html", con, clientes=itens, status=status, busca=busca, totais=totais)
 
@@ -485,16 +517,27 @@ def cliente_ficha(request: Request, cid: int, con=Depends(get_db)):
     estimativa = estimativa_cliente(con, c, precos.carregar_parametros(con))
     propostas = con.execute("SELECT * FROM propostas WHERE cliente_id=? AND excluido_em IS NULL ORDER BY id DESC", (cid,)).fetchall()
     pagamentos = con.execute("SELECT * FROM lancamentos WHERE cliente_id=? AND excluido_em IS NULL ORDER BY data DESC, id DESC LIMIT 8", (cid,)).fetchall()
-    return render(request, "cliente.html", con, c=c, eventos=eventos, estimativa=estimativa, propostas=propostas, pagamentos=pagamentos)
+    renovacao = financeiro.renovacoes(con, cid).get(cid)
+    hoje = dt.date.today().isoformat()
+    cob = (financeiro.cobranca(c["valor"], renovacao["efetiva"], hoje, db.parametros(con, "cobranca"))
+           if renovacao and c["status"] == "ativo" else None)   # quem saiu não recebe cobrança de renovação
+    return render(request, "cliente.html", con, c=c, eventos=eventos, estimativa=estimativa, propostas=propostas, pagamentos=pagamentos,
+                  renovacao=renovacao, cobranca=cob, texto_cob=texto_cobranca(cob) if cob else None)
 
 
 @app.post("/clientes/{cid}")
 async def cliente_salvar(request: Request, cid: int, con=Depends(get_db)):
     d = _form_cliente(await request.form())
     d["id"] = cid
-    antigo = con.execute("SELECT status FROM clientes WHERE id=?", (cid,)).fetchone()
+    antigo = con.execute("SELECT status, data_renovacao FROM clientes WHERE id=?", (cid,)).fetchone()
+    ren = financeiro.renovacoes(con, cid).get(cid)
+    if antigo and ren and d["data_renovacao"] == ren["efetiva"]:
+        d["data_renovacao"] = antigo["data_renovacao"]   # a ficha mostra a data que já andou com os pagamentos: salvar não mexe nela
+    trocou = bool(antigo) and (d["data_renovacao"] or None) != (antigo["data_renovacao"] or None)
     with con:
         con.execute(f"UPDATE clientes SET {','.join(k + '=:' + k for k in CAMPOS_CLIENTE)}, atualizado_em=datetime('now','localtime') WHERE id=:id", d)
+        if trocou:   # data trocada à mão: os pagamentos lançados até agora já estão nela
+            con.execute("UPDATE clientes SET renovacao_em=datetime('now','localtime') WHERE id=?", (cid,))
         if antigo and antigo["status"] != d["status"]:
             con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, descricao) VALUES (?, 'status', date('now','localtime'), ?)",
                         (cid, f"Status alterado para {d['status']}"))
@@ -514,11 +557,40 @@ def cliente_status(cid: int, status: str = Form(...), con=Depends(get_db)):
 def cliente_evento(cid: int, tipo: str = Form(...), data: str = Form(...), valor: str = Form(""), descricao: str = Form(""),
                    nova_renovacao: str = Form(""), con=Depends(get_db)):
     v = _num_br(valor) if valor else None
+    nova = data_iso(nova_renovacao)
+    antes = financeiro.renovacoes(con, cid).get(cid)
+    if tipo == "pausa":
+        # pulou o mês: a renovação que estava para vencer não é cobrada; a próxima é a volta (vazio = um mês depois)
+        pulada = data_iso(antes["efetiva"]) if antes else None
+        pulada = pulada or data_iso(data) or dt.date.today().isoformat()
+        volta = nova or financeiro.proxima_renovacao(pulada)
+        if volta <= pulada:
+            return voltar(f"/clientes/{cid}", erro=f"A volta precisa ser depois de {data_br(pulada)} (a renovação que foi pulada).")
+        texto = f"Renovação de {data_br(pulada)} sem cobrança; volta em {data_br(volta)}" + (f". {descricao}" if descricao else "")
+        with con:
+            con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, ate, descricao) VALUES (?,?,?,?,?)",
+                        (cid, "pausa", pulada, volta, texto))
+            con.execute("UPDATE clientes SET data_renovacao=?, renovacao_em=datetime('now','localtime'), status='ativo' WHERE id=?",
+                        (volta, cid))
+        return voltar(f"/clientes/{cid}", msg=f"Mês pulado, sem cobrança. Próxima renovação: {data_br(volta)}.")
     with con:
         con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, valor, descricao) VALUES (?,?,?,?,?)", (cid, tipo, data, v, descricao or None))
-        if tipo == "renovacao" and nova_renovacao:
-            con.execute("UPDATE clientes SET data_renovacao=?, status='ativo' WHERE id=?", (nova_renovacao, cid))
-    return voltar(f"/clientes/{cid}", msg="Registrado.")
+        if tipo == "renovacao" and nova:
+            con.execute("UPDATE clientes SET data_renovacao=?, renovacao_em=datetime('now','localtime'), status='ativo' WHERE id=?",
+                        (nova, cid))
+        elif tipo == "renovacao" and not antes and data_iso(data):   # aluno sem data de renovação: renovou hoje, a próxima é daqui a um mês
+            con.execute("UPDATE clientes SET data_renovacao=?, renovacao_em=datetime('now','localtime'), status='ativo' WHERE id=?",
+                        (financeiro.proxima_renovacao(data_iso(data)), cid))
+        elif tipo == "renovacao":
+            con.execute("UPDATE clientes SET status='ativo' WHERE id=?", (cid,))
+    if tipo != "renovacao":
+        return voltar(f"/clientes/{cid}", msg="Registrado.")
+    depois = financeiro.renovacoes(con, cid).get(cid)
+    proxima = data_br(depois["efetiva"]) if depois else "—"
+    if nova or not antes or depois["efetiva"] != antes["efetiva"]:
+        return voltar(f"/clientes/{cid}", msg=f"Renovação registrada. Próxima: {proxima}.")
+    return voltar(f"/clientes/{cid}", msg=f"Registrado. A renovação continua em {proxima}: sem data, ela só anda quando faltam até "
+                                          f"{financeiro.ANTECEDENCIA} dias. Para outra data, preencha a nova data de renovação.")
 
 
 @app.post("/clientes/{cid}/excluir")
@@ -724,6 +796,45 @@ def fases_bloqueio(con) -> list:
 
 def em_bloqueio(fases, iso) -> bool:
     return any(i <= iso <= f for i, f in fases)
+
+
+def data_iso(v) -> str | None:
+    """'AAAA-MM-DD' válida (dos 10 primeiros caracteres) ou None."""
+    s = str(v or "").strip()[:10]
+    try:
+        return dt.date.fromisoformat(s).isoformat() if ISO_DATA.fullmatch(s) else None
+    except ValueError:
+        return None
+
+
+templates.env.globals.update(data_iso=data_iso, proxima_renovacao=financeiro.proxima_renovacao)
+
+
+def pausas_por_aluno(con) -> dict:
+    """{cliente_id: [(início, fim)]} dos meses pulados (ficha → Pulou o mês): da renovação pulada até a véspera da volta."""
+    out = {}
+    for e in con.execute("SELECT cliente_id, data, ate FROM cliente_eventos WHERE tipo='pausa' AND excluido_em IS NULL"):
+        ini = data_iso(e["data"])
+        if not ini:
+            continue
+        volta = data_iso(e["ate"])
+        if not volta or volta <= ini:
+            volta = financeiro.proxima_renovacao(ini)
+        out.setdefault(e["cliente_id"], []).append((ini, (dt.date.fromisoformat(volta) - dt.timedelta(days=1)).isoformat()))
+    return out
+
+
+def dias_parados(ultima: dt.date, hoje: dt.date, intervalos) -> int:
+    """Quantos dias depois de `ultima` até `hoje` (inclusive) caem em algum intervalo [início, fim] ISO: bloqueio da agenda
+    (viagem) ou mês pulado. Intervalos que se cruzam contam uma vez."""
+    total, contado = 0, ultima
+    for i, f in sorted(intervalos):
+        ini = max(dt.date.fromisoformat(i), contado + dt.timedelta(days=1))
+        fim = min(dt.date.fromisoformat(f), hoje)
+        if fim >= ini:
+            total += (fim - ini).days + 1
+            contado = fim
+    return total
 
 
 def aulas_da_semana(con, segunda, hoje=None) -> list:
@@ -2050,7 +2161,9 @@ GRUPOS_CONFIG = [("imposto", "Imposto (DAS)", "pct"), ("taxa_pagamento", "Taxas 
                  ("salario", "Salário fixo da PJ para a PF: valor (R$ por mês; 0 = desligado) e dia do pagamento", "num"),
                  ("colchao", "Colchão: meta em meses de custo fixo (0 = sem meta)", "num"),
                  ("impacto_curto", "Fila de pagamento: o quanto atrasar atrapalha agora (0 a 40; quanto maior, mais cedo na fila)", "num"),
-                 ("impacto_juros", "Fila de pagamento: juros e multa por mês de atraso (quanto maior, mais cedo na fila)", "pct")]
+                 ("impacto_juros", "Fila de pagamento: juros e multa por mês de atraso (quanto maior, mais cedo na fila)", "pct"),
+                 ("cobranca", "Cobrança de aluno atrasado: multa (uma vez) e juros ao mês, proporcional aos dias. "
+                              "Só cobre se estiver no contrato; pelo Código do Consumidor a multa vai até 2%", "pct")]
 
 
 @app.get("/configuracoes", response_class=HTMLResponse)

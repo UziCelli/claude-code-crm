@@ -756,6 +756,7 @@ def test_restaurar_horario_fixo_respeita_o_limite_de_2_alunos(http):
 
 # ---------- 3. marcar a aula ----------
 def test_marcar_feita_faltou_desfazer_e_alerta_de_sem_aula(http):
+    grava("DELETE FROM campanha_fases WHERE tipo='bloqueio'")   # dia de bloqueio não conta no "sem aula" (ver test_alertas)
     ana = aluno("Ana Silva")
     hoje = dt.date.today()
     http.post(f"/clientes/{ana}/evento", data={"tipo": "aula", "data": (hoje - dt.timedelta(days=20)).isoformat()})

@@ -21,6 +21,12 @@ PARAMETROS_INICIAIS = [
     ("msg_whatsapp", "falta", None, "Oi, {nome}! Senti sua falta nos treinos (última aula em {data}). Está tudo bem? Vamos remarcar? Victor | VFITCOACH", 2),
     ("msg_whatsapp", "boas_vindas", None, "Oi, {nome}! Seja bem-vindo(a) à VFITCOACH! Fico feliz em começar essa jornada com você. Victor | VFITCOACH", 3),
     ("msg_whatsapp", "reativacao", None, "Oi, {nome}! Faz tempo que não nos falamos. Que tal retomarmos os treinos? Tenho novidades para você. Victor | VFITCOACH", 4),
+    ("msg_whatsapp", "cobranca", None, "Oi, {nome}! Tudo bem? Passando para lembrar do pagamento em aberto desde {data} ({dias} dias de atraso): "
+                                       "{valor} + multa de {multa} + juros de {juros} = {total}. Pode me mandar o comprovante quando pagar? "
+                                       "Obrigado! Victor | VFITCOACH", 5),
+    # cobrança de mensalidade atrasada (botão "Cobrar" no alerta): multa uma vez + juros ao mês proporcional aos dias
+    ("cobranca", "multa", 0.02, None, 1),
+    ("cobranca", "juros_ao_mes", 0.01, None, 2),
     ("imposto", "DAS", 0.06, None, 1),
     ("taxa_pagamento", "PIX", 0.0, None, 1),
     ("taxa_pagamento", "Cartão 1x", 0.0581, None, 2),
@@ -172,6 +178,8 @@ def iniciar_banco(caminho: Path = None) -> None:
         _garantir_coluna(con, "recorrencias", "prioridade", "INTEGER")         # banco de antes da fila de pagamento
         _garantir_coluna(con, "cliente_eventos", "hora", "INTEGER")            # banco de antes da Agenda
         _garantir_coluna(con, "agenda_avulsas", "reposicao", "INTEGER DEFAULT 0")   # banco de antes do controle de reposições
+        _garantir_coluna(con, "clientes", "renovacao_em", "TEXT")              # banco de antes da renovação pelo pagamento
+        _garantir_coluna(con, "cliente_eventos", "ate", "TEXT")                # banco de antes do "pulou o mês"
         if con.execute("SELECT COUNT(*) FROM campanha_checkpoints").fetchone()[0] == 0:
             con.executemany(
                 "INSERT INTO campanha_checkpoints (pergunta, canal, prazo) VALUES (?,?,?)", CHECKPOINTS_INICIAIS

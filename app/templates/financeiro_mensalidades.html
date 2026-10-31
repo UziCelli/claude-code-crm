@@ -42,7 +42,7 @@
       <td><a href="/clientes/{{ i.id }}">{{ i.nome }}</a></td>
       <td class="num">{{ i.previsto|moeda }}</td>
       <td class="num">{{ i.recebido|moeda }}</td>
-      <td><span class="tag {{ {'recebido': 'verde', 'parcial': 'amarelo', 'em aberto': 'vermelho'}[i.situacao] }}">{{ i.situacao }}</span>{% if i.aberto and i.situacao != 'recebido' %} <span class="muted">{{ i.aberto|moeda }} lançado, a receber</span>{% endif %}</td>
+      <td><span class="tag {{ {'recebido': 'verde', 'parcial': 'amarelo', 'em aberto': 'vermelho', 'pulou o mês': 'azul'}[i.situacao] }}">{{ i.situacao }}</span>{% if i.aberto and i.situacao != 'recebido' %} <span class="muted">{{ i.aberto|moeda }} lançado, a receber</span>{% endif %}</td>
       <td>{% if i.situacao != 'recebido' %}
         {# já lançado em aberto: dar baixa nele; "Registrar pagamento" só para o que nem foi lançado (senão vira 2ª entrada) #}
         {% for a in i.abertos %}<form method="post" action="/financeiro/lancamento/{{ a.id }}/baixa" class="inline"><input type="hidden" name="volta" value="{{ volta }}"><button class="verde pequeno" title="{{ a.descricao or a.categoria }} · {{ a.data|data }}">Dar baixa {{ a.valor|moeda }}</button></form> {% endfor %}
