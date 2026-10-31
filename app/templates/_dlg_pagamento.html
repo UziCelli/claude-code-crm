@@ -2,6 +2,7 @@
    data-descricao, data-data e data-voltar (caminho para onde ir depois de salvar; vazio = padrão do financeiro). #}
 <dialog id="dlg-pgto">
   <h2 data-titulo>Registrar pagamento</h2>
+  <p class="muted" data-nota hidden></p>{# "Crédito de R$ X descontado": o valor abaixo já vem sem ele #}
   <form method="post" action="/financeiro/lancamento">
     <input type="hidden" name="escopo" value="PJ"><input type="hidden" name="tipo" value="entrada"><input type="hidden" name="cliente_id" value=""><input type="hidden" name="volta" value="{{ volta|default('') }}"><input type="hidden" name="voltar" value="">
     <div class="form-grid">

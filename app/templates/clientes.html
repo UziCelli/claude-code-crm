@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_acoes.html" import botoes with context %}
 {% block conteudo %}
 <div class="linha topo">
   <h1 style="margin:0">Clientes</h1>
@@ -29,9 +30,11 @@
       <span class="tag status-{{ c.status }}">{{ c.status }}</span>
     </div>
     <div class="muted">{{ c.local or '—' }} · {{ c.plano or c.tipo_servico or '—' }}{% if c.data_inicio %} · começou em {{ c.data_inicio|data }}{% endif %}</div>
+    {% if c.estado and c.estado.situacao != 'em_dia' %}<div style="margin-top:6px"><span class="tag {{ c.estado.cor }}">{{ c.estado.rotulo }}</span> <span class="muted">{{ c.estado.texto }}</span></div>{% endif %}
     {% if motivo == 'sem-aula' %}
     <div class="linha mt" style="margin-top:10px">
       <a class="btn pequeno" href="/agenda?aluno={{ c.id }}">Abrir agenda</a>
+      {% if c.estado %}{{ botoes(c.estado.acoes|rejectattr('rotulo', 'in', ['Abrir agenda', 'Não tem aula (consultoria)'])|list, c.estado, voltar_lista) }}{% endif %}
       <form method="post" action="/clientes/{{ c.id }}/consultoria" class="linha" style="gap:6px">
         <input type="hidden" name="voltar" value="{{ voltar_lista }}">
         <label for="ts{{ c.id }}" style="margin:0">Não tem aula:</label>
@@ -47,7 +50,8 @@
     {% endif %}
   </div>
   {% else %}
-  <a class="card borda-{{ c.alerta or ('verde' if c.status == 'ativo' else 'neutro') }}" href="/clientes/{{ c.id }}" style="color:inherit">
+  <div class="card cartao-aluno borda-{{ c.alerta or ('verde' if c.status == 'ativo' else 'neutro') }}">
+  <a href="/clientes/{{ c.id }}" style="color:inherit;display:block;text-decoration:none">
     <div class="linha" style="justify-content:space-between">
       <strong>{{ c.nome }}</strong>
       <span class="tag status-{{ c.status }}">{{ c.status }}</span>
@@ -58,7 +62,10 @@
       <span class="muted">{{ c.dias_horarios or 'sem horário' }}</span>
     </div>
     {% if c.data_renovacao %}<div class="muted" style="margin-top:6px">Renova em {{ c.data_renovacao|data }}</div>{% endif %}
+    {% if c.estado and c.estado.situacao != 'em_dia' %}<div style="margin-top:6px"><span class="tag {{ c.estado.cor }}">{{ c.estado.rotulo }}</span> <span class="muted">{{ c.estado.texto }}</span></div>{% endif %}
   </a>
+  {% if c.estado and c.estado.acoes %}<div class="acoes-alerta">{{ botoes(c.estado.acoes, c.estado, request.url.path) }}</div>{% endif %}
+  </div>
   {% endif %}
   {% else %}{% if not filtrado %}
   <div>

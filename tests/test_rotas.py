@@ -51,7 +51,7 @@ def test_ficha_do_cliente_abre(cliente_http):
 def _card_do_cliente(pagina, nome):
     """Trecho HTML do card da lista de clientes que mostra o nome dado."""
     fim = pagina.index(f"<strong>{nome}</strong>")
-    ini = pagina.rindex('<a class="card', 0, fim)
+    ini = pagina.rindex('<div class="card cartao-aluno', 0, fim)
     return pagina[ini:pagina.index("</a>", fim)]
 
 

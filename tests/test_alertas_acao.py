@@ -64,11 +64,13 @@ def test_pular_mes_leva_ao_cartao_da_ficha(con_temp, http):
     assert 'id="cadastro"' in ficha and ficha.count('id="dlg-pgto"') == 1   # o diálogo vem do base.html, uma vez só
 
 
-def test_renovacao_a_vencer_tem_whatsapp_e_registrar_pagamento_sem_pular(con_temp):
+def test_renovacao_a_vencer_tem_registrar_pagamento_e_whatsapp_sem_pular(con_temp):
     cid = cliente(con_temp, "Proxima", dia(3), valor=300)
+    with con_temp:
+        con_temp.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data) VALUES (?, 'aula', ?)", (cid, dia(-2)))   # veio neste ciclo
     a = de_renovacao(con_temp, "Proxima")
-    assert [x.get("rotulo", "wa") for x in a["acoes"]] == ["wa", "Registrar pagamento"]
-    assert a["acoes"][1]["dados"]["cliente_id"] == cid and a["acoes"][1]["dados"]["valor"] == "300,00"
+    assert [x.get("rotulo", "wa") for x in a["acoes"]] == ["Registrar pagamento", "wa"]
+    assert a["acoes"][0]["dados"]["cliente_id"] == cid and a["acoes"][0]["dados"]["valor"] == "300,00"
 
 
 def test_pagamento_pelo_alerta_volta_para_o_painel_e_tira_o_alerta(con_temp, http):
@@ -142,26 +144,28 @@ def test_saldo_livre_negativo_nao_e_mais_alerta(con_temp, http):
 def test_sem_aula_desde_tem_abrir_agenda_do_aluno(con_temp):
     cid = cliente(con_temp, "Fabio", dia(30))
     with con_temp:
-        con_temp.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data) VALUES (?, 'aula', ?)", (cid, dia(-40)))
+        con_temp.execute("DELETE FROM campanha_fases WHERE tipo='bloqueio'")
+        con_temp.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data) VALUES (?, 'aula', ?)", (cid, dia(-16)))
     a = [x for x in do_aluno(con_temp, "Fabio") if "sem aula desde" in x["texto"]][0]
-    assert [x.get("rotulo", "wa") for x in a["acoes"]] == ["wa", "Abrir agenda"]
-    assert a["acoes"][1]["href"] == f"/agenda?aluno={cid}"
+    assert [x.get("rotulo", "wa") for x in a["acoes"]] == ["Abrir agenda", "wa"]
+    assert a["acoes"][0]["href"] == f"/agenda?aluno={cid}"
 
 
-def test_sem_nenhuma_aula_abre_lista_filtrada_so_com_esses_alunos(con_temp, http):
+def test_sem_nenhuma_aula_vira_um_alerta_por_aluno_e_abre_a_lista_filtrada(con_temp, http):
     ids = {n: cliente(con_temp, n, dia(30), inicio=dia(-60)) for n in ("Bruno", "Ana")}
     cliente(con_temp, "Novato", dia(30), inicio=dia(-3))            # começou agora: fora do alerta
     cliente(con_temp, "Online", dia(30), tipo="Consultoria Online")
-    a = alerta(con_temp, "sem nenhuma aula")
-    m = re.fullmatch(r"/clientes\?ids=([\d,]+)&motivo=sem-aula", a["url"])
-    assert m and {int(i) for i in m[1].split(",")} == set(ids.values())
+    for n, cid in ids.items():   # um alerta por aluno, com a saída "Não tem aula (consultoria)" que leva à lista dele
+        a = alerta(con_temp, f"{n} —")
+        assert a["acoes"][-1] == {"rotulo": "Não tem aula (consultoria)", "href": f"/clientes?ids={cid}&motivo=sem-aula"}
+    lista = f"/clientes?ids={','.join(map(str, ids.values()))}&motivo=sem-aula"
 
-    pg = http.get(a["url"]).text
+    pg = http.get(lista).text
     assert "Alunos sem nenhuma aula registrada" in pg and 'href="/clientes">Ver todos' in pg
     assert "Bruno" in pg and "Ana" in pg and "Novato" not in pg and "Online" not in pg.replace("Consultoria Online", "")
     for cid in ids.values():
         assert f'href="/agenda?aluno={cid}"' in pg and f'action="/clientes/{cid}/consultoria"' in pg
-    assert pg.count("Não tem aula") == 2 and pg.count("Abrir agenda") == 2
+    assert pg.count('name="tipo_servico"') == 2 and pg.count('class="btn pequeno" href="/agenda?aluno=') == 2
     assert "Novato" in http.get("/clientes").text                    # a lista normal continua inteira
 
 

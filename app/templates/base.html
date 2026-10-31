@@ -47,6 +47,7 @@
   {% block conteudo %}{% endblock %}
 </main>
 {% include "_dlg_pagamento.html" %}{# diálogo único de pagamento: ficha, Mensalidades e botões dos alertas #}
+{% include "_dlg_estado.html" %}{# crédito e "pulou o mês": as soluções do estado do aluno #}
 <script src="/static/app.js?v={{ versao('app.js') }}"></script>
 </body>
 </html>

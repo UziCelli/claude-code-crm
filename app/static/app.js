@@ -15,6 +15,8 @@ document.addEventListener("click", function (e) {
   });
   var titulo = d.querySelector("[data-titulo]");
   if (titulo && b.dataset.titulo) titulo.textContent = b.dataset.titulo;
+  var nota = d.querySelector("[data-nota]");   // aviso opcional (ex.: "Crédito de R$ 100,00 descontado")
+  if (nota) { nota.textContent = b.dataset.nota || ""; nota.hidden = !b.dataset.nota; }
   d.showModal();
 });
 document.addEventListener("click", function (e) {

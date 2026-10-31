@@ -3,7 +3,7 @@ import datetime as dt
 import pytest
 from fastapi.testclient import TestClient
 
-from app import db, financeiro, main
+from app import alunos, db, financeiro, main
 
 
 @pytest.fixture
@@ -273,14 +273,16 @@ def test_sem_aula_desconta_bloqueio_e_mes_pulado(con_temp):
     assert main.dias_parados(dt.date(2026, 10, 15), dt.date(2026, 10, 31), [("2026-09-01", "2026-10-10")]) == 0
 
 
-def test_alunos_sem_nenhuma_aula_mostram_nomes(con_temp):
+def test_alunos_sem_nenhuma_aula_viram_um_alerta_cada_um(con_temp):
+    """Sem aula registrada: um alerta por aluno (estado do aluno), com o nome; quem começou agora, vai começar ou é consultoria fica de fora."""
     for nome in ("Bruno", "Ana", "Carla", "Duda"):
         cliente(con_temp, nome, dia(30), inicio=dia(-60))
     cliente(con_temp, "Novato", dia(30), inicio=dia(-3))        # começou há 3 dias: ainda não é alerta
     cliente(con_temp, "Futuro", dia(30), inicio=dia(5))
     cliente(con_temp, "Online", dia(30), tipo="Consultoria Online")
-    [a] = [x for x in main.alertas(con_temp) if "sem nenhuma aula" in x["texto"]]
-    assert a["texto"] == "4 alunos sem nenhuma aula registrada: Ana, Bruno, Carla e mais 1"
+    sem = {a["nome"] for a in main.alertas(con_temp) if "sem aula" in a["texto"]}
+    assert sem == {"Bruno", "Ana", "Carla", "Duda"}
+    assert not [a for a in main.alertas(con_temp) if "sem nenhuma aula" in a["texto"]]    # o alerta agrupado acabou
 
 
 def test_alerta_de_propostas_abre_o_simulador(con_temp):
@@ -305,7 +307,8 @@ def _novo(con, nome, tipo, plano=None, ultima=None, inicio=None, horario=False):
 
 
 def _sem_aula(con):
-    return sorted(a["nome"] for a in main.alertas(con) if "sem aula desde" in a["texto"])
+    """Quem tem aula e não está indo, pelo estado do aluno (sem aula recente, ou o mês pago/sem pagar sem aula)."""
+    return sorted(e["nome"] for e in alunos.estado(con).values() if e["situacao"] in alunos.SEM_AULA)
 
 
 def test_sem_aula_online_sem_horario_nao_alerta_e_com_horario_alerta(con_temp):
@@ -344,8 +347,7 @@ def test_sem_nenhuma_aula_segue_a_mesma_regra(con_temp):
                            ("Caio Online com horario", "Consultoria Online", {"horario": True}), ("Dora Sem Tipo", None, {"plano": "Pacote 8"}),
                            ("Edu Online", "Consultoria Online", {}), ("Fabi Hibrida", "Consultoria Híbrida", {}), ("Gil Sem Nada", None, {})):
         _novo(con_temp, nome, tipo, inicio=dia(-60), **kw)
-    [a] = [x for x in main.alertas(con_temp) if "sem nenhuma aula" in x["texto"]]
-    assert a["texto"] == "4 alunos sem nenhuma aula registrada: Ana Pacote, Bia Mensalidade, Caio Online com horario e mais 1"
+    assert _sem_aula(con_temp) == ["Ana Pacote", "Bia Mensalidade", "Caio Online com horario", "Dora Sem Tipo"]
 
 
 def test_sem_aula_continua_descontando_bloqueio_e_mes_pulado_para_quem_so_tem_horario(con_temp):

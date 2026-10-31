@@ -492,7 +492,7 @@ def test_registrar_no_aluno_so_anota_e_manda_a_aula_para_marcar_aula(con_temp):
 
 def test_marcar_aula_entra_no_fim_das_ferramentas_de_escrita_e_no_prompt():
     nomes = [f["name"] for f in assistente.FERRAMENTAS]
-    assert nomes[-2:] == ["registrar_no_aluno", "marcar_aula"]   # ordem estável: a nova vai no fim
+    assert nomes[-4:] == ["registrar_no_aluno", "marcar_aula", "situacao_alunos", "dar_credito"]   # ordem estável: as novas vão no fim
     assert "marcar_aula" in assistente.EXECUTORES and assistente.rotulo("marcar_aula") != "marcar_aula"
     assert "marcar_aula" in assistente.SISTEMA and "não repõe" in assistente.SISTEMA
     schema = next(f for f in assistente.FERRAMENTAS if f["name"] == "marcar_aula")["input_schema"]

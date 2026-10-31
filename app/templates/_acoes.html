@@ -1,0 +1,7 @@
+{# Botões de um aluno (acoes do estado, app/alunos.py): {"wa"}: WhatsApp do modelo; {"dialogo"}: abre o diálogo com data-*; senão link.
+   Importar com contexto: {% from "_acoes.html" import botoes with context %}. e = o estado do aluno; voltar = para onde ir depois de salvar. #}
+{% macro botoes(acoes, e, voltar) %}{% for x in acoes %}
+{% if x.wa %}<a class="btn claro pequeno" href="{{ wa(e.tel, modelos[e.modelo]|preencher(e.nome, e.data_modelo, e.extra)) }}" target="_blank" rel="noopener">{{ e.botao or 'WhatsApp' }}</a>
+{% elif x.dialogo %}<button type="button" class="{{ x.classe or 'claro' }} pequeno" data-abrir="{{ x.dialogo }}" data-voltar="{{ voltar }}"{% for k, v in x.dados.items() %} data-{{ k }}="{{ v }}"{% endfor %}>{{ x.rotulo }}</button>
+{% else %}<a class="btn claro pequeno" href="{{ x.href }}">{{ x.rotulo }}</a>{% endif %}
+{% endfor %}{% endmacro %}

@@ -181,6 +181,8 @@ def iniciar_banco(caminho: Path = None) -> None:
         _garantir_coluna(con, "agenda_avulsas", "repoe_evento_id", "INTEGER")  # banco de antes de ligar a reposição à desmarcação
         _garantir_coluna(con, "clientes", "renovacao_em", "TEXT")              # banco de antes da renovação pelo pagamento
         _garantir_coluna(con, "cliente_eventos", "ate", "TEXT")                # banco de antes do "pulou o mês"
+        _garantir_coluna(con, "cliente_eventos", "usado_em", "TEXT")           # banco de antes do crédito do aluno
+        _garantir_coluna(con, "cliente_eventos", "usado_lancamento_id", "INTEGER")
         if con.execute("SELECT COUNT(*) FROM campanha_checkpoints").fetchone()[0] == 0:
             con.executemany(
                 "INSERT INTO campanha_checkpoints (pergunta, canal, prazo) VALUES (?,?,?)", CHECKPOINTS_INICIAIS
