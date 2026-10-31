@@ -1,5 +1,6 @@
 """Pagamento num lugar só: diálogo único (Mensalidades e ficha), baixa com data e conta, conta recorrente só pelo "Pagar"."""
 import datetime as dt
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -45,6 +46,23 @@ def test_pagamento_pela_ficha_liga_ao_aluno_move_a_renovacao_e_volta_para_a_fich
     ficha = http.get(r.headers["location"]).text
     assert f"Pago até <strong>{hoje:%m/%Y}</strong>" in ficha
     assert f"próxima renovação <strong>{proxima[8:]}/{proxima[5:7]}/{proxima[:4]}</strong>" in ficha
+    con.close()
+
+
+def test_pagamento_de_outro_valor_da_baixa_total_na_entrada_em_aberto(cliente_http):
+    http, cid = cliente_http
+    hoje = dt.date.today().isoformat()
+    con = db.conectar()
+    aluno_renova(con, cid, hoje)
+    with con:
+        con.execute("INSERT INTO lancamentos (escopo, tipo, data, valor, categoria, cliente_id) VALUES ('PJ','entrada',?,500,'Outros',?)", (hoje, cid))
+    r = http.post("/financeiro/lancamento", data={"escopo": "PJ", "tipo": "entrada", "data": hoje, "pago_em": hoje, "valor": "200,00",
+                  "categoria": "Outros", "cliente_id": cid, "conta": "Inter", "forma": "Pix", "voltar": f"/clientes/{cid}"}, follow_redirects=False)
+    assert [tuple(x) for x in con.execute("SELECT cliente_id, valor, pago_em, conta, forma FROM lancamentos")] == [(cid, 200, hoje, "Inter", "Pix")]
+    aviso = parse_qs(urlsplit(r.headers["location"]).query)["msg"][0]
+    assert "Baixa total: a mensalidade em aberto de R$ 500,00 foi quitada com R$ 200,00." in aviso
+    m = {i["nome"]: i for i in financeiro.mensalidades(con, hoje[:7])}[con.execute("SELECT nome FROM clientes WHERE id=?", (cid,)).fetchone()[0]]
+    assert (m["situacao"], m["falta"]) == ("recebido", 0)
     con.close()
 
 

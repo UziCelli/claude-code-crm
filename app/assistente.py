@@ -188,7 +188,8 @@ FERRAMENTAS = [
                          "Também o que falta receber."),
     _f("previsao_de_caixa", "Saldo previsto de PF e PJ semana a semana, com as maiores entradas e saídas de cada semana e o primeiro "
                             "aperto (saldo negativo).", {"semanas": {"type": "integer", "description": "1 a 13, padrão 8"}}),
-    _f("mensalidades_do_mes", "Mensalidades dos alunos ativos num mês: previsto, recebido, em aberto e quanto falta de cada um, "
+    _f("mensalidades_do_mes", "Mensalidades dos alunos ativos num mês: previsto, recebido, em aberto e quanto falta de cada um "
+                              "(qualquer pagamento quita o mês: recebido > 0 = situacao recebido, sem falta), "
                               "mais as entradas da PJ sem aluno ligado.", {"mes": _MES}),
     _f("saldos_das_contas", "Último saldo digitado de cada conta bancária e cartão, com a data e a frente (PF, PJ, Reserva ou Fora)."),
     _f("listar_contas_recorrentes", "Contas recorrentes ativas (aluguel, internet, DAS...) com valor, dia de vencimento e se a deste mês "
@@ -546,9 +547,10 @@ def _mensalidades_do_mes(con, a):
     mes = _mes(a, "mes", _hoje()[:7])
     itens = financeiro.mensalidades(con, mes)
     return {"mes": mes, "previsto": round(sum(i["previsto"] for i in itens), 2), "recebido": round(sum(i["recebido"] for i in itens), 2),
-            "falta_receber": round(sum(max(i["previsto"] - i["recebido"], 0) for i in itens), 2),
+            "falta_receber": round(sum(i["previsto"] for i in itens if not i["quitado"]), 2),
             "alunos": [{"cliente_id": i["id"], "nome": i["nome"], "previsto": i["previsto"], "recebido": i["recebido"],
-                        "em_aberto": i["aberto"], "falta_lancar": i["falta"], "situacao": i["situacao"]} for i in itens],
+                        "em_aberto": i["aberto"], "falta_lancar": i["falta"], "situacao": i["situacao"],
+                        "mes_quitado": i["quitado"]} for i in itens],
             "entradas_sem_aluno": [{"id": e["id"], "data": e["data"], "valor": e["valor"], "descricao": e["descricao"],
                                     "contraparte": e["contraparte"]} for e in financeiro.entradas_sem_aluno(con, mes)]}
 
@@ -696,7 +698,18 @@ def _criar_lancamento(con, a):
             aberta = con.execute("""SELECT id FROM lancamentos WHERE cliente_id=? AND escopo='PJ' AND tipo='entrada' AND pago_em IS NULL
                                     AND excluido_em IS NULL AND ROUND(valor, 2)=? AND substr(data,1,7)=? ORDER BY data, id LIMIT 1""",
                                  (cid, valor, data[:7])).fetchone()
-        if aberta:
+        parcial = None
+        if cid and pago_em and escopo == "PJ" and tipo == "entrada" and not aberta:   # outro valor: baixa total na 1ª em aberto do mês
+            parcial = con.execute("""SELECT id, valor FROM lancamentos WHERE cliente_id=? AND escopo='PJ' AND tipo='entrada' AND pago_em IS NULL
+                                     AND excluido_em IS NULL AND substr(data,1,7)=? ORDER BY data, id LIMIT 1""", (cid, data[:7])).fetchone()
+        if parcial:
+            lid = parcial["id"]
+            con.execute("UPDATE lancamentos SET pago_em=?, valor=?, conta=COALESCE(?, conta), forma=COALESCE(?, forma) WHERE id=?",
+                        (pago_em, valor, conta, forma, lid))
+            msg = (f"Baixa total: a mensalidade em aberto de {financeiro.moeda_br(parcial['valor'])} de {aluno['nome']} foi quitada com "
+                   f"{financeiro.moeda_br(valor)} (lançamento {lid}), sem criar outro.")
+            desfazer = f"editar_lancamento(id={lid}, pago_em=\"\", valor={parcial['valor']})"
+        elif aberta:
             lid = aberta["id"]
             con.execute("UPDATE lancamentos SET pago_em=?, conta=COALESCE(?, conta), forma=COALESCE(?, forma) WHERE id=?",
                         (pago_em, conta, forma, lid))
