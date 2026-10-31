@@ -1,0 +1,26 @@
+{# mensagens da conversa do assistente: usado na tela e depois de cada resposta (a tela troca o que chegou aos pedaços por isto) #}
+{% if not turnos %}
+<div class="chat-vazio">
+  <p><strong>Pergunte sobre contas, financeiro e tarefas.</strong> O assistente lê os dados do CRM e também lança, dá baixa e marca tarefas.</p>
+  <div class="chat-sugestoes">
+    {% for s in ["O que vence esta semana?", "Quanto tenho livre na PJ e na PF?", "Quem está com a renovação vencida?",
+                 "Quais são minhas tarefas de hoje?", "Como fica o caixa nas próximas semanas?"] %}
+    <button type="button" class="claro pequeno" data-sugestao="{{ s }}">{{ s }}</button>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% for t in turnos %}
+{% if t.papel == 'user' %}
+<div class="msg eu"><div class="balao">{{ t.texto }}</div></div>
+{% elif t.papel == 'assistant' %}
+<div class="msg ele"><div class="balao">
+  {% for p in t.partes %}
+  {% if p.tipo == 'texto' %}<div class="md">{{ p.texto|markdown }}</div>
+  {% else %}<div class="acao{{ ' erro' if p.erro }}">{{ '✗' if p.erro else '✓' }} {{ p.texto }}{% if p.erro %}: {{ p.erro }}{% endif %}</div>{% endif %}
+  {% endfor %}
+</div></div>
+{% else %}
+<div class="msg aviso-chat">{{ t.texto }}</div>
+{% endif %}
+{% endfor %}

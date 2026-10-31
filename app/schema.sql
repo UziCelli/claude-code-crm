@@ -314,3 +314,22 @@ CREATE TABLE IF NOT EXISTS duplicados_ok (
     b INTEGER NOT NULL,
     PRIMARY KEY (a, b)
 );
+
+-- Assistente (chat com o Claude). A conversa só cresce: o que já foi mandado para a API nunca é editado.
+CREATE TABLE IF NOT EXISTS assistente_conversas (
+    id INTEGER PRIMARY KEY,
+    titulo TEXT,
+    criado_em TEXT DEFAULT (datetime('now','localtime')),
+    atualizado_em TEXT DEFAULT (datetime('now','localtime')),
+    excluido_em TEXT
+);
+
+CREATE TABLE IF NOT EXISTS assistente_mensagens (
+    id INTEGER PRIMARY KEY,
+    conversa_id INTEGER NOT NULL REFERENCES assistente_conversas(id),
+    papel TEXT NOT NULL,              -- user | assistant | aviso (aviso só aparece na tela, não vai para a API)
+    conteudo TEXT NOT NULL,           -- JSON: lista de blocos, como a API devolveu
+    uso TEXT,                         -- JSON: modelo e tokens da resposta (estimativa de custo)
+    criado_em TEXT DEFAULT (datetime('now','localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_assistente_mensagens ON assistente_mensagens (conversa_id, id);
