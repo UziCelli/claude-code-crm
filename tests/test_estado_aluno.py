@@ -372,7 +372,7 @@ def test_clientes_mostra_o_estado_e_os_botoes_em_cada_card(con_temp, http):
     sem_bloqueio(con_temp)
     cid, _ = aluno_pago_sem_aula(con_temp)
     pg = http.get("/clientes").text
-    card = pg[pg.index('<div class="cartao-aluno">'):]
+    card = pg[pg.index('<div class="card cartao-aluno'):]
     card = card[:card.index("</div>\n  </div>") + 6]
     assert "Pagou sem aula" in card and "pagou e não teve aula em" in card and 'data-abrir="dlg-credito"' in card and "Pulou o mês" in card
     lista = http.get(f"/clientes?ids={cid}&motivo=sem-aula").text           # o filtro por motivo usa o estado

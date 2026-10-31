@@ -50,8 +50,8 @@
     {% endif %}
   </div>
   {% else %}
-  <div class="cartao-aluno">
-  <a class="card borda-{{ c.alerta or ('verde' if c.status == 'ativo' else 'neutro') }}" href="/clientes/{{ c.id }}" style="color:inherit">
+  <div class="card cartao-aluno borda-{{ c.alerta or ('verde' if c.status == 'ativo' else 'neutro') }}">
+  <a href="/clientes/{{ c.id }}" style="color:inherit;display:block;text-decoration:none">
     <div class="linha" style="justify-content:space-between">
       <strong>{{ c.nome }}</strong>
       <span class="tag status-{{ c.status }}">{{ c.status }}</span>
