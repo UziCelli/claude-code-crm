@@ -438,9 +438,10 @@ def _linha_lanc(r, hoje, nomes=None) -> dict:
     return d
 
 
-def _potes(con, lid, pago_em) -> str:
-    div = next((e["divisao"] for e in financeiro.potes_mes(con, pago_em[:7])["entradas"] if e["id"] == lid), None)
-    return f" Separe: {financeiro.texto_divisao(div)}." if div else ""
+def _separe_imposto(con, lid) -> str:
+    """' Separe R$ 60,00 para o imposto (DAS 6%).' para a entrada PJ paga (vazio se o DAS está em 0%)."""
+    aviso = financeiro.aviso_imposto(con, con.execute("SELECT valor FROM lancamentos WHERE id=?", (lid,)).fetchone()["valor"])
+    return f" {aviso}" if aviso else ""
 
 
 # ---------- ferramentas de leitura ----------
@@ -711,7 +712,7 @@ def _criar_lancamento(con, a):
     if escopo == "PJ" and tipo == "entrada" and categoria == financeiro.EMPRESTIMO:
         msg += " É empréstimo: não paga DAS e não conta como receita."
     elif escopo == "PJ" and tipo == "entrada" and pago_em:
-        msg += _potes(con, lid, pago_em)
+        msg += _separe_imposto(con, lid)
     return {"ok": True, "id": lid, "mensagem": msg, "para_desfazer": desfazer}
 
 
@@ -768,7 +769,7 @@ def _dar_baixa(con, a):
             con.execute("UPDATE lancamentos SET pago_em=?, valor=COALESCE(?, valor) WHERE id=? AND pago_em IS NULL", (pago_em, valor, lid))
         msg = f"Baixa no lançamento {lid} em {pago_em}."
         if r["escopo"] == "PJ" and r["tipo"] == "entrada" and r["categoria"] != financeiro.EMPRESTIMO:
-            msg += _potes(con, lid, pago_em)
+            msg += _separe_imposto(con, lid)
         return {"ok": True, "id": lid, "mensagem": msg, "para_desfazer": f"editar_lancamento(id={lid}, pago_em=\"\")"}
     rid = _inteiro(a, "recorrencia_id")
     if rid is None:

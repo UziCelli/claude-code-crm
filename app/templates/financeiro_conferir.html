@@ -2,14 +2,13 @@
 {% block titulo %}Conferir · Financeiro · VFITCOACH CRM{% endblock %}
 {% macro ids_do_grupo(g) %}{% for x in g.ids %}<input type="hidden" name="ids" value="{{ x }}">{% endfor %}{% endmacro %}
 {% block conteudo %}
-<div class="linha topo">
-  <h1 style="margin:0">Conferir</h1>
-  <a class="btn claro" href="/financeiro">Voltar ao Financeiro</a>
-</div>
+<a class="voltar" href="/financeiro">← Financeiro</a>
+<h1>Conferir</h1>
 <p class="muted">O CRM procurou sozinho o que pode estar errado. É uma decisão por cartão. O que você exclui vai para a lixeira e dá para restaurar em Dados.</p>
 
-{% if not repetidos and not parecidas and not recs_retirada %}
-<div class="card mt"><strong>Tudo certo.</strong> <span class="muted">Nenhum lançamento repetido e nenhuma conta parecida com recorrente.</span></div>
+{% set bancos_dif = bancos|rejectattr('bate')|list %}
+{% if not repetidos and not parecidas and not recs_retirada and not bancos_dif %}
+<div class="card mt"><strong>Tudo certo.</strong> <span class="muted">Nenhum lançamento repetido, nenhuma conta parecida com recorrente e os saldos batem com os lançamentos.</span></div>
 {% endif %}
 
 {% if repetidos %}
@@ -36,20 +35,24 @@
 
 {% if bancos %}
 <h2 class="mt">Banco × CRM</h2>
-<p class="muted">Compara o saldo que você digitou com o que o CRM esperava. Se não bate, falta lançar algo ou tem algo a mais.</p>
+<p class="muted">Para cada conta: o saldo que você digitou contra o que os lançamentos dizem que ela devia ter.</p>
 {% for b in bancos %}
 <div class="card mt {{ '' if b.bate else 'atencao' }}">
   <div class="linha topo">
     <strong>{{ b.conta }}</strong>
-    {% if b.bate %}<span class="tag verde">bate</span>{% else %}<span class="tag amarelo">banco tem {{ b.diferenca|abs|moeda }} {{ 'a mais' if b.diferenca > 0 else 'a menos' }}</span>{% endif %}
+    {% if b.bate %}<span class="tag verde">bate</span>{% else %}<span class="tag amarelo">diferença {{ b.diferenca|moeda }}</span>{% endif %}
   </div>
   {% if not b.bate %}
-  <p style="margin:6px 0">{% if b.diferenca > 0 %}Falta lançar uma entrada, ou tem uma saída lançada a mais.{% else %}Falta lançar uma saída, ou tem uma entrada lançada a mais.{% endif %}</p>
-  {% if b.repetido %}<p style="margin:6px 0"><span class="tag vermelho">pista</span> Pode ser o lançamento repetido "{{ b.repetido.descricao }}" de {{ b.repetido.valor|moeda }} (veja em "Pode estar repetido").</p>{% endif %}
+  <p style="margin:6px 0">{{ b.resumo }}</p>
+  <p style="margin:6px 0"><span class="tag {{ 'vermelho' if b.repetido or b.zero else 'neutro' }}">pista</span> {{ b.causa }}</p>
+  <div class="linha mt">
+    <a class="btn pequeno" href="{{ b.lancar_url }}">Lançar a diferença</a>
+    <a class="btn claro pequeno" href="{{ b.ver_url }}">Ver lançamentos desta conta</a>
+    <form method="post" action="/financeiro/conferir/ok" class="inline"><input type="hidden" name="conta" value="{{ b.conta }}"><input type="hidden" name="volta" value="{{ volta }}"><button class="claro pequeno">Está certo</button></form>
+  </div>
   {% endif %}
-  {% if b.sem_conta %}<p class="muted" style="margin:6px 0">{{ b.sem_conta }} lançamento{{ 's' if b.sem_conta > 1 }} pago{{ 's' if b.sem_conta > 1 }} sem conta neste período: escolha a conta neles para eu conseguir conferir.</p>{% endif %}
-  <details><summary class="muted">Ver a conta</summary>
-    <div class="muted">De {{ b.de|data }} a {{ b.ate|data }}: {{ b.saldo_antes|moeda }} + entradas {{ b.entradas|moeda }} − saídas {{ b.saidas|moeda }} = esperado {{ b.esperado|moeda }}. O banco mostra {{ b.saldo_depois|moeda }}.</div>
+  <details class="mt"><summary class="muted">Ver a conta</summary>
+    <div class="muted">Saldo de {{ b.de|data }}: {{ b.saldo_antes|moeda }}. Entrou {{ b.entradas|moeda }} e saiu {{ b.saidas|moeda }}. Devia ter {{ b.esperado|moeda }} em {{ b.ate|data }}. Você digitou {{ b.saldo_depois|moeda }}.</div>
   </details>
 </div>
 {% endfor %}

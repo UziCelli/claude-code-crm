@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block titulo %}Próximos 90 dias · VFITCOACH CRM{% endblock %}
 {% block conteudo %}
+<a class="voltar" href="/financeiro">← Financeiro</a>
 <div class="linha topo">
   <h1 style="margin:0">Próximos 90 dias</h1>
   <div class="linha"><a class="btn claro" href="/financeiro">Livro-caixa</a><a class="btn claro" href="/financeiro/painel">Painel financeiro</a></div>
@@ -15,7 +16,7 @@
     <div class="valor">—</div><div class="meta">Digite os saldos {{ f }} em <a href="/financeiro">Atualizar saldos</a>. Até lá, a previsão começa do zero.</div>
     {% elif f in prev.aperto %}
     <div class="valor">Aperto em {{ prev.aperto[f].inicio|data }}</div>
-    <div class="meta">Nesse dia o saldo fica em {{ prev.aperto[f].saldo|moeda }}. O ponto mais baixo dos 90 dias é {{ prev.menor[f]|moeda }}, em {{ prev.menor_dia[f].data|data }}. Segure gastos ou reforce o colchão antes dessa data.</div>
+    <div class="meta">Nesse dia o saldo fica em {{ prev.aperto[f].saldo|moeda }}. O ponto mais baixo dos 90 dias é {{ prev.menor[f]|moeda }}, em {{ prev.menor_dia[f].data|data }}. Segure gastos ou reforce a reserva antes dessa data.</div>
     {% else %}
     <div class="valor">Sem aperto</div>
     <div class="meta">O ponto mais baixo dos 90 dias é {{ prev.menor[f]|moeda }}, em {{ prev.menor_dia[f].data|data }}.</div>
