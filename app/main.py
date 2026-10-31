@@ -530,8 +530,14 @@ def cliente_ficha(request: Request, cid: int, con=Depends(get_db)):
     hoje = dt.date.today().isoformat()
     cob = (financeiro.cobranca(c["valor"], renovacao["efetiva"], hoje, db.parametros(con, "cobranca"))
            if renovacao and c["status"] == "ativo" else None)   # quem saiu não recebe cobrança de renovação
+    pago_ate = None   # mês da última mensalidade paga: o ciclo que fecha na renovação efetiva (só se há pagamento de verdade)
+    if renovacao and renovacao["ciclos"] and con.execute(
+            """SELECT 1 FROM lancamentos WHERE cliente_id=? AND escopo='PJ' AND tipo='entrada' AND pago_em IS NOT NULL AND excluido_em IS NULL
+               UNION ALL SELECT 1 FROM cliente_eventos WHERE cliente_id=? AND tipo='pagamento' AND excluido_em IS NULL LIMIT 1""", (cid, cid)).fetchone():
+        m = financeiro.proxima_renovacao(renovacao["efetiva"], -1)
+        pago_ate = f"{m[5:7]}/{m[:4]}"
     return render(request, "cliente.html", con, c=c, eventos=eventos, estimativa=estimativa, propostas=propostas, pagamentos=pagamentos,
-                  renovacao=renovacao, cobranca=cob, texto_cob=texto_cobranca(cob) if cob else None)
+                  renovacao=renovacao, cobranca=cob, texto_cob=texto_cobranca(cob) if cob else None, pago_ate=pago_ate)
 
 
 @app.post("/clientes/{cid}")
@@ -1786,10 +1792,16 @@ def espera_excluir(eid: int, con=Depends(get_db)):
 RE_MES = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 
+def _caminho_seguro(p) -> str:
+    """Destino de volta aceito: caminho do próprio CRM ("/clientes/3"). Esquema, "//host" e barra invertida viram "" (vale o padrão da rota)."""
+    p = (p or "").strip()
+    return p if p.startswith("/") and not p.startswith("//") and "\\" not in p and p.isprintable() else ""
+
+
 def _fin_voltar(volta, msg=None, erro=None):
     volta = volta.replace("\n", "").replace("\r", "")
-    # volta que começa com "/financeiro/" já é um caminho completo (ex.: mensalidades); senão é a query do livro-caixa
-    return voltar(volta if volta.startswith("/financeiro/") else "/financeiro?" + volta, msg, erro)
+    # volta que é um caminho completo (ex.: mensalidades, ficha do aluno) vale como está; senão é a query do livro-caixa
+    return voltar(volta if volta.startswith("/financeiro/") or _caminho_seguro(volta) else "/financeiro?" + volta, msg, erro)
 
 
 @app.get("/financeiro", response_class=HTMLResponse)
@@ -1901,7 +1913,7 @@ def _fin_valor(f):
 @app.post("/financeiro/lancamento")
 async def financeiro_lancamento(request: Request, con=Depends(get_db)):
     f = dict((await request.form()).items())
-    volta = f.get("volta", "")
+    volta = _caminho_seguro(f.get("voltar")) or f.get("volta", "")   # "voltar" (ex.: ficha do aluno) manda; inseguro cai no "volta"
     try:
         valor = _fin_valor(f)
         if f.get("tipo") not in ("entrada", "saida") or not f.get("categoria"):
@@ -1987,9 +1999,15 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
 
 
 @app.post("/financeiro/lancamento/{lid}/baixa")
-def financeiro_baixa(lid: int, volta: str = Form(""), con=Depends(get_db)):
+def financeiro_baixa(lid: int, volta: str = Form(""), voltar_a: str = Form("", alias="voltar"), pago_em: str = Form(""), conta: str = Form(""),
+                     con=Depends(get_db)):
+    """Dar baixa: 'pago_em' (vazio = hoje; não pode ser futura) e 'conta' (vazio mantém a do lançamento)."""
+    volta = _caminho_seguro(voltar_a) or volta
+    pago_em = pago_em.strip() or dt.date.today().isoformat()
+    if not _ja_aconteceu(pago_em):
+        return _fin_voltar(volta, erro="Confira a data do pagamento: não pode ser no futuro.")
     with con:
-        con.execute("UPDATE lancamentos SET pago_em=? WHERE id=? AND pago_em IS NULL", (dt.date.today().isoformat(), lid))
+        con.execute("UPDATE lancamentos SET pago_em=?, conta=COALESCE(NULLIF(?, ''), conta) WHERE id=? AND pago_em IS NULL", (pago_em, conta.strip(), lid))
     return _fin_voltar(volta, msg="Baixa registrada.")
 
 

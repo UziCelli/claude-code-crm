@@ -1,0 +1,18 @@
+{# Diálogo único de pagamento de aluno (Mensalidades e ficha). Abre por botão com data-abrir="dlg-pgto" e data-cliente_id, data-valor,
+   data-descricao, data-data e data-voltar (caminho para onde ir depois de salvar; vazio = padrão do financeiro). #}
+<dialog id="dlg-pgto">
+  <h2 data-titulo>Registrar pagamento</h2>
+  <form method="post" action="/financeiro/lancamento">
+    <input type="hidden" name="escopo" value="PJ"><input type="hidden" name="tipo" value="entrada"><input type="hidden" name="cliente_id" value=""><input type="hidden" name="volta" value="{{ volta|default('') }}"><input type="hidden" name="voltar" value="">
+    <div class="form-grid">
+      <div class="campo"><label>Data</label><input name="data" type="date" value="{{ hoje() }}" required></div>
+      <div class="campo"><label>Valor (R$)</label><input name="valor" inputmode="decimal" required></div>
+      <div class="campo largo"><label>Categoria</label><select name="categoria" required>{% for k in listas.lista_categorias_pj %}<option {{ 'selected' if k == 'Mensalidade (Aulas Presenciais)' }}>{{ k }}</option>{% endfor %}</select></div>
+      <div class="campo largo"><label>Descrição</label><input name="descricao"></div>
+      <div class="campo"><label>Conta</label><select name="conta"><option value="">—</option>{% for k in listas.lista_contas %}<option>{{ k }}</option>{% endfor %}</select></div>
+      <div class="campo"><label>Forma</label><select name="forma"><option value="">—</option>{% for k in listas.lista_formas_lancamento %}<option>{{ k }}</option>{% endfor %}</select></div>
+      <div class="campo largo"><label>Pago em (deixe vazio se ainda não caiu)</label><input name="pago_em" type="date" value="{{ hoje() }}" max="{{ hoje() }}"></div>
+    </div>
+    <div class="linha"><button class="verde">Salvar</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
+  </form>
+</dialog>

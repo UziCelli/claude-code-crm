@@ -1,0 +1,13 @@
+{# Diálogo único de "Dar baixa" (Mensalidades, A pagar e a receber, Livro-caixa). O botão traz data-abrir="dlg-baixa", data-acao
+   (/financeiro/lancamento/ID/baixa), data-titulo e, se houver, data-conta (a conta do lançamento já vem escolhida). #}
+<dialog id="dlg-baixa">
+  <h2 data-titulo>Dar baixa</h2>
+  <form method="post" action="">
+    <input type="hidden" name="volta" value="{{ volta|default('') }}">
+    <div class="form-grid">
+      <div class="campo"><label>Pago em</label><input name="pago_em" type="date" value="{{ hoje() }}" max="{{ hoje() }}" required></div>
+      <div class="campo"><label>Conta</label><select name="conta"><option value="">—</option>{% for k in listas.lista_contas %}<option>{{ k }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="linha"><button class="verde">Confirmar baixa</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
+  </form>
+</dialog>
