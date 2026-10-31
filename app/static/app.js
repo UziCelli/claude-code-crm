@@ -32,7 +32,8 @@ document.addEventListener("click", function (e) {
 // Confirmação em 1 clique para ações sensíveis
 document.addEventListener("submit", function (e) {
   var f = e.target;
-  if (f.dataset.confirmar && !confirm(f.dataset.confirmar)) e.preventDefault();
+  var msg = (e.submitter && e.submitter.dataset.confirmar) || f.dataset.confirmar;   // o botão pode ter a sua própria pergunta
+  if (msg && !confirm(msg)) e.preventDefault();
   if (e.defaultPrevented) return;
   // Botão ocupado: impede duplo envio. Desabilita depois do envio para o name/value do botão ir junto.
   var b = e.submitter || f.querySelector("button:not([type=button]), [type=submit]");
