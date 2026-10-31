@@ -140,12 +140,12 @@ def test_alerta_contas_vencidas(con_temp):
     ontem = (dt.date.today() - dt.timedelta(days=1)).isoformat()
     with con_temp:
         con_temp.execute("INSERT INTO lancamentos (escopo, tipo, data, valor, categoria) VALUES ('PJ','saida',?,100,'Outros')", (ontem,))
-    a = [x for x in main.alertas(con_temp) if x["url"] == "/financeiro"]
+    a = [x for x in main.alertas(con_temp) if x["url"].startswith("/financeiro?vencidas=1")]
     assert len(a) == 1 and a[0]["cor"] == "vermelho" and a[0]["texto"].startswith("1 conta vencida")
     assert a[0]["texto"].endswith("(R$ 100,00)")   # o total já aparece no alerta
     with con_temp:
         con_temp.execute("UPDATE lancamentos SET pago_em=?", (ontem,))
-    assert not [x for x in main.alertas(con_temp) if x["url"] == "/financeiro"]
+    assert not [x for x in main.alertas(con_temp) if x["url"].startswith("/financeiro?vencidas=1")]
 
 # ---------- revisão dos alertas do Painel de 31/10 ----------
 def dia(n):

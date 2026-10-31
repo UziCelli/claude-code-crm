@@ -5,7 +5,38 @@
 <optgroup label="PF">{% for k in listas.lista_categorias_pf %}<option>{{ k }}</option>{% endfor %}</optgroup>
 {% endmacro %}
 {% macro valor_txt(v) %}{{ '%.2f'|format(v)|replace('.', ',') }}{% endmacro %}
+{# linha de conta a pagar (A pagar e a receber e Contas vencidas): recorrente se paga em "Pagar"; lançamento, em "Dar baixa" #}
+{% macro linha_pend(i) %}
+<tr>
+  <td>{{ i.data|data }}</td>
+  <td>{{ i.descricao }} <span class="tag neutro">{{ i.escopo }}</span>{% if i.talvez_pago %} <span class="tag amarelo" title="Há um lançamento seu parecido neste mês. Veja o aviso acima.">talvez já pago</span>{% endif %}</td>
+  <td>{{ i.categoria }}</td>
+  <td class="num v-{{ i.tipo }}">{{ '+' if i.tipo == 'entrada' else '−' }} {{ i.valor|moeda }}</td>
+  <td>{% if i.status == 'atrasado' %}<span class="tag vermelho">atrasado há {{ i.dias }} dia{{ 's' if i.dias > 1 }}</span>{% else %}<span class="tag amarelo">pendente</span>{% endif %}</td>
+  <td>
+    {% if i.origem == 'recorrencia' %}
+    <button class="verde pequeno" data-abrir="dlg-pagar" data-titulo="Pagar {{ i.descricao }}" data-rid="{{ i.id }}" data-competencia="{{ i.competencia }}" data-valor="{{ valor_txt(i.valor) }}">Pagar</button>
+    {% else %}
+    <button class="verde pequeno" data-abrir="dlg-baixa" data-acao="/financeiro/lancamento/{{ i.id }}/baixa" data-titulo="Dar baixa: {{ i.descricao }}" data-conta="{{ i.conta or '' }}">Dar baixa</button>
+    {% endif %}
+  </td>
+</tr>
+{% endmacro %}
 {% block conteudo %}
+{% if venc is not none %}
+<div class="card atencao" id="vencidas" style="margin-bottom:16px">
+  <div class="linha topo" style="margin-bottom:8px"><h2 style="margin:0">Contas vencidas ou vencendo</h2><a class="btn claro pequeno" href="/financeiro">Fechar</a></div>
+  {% if venc %}
+  <p class="muted">Vencidas e as que vencem em até 3 dias. Pague aqui e a conta sai da lista.</p>
+  <table>
+    <thead><tr><th>Vence</th><th>Conta</th><th class="sec">Categoria</th><th class="num dest">Valor</th><th>Situação</th><th></th></tr></thead>
+    <tbody>{% for i in venc %}
+    {{ linha_pend(i) }}{% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p style="margin:0">Tudo em dia: nenhuma conta vencida nem vencendo em 3 dias.</p>{% endif %}
+</div>
+{% endif %}
 <div class="linha topo">
   <h1 style="margin:0">Financeiro</h1>
   <div class="linha">
@@ -18,7 +49,7 @@
   </div>
 </div>
 
-<section class="mt" aria-labelledby="t-livre">
+<section class="mt" id="livre" aria-labelledby="t-livre">
   <div class="linha topo">
     <h2 id="t-livre" style="margin:0">Quanto dá para gastar</h2>
     <button class="claro" data-abrir="dlg-saldos" data-titulo="Atualizar saldos">Atualizar saldos</button>
@@ -115,20 +146,7 @@
     <thead><tr><th>Vence</th><th>Conta</th><th class="sec">Categoria</th><th class="num dest">Valor</th><th>Situação</th><th></th></tr></thead>
     <tbody>
     {% for i in pend %}
-    <tr>
-      <td>{{ i.data|data }}</td>
-      <td>{{ i.descricao }} <span class="tag neutro">{{ i.escopo }}</span>{% if i.talvez_pago %} <span class="tag amarelo" title="Há um lançamento seu parecido neste mês. Veja o aviso acima.">talvez já pago</span>{% endif %}</td>
-      <td>{{ i.categoria }}</td>
-      <td class="num v-{{ i.tipo }}">{{ '+' if i.tipo == 'entrada' else '−' }} {{ i.valor|moeda }}</td>
-      <td>{% if i.status == 'atrasado' %}<span class="tag vermelho">atrasado há {{ i.dias }} dia{{ 's' if i.dias > 1 }}</span>{% else %}<span class="tag amarelo">pendente</span>{% endif %}</td>
-      <td>
-        {% if i.origem == 'recorrencia' %}
-        <button class="verde pequeno" data-abrir="dlg-pagar" data-titulo="Pagar {{ i.descricao }}" data-rid="{{ i.id }}" data-competencia="{{ i.competencia }}" data-valor="{{ valor_txt(i.valor) }}">Pagar</button>
-        {% else %}
-        <button class="verde pequeno" data-abrir="dlg-baixa" data-acao="/financeiro/lancamento/{{ i.id }}/baixa" data-titulo="Dar baixa: {{ i.descricao }}" data-conta="{{ i.conta or '' }}">Dar baixa</button>
-        {% endif %}
-      </td>
-    </tr>
+    {{ linha_pend(i) }}
     {% else %}
     <tr><td colspan="6" class="muted">Nada a pagar neste mês. Cadastre as contas fixas em Contas recorrentes (abaixo) para elas aparecerem aqui todo mês.</td></tr>
     {% endfor %}
