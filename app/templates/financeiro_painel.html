@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block titulo %}Painel financeiro · VFITCOACH CRM{% endblock %}
 {% block conteudo %}
+<a class="voltar" href="/financeiro">← Financeiro</a>
 <div class="linha topo">
   <h1 style="margin:0">Painel financeiro — {{ mes[5:] }}/{{ mes[:4] }}</h1>
   <div class="linha"><a class="btn claro" href="/financeiro?mes={{ mes }}">Livro-caixa</a><a class="btn claro" href="/financeiro/mensalidades?mes={{ mes }}">Mensalidades</a><a class="btn claro" href="/financeiro/previsao">Próximos 90 dias</a></div>
@@ -33,24 +34,20 @@
       <div><div class="muted">Saídas</div><strong class="v-saida">{{ r.pf.saidas|moeda }}</strong></div>
       <div><div class="muted">Saldo</div><strong>{{ r.pf.saldo|moeda }}</strong></div>
     </div>
-    {% if salario.ligado %}
-    <div class="mt"><div class="muted">Gasto pessoal × salário: {{ salario.gasto_pf|moeda }} de {{ salario.valor|moeda }} ({{ salario.pct_gasto }}%)</div>
-      <div class="barra"><i style="width:{{ [salario.pct_gasto, 100]|min }}%;{{ ' background:var(--vermelho)' if salario.pct_gasto >= 90 }}"></i></div></div>
-    {% endif %}
     {% else %}<p class="muted">Nada pago no pessoal neste mês. Lance entradas e saídas com escopo PF no <a href="/financeiro?mes={{ mes }}&escopo=PF">livro-caixa</a>.</p>{% endif %}
   </div>
   <div class="card">
-    <h2>Colchão para meses fracos</h2>
+    <h2>Reserva para meses fracos</h2>
     <p class="muted">Custo fixo de 1 mês: contas fixas da PJ + {{ 'o salário da PF' if salario.ligado else 'contas fixas da PF' }} = {{ colchao.mensal|moeda }}.</p>
     <div class="linha" style="gap:24px">
       <div><div class="muted">1 mês</div><strong>{{ colchao.um|moeda }}</strong></div>
       <div><div class="muted">3 meses</div><strong>{{ colchao.tres|moeda }}</strong></div>
-      <div><div class="muted">Guardado (contas Reserva)</div><strong>{{ colchao.guardado|moeda }}</strong>{% if colchao.cobre_meses is not none %} <span class="muted">cobre {{ '%.1f'|format(colchao.cobre_meses)|replace('.', ',') }} mês(es)</span>{% endif %}</div>
+      <div><div class="muted">Guardado na Reserva</div><strong>{{ colchao.guardado|moeda }}</strong>{% if colchao.cobre_meses is not none %} <span class="muted">cobre {{ '%.1f'|format(colchao.cobre_meses)|replace('.', ',') }} mês(es)</span>{% endif %}</div>
     </div>
     {% if colchao.meta %}
-    <div class="mt muted">Meta: {{ colchao.meses_meta|int }} mês(es) = {{ colchao.meta|moeda }} ({{ colchao.pct }}%)</div>
+    <div class="mt muted">Reserva: {{ colchao.meses_meta|int }} mês(es) de custo fixo = {{ colchao.meta|moeda }} ({{ colchao.pct }}%)</div>
     <div class="barra"><i style="width:{{ colchao.pct }}%"></i></div>
-    {% else %}<p class="muted mt">Sem meta ainda. Quando decidir, defina os meses em <a href="/configuracoes">Configurações</a>. Para guardar, crie uma caixinha no banco e marque a conta como Reserva em Atualizar saldos.</p>{% endif %}
+    {% else %}<p class="muted mt">Sem meta ainda. Quando decidir, defina os meses de custo fixo em <a href="/configuracoes">Configurações</a>. Para guardar, crie uma caixinha no banco e marque a conta como Reserva em Atualizar saldos.</p>{% endif %}
   </div>
   <div class="card" style="grid-column:1/-1">
     <h2>Últimos 12 meses — receita, custos e lucro</h2>

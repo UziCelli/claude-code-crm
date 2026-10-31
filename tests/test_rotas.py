@@ -306,10 +306,12 @@ def test_entrada_pj_diz_como_separar(cliente_http):
     hoje = dt.date.today().isoformat()
     r = http.post("/financeiro/lancamento", data={"escopo": "PJ", "tipo": "entrada", "data": hoje, "pago_em": hoje, "valor": "1000",
                                                   "categoria": "Outros", "volta": "mes=&escopo=todos"}, follow_redirects=False)
-    assert "Separe" in unquote(r.headers["location"])
+    assert "Separe R$ 60,00 para o imposto (DAS 6%)." in unquote(r.headers["location"])
     pagina = http.get("/financeiro").text
-    assert "Potes do mês" in pagina and "R$ 60,00" in pagina
-    assert "Colchão para meses fracos" in http.get("/financeiro/painel").text
+    assert "Imposto a separar este mês: R$ 60,00" in pagina and "(DAS 6%)" in pagina
+    assert "Potes do mês" not in pagina and "Divisão de cada entrada" not in pagina and "olchão" not in pagina
+    painel = http.get("/financeiro/painel").text
+    assert "Reserva para meses fracos" in painel and "olchão" not in painel and "Gasto pessoal × salário" not in painel
 
 
 def test_financeiro_ligar_saida_a_recorrencia(cliente_http):
@@ -360,7 +362,8 @@ def test_financeiro_card_de_contas_parecidas_ligar_e_descartar(cliente_http):
                                                   "descricao": desc, "pago_em": hoje.isoformat()}, follow_redirects=False)
     a, b = [r[0] for r in con.execute("SELECT id FROM lancamentos ORDER BY id")]
     tela = http.get(f"/financeiro?mes={mes}").text
-    assert "2 coisas para conferir" in tela and "talvez já pago" in tela        # o livro-caixa só avisa; o cartão fica na tela Conferir
+    assert "Conferir (2)" in tela and "talvez já pago" in tela                  # o livro-caixa só avisa (botão com contador); o cartão fica na tela Conferir
+    assert "coisas para conferir" not in tela                                    # sem o card repetido
     assert "2 contas lançadas à mão parecem recorrentes" in http.get("/financeiro/conferir").text
     http.post(f"/financeiro/lancamento/{a}/recorrencia", data={**base, "recorrencia_id": rid}, follow_redirects=False)
     assert con.execute("SELECT recorrencia_id FROM lancamentos WHERE id=?", (a,)).fetchone()[0] == rid
@@ -372,7 +375,7 @@ def test_financeiro_card_de_contas_parecidas_ligar_e_descartar(cliente_http):
     http.post(f"/financeiro/lancamento/{b}/nao-recorrente", data=base, follow_redirects=False)
     assert con.execute("SELECT sem_recorrencia FROM lancamentos WHERE id=?", (b,)).fetchone()[0] == 1
     assert "lançada à mão parece" not in http.get("/financeiro/conferir").text
-    assert "para conferir" not in http.get(f"/financeiro?mes={mes}").text
+    assert "Conferir (" not in http.get(f"/financeiro?mes={mes}").text
     con.close()
 
 
@@ -403,7 +406,7 @@ def test_financeiro_card_avisa_recorrencia_de_retirada_ja_cadastrada(cliente_htt
         con.execute("INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, fixo, inicio)"
                     " VALUES ('PJ','Salário','Retirada',3000,5,1,'2026-01')")
     con.close()
-    assert "1 coisa para conferir" in http.get("/financeiro").text
+    assert "Conferir (1)" in http.get("/financeiro").text
     assert "Salário não é conta recorrente" in http.get("/financeiro/conferir").text
 
 
@@ -472,8 +475,11 @@ def test_linha_do_tempo_e_banco_x_crm_nas_telas(cliente_http):
         con.execute("INSERT INTO saldos (conta, saldo, data) VALUES ('Inter', 1500, ?)", (hoje.isoformat(),))
         con.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao, conta) VALUES ('PF','entrada',?,?,900,'Outros','Freela','Inter')", (d2, d2))
     tela = http.get("/financeiro/conferir").text
-    assert "Banco × CRM" in tela and "banco tem R$ 400,00 a menos" in tela
-    assert "Falta lançar uma saída, ou tem uma entrada lançada a mais" in tela
+    assert "Banco × CRM" in tela and "Inter: você digitou R$ 1.500,00 em" in tela
+    assert "Pelos lançamentos, devia ter R$ 1.900,00. Diferença: −R$ 400,00." in tela
+    assert "Falta lançar uma saída de R$ 400,00, ou tem entrada a mais." in tela
+    assert "Lançar a diferença" in tela and "Ver lançamentos desta conta" in tela and "Está certo" in tela
+    assert "Conferir (1)" in http.get("/financeiro").text                                  # a diferença entra no contador
     t = http.get("/financeiro/linha-do-tempo").text
     assert "Linha do tempo" in t and "Hoje" in t and "Ontem" in t and "Freela" in t and "Saldo digitado: Inter" in t
     so_inter = http.get("/financeiro/linha-do-tempo?dias=7&conta=Inter").text
@@ -482,3 +488,63 @@ def test_linha_do_tempo_e_banco_x_crm_nas_telas(cliente_http):
     assert http.get("/financeiro/linha-do-tempo?dias=999&conta=Banco%20Fantasma").status_code == 200
     assert "Linha do tempo" in http.get("/financeiro").text
     con.close()
+
+
+def test_financeiro_sem_potes_com_o_imposto_em_uma_linha(cliente_http):
+    http, _ = cliente_http
+    pagina = http.get("/financeiro").text
+    assert "Imposto a separar este mês: R$ 0,00" in pagina and "(DAS 6%)" in pagina
+    assert "Potes do mês" not in pagina and "Divisão de cada entrada" not in pagina and "olchão" not in pagina
+    assert "coisas para conferir" not in pagina and "coisa para conferir" not in pagina
+
+
+def test_esta_certo_esconde_a_diferenca_e_baixa_o_contador(cliente_http):
+    import datetime as dt
+    http, _ = cliente_http
+    hoje = dt.date.today()
+    d1 = (hoje - dt.timedelta(days=9)).isoformat()
+    con = db.conectar()
+    with con:
+        con.execute("INSERT INTO saldos (conta, saldo, data) VALUES ('Inter', 1000, ?)", (d1,))
+        con.execute("INSERT INTO saldos (conta, saldo, data) VALUES ('Inter', 0, ?)", (hoje.isoformat(),))
+    tela = http.get("/financeiro/conferir").text
+    assert "Você digitou R$ 0,00 — foi isso mesmo?" in tela and "Tudo certo" not in tela
+    assert "Conferir (1)" in http.get("/financeiro").text
+    r = http.post("/financeiro/conferir/ok", data={"conta": "Inter", "volta": "/financeiro/conferir"}, follow_redirects=False)
+    assert r.headers["location"].startswith("/financeiro/conferir") and "msg=" in r.headers["location"]
+    assert "Tudo certo" in http.get("/financeiro/conferir").text and "Conferir (" not in http.get("/financeiro").text
+    r = http.post("/financeiro/conferir/ok", data={"conta": "Conta Fantasma"}, follow_redirects=False)
+    assert "erro=" in r.headers["location"]
+    con.close()
+
+
+def test_lancar_a_diferenca_abre_o_novo_lancamento_e_ver_lancamentos_filtra_a_conta(cliente_http):
+    import datetime as dt
+    http, _ = cliente_http
+    hoje = dt.date.today()
+    d1, d2 = (hoje - dt.timedelta(days=9)).isoformat(), (hoje - dt.timedelta(days=1)).isoformat()
+    con = db.conectar()
+    with con:
+        con.execute("INSERT INTO saldos (conta, saldo, data) VALUES ('Inter', 1000, ?)", (d1,))
+        con.execute("INSERT INTO saldos (conta, saldo, data) VALUES ('Inter', 1500, ?)", (hoje.isoformat(),))
+        for conta, desc in (("Inter", "Freela Inter"), ("Itaú", "Mercado Itaú")):
+            con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao, conta)
+                           VALUES ('PF','entrada',?,?,100,'Outros',?,?)""", (d2, d2, desc, conta))
+    con.close()
+    tela = http.get("/financeiro/conferir").text
+    assert 'href="/financeiro?novo=1&amp;conta=Inter&amp;tipo=entrada' in tela and "valor=400%2C00" in tela
+    assert f'href="/financeiro?conta=Inter&amp;mes={hoje:%Y-%m}"' in tela
+    pagina = http.get("/financeiro?novo=1&conta=Inter&tipo=entrada&escopo=PF&valor=400,00&data=" + hoje.isoformat()).text
+    assert 'id="dlg-lanc"' in pagina and 'get("novo")' in pagina                     # a página tem o script que abre o diálogo
+    todos = http.get(f"/financeiro?mes={d2[:7]}").text
+    so_inter = http.get(f"/financeiro?mes={d2[:7]}&conta=Inter").text
+    assert "Freela Inter" in todos and "Mercado Itaú" in todos
+    assert "Freela Inter" in so_inter and "Mercado Itaú" not in so_inter and "Só da conta Inter" in so_inter
+    assert http.get("/financeiro?conta=Banco%20Fantasma").status_code == 200
+
+
+@pytest.mark.parametrize("url", ["/financeiro/mensalidades", "/financeiro/painel", "/financeiro/previsao", "/financeiro/conferir",
+                                 "/financeiro/linha-do-tempo"])
+def test_subtelas_do_financeiro_tem_o_mesmo_link_de_volta(cliente_http, url):
+    http, _ = cliente_http
+    assert '<a class="voltar" href="/financeiro">← Financeiro</a>' in http.get(url).text

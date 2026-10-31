@@ -1876,7 +1876,7 @@ def _fin_voltar(volta, msg=None, erro=None):
 
 
 @app.get("/financeiro", response_class=HTMLResponse)
-def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", con=Depends(get_db)):
+def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", conta: str = "", con=Depends(get_db)):
     h = dt.date.today().isoformat()
     mes = mes if RE_MES.match(mes) else mes_atual()
     escopo = escopo if escopo in ("PJ", "PF") else "todos"
@@ -1904,14 +1904,19 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", con=
     for p in pend:
         p["talvez_pago"] = p["origem"] == "recorrencia" and (p["id"], p["competencia"]) in talvez
     livre = financeiro.saldo_livre(con, h)
+    repetidos = financeiro.duplicados(con)
+    bancos = financeiro.conferencia_contas(con, repetidos)
+    conta = conta if conta in db.lista(con, "lista_contas") else ""
+    tabela = [l for l in lancs if l["conta"] == conta] if conta else lancs   # filtro só do livro-caixa: as somas do mês ficam como estão
     recs = con.execute(f"SELECT * FROM recorrencias WHERE excluido_em IS NULL AND escopo IN ({qs}) ORDER BY escopo, dia_vencimento, descricao", lista).fetchall()
     clientes_ = con.execute("SELECT id, nome FROM clientes WHERE excluido_em IS NULL ORDER BY nome").fetchall()
-    return render(request, "financeiro.html", con, mes=mes, escopo=escopo, lancs=lancs, entradas=entradas, saidas=saidas,
+    return render(request, "financeiro.html", con, mes=mes, escopo=escopo, conta=conta, lancs=tabela, entradas=entradas, saidas=saidas,
                   saldo=round(entradas - saidas, 2), transferencia=round(sum(l["valor"] for l in transf if l["tipo"] == "saida"), 2),
                   emprestado=emprestado, devolvido=devolvido, pend=pend, recs=recs, clientes_=clientes_, volta=f"mes={mes}&escopo={escopo}",
                   livre=livre, fila=financeiro.fila_pagamentos(con, livre, h), saldos=financeiro.saldos_atuais(con), frentes=financeiro.FRENTES,
-                  salario=financeiro.salario_mes(con, h[:7], h), potes=financeiro.potes_mes(con, mes),
-                  parecidas=parecidas, n_conferir=len(financeiro.duplicados(con)) + len(parecidas) + len(financeiro.recorrencias_retirada(con)),
+                  salario=financeiro.salario_mes(con, h[:7], h), imposto=financeiro.imposto_mes(con, h[:7], h),
+                  das_txt=financeiro.texto_pct(financeiro.pct_das(con)), parecidas=parecidas,
+                  n_conferir=len(repetidos) + len(parecidas) + len(financeiro.recorrencias_retirada(con)) + sum(not b["bate"] for b in bancos),
                   recs_todas=con.execute("SELECT * FROM recorrencias WHERE excluido_em IS NULL ORDER BY escopo, descricao").fetchall())
 
 
@@ -2062,10 +2067,9 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
     if f["escopo"] == "PJ" and f["tipo"] == "entrada" and f["categoria"] == financeiro.EMPRESTIMO:
         return _fin_voltar(volta, msg=(aviso or "Lançamento salvo. ") + "É empréstimo: não paga DAS e não conta como receita.")
     if f["escopo"] == "PJ" and f["tipo"] == "entrada" and pago_em:
-        # dinheiro que entrou na PJ: diz na hora quanto vai para cada pote
-        div = next((e["divisao"] for e in financeiro.potes_mes(con, pago_em[:7])["entradas"] if e["id"] == lid), None)
-        if div:
-            return _fin_voltar(volta, msg=(aviso or "Lançamento salvo. ") + "Separe: " + financeiro.texto_divisao(div) + ".")
+        # dinheiro que entrou na PJ: diz na hora quanto separar para o imposto
+        if separe := financeiro.aviso_imposto(con, valor):
+            return _fin_voltar(volta, msg=(aviso or "Lançamento salvo. ") + separe)
     return _fin_voltar(volta, msg=aviso.strip() or "Lançamento salvo.")
 
 
@@ -2106,9 +2110,20 @@ def financeiro_emprestimo(lid: int, volta: str = Form(""), con=Depends(get_db)):
 
 @app.get("/financeiro/conferir", response_class=HTMLResponse)
 def financeiro_conferir(request: Request, con=Depends(get_db)):
-    """Tudo que o app acha que precisa de um olhar: lançamentos repetidos e contas lançadas à mão que parecem recorrentes."""
-    return render(request, "financeiro_conferir.html", con, repetidos=financeiro.duplicados(con), parecidas=financeiro.saidas_parecidas(con),
-                  recs_retirada=financeiro.recorrencias_retirada(con), bancos=financeiro.conferencia_contas(con), volta="/financeiro/conferir")
+    """Tudo que o app acha que precisa de um olhar: lançamentos repetidos, contas lançadas à mão que parecem recorrentes e saldos que não batem."""
+    repetidos = financeiro.duplicados(con)
+    return render(request, "financeiro_conferir.html", con, repetidos=repetidos, parecidas=financeiro.saidas_parecidas(con),
+                  recs_retirada=financeiro.recorrencias_retirada(con), bancos=financeiro.conferencia_contas(con, repetidos), volta="/financeiro/conferir")
+
+
+@app.post("/financeiro/conferir/ok")
+def financeiro_conferir_ok(conta: str = Form(""), volta: str = Form("/financeiro/conferir"), con=Depends(get_db)):
+    """'Está certo': esconde a diferença desta conta até você digitar um saldo novo."""
+    try:
+        financeiro.marcar_conferido(con, conta)
+    except ValueError as e:
+        return _fin_voltar(volta, erro=str(e))
+    return _fin_voltar(volta, msg=f"Combinado: {conta} fica sem aviso até você digitar um saldo novo.")
 
 
 @app.get("/financeiro/linha-do-tempo", response_class=HTMLResponse)
@@ -2317,7 +2332,7 @@ GRUPOS_CONFIG = [("imposto", "Imposto (DAS)", "pct"), ("taxa_pagamento", "Taxas 
                  ("funil_chance", "Chance de fechar por etapa do funil", "pct"),
                  ("fiscal", "Fiscal: salário mínimo (R$), pró-labore e INSS (frações, ex.: 0,28 = 28%)", "num"),
                  ("salario", "Salário fixo da PJ para a PF: valor (R$ por mês; 0 = desligado) e dia do pagamento", "num"),
-                 ("colchao", "Colchão: meta em meses de custo fixo (0 = sem meta)", "num"),
+                 ("colchao", "Reserva: meta em meses de custo fixo (0 = sem meta)", "num"),
                  ("impacto_curto", "Fila de pagamento: o quanto atrasar atrapalha agora (0 a 40; quanto maior, mais cedo na fila)", "num"),
                  ("impacto_juros", "Fila de pagamento: juros e multa por mês de atraso (quanto maior, mais cedo na fila)", "pct"),
                  ("cobranca", "Cobrança de aluno atrasado: multa (uma vez) e juros ao mês, proporcional aos dias. "
