@@ -9,7 +9,7 @@
       {% elif x.dialogo %}<button type="button" class="{{ x.classe or 'claro' }} pequeno" data-abrir="{{ x.dialogo }}" data-voltar="{{ request.url.path }}"{% for k, v in x.dados.items() %} data-{{ k }}="{{ v }}"{% endfor %}>{{ x.rotulo }}</button>
       {% else %}<a class="btn claro pequeno" href="{{ x.href }}"{% if x.externo %} target="_blank" rel="noopener"{% endif %}>{{ x.rotulo }}</a>{% endif %}
       {% endfor %}
-    </div>{% endif %}
+    </div>{% else %}<div class="acoes-alerta"><a class="btn claro pequeno" href="{{ a.url }}">Resolver</a></div>{% endif %}
   </li>
   {% endfor %}
 </ul>

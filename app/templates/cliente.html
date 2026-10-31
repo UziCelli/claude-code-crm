@@ -32,6 +32,7 @@
     <div class="linha" style="justify-content:space-between"><strong>{{ renova|data }}</strong>{% if cobranca %}<span class="tag vermelho">{{ cobranca.dias }} dias de atraso</span>{% endif %}</div>
     {% if renovacao and renovacao.ciclos %}<p class="muted">Andou com {{ {'pagamento': 'o pagamento', 'renovacao': 'a renovação marcada', 'pausa': 'o mês pulado'}[renovacao.motivo] }} de {{ renovacao.motivo_data|data }} (no cadastro: {{ renovacao.gravada|data }}).</p>{% endif %}
     {% if renovacao and renovacao.falta > 0 %}<p class="muted">{{ 'Renovação marcada, pagamento ainda não lançado' if renovacao.pendente else 'Pagamento parcial' }}: falta {{ renovacao.falta|moeda }}.</p>{% endif %}
+    <div class="linha" style="margin:8px 0"><button class="verde pequeno" data-abrir="dlg-pgto" data-titulo="Registrar pagamento de {{ c.nome }}" data-cliente_id="{{ c.id }}" data-valor="{{ ('%.2f'|format((renovacao.falta if renovacao and renovacao.falta > 0 else c.valor)|float))|replace('.', ',') if c.valor else '' }}" data-descricao="Mensalidade {{ data_iso(renova)[5:7] if data_iso(renova) else hoje()[5:7] }}/{{ data_iso(renova)[:4] if data_iso(renova) else hoje()[:4] }}" data-voltar="/clientes/{{ c.id }}">Registrar pagamento</button><span class="muted">a renovação anda sozinha</span></div>
     {% if cobranca %}<p class="muted">Com multa e juros: {{ cobranca.total|moeda }} ({{ cobranca.valor|moeda }} + multa {{ cobranca.multa|moeda }} + juros {{ cobranca.juros|moeda }}).</p>{% endif %}
     <form method="post" action="/clientes/{{ c.id }}/evento" class="linha" data-confirmar="Pular a renovação de {{ renova|data }} sem cobrança?">
       <input type="hidden" name="tipo" value="pausa"><input type="hidden" name="data" value="{{ hoje() }}">
@@ -80,7 +81,6 @@
 
     <div class="card mt">
       <h2>Registrar no histórico</h2>
-      <p class="muted">Pagamento vai para o financeiro: <a href="/financeiro/mensalidades">Mensalidades</a> → Registrar pagamento.</p>
       <p><a href="/agenda?aluno={{ c.id }}">Aulas: marque na Agenda.</a></p>
       <form method="post" action="/clientes/{{ c.id }}/evento" class="form-grid">
         <input type="hidden" name="tipo" value="anotacao">
