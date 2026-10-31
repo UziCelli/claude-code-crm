@@ -21,7 +21,7 @@
     </div>
     <div class="muted">{{ c.local or '—' }} · {{ c.plano or c.tipo_servico or '—' }}{% if c.pessoas and c.pessoas > 1 %} · {{ c.pessoas }} pessoas{% endif %}</div>
     <div class="linha mt" style="margin-top:8px;justify-content:space-between">
-      <span><strong>{{ c.valor|moeda }}</strong> <span class="muted">/ mês</span></span>
+      <span><strong>{{ c.valor|moeda }}</strong> <span class="muted">{{ '/ pacote' if c.tipo_servico == 'Pacote de Aulas' or (c.plano or '').startswith('Pacote') else '/ mês' }}</span></span>
       <span class="muted">{{ c.dias_horarios or 'sem horário' }}</span>
     </div>
     {% if c.data_renovacao %}<div class="muted" style="margin-top:6px">Renova em {{ c.data_renovacao|data }}</div>{% endif %}

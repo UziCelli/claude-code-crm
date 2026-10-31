@@ -268,3 +268,11 @@ def test_alunos_sem_nenhuma_aula_mostram_nomes(con_temp):
     cliente(con_temp, "Online", dia(30), tipo="Consultoria Online")
     [a] = [x for x in main.alertas(con_temp) if "sem nenhuma aula" in x["texto"]]
     assert a["texto"] == "4 alunos sem nenhuma aula registrada: Ana, Bruno, Carla e mais 1"
+
+
+def test_alerta_de_propostas_abre_o_simulador(con_temp):
+    """Proposta enviada gera alerta que abre /simulador (o antigo /propostas não tem tela GET, dava 405)."""
+    with con_temp:
+        con_temp.execute("INSERT INTO propostas (tipo_servico, preco_total, status) VALUES ('Pacote de Aulas', 500, 'enviada')")
+    [a] = [x for x in main.alertas(con_temp) if "esperando resposta" in x["texto"]]
+    assert a["url"] == "/simulador" and a["texto"] == "1 proposta enviada esperando resposta"

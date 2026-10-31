@@ -48,6 +48,29 @@ def test_ficha_do_cliente_abre(cliente_http):
     assert r.status_code == 200 and "Aluno Teste" in r.text
 
 
+def _card_do_cliente(pagina, nome):
+    """Trecho HTML do card da lista de clientes que mostra o nome dado."""
+    fim = pagina.index(f"<strong>{nome}</strong>")
+    ini = pagina.rindex('<a class="card', 0, fim)
+    return pagina[ini:pagina.index("</a>", fim)]
+
+
+def test_lista_de_clientes_mostra_pacote_ou_mes(cliente_http):
+    """Pacote de aulas mostra '/ pacote' no preço; mensalidade continua com '/ mês'."""
+    http, cid = cliente_http
+    con = db.conectar()
+    with con:
+        con.execute("INSERT INTO clientes (nome, status, tipo_servico, plano, valor) VALUES ('Pacotista', 'ativo', 'Pacote de Aulas', 'Pacote 8 aulas', 640)")
+        con.execute("INSERT INTO clientes (nome, status, tipo_servico, plano, valor) VALUES ('Mensalista', 'ativo', 'Mensalidade', 'Mensalidade 2x/semana', 480)")
+        con.execute("INSERT INTO clientes (nome, status, plano, valor) VALUES ('Antigo', 'ativo', 'Pacote 4 aulas', 320)")
+    con.close()
+    pagina = http.get("/clientes").text
+    assert "/ pacote" in _card_do_cliente(pagina, "Pacotista") and "/ mês" not in _card_do_cliente(pagina, "Pacotista")
+    assert "/ pacote" in _card_do_cliente(pagina, "Antigo")   # sem tipo de serviço: o plano já diz "Pacote"
+    assert "/ mês" in _card_do_cliente(pagina, "Mensalista") and "/ pacote" not in _card_do_cliente(pagina, "Mensalista")
+    assert "Valor (R$ por mês, ou do pacote)" in http.get(f"/clientes/{cid}").text
+
+
 def test_financeiro_lancamento_baixa_e_recorrencia(cliente_http):
     import datetime as dt
     http, _ = cliente_http
