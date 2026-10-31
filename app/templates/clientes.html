@@ -4,6 +4,13 @@
   <h1 style="margin:0">Clientes</h1>
   <a class="btn" href="/clientes/novo">Novo cliente</a>
 </div>
+{% if filtrado %}
+<div class="card atencao linha topo">
+  <div><strong>{{ titulo_lista }}</strong> <span class="muted">({{ clientes|length }})</span>
+    <div class="muted">{% if clientes %}{{ 'Resolva um por um: quem fica certo sai da lista.' if motivo else 'Só os alunos escolhidos no alerta.' }}{% else %}Tudo resolvido por aqui.{% endif %}</div></div>
+  <a class="btn claro" href="/clientes">Ver todos</a>
+</div>
+{% else %}
 <form class="linha" method="get">
   {% for s, r in [('ativo','Ativos'),('pausado','Pausados'),('inativo','Inativos'),('todos','Todos')] %}
   <a class="btn {{ 'claro' if status != s }}" href="/clientes?status={{ s }}&busca={{ busca }}">{{ r }} {% if s != 'todos' %}({{ totais.get(s, 0) }}){% endif %}</a>
@@ -12,8 +19,34 @@
   <input name="busca" value="{{ busca }}" placeholder="Buscar por nome" style="width:220px">
   <button class="claro">Buscar</button>
 </form>
+{% endif %}
 <div class="grid c3 mt">
   {% for c in clientes %}
+  {% if filtrado %}
+  <div class="card borda-{{ c.alerta or ('verde' if c.status == 'ativo' else 'neutro') }}">
+    <div class="linha" style="justify-content:space-between">
+      <a href="/clientes/{{ c.id }}"><strong>{{ c.nome }}</strong></a>
+      <span class="tag status-{{ c.status }}">{{ c.status }}</span>
+    </div>
+    <div class="muted">{{ c.local or '—' }} · {{ c.plano or c.tipo_servico or '—' }}{% if c.data_inicio %} · começou em {{ c.data_inicio|data }}{% endif %}</div>
+    {% if motivo == 'sem-aula' %}
+    <div class="linha mt" style="margin-top:10px">
+      <a class="btn pequeno" href="/agenda?aluno={{ c.id }}">Abrir agenda</a>
+      <form method="post" action="/clientes/{{ c.id }}/consultoria" class="linha" style="gap:6px">
+        <input type="hidden" name="voltar" value="{{ voltar_lista }}">
+        <label for="ts{{ c.id }}" style="margin:0">Não tem aula:</label>
+        <select id="ts{{ c.id }}" name="tipo_servico" style="width:auto">{% for t in ['Consultoria Online', 'Consultoria Híbrida'] %}<option>{{ t }}</option>{% endfor %}</select>
+        <button class="claro pequeno">Salvar</button>
+      </form>
+    </div>
+    {% elif motivo == 'incompleto' %}
+    <div class="linha mt" style="margin-top:10px">
+      {% for f in c.faltas %}<span class="tag amarelo">{{ f }}</span>{% endfor %}
+      <a class="btn pequeno" href="/clientes/{{ c.id }}#cadastro">Completar</a>
+    </div>
+    {% endif %}
+  </div>
+  {% else %}
   <a class="card borda-{{ c.alerta or ('verde' if c.status == 'ativo' else 'neutro') }}" href="/clientes/{{ c.id }}" style="color:inherit">
     <div class="linha" style="justify-content:space-between">
       <strong>{{ c.nome }}</strong>
@@ -26,11 +59,12 @@
     </div>
     {% if c.data_renovacao %}<div class="muted" style="margin-top:6px">Renova em {{ c.data_renovacao|data }}</div>{% endif %}
   </a>
-  {% else %}
+  {% endif %}
+  {% else %}{% if not filtrado %}
   <div>
     <p class="muted">{% if busca %}Nenhum cliente com “{{ busca }}”. Confira o nome ou veja Todos.{% else %}Nenhum cliente aqui. Cadastre um ou importe da planilha em Configurações.{% endif %}</p>
     <a class="btn" href="/clientes/novo">Novo cliente</a> <a class="btn claro" href="/configuracoes">Importar planilha</a>
   </div>
-  {% endfor %}
+  {% endif %}{% endfor %}
 </div>
 {% endblock %}

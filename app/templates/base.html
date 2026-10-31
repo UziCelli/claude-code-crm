@@ -46,6 +46,7 @@
   {% endif %}
   {% block conteudo %}{% endblock %}
 </main>
+{% include "_dlg_pagamento.html" %}{# diálogo único de pagamento: ficha, Mensalidades e botões dos alertas #}
 <script src="/static/app.js?v={{ versao('app.js') }}"></script>
 </body>
 </html>

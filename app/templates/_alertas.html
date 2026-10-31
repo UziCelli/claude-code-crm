@@ -1,5 +1,15 @@
+{# Cada alerta: o texto (link) e, embaixo, os botões de a.acoes na ordem. {"wa"}: WhatsApp do modelo; {"dialogo"}: abre o diálogo com data-*; senão link.
+   O diálogo de pagamento (dlg-pgto) vem do base.html; depois de salvar, volta para esta tela. #}
 <ul class="lista-alertas">
   {% for a in alertas %}
-  <li class="{{ a.cor }}"><a href="{{ a.url }}">{{ a.texto }}</a>{% if a.modelo %} <a class="btn claro pequeno" href="{{ wa(a.tel, modelos[a.modelo]|preencher(a.nome, a.data, a.extra)) }}" target="_blank" rel="noopener">{{ a.botao or 'WhatsApp' }}</a>{% endif %}</li>
+  <li class="{{ a.cor }}"><a href="{{ a.url }}">{{ a.texto }}</a>
+    {% if a.acoes %}<div class="acoes-alerta">
+      {% for x in a.acoes %}
+      {% if x.wa %}<a class="btn claro pequeno" href="{{ wa(a.tel, modelos[a.modelo]|preencher(a.nome, a.data, a.extra)) }}" target="_blank" rel="noopener">{{ a.botao or 'WhatsApp' }}</a>
+      {% elif x.dialogo %}<button type="button" class="{{ x.classe or 'claro' }} pequeno" data-abrir="{{ x.dialogo }}" data-voltar="{{ request.url.path }}"{% for k, v in x.dados.items() %} data-{{ k }}="{{ v }}"{% endfor %}>{{ x.rotulo }}</button>
+      {% else %}<a class="btn claro pequeno" href="{{ x.href }}"{% if x.externo %} target="_blank" rel="noopener"{% endif %}>{{ x.rotulo }}</a>{% endif %}
+      {% endfor %}
+    </div>{% endif %}
+  </li>
   {% endfor %}
 </ul>

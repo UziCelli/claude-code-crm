@@ -20,6 +20,15 @@ document.addEventListener("click", function (e) {
 document.addEventListener("click", function (e) {
   if (e.target.matches("[data-fechar]")) e.target.closest("dialog").close();
 });
+// Link de alerta com ?abrir=saldos abre o diálogo dlg-saldos ao carregar (só diálogos "dlg-"; o parâmetro sai do endereço)
+(function () {
+  var q = new URLSearchParams(location.search), nome = q.get("abrir");
+  var d = nome && /^[a-z]+$/.test(nome) ? document.getElementById("dlg-" + nome) : null;
+  if (!d || !d.showModal) return;
+  q.delete("abrir");
+  history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "") + location.hash);
+  d.showModal();
+})();
 // Confirmação em 1 clique para ações sensíveis
 document.addEventListener("submit", function (e) {
   var f = e.target;

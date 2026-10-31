@@ -45,6 +45,7 @@ main { padding: 20px 24px 60px; max-width: 1400px; margin: 0 auto; }
 .lista-alertas li.amarelo { border-color: var(--amarelo); }
 .lista-alertas li.vermelho { border-color: var(--vermelho); }
 .lista-alertas li.azul { border-color: var(--aco); }
+.acoes-alerta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 
 /* cards e grids */
 .card { background: var(--branco); border: 1px solid var(--borda); border-radius: 12px; padding: 16px; overflow-x: auto; overflow-wrap: break-word; } /* tabela larga rola dentro do card em vez de vazar */

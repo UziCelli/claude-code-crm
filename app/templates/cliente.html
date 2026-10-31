@@ -27,7 +27,7 @@
 <div class="grid c2">
   <div>
   {% if c and data_iso(renova) %}
-  <div class="card{{ ' borda-vermelho' if cobranca }}">
+  <div class="card{{ ' borda-vermelho' if cobranca }}" id="renovacao">
     <h2>Renovação</h2>
     <div class="linha" style="justify-content:space-between"><strong>{{ renova|data }}</strong>{% if cobranca %}<span class="tag vermelho">{{ cobranca.dias }} dias de atraso</span>{% endif %}</div>
     {% if renovacao and renovacao.ciclos %}<p class="muted">Andou com {{ {'pagamento': 'o pagamento', 'renovacao': 'a renovação marcada', 'pausa': 'o mês pulado'}[renovacao.motivo] }} de {{ renovacao.motivo_data|data }} (no cadastro: {{ renovacao.gravada|data }}).</p>{% endif %}
@@ -41,7 +41,7 @@
     </form>
   </div>
   {% endif %}
-  <div class="card{{ ' mt' if c and data_iso(renova) }}">
+  <div class="card{{ ' mt' if c and data_iso(renova) }}" id="cadastro">
     <h2>Cadastro</h2>
     <form method="post" action="{{ '/clientes/' ~ c.id if c else '/clientes' }}" class="form-grid">
       <div class="largo"><label>Nome</label><input name="nome" required value="{{ c.nome if c else '' }}"></div>
@@ -119,5 +119,4 @@
   </div>
   {% endif %}
 </div>
-{% if c %}{% include "_dlg_pagamento.html" %}{% endif %}
 {% endblock %}

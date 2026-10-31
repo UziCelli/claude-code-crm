@@ -244,18 +244,54 @@ def dias_parado(con, lead, hoje: str) -> int | None:
 
 # ---------- alertas (topo de todas as telas) ----------
 GRAV = {"vermelho": 1, "amarelo": 2, "azul": 3}
+MAX_IDS = 200   # alunos de uma lista filtrada de /clientes?ids=
+
+
+def acao_pagamento(c, efetiva, valor) -> dict:
+    """Botão "Registrar pagamento" de um aluno: abre o diálogo único (dlg-pgto) com valor e mês da renovação já preenchidos."""
+    return {"rotulo": "Registrar pagamento", "dialogo": "dlg-pgto", "classe": "verde",
+            "dados": {"titulo": f"Registrar pagamento de {c['nome']}", "cliente_id": c["id"],
+                      "valor": f"{float(valor):.2f}".replace(".", ",") if valor else "", "descricao": f"Mensalidade {efetiva[5:7]}/{efetiva[:4]}"}}
+
+
+def acao_whatsapp(tel) -> list:
+    """WhatsApp de um lead (não há modelo de mensagem para lead: abre a conversa sem texto). Sem telefone, nada."""
+    return [{"rotulo": "WhatsApp", "href": wa(tel), "externo": True}] if tel else []
+
+
+def acao_agenda(cid) -> dict:
+    """Botão "Abrir agenda" já com o aluno no Controle do aluno."""
+    return {"rotulo": "Abrir agenda", "href": f"/agenda?aluno={cid}"}
+
+
+def contas_vencendo(con, h: str) -> list:
+    """Saídas vencidas ou que vencem em até 3 dias (alerta e card "Contas vencidas" do Financeiro), vencidas primeiro.
+    Na virada do mês (30/10 olhando 01/11) olha também as pendências do mês seguinte."""
+    lim3 = (dt.date.fromisoformat(h) + dt.timedelta(days=3)).isoformat()
+    vistos, venc = set(), []
+    for mes_pend in dict.fromkeys((h[:7], lim3[:7])):
+        for p in financeiro.pendencias(con, mes_pend, h):
+            chave = (p["origem"], p["id"], p.get("competencia"))
+            if p["tipo"] == "saida" and p["data"] <= lim3 and chave not in vistos:
+                vistos.add(chave)
+                venc.append(p)
+    return sorted(venc, key=lambda p: (p["status"] != "atrasado", p["data"]))
 
 
 def alertas(con):
-    """Lista única de {grav, cor, texto, url, tel, modelo}, mais grave primeiro."""
+    """Lista única de {grav, cor, texto, url, tel, modelo, acoes}, mais grave primeiro.
+    acoes = botões do alerta, em ordem: {"wa": True} (WhatsApp/cobrança do modelo), {"rotulo", "href"} ou {"rotulo", "dialogo", "dados"}."""
     hoje = dt.date.today()
     h = hoje.isoformat()
     lim7 = (hoje + dt.timedelta(days=7)).isoformat()
     out = []
 
-    def add(cor, texto, url, tel=None, modelo=None, nome=None, data=None, extra=None, botao=None):
+    def add(cor, texto, url, tel=None, modelo=None, nome=None, data=None, extra=None, botao=None, acoes=None):
+        acoes = list(acoes or [])
+        if modelo and not any(x.get("wa") for x in acoes):
+            acoes.insert(0, {"wa": True})   # o WhatsApp do modelo vem primeiro, a menos que o alerta o ponha em outra posição
         out.append(dict(grav=GRAV[cor], cor=cor, texto=texto, url=url, tel=tel, modelo=modelo, nome=nome, data=data,
-                        extra=extra, botao=botao))
+                        extra=extra, botao=botao, acoes=acoes))
 
     def s(n):
         return "s" if n > 1 else ""
@@ -272,9 +308,12 @@ def alertas(con):
     for efetiva, c in sorted(vencendo, key=lambda x: x[0]):
         venceu = efetiva < h
         cob = financeiro.cobranca(c["valor"], efetiva, h, par_cob) if venceu else None
+        pagar = acao_pagamento(c, efetiva, (ren[c["id"]]["falta"] if c["id"] in ren else 0) or c["valor"])   # parcial: só o que falta
+        pular = {"rotulo": "Pular mês", "href": f"/clientes/{c['id']}#renovacao"}
         add("vermelho" if venceu else "amarelo", f"{c['nome']} — renovação {'venceu em' if venceu else 'em'} {data_br(efetiva)}",
             f"/clientes/{c['id']}", c["telefone"], "cobranca" if cob else "renovacao", c["nome"], data_br(efetiva),
-            extra=texto_cobranca(cob) if cob else None, botao=f"Cobrar {moeda(cob['total'])}" if cob else None)
+            extra=texto_cobranca(cob) if cob else None, botao=f"Cobrar {moeda(cob['total'])}" if cob else None,
+            acoes=[pagar, {"wa": True}, pular] if venceu else [pagar])
     # sem aula: os dias de bloqueio da agenda (viagem) e de mês pulado não contam
     parados = [(i, f) for i, f in ((data_iso(a), data_iso(b)) for a, b in fases_bloqueio(con)) if i and f]
     pausas = pausas_por_aluno(con)
@@ -290,15 +329,16 @@ def alertas(con):
         if c["ultima"] is None:
             ini = data_iso(c["data_inicio"])
             if not (ini and ini > (hoje - dt.timedelta(days=limite)).isoformat()):   # começou agora (ou vai começar): ainda não
-                nunca.append(c["nome"])
+                nunca.append((c["id"], c["nome"]))
         elif ultima := data_iso(c["ultima"]):
             ultima = dt.date.fromisoformat(ultima)
             if (hoje - ultima).days - dias_parados(ultima, hoje, parados + pausas.get(c["id"], [])) > limite:
                 add("vermelho", f"{c['nome']} — sem aula desde {data_br(c['ultima'])}", f"/clientes/{c['id']}", c["telefone"], "falta",
-                    c["nome"], data_br(c["ultima"]))
+                    c["nome"], data_br(c["ultima"]), acoes=[acao_agenda(c["id"])])
     if nunca:
-        nomes = ", ".join(sorted(nunca)[:3]) + (f" e mais {len(nunca) - 3}" if len(nunca) > 3 else "")
-        add("amarelo", f"{len(nunca)} aluno{s(len(nunca))} sem nenhuma aula registrada: {nomes}", "/clientes")
+        nomes = ", ".join(sorted(n for _, n in nunca)[:3]) + (f" e mais {len(nunca) - 3}" if len(nunca) > 3 else "")
+        add("amarelo", f"{len(nunca)} aluno{s(len(nunca))} sem nenhuma aula registrada: {nomes}",
+            "/clientes?ids=" + ",".join(str(i) for i, _ in nunca[:MAX_IDS]) + "&motivo=sem-aula")
     n = aulas_sem_marcar(con, hoje)
     if n:
         add("azul", f"{n} aula{s(n)} da agenda sem marcar nesta semana", "/agenda")
@@ -306,9 +346,10 @@ def alertas(con):
                             ORDER BY data_proxima_acao IS NULL, data_proxima_acao"""):
         if l["data_proxima_acao"] and l["data_proxima_acao"] <= h:
             add("vermelho" if l["data_proxima_acao"] < h else "azul",
-                f"{l['nome']} — {l['proxima_acao'] or 'próxima ação'} ({data_br(l['data_proxima_acao'])})", "/leads", l["telefone"])
+                f"{l['nome']} — {l['proxima_acao'] or 'próxima ação'} ({data_br(l['data_proxima_acao'])})", "/leads", l["telefone"],
+                acoes=acao_whatsapp(l["telefone"]))
         elif d := dias_parado(con, l, h):
-            add("amarelo", f"{l['nome']} — lead parado há {d} dias", "/leads", l["telefone"])
+            add("amarelo", f"{l['nome']} — lead parado há {d} dias", "/leads", l["telefone"], acoes=acao_whatsapp(l["telefone"]))
     ultimo_dia = (hoje + dt.timedelta(days=1)).day == 1
     feitos = {r[0] for r in con.execute("SELECT item FROM rotina_itens WHERE semana=? AND feito=1", (semana_atual(),))}
     for t in tarefas_rotina(con):
@@ -317,19 +358,11 @@ def alertas(con):
     for c in con.execute("""SELECT pergunta, prazo FROM campanha_checkpoints WHERE excluido_em IS NULL AND resposta='pendente'
                             AND prazo <= ? ORDER BY prazo""", (lim7,)):
         add("vermelho" if c["prazo"] < h else "amarelo", f"Checkpoint de campanha ({data_br(c['prazo'])}): {c['pergunta']}", "/campanhas")
-    lim3 = (hoje + dt.timedelta(days=3)).isoformat()
-    # na virada do mês (30/10 olhando 01/11) olha também as pendências do mês seguinte
-    vistos, venc = set(), []
-    for mes_pend in dict.fromkeys((h[:7], lim3[:7])):
-        for p in financeiro.pendencias(con, mes_pend, h):
-            chave = (p["origem"], p["id"], p.get("competencia"))
-            if p["tipo"] == "saida" and p["data"] <= lim3 and chave not in vistos:
-                vistos.add(chave)
-                venc.append(p)
+    venc = contas_vencendo(con, h)
     if venc:
         add("vermelho" if any(p["status"] == "atrasado" for p in venc) else "amarelo",
             f"{len(venc)} conta{s(len(venc))} vencida{s(len(venc))} ou vencendo em 3 dias ({moeda(sum(p['valor'] for p in venc))})",
-            "/financeiro")
+            "/financeiro?vencidas=1#vencidas")
     rep = financeiro.duplicados(con)
     if rep:
         add("amarelo", f"{len(rep)} {'grupos' if len(rep) > 1 else 'grupo'} de lançamentos do financeiro {'parecem' if len(rep) > 1 else 'parece'} "
@@ -337,7 +370,7 @@ def alertas(con):
     livre = financeiro.saldo_livre(con, h)
     for frente in ("PF", "PJ"):
         if not livre[frente]["sem_saldo"] and livre[frente]["livre"] < 0:
-            add("vermelho", f"Saldo livre {frente} negativo ({moeda(livre[frente]['livre'])}): segure gastos até entrar dinheiro", "/financeiro")
+            add("vermelho", f"Saldo livre {frente} negativo ({moeda(livre[frente]['livre'])}): segure gastos até entrar dinheiro", "/financeiro#livre")
     sal = financeiro.salario_mes(con, h[:7], h)
     if sal["ligado"] and sal["pct_gasto"] >= 90:
         add("vermelho" if sal["pct_gasto"] >= 100 else "amarelo",
@@ -346,14 +379,15 @@ def alertas(con):
         add("azul", f"Pagar o salário do mês ({moeda(sal['valor'])}) da PJ para a PF", "/financeiro")
     velho = max((livre[f]["dias_velho"] or 0) for f in ("PF", "PJ"))
     if velho > financeiro.DIAS_SALDO_VELHO:
-        add("amarelo", f"Saldos das contas sem atualizar há {velho} dias: o Saldo livre pode estar errado", "/financeiro")
+        add("amarelo", f"Saldos das contas sem atualizar há {velho} dias: o Saldo livre pode estar errado", "/financeiro?abrir=saldos")
     n = con.execute("SELECT COUNT(*) FROM propostas WHERE excluido_em IS NULL AND status='enviada'").fetchone()[0]
     if n:
         add("azul", f"{n} proposta{s(n)} enviada{s(n)} esperando resposta", "/simulador")
-    n = con.execute("""SELECT COUNT(*) FROM clientes WHERE excluido_em IS NULL AND status='ativo'
-                       AND (telefone IS NULL OR telefone='' OR data_renovacao IS NULL)""").fetchone()[0]
-    if n:
-        add("azul", f"{n} aluno{s(n)} ativo{s(n)} com cadastro incompleto (telefone ou renovação)", "/clientes")
+    incompletos = [r[0] for r in con.execute("""SELECT id FROM clientes WHERE excluido_em IS NULL AND status='ativo'
+                                                AND (telefone IS NULL OR telefone='' OR data_renovacao IS NULL) ORDER BY nome""")]
+    if n := len(incompletos):
+        add("azul", f"{n} aluno{s(n)} ativo{s(n)} com cadastro incompleto (telefone ou renovação)",
+            "/clientes?ids=" + ",".join(map(str, incompletos[:MAX_IDS])) + "&motivo=incompleto")
     if db.nuvem.ativo() and db.nuvem.status["erro"]:
         add("vermelho", "Sem conexão com o banco na nuvem (Turso): confira a internet antes de lançar algo", "/dados")
     return sorted(out, key=lambda a: a["grav"])  # estável: mantém a ordem das fontes dentro da gravidade
@@ -485,16 +519,30 @@ def _num_br(v) -> float:
     return float(s or 0)
 
 
+MOTIVOS_LISTA = {"sem-aula": "Alunos sem nenhuma aula registrada", "incompleto": "Cadastro incompleto"}   # /clientes?ids=..&motivo=..
+TIPOS_SEM_AULA = ("Consultoria Online", "Consultoria Híbrida")
+
+
 @app.get("/clientes", response_class=HTMLResponse)
-def clientes(request: Request, status: str = "ativo", busca: str = "", con=Depends(get_db)):
+def clientes(request: Request, status: str = "ativo", busca: str = "", ids: str = "", motivo: str = "", con=Depends(get_db)):
+    # lista filtrada (link de um alerta): só estes alunos, sem os filtros de status e nome; quem já foi resolvido sai da lista
+    filtro = list(dict.fromkeys(i for i in map(id_valido, ids.split(",")) if i))[:MAX_IDS]
     sql = "SELECT * FROM clientes WHERE excluido_em IS NULL"
     args = []
-    if status != "todos":
-        sql += " AND status=?"
-        args.append(status)
-    if busca:
-        sql += " AND nome LIKE ?"
-        args.append(f"%{busca}%")
+    if filtro:
+        sql += f" AND id IN ({','.join('?' * len(filtro))})"
+        args += filtro
+        if motivo == "sem-aula":
+            sql += " AND COALESCE(tipo_servico, '') != 'Consultoria Online'"
+        elif motivo == "incompleto":
+            sql += " AND status='ativo' AND (telefone IS NULL OR telefone='' OR data_renovacao IS NULL)"
+    else:
+        if status != "todos":
+            sql += " AND status=?"
+            args.append(status)
+        if busca:
+            sql += " AND nome LIKE ?"
+            args.append(f"%{busca}%")
     rows = con.execute(sql + " ORDER BY status='ativo' DESC, nome", args).fetchall()
     hoje = dt.date.today()
     ren = financeiro.renovacoes(con)
@@ -505,9 +553,12 @@ def clientes(request: Request, status: str = "ativo", busca: str = "", con=Depen
         if data_iso(renova) and c["status"] == "ativo":
             dias = (dt.date.fromisoformat(data_iso(renova)) - hoje).days
             alerta = "vermelho" if dias < 0 else ("amarelo" if dias <= 7 else None)
-        itens.append({**dict(c), "data_renovacao": renova, "alerta": alerta})
+        faltas = [t for t, falta in (("falta telefone", not c["telefone"]), ("falta data de renovação", not c["data_renovacao"])) if falta]
+        itens.append({**dict(c), "data_renovacao": renova, "alerta": alerta, "faltas": faltas})
     totais = {r[0]: r[1] for r in con.execute("SELECT status, COUNT(*) FROM clientes WHERE excluido_em IS NULL GROUP BY status")}
-    return render(request, "clientes.html", con, clientes=itens, status=status, busca=busca, totais=totais)
+    return render(request, "clientes.html", con, clientes=itens, status=status, busca=busca, totais=totais, filtrado=bool(filtro),
+                  motivo=motivo if motivo in MOTIVOS_LISTA else "", titulo_lista=MOTIVOS_LISTA.get(motivo, "Alunos selecionados"),
+                  voltar_lista=f"/clientes?ids={','.join(map(str, filtro))}&motivo={motivo if motivo in MOTIVOS_LISTA else ''}")
 
 
 def _form_cliente(form) -> dict:
@@ -631,6 +682,21 @@ def registrar_evento(con, cid: int, tipo: str, data: str, valor="", descricao=""
         return f"Renovação registrada. Próxima: {proxima}.", None
     return (f"Registrado. A renovação continua em {proxima}: sem data, ela só anda quando faltam até {financeiro.ANTECEDENCIA} dias. "
             "Para outra data, preencha a nova data de renovação."), None
+
+
+@app.post("/clientes/{cid}/consultoria")
+def cliente_consultoria(cid: int, tipo_servico: str = Form(""), destino: str = Form("", alias="voltar"), con=Depends(get_db)):
+    """"Não tem aula" (lista de alunos sem aula): o aluno é de consultoria, então não precisa de aula marcada. Volta para a lista."""
+    url = _caminho_seguro(destino)
+    url = url if url.startswith("/clientes") else "/clientes"
+    if tipo_servico not in TIPOS_SEM_AULA:
+        return voltar(url, erro="Escolha Consultoria Online ou Consultoria Híbrida.")
+    c = con.execute("SELECT nome FROM clientes WHERE id=? AND excluido_em IS NULL", (cid,)).fetchone()
+    if not c:
+        return voltar(url, erro="Aluno não encontrado.")
+    with con:
+        con.execute("UPDATE clientes SET tipo_servico=?, atualizado_em=datetime('now','localtime') WHERE id=?", (tipo_servico, cid))
+    return voltar(url, msg=f"{c['nome']}: {tipo_servico}.")
 
 
 @app.post("/clientes/{cid}/excluir")
@@ -1876,7 +1942,7 @@ def _fin_voltar(volta, msg=None, erro=None):
 
 
 @app.get("/financeiro", response_class=HTMLResponse)
-def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", conta: str = "", con=Depends(get_db)):
+def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", conta: str = "", vencidas: int = 0, con=Depends(get_db)):
     h = dt.date.today().isoformat()
     mes = mes if RE_MES.match(mes) else mes_atual()
     escopo = escopo if escopo in ("PJ", "PF") else "todos"
@@ -1896,12 +1962,13 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", cont
     emprestado = round(sum(l["valor"] for l in empr if l["tipo"] == "entrada"), 2)
     devolvido = round(sum(l["valor"] for l in empr if l["tipo"] == "saida"), 2)
     pend = [p for p in financeiro.pendencias(con, mes, h) if p["escopo"] in lista]
-    for p in pend:
+    venc = contas_vencendo(con, h) if vencidas else None   # ?vencidas=1 (link do alerta): as contas que o alerta conta, de qualquer mês
+    for p in pend + (venc or []):
         p["dias"] = (dt.date.fromisoformat(h) - dt.date.fromisoformat(p["data"])).days if p["status"] == "atrasado" else 0
     parecidas = [s for s in financeiro.saidas_parecidas(con) if s["escopo"] in lista]
     # recorrência em aberto cuja conta parece já ter sido lançada à mão naquele mês: etiqueta "talvez já pago"
     talvez = {(c["id"], s["data"][:7]) for s in parecidas for c in s["candidatos"] if not c["ja_baixada"]}
-    for p in pend:
+    for p in pend + (venc or []):
         p["talvez_pago"] = p["origem"] == "recorrencia" and (p["id"], p["competencia"]) in talvez
     livre = financeiro.saldo_livre(con, h)
     repetidos = financeiro.duplicados(con)
@@ -1912,7 +1979,8 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", cont
     clientes_ = con.execute("SELECT id, nome FROM clientes WHERE excluido_em IS NULL ORDER BY nome").fetchall()
     return render(request, "financeiro.html", con, mes=mes, escopo=escopo, conta=conta, lancs=tabela, entradas=entradas, saidas=saidas,
                   saldo=round(entradas - saidas, 2), transferencia=round(sum(l["valor"] for l in transf if l["tipo"] == "saida"), 2),
-                  emprestado=emprestado, devolvido=devolvido, pend=pend, recs=recs, clientes_=clientes_, volta=f"mes={mes}&escopo={escopo}",
+                  emprestado=emprestado, devolvido=devolvido, pend=pend, venc=venc, recs=recs, clientes_=clientes_,
+                  volta=f"mes={mes}&escopo={escopo}" + ("&vencidas=1" if vencidas else ""),   # pagou uma, continua vendo as outras
                   livre=livre, fila=financeiro.fila_pagamentos(con, livre, h), saldos=financeiro.saldos_atuais(con), frentes=financeiro.FRENTES,
                   salario=financeiro.salario_mes(con, h[:7], h), imposto=financeiro.imposto_mes(con, h[:7], h),
                   das_txt=financeiro.texto_pct(financeiro.pct_das(con)), parecidas=parecidas,
