@@ -333,7 +333,7 @@ def alertas(con):
         add("amarelo", f"Saldos das contas sem atualizar há {velho} dias: o Saldo livre pode estar errado", "/financeiro")
     n = con.execute("SELECT COUNT(*) FROM propostas WHERE excluido_em IS NULL AND status='enviada'").fetchone()[0]
     if n:
-        add("azul", f"{n} proposta{s(n)} enviada{s(n)} esperando resposta", "/propostas")
+        add("azul", f"{n} proposta{s(n)} enviada{s(n)} esperando resposta", "/simulador")
     n = con.execute("""SELECT COUNT(*) FROM clientes WHERE excluido_em IS NULL AND status='ativo'
                        AND (telefone IS NULL OR telefone='' OR data_renovacao IS NULL)""").fetchone()[0]
     if n:
