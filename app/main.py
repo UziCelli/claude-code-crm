@@ -308,7 +308,7 @@ def alertas(con):
     for efetiva, c in sorted(vencendo, key=lambda x: x[0]):
         venceu = efetiva < h
         cob = financeiro.cobranca(c["valor"], efetiva, h, par_cob) if venceu else None
-        pagar = acao_pagamento(c, efetiva, (ren[c["id"]]["falta"] if c["id"] in ren else 0) or c["valor"])   # parcial: só o que falta
+        pagar = acao_pagamento(c, efetiva, c["valor"])   # pagamento parcial já quita o mês: sempre a mensalidade cheia
         pular = {"rotulo": "Pular mês", "href": f"/clientes/{c['id']}#renovacao"}
         add("vermelho" if venceu else "amarelo", f"{c['nome']} — renovação {'venceu em' if venceu else 'em'} {data_br(efetiva)}",
             f"/clientes/{c['id']}", c["telefone"], "cobranca" if cob else "renovacao", c["nome"], data_br(efetiva),
@@ -2102,12 +2102,16 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
         atual = con.execute("SELECT recorrencia_id, competencia FROM lancamentos WHERE id=?", (lid,)).fetchone()
         if atual and atual["recorrencia_id"] == rec_id and atual["competencia"]:
             competencia = atual["competencia"]
-    aberta, aviso = None, ""
+    aberta, parcial, aviso = None, None, ""
     if not lid and cliente_id and pago_em and f["escopo"] == "PJ" and f["tipo"] == "entrada":
         # o aluno já tem essa entrada lançada em aberto no mês: dar baixa nela em vez de criar outra (senão conta duas vezes)
         aberta = con.execute("""SELECT id FROM lancamentos WHERE cliente_id=? AND escopo='PJ' AND tipo='entrada' AND pago_em IS NULL
                                 AND excluido_em IS NULL AND ROUND(valor, 2)=? AND substr(data,1,7)=? ORDER BY data, id LIMIT 1""",
                              (cliente_id, valor, f["data"][:7])).fetchone()
+        if not aberta:   # pagamento de outro valor: dá baixa total na 1ª entrada em aberto do mês, com o valor realmente recebido
+            parcial = con.execute("""SELECT id, valor FROM lancamentos WHERE cliente_id=? AND escopo='PJ' AND tipo='entrada' AND pago_em IS NULL
+                                     AND excluido_em IS NULL AND substr(data,1,7)=? ORDER BY data, id LIMIT 1""",
+                                  (cliente_id, f["data"][:7])).fetchone()
     try:
         with con:
             if rec_id:
@@ -2116,6 +2120,11 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
                 lid, aviso = aberta["id"], "Esse valor já estava lançado em aberto para o aluno: dei baixa nele, sem criar outro. "
                 con.execute("UPDATE lancamentos SET pago_em=?, conta=COALESCE(?, conta), forma=COALESCE(?, forma) WHERE id=?",
                             (pago_em, f.get("conta") or None, f.get("forma") or None, lid))
+            elif parcial:
+                lid = parcial["id"]
+                aviso = f"Baixa total: a mensalidade em aberto de {financeiro.moeda_br(parcial['valor'])} foi quitada com {financeiro.moeda_br(valor)}. "
+                con.execute("UPDATE lancamentos SET pago_em=?, valor=?, conta=COALESCE(?, conta), forma=COALESCE(?, forma) WHERE id=?",
+                            (pago_em, valor, f.get("conta") or None, f.get("forma") or None, lid))
             elif lid:
                 con.execute("""UPDATE lancamentos SET escopo=?, tipo=?, data=?, pago_em=?, valor=?, categoria=?, descricao=?, contraparte=?,
                                cliente_id=?, conta=?, forma=?, parcela_num=?, parcela_total=? WHERE id=?""", (*campos, lid))
@@ -2314,8 +2323,8 @@ def financeiro_mensalidades(request: Request, mes: str = "", con=Depends(get_db)
     mes = _fin_mes(mes)
     itens = financeiro.mensalidades(con, mes)
     previsto, recebido = (round(sum(i[k] for i in itens), 2) for k in ("previsto", "recebido"))
-    # falta por aluno: quem pagou a mais não cobre quem não pagou
-    falta = round(sum(max(i["previsto"] - i["recebido"], 0) for i in itens), 2)
+    # falta: só quem ainda não pagou nada no mês (qualquer pagamento quita o mês)
+    falta = round(sum(i["previsto"] for i in itens if not i["quitado"]), 2)
     alunos = con.execute("SELECT id, nome FROM clientes WHERE excluido_em IS NULL ORDER BY status != 'ativo', nome").fetchall()
     sem_aluno = [dict(e, sugestao=financeiro.sugerir_aluno(f"{e['descricao'] or ''} {e['contraparte'] or ''}", alunos),
                       parece_emprestimo=financeiro.parece_emprestimo(f"{e['descricao'] or ''} {e['contraparte'] or ''}"))

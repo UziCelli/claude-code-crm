@@ -43,8 +43,11 @@
       <td><a href="/clientes/{{ i.id }}">{{ i.nome }}</a></td>
       <td class="num">{{ i.previsto|moeda }}</td>
       <td class="num">{{ i.recebido|moeda }}</td>
-      <td><span class="tag {{ {'recebido': 'verde', 'parcial': 'amarelo', 'em aberto': 'vermelho', 'pulou o mês': 'azul'}[i.situacao] }}">{{ i.situacao }}</span>{% if i.aberto and i.situacao != 'recebido' %} <span class="muted">{{ i.aberto|moeda }} lançado, a receber</span>{% endif %}</td>
-      <td>{% if i.situacao != 'recebido' %}
+      <td><span class="tag {{ {'recebido': 'verde', 'em aberto': 'vermelho', 'pulou o mês': 'azul'}[i.situacao] }}">{{ i.situacao }}</span>{% if i.aberto %} <span class="muted">{{ i.aberto|moeda }} lançado, a receber</span>{% elif i.quitado and i.abertos %} <span class="muted">mês já quitado</span>{% endif %}</td>
+      <td>{% if i.quitado %}
+        {# pagou no mês: os lançamentos em aberto dele não são mais a receber; fica só a opção de excluir #}
+        {% for a in i.abertos %}<form method="post" action="/financeiro/lancamento/{{ a.id }}/excluir" class="inline" data-confirmar="Enviar este lançamento para a lixeira?"><input type="hidden" name="volta" value="{{ volta }}"><button class="claro pequeno" title="{{ a.descricao or a.categoria }} · {{ a.data|data }}">Excluir {{ a.valor|moeda }} (já quitado)</button></form> {% endfor %}
+      {% elif i.situacao != 'recebido' %}
         {# já lançado em aberto: dar baixa nele; "Registrar pagamento" só para o que nem foi lançado (senão vira 2ª entrada) #}
         {% for a in i.abertos %}<button class="verde pequeno" data-abrir="dlg-baixa" data-acao="/financeiro/lancamento/{{ a.id }}/baixa" data-titulo="Dar baixa: {{ a.descricao or a.categoria }} · {{ a.data|data }}" data-conta="{{ a.conta or '' }}" title="{{ a.descricao or a.categoria }} · {{ a.data|data }}">Dar baixa {{ a.valor|moeda }}</button> {% endfor %}
         {% if i.falta > 0 %}<button class="{{ 'claro' if i.abertos else 'verde' }} pequeno" data-abrir="dlg-pgto" data-titulo="Registrar pagamento de {{ i.nome }}" data-cliente_id="{{ i.id }}" data-valor="{{ ('%.2f'|format(i.falta))|replace('.', ',') }}" data-descricao="Mensalidade {{ mes[5:] }}/{{ mes[:4] }}" data-data="{{ hoje() if hoje()[:7] == mes else mes ~ '-01' }}">Registrar pagamento</button>{% endif %}

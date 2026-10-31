@@ -182,6 +182,16 @@ def test_alerta_de_renovacao_some_com_pagamento_e_vira_cobranca_sem_ele(con_temp
     assert t and sem_valor
 
 
+def test_alerta_de_cobranca_some_apos_pagamento_parcial(con_temp):
+    a = cliente(con_temp, "Bruno", dia(-26))
+    assert do_aluno(con_temp, "Bruno")[0]["modelo"] == "cobranca"
+    with con_temp:
+        con_temp.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, cliente_id)"
+                         " VALUES ('PJ','entrada',?,?,100,'Pacotes de Aulas',?)", (dia(-3), dia(-3), a))   # 100 de 400
+    assert not [x for x in do_aluno(con_temp, "Bruno") if x["modelo"] == "cobranca" or x["cor"] == "vermelho"]
+    assert not [x for x in main.alertas(con_temp) if x.get("nome") == "Bruno" and "parcial" in x["texto"].lower()]
+
+
 def test_ficha_renovacao_sem_data_e_pulou_o_mes(con_temp):
     http = TestClient(main.app, base_url="http://localhost")
     v = cliente(con_temp, "Caio", "2026-10-25")
@@ -220,7 +230,8 @@ def test_ficha_mostra_data_que_andou_e_salvar_nao_mexe(con_temp):
         con_temp.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, cliente_id)"
                          " VALUES ('PJ','entrada','2026-10-28','2026-10-28',200,'Pacotes de Aulas',?)", (a,))
     pagina = http.get(f"/clientes/{a}").text
-    assert 'value="2026-11-05"' in pagina and "Andou com o pagamento de 28/10/2026" in pagina and "falta R$ 200,00" in pagina
+    assert 'value="2026-11-05"' in pagina and "Andou com o pagamento de 28/10/2026" in pagina
+    assert "Pagamento parcial" not in pagina and "falta R$" not in pagina   # parcial quita o mês: nada fica devendo
     form = {"nome": "Bruno", "telefone": "11988887777", "status": "ativo", "data_renovacao": "2026-11-05", "valor": "400"}
     http.post(f"/clientes/{a}", data=form, follow_redirects=False)
     gravada = con_temp.execute("SELECT data_renovacao, renovacao_em FROM clientes WHERE id=?", (a,)).fetchone()

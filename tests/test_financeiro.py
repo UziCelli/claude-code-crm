@@ -108,7 +108,8 @@ def test_mensalidades_previsto_x_recebido(con_temp):
     assert set(r) == {"Aluno A", "Aluno B"}   # inativo fica de fora
     assert (r["Aluno A"]["recebido"], r["Aluno A"]["situacao"]) == (400, "recebido")
     assert (r["Aluno B"]["recebido"], r["Aluno B"]["situacao"]) == (0, "em aberto")   # pendente e pagamento de outro mes nao contam
-    assert financeiro.mensalidades(con_temp, "2026-02")[1]["situacao"] == "parcial"
+    b_fev = financeiro.mensalidades(con_temp, "2026-02")[1]
+    assert (b_fev["situacao"], b_fev["falta"], b_fev["quitado"]) == ("recebido", 0, True)   # qualquer pagamento quita o mês
 
 
 def test_mensalidades_em_aberto_falta_e_inicio(con_temp):
@@ -998,6 +999,21 @@ def aluno_renova(con, nome, renova, valor=400, renovacao_em=None):
                            (nome, valor, renova, renovacao_em)).lastrowid
 
 
+def test_mensalidades_aluno_que_pagou_nao_tem_mais_a_receber(con_temp):
+    """Quem pagou algo no mês está quitado: o aberto dele fica listado (para excluir), mas não conta como a receber."""
+    with con_temp:
+        a = con_temp.execute("INSERT INTO clientes (nome, valor, status) VALUES ('Quitado', 500, 'ativo')").lastrowid
+        con_temp.execute("INSERT INTO lancamentos (escopo, tipo, data, valor, categoria, cliente_id) VALUES ('PJ','entrada','2026-10-05',500,'Outros',?)", (a,))
+        con_temp.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, cliente_id)"
+                         " VALUES ('PJ','entrada','2026-10-06','2026-10-06',200,'Outros',?)", (a,))
+    [m] = financeiro.mensalidades(con_temp, "2026-10")
+    assert (m["situacao"], m["aberto"], m["falta"], m["quitado"]) == ("recebido", 0, 0, True)
+    assert [x["valor"] for x in m["abertos"]] == [500]
+    assert financeiro._mensalidades_a_receber(con_temp, "2026-10")[0] == 0
+    p = financeiro.previsao(con_temp, "2026-10-10")
+    assert p["semanas"][0]["PJ"]["entradas"] == 0   # o aberto de 500 (vencido) não cai na 1ª semana da previsão
+
+
 def pagou(con, cid, valor, data, criado_em=None):
     with con:
         con.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, cliente_id, criado_em)"
@@ -1015,17 +1031,35 @@ def efetiva(con, cid):
     return financeiro.renovacoes(con, cid)[cid]["efetiva"]
 
 
-def test_pagamento_parcial_renova_e_o_resto_nao_anda_outro_mes(con_temp):
-    """Bruno: pagou parte das aulas depois do vencimento de 05/10. Renova para 05/11; o resto só completa outubro."""
+def test_pagamento_parcial_renova_e_quita_o_mes(con_temp):
+    """Bruno: pagou parte das aulas depois do vencimento de 05/10. Renova para 05/11 e não fica devendo nada."""
     a = aluno_renova(con_temp, "Bruno", "2026-10-05")
     assert efetiva(con_temp, a) == "2026-10-05"
     pagou(con_temp, a, 200, "2026-10-28")
     r = financeiro.renovacoes(con_temp, a)[a]
-    assert (r["efetiva"], r["falta"], r["motivo"], r["motivo_data"]) == ("2026-11-05", 200, "pagamento", "2026-10-28")
-    pagou(con_temp, a, 200, "2026-11-02")             # o resto de outubro, já perto do vencimento de novembro
-    assert (efetiva(con_temp, a), financeiro.renovacoes(con_temp, a)[a]["falta"]) == ("2026-11-05", 0)
-    pagou(con_temp, a, 400, "2026-11-06")             # novembro
-    assert efetiva(con_temp, a) == "2026-12-05"
+    assert (r["efetiva"], r["falta"], r["pendente"], r["motivo"], r["motivo_data"]) == ("2026-11-05", 0, False, "pagamento", "2026-10-28")
+    m = {i["nome"]: i for i in financeiro.mensalidades(con_temp, "2026-10")}["Bruno"]
+    assert (m["situacao"], m["recebido"], m["falta"], m["quitado"]) == ("recebido", 200, 0, True)
+    pagou(con_temp, a, 100, "2026-11-02")             # pequeno, mas perto do vencimento de novembro: conta como qualquer pagamento
+    r = financeiro.renovacoes(con_temp, a)[a]
+    assert (r["efetiva"], r["falta"]) == ("2026-12-05", 0)
+
+
+def test_pagamento_parcial_de_renovacao_marcada_quita(con_temp):
+    w = aluno_renova(con_temp, "Outro", "2026-10-25")
+    evento(con_temp, w, "renovacao", "2026-10-31")
+    r = financeiro.renovacoes(con_temp, w)[w]
+    assert (r["efetiva"], r["pendente"], r["falta"]) == ("2026-11-25", True, 400)   # sem pagamento: pendente, deve o mês
+    pagou(con_temp, w, 150, "2026-11-01")             # parcial: é da renovação e dá baixa total
+    r = financeiro.renovacoes(con_temp, w)[w]
+    assert (r["efetiva"], r["pendente"], r["falta"]) == ("2026-11-25", False, 0)
+
+
+def test_pagamento_pequeno_longe_do_vencimento_nao_renova(con_temp):
+    a = aluno_renova(con_temp, "Extra", "2026-11-25")
+    pagou(con_temp, a, 80, "2026-10-31")              # aula extra, 25 dias antes
+    r = financeiro.renovacoes(con_temp, a)[a]
+    assert (r["efetiva"], r["ciclos"], r["falta"]) == ("2026-11-25", 0, 0)
 
 
 def test_renovacao_marcada_e_pagamento_contam_uma_vez(con_temp):
