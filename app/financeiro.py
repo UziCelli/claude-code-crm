@@ -49,13 +49,15 @@ def somar_meses(mes: str, n: int) -> str:
 
 
 def _recorrencias_abertas(con: sqlite3.Connection, comp: str, hoje: str) -> list[dict]:
-    """Recorrências ativas na competência que ainda não têm lançamento nela (nem pago nem em aberto)."""
+    """Recorrências ativas na competência que ainda não têm lançamento nela (nem pago nem em aberto) e que não foram puladas
+    ("Só este mês", tabela recorrencia_pulos)."""
     itens = []
     for r in con.execute(
         """SELECT * FROM recorrencias WHERE excluido_em IS NULL AND inicio <= ? AND (fim IS NULL OR fim >= ?)
            AND NOT EXISTS (SELECT 1 FROM lancamentos l WHERE l.recorrencia_id = recorrencias.id AND l.competencia = ?
-                           AND l.excluido_em IS NULL)""",
-        (comp, comp, comp),
+                           AND l.excluido_em IS NULL)
+           AND NOT EXISTS (SELECT 1 FROM recorrencia_pulos p WHERE p.recorrencia_id = recorrencias.id AND p.competencia = ?)""",
+        (comp, comp, comp, comp),
     ):
         data = vencimento(r["dia_vencimento"], comp)
         itens.append({"origem": "recorrencia", "id": r["id"], "escopo": r["escopo"], "tipo": "saida", "data": data,
@@ -100,7 +102,8 @@ def em_aberto_ate(con: sqlite3.Connection, ate: str, hoje: str) -> list[dict]:
         data = r["pago_em"] or r["data"]
         itens.append({"origem": "lancamento", "id": r["id"], "escopo": r["escopo"], "tipo": r["tipo"], "data": data,
                       "descricao": r["descricao"] or r["categoria"], "categoria": r["categoria"], "valor": r["valor"],
-                      "prioridade": r["prioridade"], "status": status({"pago_em": None, "data": data}, hoje)})
+                      "prioridade": r["prioridade"], "status": status({"pago_em": None, "data": data}, hoje),
+                      "agendado": bool(r["pago_em"]), "recorrencia_id": r["recorrencia_id"], "competencia": r["competencia"]})
     comp, fim = somar_meses(hoje[:7], -3), ate[:7]
     while comp <= fim:
         itens += [i for i in _recorrencias_abertas(con, comp, hoje) if i["data"] <= ate]
@@ -338,6 +341,93 @@ def fila_pagamentos(con: sqlite3.Connection, livre: dict, hoje: str) -> dict:
         out[f] = {"itens": itens, "cobertos": sum(i["coberto"] for i in itens), "sem_saldo": l["sem_saldo"],
                   "tudo_coberto": bool(itens) and all(i["coberto"] for i in itens), "sobra": round(max(resto, 0), 2)}
     return out
+
+
+# ---------- Contas a pagar (a lista única da tela) ----------
+def _texto_prazo(dias: int) -> str:
+    """'atrasada há 3 dias' | 'vence hoje' | 'vence amanhã' | 'vence em 5 dias' (dias = hoje até a data; negativo = já passou)."""
+    if dias < 0:
+        return "atrasada há %d dia%s" % (-dias, "s" if dias < -1 else "")
+    return "vence hoje" if dias == 0 else "vence amanhã" if dias == 1 else f"vence em {dias} dias"
+
+
+def chave_conta(i: dict) -> tuple:
+    """Identifica uma conta em aberto: (origem, id, competência). A competência só conta para conta recorrente ainda sem lançamento."""
+    return (i["origem"], i["id"], i.get("competencia") if i["origem"] == "recorrencia" else None)
+
+
+def contas_a_pagar(con: sqlite3.Connection, hoje: str, dias: int = 30, so: set | None = None) -> dict:
+    """A lista única de contas a pagar: toda saída em aberto até hoje+dias (o mesmo horizonte do saldo_livre; atrasadas incluídas).
+    Ordem: atrasadas primeiro; depois a nota de impacto (multa, essencial, urgência: nota_impacto); depois a data.
+    Pagamento já agendado para o futuro não entra (já está pago). `so` = conjunto de chave_conta: mostra só essas.
+    Devolve {ate, itens, total}; cada item traz 'dias' (até o vencimento), 'prazo' (texto), 'custo_atraso' e 'motivo'."""
+    ate = (dt.date.fromisoformat(hoje) + dt.timedelta(days=dias)).isoformat()
+    curto, juros = db.parametros(con, "impacto_curto"), db.parametros(con, "impacto_juros")
+    itens = []
+    for i in em_aberto_ate(con, ate, hoje):
+        if i["tipo"] != "saida" or i.get("agendado") or (so is not None and chave_conta(i) not in so):
+            continue
+        i = dict(i, **nota_impacto(i, curto, juros, hoje))
+        i["dias"] = _dias_com_sinal(i["data"], hoje)
+        i["prazo"] = _texto_prazo(i["dias"])
+        itens.append(i)
+    itens.sort(key=lambda i: (i["status"] != "atrasado", -i["nota"], i["data"], -i["valor"]))
+    return {"ate": ate, "itens": itens, "total": round(sum(i["valor"] for i in itens), 2)}
+
+
+def saldos_resumo(con: sqlite3.Connection, hoje: str) -> dict:
+    """O que a tela e o alerta precisam dos saldos digitados, sem o cálculo do saldo livre.
+    tem = dinheiro nas contas PF + PJ (última foto de cada conta mais o pago depois dela); data = a foto mais antiga delas;
+    dias_velho/desatualizado pela mesma regra do alerta (mais de DIAS_SALDO_VELHO dias); reserva e contas sem frente."""
+    saldos = saldos_atuais(con)
+    contas = {c: v for c, v in saldos.items() if v["escopo"] in ("PF", "PJ")}
+    datas = [v["data"] for v in contas.values() if v["data"]]
+    tem = sum(_tem(con, {c: v for c, v in contas.items() if v["escopo"] == f}, f, hoje) for f in ("PF", "PJ"))
+    dias_velho = (dt.date.fromisoformat(hoje) - dt.date.fromisoformat(min(datas))).days if datas else None
+    return {"sem_saldo": not datas, "tem": round(tem, 2), "data": min(datas) if datas else None, "dias_velho": dias_velho,
+            "desatualizado": dias_velho is not None and dias_velho > DIAS_SALDO_VELHO,
+            "reserva": round(sum(v["saldo"] for v in saldos.values() if v["escopo"] == "Reserva" and v["saldo"] is not None), 2),
+            "sem_frente": [c for c, v in saldos.items() if v["escopo"] is None]}
+
+
+def _tirar_lancamento_aberto(con: sqlite3.Connection, rid: int, comp: str) -> None:
+    """Lançamento em aberto ligado à conta recorrente naquele mês vai para a lixeira (senão a conta voltaria à lista no lugar dele)."""
+    con.execute("""UPDATE lancamentos SET excluido_em=datetime('now','localtime')
+                   WHERE recorrencia_id=? AND competencia=? AND pago_em IS NULL AND excluido_em IS NULL""", (rid, comp))
+
+
+def _recorrencia_viva(con: sqlite3.Connection, rid: int, comp: str):
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", comp or ""):
+        raise ValueError("Mês inválido.")
+    r = con.execute("SELECT * FROM recorrencias WHERE id=? AND excluido_em IS NULL", (rid,)).fetchone()
+    if r is None:
+        raise ValueError("Conta recorrente não encontrada.")
+    return r
+
+
+def pular_mes(con: sqlite3.Connection, rid: int, comp: str) -> str:
+    """"Só este mês": a conta recorrente some da lista nesta competência e segue nos outros meses. Devolve o nome da conta."""
+    r = _recorrencia_viva(con, rid, comp)
+    with con:
+        con.execute("INSERT OR IGNORE INTO recorrencia_pulos (recorrencia_id, competencia) VALUES (?, ?)", (rid, comp))
+        _tirar_lancamento_aberto(con, rid, comp)
+    return r["descricao"]
+
+
+def encerrar_recorrencia(con: sqlite3.Connection, rid: int, comp: str) -> tuple[str, bool]:
+    """"Encerrar a conta": nenhum mês de `comp` em diante volta. Se a conta nunca teve pagamento (ou começou em `comp`), vai para
+    a lixeira; senão o fim passa a ser o mês anterior e o histórico pago continua. Devolve (nome, foi_para_a_lixeira)."""
+    r = _recorrencia_viva(con, rid, comp)
+    antes = somar_meses(comp, -1)
+    pagou = con.execute("""SELECT 1 FROM lancamentos WHERE recorrencia_id=? AND pago_em IS NOT NULL AND excluido_em IS NULL""", (rid,)).fetchone()
+    lixeira = not pagou or antes < r["inicio"]
+    with con:
+        if lixeira:
+            con.execute("UPDATE recorrencias SET excluido_em=datetime('now','localtime') WHERE id=?", (rid,))
+        else:
+            con.execute("UPDATE recorrencias SET fim=? WHERE id=?", (antes, rid))
+        _tirar_lancamento_aberto(con, rid, comp)
+    return r["descricao"], lixeira
 
 
 def salvar_saldos(con: sqlite3.Connection, data: str, valores: dict, frentes: dict) -> int:

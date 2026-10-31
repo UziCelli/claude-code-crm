@@ -103,10 +103,11 @@ def test_contas_vencidas_abre_lista_com_as_do_mes_seguinte(con_temp, http, monke
     assert [p["descricao"] for p in main.contas_vencendo(con_temp, "2026-09-29")] == ["Conta atrasada", "Conta de outubro", "Aluguel"]
 
     sem = http.get("/financeiro").text
-    assert 'id="vencidas"' not in sem and "Conta de outubro" not in sem       # a tela comum só mostra setembro
+    assert 'id="vencidas"' not in sem and sem.count("Contas a pagar</h2>") == 1     # a tela comum mostra a lista toda, sem o filtro
     pg = http.get("/financeiro?vencidas=1").text
-    card = pg.split('id="vencidas"')[1].split("</table>")[0]
-    assert "Contas vencidas ou vencendo" in card and card.index("Conta atrasada") < card.index("Conta de outubro")
+    card = pg.split('id="vencidas"')[1].split("Salário fixo")[0]
+    assert pg.count("Contas a pagar</h2>") == 1 and "Vencidas ou vencendo em 3 dias" in card and "Ver todas" in card
+    assert card.index("Conta atrasada") < card.index("Conta de outubro")
     assert "Aluguel" in card and "Conta longe" not in pg
     assert card.count('data-abrir="dlg-baixa"') == 2 and card.count('data-abrir="dlg-pagar"') == 1   # lançamento: Dar baixa; recorrente: Pagar
     assert 'data-competencia="2026-10"' in card
@@ -129,14 +130,14 @@ def test_saldos_velhos_abrem_o_dialogo_de_saldos(con_temp, http):
     assert 'get("abrir")' in js and '"dlg-" + nome' in js          # o parâmetro abre o diálogo dlg-<nome>
 
 
-def test_saldo_livre_negativo_leva_ao_cartao_quanto_da_para_gastar(con_temp, http):
+def test_saldo_livre_negativo_nao_e_mais_alerta(con_temp, http):
+    """A tela não calcula mais o Saldo livre: sem o alerta do Painel e sem o cartão."""
     hoje = dt.date.today().isoformat()
     financeiro.salvar_saldos(con_temp, hoje, {"Itaú": 50.0}, {"Itaú": "PF"})
     with con_temp:
         con_temp.execute("INSERT INTO lancamentos (escopo, tipo, data, valor, categoria) VALUES ('PF','saida',?,500,'Outros')", (dia(-1),))
-    a = alerta(con_temp, "Saldo livre PF negativo")
-    assert a["url"] == "/financeiro#livre"
-    assert 'id="livre"' in http.get("/financeiro").text
+    assert not [x for x in main.alertas(con_temp) if "Saldo livre" in x["texto"]]
+    assert 'id="livre"' not in http.get("/financeiro").text
 
 
 # ---------- sem aula ----------

@@ -254,7 +254,7 @@ def acao_whatsapp(tel) -> list:
 
 
 def contas_vencendo(con, h: str) -> list:
-    """Saídas vencidas ou que vencem em até 3 dias (alerta e card "Contas vencidas" do Financeiro), vencidas primeiro.
+    """Saídas vencidas ou que vencem em até 3 dias (alerta e filtro ?vencidas=1 do Contas a pagar), vencidas primeiro.
     Na virada do mês (30/10 olhando 01/11) olha também as pendências do mês seguinte."""
     lim3 = (dt.date.fromisoformat(h) + dt.timedelta(days=3)).isoformat()
     vistos, venc = set(), []
@@ -324,19 +324,15 @@ def alertas(con):
     if rep:
         add("amarelo", f"{len(rep)} {'grupos' if len(rep) > 1 else 'grupo'} de lançamentos do financeiro {'parecem' if len(rep) > 1 else 'parece'} "
                        "repetido: confira e exclua", "/financeiro/conferir")
-    livre = financeiro.saldo_livre(con, h)
-    for frente in ("PF", "PJ"):
-        if not livre[frente]["sem_saldo"] and livre[frente]["livre"] < 0:
-            add("vermelho", f"Saldo livre {frente} negativo ({moeda(livre[frente]['livre'])}): segure gastos até entrar dinheiro", "/financeiro#livre")
     sal = financeiro.salario_mes(con, h[:7], h)
     if sal["ligado"] and sal["pct_gasto"] >= 90:
         add("vermelho" if sal["pct_gasto"] >= 100 else "amarelo",
             f"Gasto pessoal do mês em {sal['pct_gasto']}% do salário ({moeda(sal['gasto_pf'])} de {moeda(sal['valor'])})", "/financeiro")
     if sal["pode_pagar"]:
         add("azul", f"Pagar o salário do mês ({moeda(sal['valor'])}) da PJ para a PF", "/financeiro")
-    velho = max((livre[f]["dias_velho"] or 0) for f in ("PF", "PJ"))
-    if velho > financeiro.DIAS_SALDO_VELHO:
-        add("amarelo", f"Saldos das contas sem atualizar há {velho} dias: o Saldo livre pode estar errado", "/financeiro?abrir=saldos")
+    saldos = financeiro.saldos_resumo(con, h)
+    if saldos["desatualizado"]:
+        add("amarelo", f"Saldos das contas sem atualizar há {saldos['dias_velho']} dias: atualize para saber quanto tem", "/financeiro?abrir=saldos")
     n = con.execute("SELECT COUNT(*) FROM propostas WHERE excluido_em IS NULL AND status='enviada'").fetchone()[0]
     if n:
         add("azul", f"{n} proposta{s(n)} enviada{s(n)} esperando resposta", "/simulador")
@@ -1937,16 +1933,18 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", cont
     saidas = round(sum(l["valor"] for l in lancs if l["tipo"] == "saida" and l["id"] not in fora_ids), 2)
     emprestado = round(sum(l["valor"] for l in empr if l["tipo"] == "entrada"), 2)
     devolvido = round(sum(l["valor"] for l in empr if l["tipo"] == "saida"), 2)
-    pend = [p for p in financeiro.pendencias(con, mes, h) if p["escopo"] in lista]
-    venc = contas_vencendo(con, h) if vencidas else None   # ?vencidas=1 (link do alerta): as contas que o alerta conta, de qualquer mês
-    for p in pend + (venc or []):
+    # A receber: as entradas em aberto do mês (as saídas em aberto ficam só na lista Contas a pagar)
+    pend = [p for p in financeiro.pendencias(con, mes, h) if p["escopo"] in lista and p["tipo"] == "entrada"]
+    for p in pend:
         p["dias"] = (dt.date.fromisoformat(h) - dt.date.fromisoformat(p["data"])).days if p["status"] == "atrasado" else 0
+    # ?vencidas=1 (link do alerta): a mesma lista, só com as contas que o alerta conta (de qualquer mês)
+    so = {financeiro.chave_conta(p) for p in contas_vencendo(con, h)} if vencidas else None
+    contas = financeiro.contas_a_pagar(con, h, so=so)
     parecidas = [s for s in financeiro.saidas_parecidas(con) if s["escopo"] in lista]
     # recorrência em aberto cuja conta parece já ter sido lançada à mão naquele mês: etiqueta "talvez já pago"
     talvez = {(c["id"], s["data"][:7]) for s in parecidas for c in s["candidatos"] if not c["ja_baixada"]}
-    for p in pend + (venc or []):
+    for p in contas["itens"]:
         p["talvez_pago"] = p["origem"] == "recorrencia" and (p["id"], p["competencia"]) in talvez
-    livre = financeiro.saldo_livre(con, h)
     repetidos = financeiro.duplicados(con)
     bancos = financeiro.conferencia_contas(con, repetidos)
     conta = conta if conta in db.lista(con, "lista_contas") else ""
@@ -1955,9 +1953,9 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", cont
     clientes_ = con.execute("SELECT id, nome FROM clientes WHERE excluido_em IS NULL ORDER BY nome").fetchall()
     return render(request, "financeiro.html", con, mes=mes, escopo=escopo, conta=conta, lancs=tabela, entradas=entradas, saidas=saidas,
                   saldo=round(entradas - saidas, 2), transferencia=round(sum(l["valor"] for l in transf if l["tipo"] == "saida"), 2),
-                  emprestado=emprestado, devolvido=devolvido, pend=pend, venc=venc, recs=recs, clientes_=clientes_,
+                  emprestado=emprestado, devolvido=devolvido, pend=pend, contas=contas, so_vencidas=bool(vencidas), recs=recs, clientes_=clientes_,
                   volta=f"mes={mes}&escopo={escopo}" + ("&vencidas=1" if vencidas else ""),   # pagou uma, continua vendo as outras
-                  livre=livre, fila=financeiro.fila_pagamentos(con, livre, h), saldos=financeiro.saldos_atuais(con), frentes=financeiro.FRENTES,
+                  resumo=financeiro.saldos_resumo(con, h), saldos=financeiro.saldos_atuais(con), frentes=financeiro.FRENTES,
                   salario=financeiro.salario_mes(con, h[:7], h), imposto=financeiro.imposto_mes(con, h[:7], h),
                   das_txt=financeiro.texto_pct(financeiro.pct_das(con)), parecidas=parecidas,
                   n_conferir=len(repetidos) + len(parecidas) + len(financeiro.recorrencias_retirada(con)) + sum(not b["bate"] for b in bancos),
@@ -2278,6 +2276,27 @@ def financeiro_recorrencia_excluir(rid: int, volta: str = Form(""), con=Depends(
     with con:
         con.execute("UPDATE recorrencias SET excluido_em=datetime('now','localtime') WHERE id=?", (rid,))
     return _fin_voltar(volta, msg="Conta recorrente enviada para a lixeira (restaurável em Dados).")
+
+
+@app.post("/financeiro/recorrencia/pular")
+def financeiro_recorrencia_pular(rid: int = Form(...), competencia: str = Form(...), volta: str = Form(""), con=Depends(get_db)):
+    """Excluir uma conta a pagar, "Só este mês": a competência sai da lista, dos totais e do alerta; os outros meses continuam."""
+    try:
+        nome = financeiro.pular_mes(con, rid, competencia)
+    except ValueError as e:
+        return _fin_voltar(volta, erro=str(e))
+    return _fin_voltar(volta, msg=f"{nome} de {competencia[5:7]}/{competencia[:4]} saiu da lista. Nos outros meses ela continua.")
+
+
+@app.post("/financeiro/recorrencia/encerrar")
+def financeiro_recorrencia_encerrar(rid: int = Form(...), competencia: str = Form(...), volta: str = Form(""), con=Depends(get_db)):
+    """Excluir uma conta a pagar, "Encerrar a conta": nenhum mês dessa competência em diante volta."""
+    try:
+        nome, lixeira = financeiro.encerrar_recorrencia(con, rid, competencia)
+    except ValueError as e:
+        return _fin_voltar(volta, erro=str(e))
+    return _fin_voltar(volta, msg=f"{nome} encerrada" + (" e enviada para a lixeira (restaurável em Dados)." if lixeira
+                                                          else ": os meses já pagos ficam no livro-caixa."))
 
 
 @app.post("/financeiro/recorrencia/baixa")

@@ -5,38 +5,34 @@
 <optgroup label="PF">{% for k in listas.lista_categorias_pf %}<option>{{ k }}</option>{% endfor %}</optgroup>
 {% endmacro %}
 {% macro valor_txt(v) %}{{ '%.2f'|format(v)|replace('.', ',') }}{% endmacro %}
-{# linha de conta a pagar (A pagar e a receber e Contas vencidas): recorrente se paga em "Pagar"; lançamento, em "Dar baixa" #}
-{% macro linha_pend(i) %}
-<tr>
-  <td>{{ i.data|data }}</td>
-  <td>{{ i.descricao }} <span class="tag neutro">{{ i.escopo }}</span>{% if i.talvez_pago %} <span class="tag amarelo" title="Há um lançamento seu parecido neste mês. Veja o aviso acima.">talvez já pago</span>{% endif %}</td>
-  <td>{{ i.categoria }}</td>
-  <td class="num v-{{ i.tipo }}">{{ '+' if i.tipo == 'entrada' else '−' }} {{ i.valor|moeda }}</td>
-  <td>{% if i.status == 'atrasado' %}<span class="tag vermelho">atrasado há {{ i.dias }} dia{{ 's' if i.dias > 1 }}</span>{% else %}<span class="tag amarelo">pendente</span>{% endif %}</td>
-  <td>
+{% macro dm(iso) %}{{ iso[8:10] }}/{{ iso[5:7] }}{% endmacro %}
+{# uma conta a pagar: nome, valor, data, PF/PJ, situação, multa e dois botões. Recorrente se paga em "Pagar"; lançamento, em "Dar baixa".
+   Excluir: lançamento avulso vai para a lixeira; conta recorrente (ou lançamento dela) abre a escolha "só este mês" / "encerrar". #}
+{% macro conta_item(i) %}
+<div class="conta-item {{ 'atrasada' if i.status == 'atrasado' }}">
+  <div class="linha" style="justify-content:space-between;flex-wrap:nowrap;align-items:flex-start">
+    <strong>{{ i.descricao }}</strong><strong class="num">{{ i.valor|moeda }}</strong>
+  </div>
+  <div class="muted">{{ dm(i.data) }} <span class="tag neutro">{{ i.escopo }}</span>
+    <span class="tag {{ 'vermelho' if i.status == 'atrasado' else ('amarelo' if i.dias <= 3 else 'neutro') }}">{{ i.prazo }}</span>
+    {% if i.talvez_pago %}<span class="tag amarelo" title="Há um lançamento seu parecido neste mês. Veja em Conferir.">talvez já pago</span>{% endif %}</div>
+  {% if i.custo_atraso >= 1 %}<div class="muted">Atrasar 1 mês custa ~{{ i.custo_atraso|moeda }}</div>{% endif %}
+  <div class="linha">
     {% if i.origem == 'recorrencia' %}
     <button class="verde pequeno" data-abrir="dlg-pagar" data-titulo="Pagar {{ i.descricao }}" data-rid="{{ i.id }}" data-competencia="{{ i.competencia }}" data-valor="{{ valor_txt(i.valor) }}">Pagar</button>
     {% else %}
-    <button class="verde pequeno" data-abrir="dlg-baixa" data-acao="/financeiro/lancamento/{{ i.id }}/baixa" data-titulo="Dar baixa: {{ i.descricao }}" data-conta="{{ i.conta or '' }}">Dar baixa</button>
+    <button class="verde pequeno" data-abrir="dlg-baixa" data-acao="/financeiro/lancamento/{{ i.id }}/baixa" data-titulo="Dar baixa: {{ i.descricao }}" data-conta="{{ i.conta or '' }}">Pagar</button>
     {% endif %}
-  </td>
-</tr>
+    {% set rid = i.id if i.origem == 'recorrencia' else (i.recorrencia_id if i.competencia else none) %}
+    {% if rid %}
+    <button class="claro pequeno" data-abrir="dlg-excluir-rec" data-titulo="Excluir {{ i.descricao }} de {{ i.competencia[5:7] }}/{{ i.competencia[:4] }}" data-rid="{{ rid }}" data-competencia="{{ i.competencia }}">Excluir</button>
+    {% else %}
+    <form method="post" action="/financeiro/lancamento/{{ i.id }}/excluir" class="inline" data-confirmar="Excluir {{ i.descricao }}? Ela vai para a lixeira e dá para restaurar em Dados."><input type="hidden" name="volta" value="{{ volta }}"><button class="claro pequeno">Excluir</button></form>
+    {% endif %}
+  </div>
+</div>
 {% endmacro %}
 {% block conteudo %}
-{% if venc is not none %}
-<div class="card atencao" id="vencidas" style="margin-bottom:16px">
-  <div class="linha topo" style="margin-bottom:8px"><h2 style="margin:0">Contas vencidas ou vencendo</h2><a class="btn claro pequeno" href="/financeiro">Fechar</a></div>
-  {% if venc %}
-  <p class="muted">Vencidas e as que vencem em até 3 dias. Pague aqui e a conta sai da lista.</p>
-  <table>
-    <thead><tr><th>Vence</th><th>Conta</th><th class="sec">Categoria</th><th class="num dest">Valor</th><th>Situação</th><th></th></tr></thead>
-    <tbody>{% for i in venc %}
-    {{ linha_pend(i) }}{% endfor %}
-    </tbody>
-  </table>
-  {% else %}<p style="margin:0">Tudo em dia: nenhuma conta vencida nem vencendo em 3 dias.</p>{% endif %}
-</div>
-{% endif %}
 <div class="linha topo">
   <h1 style="margin:0">Financeiro</h1>
   <div class="linha">
@@ -49,51 +45,22 @@
   </div>
 </div>
 
-<section class="mt" id="livre" aria-labelledby="t-livre">
-  <div class="linha topo">
-    <h2 id="t-livre" style="margin:0">Quanto dá para gastar</h2>
-    <button class="claro" data-abrir="dlg-saldos" data-titulo="Atualizar saldos">Atualizar saldos</button>
+<section class="mt" id="{{ 'vencidas' if so_vencidas else 'contas' }}" aria-labelledby="t-contas">
+  <div class="linha topo" style="margin-bottom:8px">
+    <h2 id="t-contas" style="margin:0">Contas a pagar</h2>
+    {% if so_vencidas %}<a class="btn claro pequeno" href="/financeiro">Ver todas</a>{% endif %}
   </div>
-  <p class="muted">Dinheiro nas contas (o último saldo digitado mais o que foi pago depois dele), menos tudo que vence até {{ livre.PF.ate|data }}, o imposto a guardar e o salário ainda não pago. Entrada prevista não conta.</p>
-  {% if livre.sem_frente %}<p class="aviso erro">Conta sem frente: {{ livre.sem_frente|join(', ') }}. Escolha PF, PJ, Reserva ou Fora em Atualizar saldos.</p>{% endif %}
-  <div class="grid c2">
-    {% for f in ['PF', 'PJ'] %}{% set l = livre[f] %}
-    <div class="kpi {{ 'amarelo' if l.sem_saldo else ('verde' if l.livre >= 0 else 'vermelho') }}">
-      <div class="rotulo">Livre {{ 'pessoal (PF)' if f == 'PF' else 'empresa (PJ)' }}</div>
-      {% if l.sem_saldo %}
-      <div class="valor">—</div>
-      <div class="meta">Digite o saldo das contas {{ f }} em Atualizar saldos para ver este número.</div>
-      {% else %}
-      <div class="valor">{{ l.livre|moeda }}</div>
-      <div class="meta">Tem {{ l.tem|moeda }} · já comprometido {{ l.comprometido|moeda }}{% if f == 'PJ' %} · imposto a guardar {{ l.imposto|moeda }}{% if l.salario %} · salário a pagar {{ l.salario|moeda }}{% endif %}{% endif %}</div>
-      {% if l.desatualizado %}<div class="meta"><span class="tag amarelo">saldo de {{ l.dias_velho }} dias atrás: atualize</span></div>{% endif %}
-      {% set q = fila[f] %}
-      {% if q.itens %}
-      <div class="fila mt">
-        <strong>Pague nesta ordem</strong>
-        {% if q.tudo_coberto %}<div class="muted">O dinheiro dá para tudo{% if q.sobra %} e ainda sobra {{ q.sobra|moeda }}{% endif %}.</div>{% endif %}
-        {% macro item_fila(i, n) %}
-        {% if n == q.cobertos and n > 0 and not q.tudo_coberto %}<div class="fila-corte">↑ o dinheiro da {{ f }} dá até aqui</div>{% endif %}
-        <div class="fila-item {{ 'ok' if i.coberto else 'sem' }}">
-          <span class="fila-n">{{ n + 1 }}</span>
-          <div style="flex:1">
-            <div class="linha" style="justify-content:space-between"><strong>{{ i.descricao }}</strong><strong>{{ i.valor|moeda }}</strong></div>
-            <div class="muted">{{ i.data|data }}{% if i.motivo %} · {{ i.motivo }}{% endif %}</div>
-            {% if i.custo_atraso >= 1 %}<div class="muted">Atrasar 1 mês custa ~{{ i.custo_atraso|moeda }}</div>{% endif %}
-            {% if i.esta_semana %}<span class="tag verde">pague esta semana</span>{% elif not i.coberto %}<span class="tag vermelho">falta dinheiro</span>{% endif %}
-          </div>
-        </div>
-        {% endmacro %}
-        {% for i in q.itens[:5] %}{{ item_fila(i, loop.index0) }}{% endfor %}
-        {% if q.itens|length > 5 %}
-        <details class="mt"><summary class="muted">Ver os outros {{ q.itens|length - 5 }}</summary>
-          {% for i in q.itens[5:] %}{{ item_fila(i, loop.index0 + 5) }}{% endfor %}
-        </details>
-        {% endif %}
-      </div>
-      {% endif %}
-      {% endif %}
-    </div>
+  <p style="margin:0 0 4px;font-size:18px">{% if so_vencidas %}Vencidas ou vencendo em 3 dias{% else %}Para pagar até {{ dm(contas.ate) }}{% endif %}: <strong>{{ contas.total|moeda }}</strong></p>
+  {% if resumo.sem_saldo or resumo.desatualizado %}
+  <p><button class="claro pequeno" data-abrir="dlg-saldos" data-titulo="Atualizar saldos">Atualizar saldos</button></p>
+  {% else %}
+  <p class="muted">Nas contas: {{ resumo.tem|moeda }} (atualizado em {{ dm(resumo.data) }}) · <button class="claro pequeno" data-abrir="dlg-saldos" data-titulo="Atualizar saldos">Atualizar saldos</button></p>
+  {% endif %}
+  {% if resumo.sem_frente %}<p class="aviso erro">Conta sem frente: {{ resumo.sem_frente|join(', ') }}. Escolha PF, PJ, Reserva ou Fora em Atualizar saldos.</p>{% endif %}
+  <div class="card">
+    {% for i in contas.itens %}{{ conta_item(i) }}
+    {% else %}
+    <p style="margin:0">{% if so_vencidas %}Tudo em dia: nenhuma conta vencida nem vencendo em 3 dias.{% else %}Nenhuma conta a pagar nos próximos 30 dias. Cadastre as contas fixas em Contas recorrentes (abaixo) para elas aparecerem aqui todo mês.{% endif %}</p>
     {% endfor %}
   </div>
   <div class="card mt">
@@ -121,7 +88,7 @@
     {% endif %}
   </div>
   <p class="mt"><strong>Imposto a separar este mês: {{ imposto|moeda }}</strong> <span class="muted">(DAS {{ das_txt }}%)</span></p>
-  {% if livre.reserva %}<p class="muted">Reserva: {{ livre.reserva|moeda }}. Não entra no livre.</p>{% endif %}
+  {% if resumo.reserva %}<p class="muted">Reserva: {{ resumo.reserva|moeda }}. Não entra nas contas acima.</p>{% endif %}
 </section>
 
 <h2 class="mt">Mês</h2>
@@ -140,19 +107,26 @@
   <div class="kpi {{ 'verde' if saldo >= 0 else 'vermelho' }}"><div class="rotulo">Saldo do mês</div><div class="valor">{{ saldo|moeda }}</div><div class="meta">Só lançamentos do mês (pagos e em aberto). Recorrência que ainda não virou lançamento não entra.</div></div>
 </div>
 
+{% if pend %}
 <div class="card mt">
-  <h3>A pagar e a receber</h3>
+  <h3>A receber</h3>
   <table>
     <thead><tr><th>Vence</th><th>Conta</th><th class="sec">Categoria</th><th class="num dest">Valor</th><th>Situação</th><th></th></tr></thead>
     <tbody>
     {% for i in pend %}
-    {{ linha_pend(i) }}
-    {% else %}
-    <tr><td colspan="6" class="muted">Nada a pagar neste mês. Cadastre as contas fixas em Contas recorrentes (abaixo) para elas aparecerem aqui todo mês.</td></tr>
+    <tr>
+      <td>{{ i.data|data }}</td>
+      <td>{{ i.descricao }} <span class="tag neutro">{{ i.escopo }}</span></td>
+      <td>{{ i.categoria }}</td>
+      <td class="num v-{{ i.tipo }}">+ {{ i.valor|moeda }}</td>
+      <td>{% if i.status == 'atrasado' %}<span class="tag vermelho">atrasado há {{ i.dias }} dia{{ 's' if i.dias > 1 }}</span>{% else %}<span class="tag amarelo">pendente</span>{% endif %}</td>
+      <td><button class="verde pequeno" data-abrir="dlg-baixa" data-acao="/financeiro/lancamento/{{ i.id }}/baixa" data-titulo="Dar baixa: {{ i.descricao }}" data-conta="{{ i.conta or '' }}">Dar baixa</button></td>
+    </tr>
     {% endfor %}
     </tbody>
   </table>
 </div>
+{% endif %}
 
 <div class="card mt" id="livro-caixa">
   <h3>Livro-caixa</h3>
@@ -205,7 +179,7 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="7" class="muted">Nenhuma conta recorrente. Cadastre aluguel, assinaturas e faturas de cartão uma vez e elas aparecem em A pagar e a receber todo mês.</td></tr>
+    <tr><td colspan="7" class="muted">Nenhuma conta recorrente. Cadastre aluguel, assinaturas e faturas de cartão uma vez e elas aparecem em Contas a pagar todo mês.</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -260,6 +234,20 @@
 </dialog>
 
 {% include "_dlg_baixa.html" %}
+
+<dialog id="dlg-excluir-rec">
+  <h2 data-titulo>Excluir conta</h2>
+  <form method="post" action="/financeiro/recorrencia/pular">
+    <input type="hidden" name="rid" value=""><input type="hidden" name="competencia" value=""><input type="hidden" name="volta" value="{{ volta }}">
+    <p><strong>Só este mês</strong><br><span class="muted">Tira só esta conta da lista. Nos outros meses ela continua.</span></p>
+    <p><strong>Encerrar a conta</strong><br><span class="muted">Não existe mais: este mês e os próximos somem. O que já foi pago fica no livro-caixa.</span></p>
+    <div class="linha">
+      <button data-confirmar="Tirar só este mês da lista?">Só este mês</button>
+      <button formaction="/financeiro/recorrencia/encerrar" data-confirmar="Encerrar esta conta? Ela não aparece mais nos próximos meses.">Encerrar a conta</button>
+      <button type="button" class="claro" data-fechar>Cancelar</button>
+    </div>
+  </form>
+</dialog>
 
 <dialog id="dlg-pagar">
   <h2 data-titulo>Pagar conta</h2>
