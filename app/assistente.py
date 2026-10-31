@@ -153,7 +153,10 @@ Antes de mudar dados
 - Lançamento novo, baixa ou tarefa pedidos com clareza: faça direto.
 - Excluir, mudar valor de algo já lançado ou mais de 3 mudanças de uma vez: mostre em uma lista curta o que vai fazer e espere a confirmação.
 - Se faltar algo obrigatório (valor, data, PF ou PJ, categoria), pergunte em vez de chutar.
-- Depois de mudar, diga em uma linha o que mudou e como desfazer."""
+- Depois de mudar, diga em uma linha o que mudou e como desfazer.
+
+Aulas
+- Aula dada, falta e desmarcou se marcam com marcar_aula (a aula precisa estar na Agenda). Desmarcou gera reposição; Cancelada (não repõe) não gera."""
 
 
 # ---------- ferramentas (ordem fixa) ----------
@@ -205,7 +208,7 @@ FERRAMENTAS = [
                           "fixo, conta, inicio AAAA-MM, fim, prioridade); saldos(conta, saldo, data); clientes(id, nome, telefone, "
                           "status ativo|pausado|inativo, plano, local, tipo_servico, valor, forma_pagamento, data_inicio, "
                           "data_renovacao, dias_horarios, canal_origem); cliente_eventos(cliente_id, tipo aula|falta|desmarcou|"
-                          "renovacao|pausa|pagamento|anotacao|status, data, valor, descricao); leads(id, nome, canal_origem, etapa, "
+                          "cancelada|renovacao|pausa|pagamento|anotacao|status, data, hora, valor, descricao); leads(id, nome, canal_origem, etapa, "
                           "proxima_acao, data_proxima_acao); propostas(id, data, tipo_servico, preco_total, margem, status); "
                           "rotina_tarefas(chave, texto, dia 1-7); rotina_itens(semana AAAA-Wss, item, feito); agenda_fixos(cliente_id, "
                           "dia 1-6, hora, local); gastos_marketing(mes, canal, anuncios, leads, clientes); parametros(grupo, chave, "
@@ -254,13 +257,20 @@ FERRAMENTAS = [
         "data": {"type": "string", "description": "AAAA-MM-DD ou \"\""}}, ["lead_id"]),
     _f("responder_checkpoint", "Responde um checkpoint de campanha.",
        {"id": {"type": "integer"}, "resposta": {"type": "string", "enum": ["sim", "nao", "pendente"]}}, ["id", "resposta"]),
-    _f("registrar_no_aluno", "Registra no histórico do aluno: aula dada, falta, desmarcou, renovação (com nova_renovacao opcional), "
-                             "pausa (pulou o mês sem cobrança; nova_renovacao = dia da volta) ou anotação. Pagamento não: "
-                             "pagamento é criar_lancamento PJ entrada com cliente_id.",
+    _f("registrar_no_aluno", "Registra no histórico do aluno: anotação ou pausa (pulou o mês sem cobrança; nova_renovacao = dia da volta). "
+                             "Aula dada, falta e desmarcou não: use marcar_aula. Pagamento não: pagamento é criar_lancamento PJ "
+                             "entrada com cliente_id.",
        {"cliente_id": {"type": "integer"},
-        "tipo": {"type": "string", "enum": ["aula", "falta", "desmarcou", "renovacao", "pausa", "anotacao"]},
+        "tipo": {"type": "string", "enum": ["pausa", "anotacao"]},
         "data": _DATA, "valor": {"type": "number"}, "descricao": {"type": "string"}, "nova_renovacao": _DATA},
        ["cliente_id", "tipo"]),
+    _f("marcar_aula", "Marca uma aula que já está na Agenda do aluno: feita, faltou, desmarcou (gera reposição) ou cancelada (não repõe: "
+                      "feriado, viagem). Acha a aula do aluno naquele dia; se ele tiver mais de uma, informe a hora. Se não houver aula "
+                      "nesse dia, ela precisa ser incluída antes na Agenda.",
+       {"aluno": {"type": "string", "description": "nome ou id do aluno"}, "data": _DATA,
+        "estado": {"type": "string", "enum": ["feita", "faltou", "desmarcou", "cancelada"]},
+        "hora": {"type": "integer", "description": "5 a 23; só quando o aluno tem mais de uma aula no dia"}},
+       ["aluno", "data", "estado"]),
 ]
 
 ROTULOS = {"ver_painel": "Lendo os alertas do Painel", "resumo_do_mes": "Somando o mês", "listar_lancamentos": "Buscando lançamentos",
@@ -273,7 +283,8 @@ ROTULOS = {"ver_painel": "Lendo os alertas do Painel", "resumo_do_mes": "Somando
            "salvar_conta_recorrente": "Salvando conta recorrente", "excluir_conta_recorrente": "Enviando conta recorrente para a lixeira",
            "atualizar_saldo": "Atualizando saldo", "pagar_salario": "Pagando o salário", "marcar_tarefa": "Marcando tarefa",
            "criar_tarefa": "Criando tarefa", "excluir_tarefa": "Tirando tarefa da rotina", "agendar_lead": "Agendando ação do lead",
-           "responder_checkpoint": "Respondendo checkpoint", "registrar_no_aluno": "Registrando na ficha do aluno"}
+           "responder_checkpoint": "Respondendo checkpoint", "registrar_no_aluno": "Registrando na ficha do aluno",
+           "marcar_aula": "Marcando a aula na Agenda"}
 
 
 def rotulo(nome: str) -> str:
@@ -955,7 +966,10 @@ def _responder_checkpoint(con, a):
 def _registrar_no_aluno(con, a):
     cid = _inteiro(a, "cliente_id", True)
     aluno = _aluno(con, cid)
-    tipo = _opcao(a, "tipo", ("aula", "falta", "desmarcou", "renovacao", "pausa", "anotacao"), obrigatorio=True)
+    tipo = _texto(a, "tipo", True)
+    if tipo not in ("pausa", "anotacao"):
+        dica = " Aula, falta e desmarcou: use marcar_aula." if tipo in ("aula", "falta", "desmarcou", "cancelada") else ""
+        raise ErroFerramenta(f"tipo precisa ser um destes: pausa, anotacao (veio {tipo!r}).{dica}")
     data = _data(a, "data") or _hoje()
     valor = _numero(a, "valor")
     msg, erro = _main().registrar_evento(con, cid, tipo, data, "" if valor is None else f"{valor:.2f}".replace(".", ","),
@@ -964,6 +978,54 @@ def _registrar_no_aluno(con, a):
         raise ErroFerramenta(erro)
     return {"ok": True, "aluno": aluno["nome"], "mensagem": msg,
             "para_desfazer": "apagar o registro na ficha do aluno (histórico) ou em Dados > Lixeira"}
+
+
+def _aluno_da_entrada(con, a):
+    """Aluno do campo `aluno`: o id, ou o nome (sem acento nem maiúscula; vale o nome inteiro ou um pedaço que só um aluno ativo tenha)."""
+    texto = _texto(a, "aluno", True, 80)
+    if texto.isascii() and texto.isdigit() and len(texto) < 10 and int(texto):
+        return _aluno(con, int(texto))
+    alvo = _norm(texto)
+    todos = con.execute("SELECT id, nome, status FROM clientes WHERE excluido_em IS NULL ORDER BY nome").fetchall()
+    for bate in (lambda n: n == alvo, lambda n: alvo in n):   # o nome inteiro primeiro; depois um pedaço dele
+        achados = [c for c in todos if bate(_norm(c["nome"]))]
+        ativos = [c for c in achados if c["status"] == "ativo"]
+        if len(ativos) == 1 or len(achados) == 1:
+            return ativos[0] if len(ativos) == 1 else achados[0]
+        if achados:
+            raise ErroFerramenta("Mais de um aluno com esse nome: " + "; ".join(f"{c['nome']} (id {c['id']})" for c in achados[:8])
+                                 + ". Pergunte qual e chame de novo com o id.")
+    raise ErroFerramenta(f"Aluno {texto!r} não encontrado (use buscar_alunos).")
+
+
+def _marcar_aula(con, a):
+    m = _main()
+    aluno = _aluno_da_entrada(con, a)
+    data = _data(a, "data", True)
+    estado = _opcao(a, "estado", tuple(m.ESTADO_TIPO), obrigatorio=True)
+    hora = _inteiro(a, "hora")
+    if hora is not None and not 5 <= hora <= 23:
+        raise ErroFerramenta("hora precisa ser de 5 a 23.")
+    d = dt.date.fromisoformat(data)
+    do_dia = [x for x in m.aulas_da_semana(con, m.inicio_semana(data)) if x["cliente_id"] == aluno["id"] and x["data"] == data]
+    quando = f"{aluno['nome']} em {d:%d/%m}"
+    if not do_dia:
+        raise ErroFerramenta(f"{quando} não tem aula na Agenda. Inclua a aula na Agenda primeiro (+ Incluir aula) e peça de novo.")
+    horas = ", ".join(f"{x['hora']:02d}h" for x in do_dia)
+    if hora is None and len(do_dia) > 1:
+        raise ErroFerramenta(f"{quando} tem {len(do_dia)} aulas ({horas}). Pergunte qual e chame de novo com a hora.")
+    aula = next((x for x in do_dia if hora is None or x["hora"] == hora), None)
+    if aula is None:
+        raise ErroFerramenta(f"{quando} não tem aula às {hora:02d}h (tem {horas}).")
+    with con:
+        m.gravar_marcas(con, [(aluno["id"], data, aula["hora"], estado,
+                               m.descricao_marca(d, aula["hora"], aula["local"], aula["avulsa"], aula["reposicao"]))])
+    out = {"ok": True, "aluno": aluno["nome"], "aula": f"{d:%d/%m} às {aula['hora']:02d}h", "estado": estado,
+           "mensagem": f"{aluno['nome']}: aula de {d:%d/%m} às {aula['hora']:02d}h marcada como {m.ESTADO_MSG[estado]}.",
+           "para_desfazer": "na Agenda, toque na aula e em Desfazer"}
+    if estado in ("desmarcou", "cancelada"):
+        out["reposicoes_a_fazer"] = m.saldos_reposicao(con, [aluno["id"]])[aluno["id"]]["saldo"]
+    return out
 
 
 EXECUTORES = {"ver_painel": _ver_painel, "resumo_do_mes": _resumo_do_mes, "listar_lancamentos": _listar_lancamentos,
@@ -975,7 +1037,8 @@ EXECUTORES = {"ver_painel": _ver_painel, "resumo_do_mes": _resumo_do_mes, "lista
               "salvar_conta_recorrente": _salvar_conta_recorrente, "excluir_conta_recorrente": _excluir_conta_recorrente,
               "atualizar_saldo": _atualizar_saldo, "pagar_salario": _pagar_salario, "marcar_tarefa": _marcar_tarefa,
               "criar_tarefa": _criar_tarefa, "excluir_tarefa": _excluir_tarefa, "agendar_lead": _agendar_lead,
-              "responder_checkpoint": _responder_checkpoint, "registrar_no_aluno": _registrar_no_aluno}
+              "responder_checkpoint": _responder_checkpoint, "registrar_no_aluno": _registrar_no_aluno,
+              "marcar_aula": _marcar_aula}
 
 
 def executar(con, nome: str, entrada) -> tuple[str, bool]:

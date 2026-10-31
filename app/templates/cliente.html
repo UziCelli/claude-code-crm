@@ -81,14 +81,12 @@
     <div class="card mt">
       <h2>Registrar no histórico</h2>
       <p class="muted">Pagamento vai para o financeiro: <a href="/financeiro/mensalidades">Mensalidades</a> → Registrar pagamento.</p>
+      <p><a href="/agenda?aluno={{ c.id }}">Aulas: marque na Agenda.</a></p>
       <form method="post" action="/clientes/{{ c.id }}/evento" class="form-grid">
-        <div><label>Tipo</label><select name="tipo" id="tipo-evento"><option value="aula">Aula dada</option><option value="falta">Faltou</option><option value="desmarcou">Desmarcou</option><option value="renovacao">Renovação</option><option value="anotacao">Anotação</option></select></div>
+        <input type="hidden" name="tipo" value="anotacao">
         <div><label>Data</label><input name="data" type="date" value="{{ hoje() }}" required></div>
-        <div><label>Valor (R$)</label><input name="valor" placeholder="opcional"></div>
-        <div><label>Nova data de renovação</label><input name="nova_renovacao" type="date">
-          <div class="muted">Vazio: anda 1 mês, se vence em até 7 dias</div></div>
-        <div class="largo"><label>Descrição</label><input name="descricao" placeholder="opcional"></div>
-        <div class="largo"><button>Registrar</button></div>
+        <div class="largo"><label>Anotação</label><input name="descricao" placeholder="O que aconteceu?" required></div>
+        <div class="largo"><button>Registrar anotação</button></div>
       </form>
     </div>
 
@@ -96,8 +94,9 @@
       <h2>Histórico</h2>
       {% for e in eventos %}
       <div class="linha" style="justify-content:space-between;border-bottom:1px solid var(--borda);padding:6px 0">
-        <span><span class="tag {{ {'aula':'azul','falta':'vermelho','desmarcou':'amarelo','pagamento':'verde','renovacao':'amarelo','pausa':'azul','status':'neutro','anotacao':'neutro'}[e.tipo] }}">{{ {'aula':'aula dada','falta':'faltou','pausa':'pulou o mês'}.get(e.tipo, e.tipo) }}</span> {{ e.descricao or '' }}</span>
-        <span class="muted">{{ e.data|data }}{% if e.valor %} · {{ e.valor|moeda }}{% endif %}</span>
+        <span><span class="tag {{ {'aula':'azul','falta':'vermelho','desmarcou':'amarelo','cancelada':'neutro','pagamento':'verde','renovacao':'amarelo','pausa':'azul','status':'neutro','anotacao':'neutro'}[e.tipo] }}">{{ {'aula':'aula dada','falta':'faltou','pausa':'pulou o mês','cancelada':'cancelada (não repõe)'}.get(e.tipo, e.tipo) }}</span> {{ e.descricao or '' }}</span>
+        <div class="linha" style="gap:8px"><span class="muted">{{ e.data|data }}{% if e.valor %} · {{ e.valor|moeda }}{% endif %}</span>
+          <form method="post" action="/agenda/evento/{{ e.id }}/excluir" class="inline" data-confirmar="Excluir este registro do histórico? Dá para restaurar em Dados."><input type="hidden" name="destino" value="ficha"><button class="claro pequeno">excluir</button></form></div>
       </div>
       {% else %}<p class="muted">Nada registrado ainda.</p>{% endfor %}
     </div>

@@ -135,7 +135,16 @@ def marcar(http, cid, data, hora=7, estado="feita", avulsa=0, local="CIA"):
 
 def ativos(cid, data):
     return consulta("""SELECT tipo, hora, descricao FROM cliente_eventos WHERE cliente_id=? AND data=? AND excluido_em IS NULL
-                       AND tipo IN ('aula','falta','desmarcou') ORDER BY id""", cid, data)
+                       AND tipo IN ('aula','falta','desmarcou','cancelada') ORDER BY id""", cid, data)
+
+
+def da_ficha(cid, data, tipo="aula"):
+    """Evento antigo, lançado pela ficha (sem hora): a ficha não aceita mais aula, mas o histórico e a Agenda ainda leem esses."""
+    con = db.conectar()
+    try:
+        return main.registrar_evento(con, cid, tipo, data)
+    finally:
+        con.close()
 
 
 class Espia:
@@ -759,7 +768,7 @@ def test_marcar_feita_faltou_desfazer_e_alerta_de_sem_aula(http):
     grava("DELETE FROM campanha_fases WHERE tipo='bloqueio'")   # dia de bloqueio não conta no "sem aula" (ver test_alertas)
     ana = aluno("Ana Silva")
     hoje = dt.date.today()
-    http.post(f"/clientes/{ana}/evento", data={"tipo": "aula", "data": (hoje - dt.timedelta(days=20)).isoformat()})
+    marcar(http, ana, (hoje - dt.timedelta(days=20)).isoformat(), 7, "feita")
     sem_aula = "Ana Silva — sem aula desde"
     assert any(a.startswith(sem_aula) for a in alertas())
 
@@ -791,7 +800,7 @@ def test_marcacao_aparece_na_agenda_e_no_historico_do_aluno(http):
     assert aulas()[0]["estado"] == "faltou"
     ficha = http.get(f"/clientes/{ana}").text
     assert 'tag vermelho">faltou</span>' in ficha and "Agenda — Ter 07h CIA" in ficha
-    assert '<option value="falta">Faltou</option>' in ficha and '<option value="desmarcou">Desmarcou</option>' in ficha
+    assert '<option value="falta">' not in ficha and '<option value="desmarcou">' not in ficha   # a ficha só anota; a aula se marca na Agenda
     marcar(http, ana, TER, 7, "desmarcou")
     assert 'tag amarelo">desmarcou</span>' in http.get(f"/clientes/{ana}").text
     marcar(http, ana, TER, 7, "feita")
@@ -813,7 +822,7 @@ def test_aula_lancada_pela_ficha_conta_como_feita_na_agenda(http):
     ana = aluno("Ana Silva")
     fixo(ana, 2, 7)
     fixo(ana, 2, 18)
-    http.post(f"/clientes/{ana}/evento", data={"tipo": "aula", "data": TER})   # sem hora
+    da_ficha(ana, TER)   # sem hora
     assert consulta("SELECT hora FROM cliente_eventos WHERE tipo='aula'") == [(None,)]
     assert [(a["hora"], a["estado"]) for a in aulas()] == [(7, "feita"), (18, "feita")]
     marcar(http, ana, TER, 7, "faltou")   # a marcação nova substitui a da ficha
@@ -887,7 +896,7 @@ def test_aulas_sem_marcar_conta_de_segunda_ate_ontem_e_pula_bloqueio(http):
     quinta = dt.date(2026, 10, 15)
     assert sem_marcar(quinta) == 4   # seg 7h, seg 18h, ter e qua; quinta (hoje) e sexta ainda não contam
     marcar(http, ana, "2026-10-12", 7, "feita")
-    http.post(f"/clientes/{ana}/evento", data={"tipo": "aula", "data": TER})   # da ficha, sem hora
+    da_ficha(ana, TER)   # da ficha, sem hora
     assert sem_marcar(quinta) == 2
     grava("INSERT INTO campanha_fases (nome, inicio, fim, tipo, ordem) VALUES ('Bloqueio de teste', '2026-10-14', '2026-10-14', 'bloqueio', 99)")
     assert sem_marcar(quinta) == 1   # quarta é bloqueio
@@ -1325,7 +1334,7 @@ def test_pagina_tem_o_modo_marcar_varias_e_a_barra(http):
     fixo(ana, 2, 7)
     pagina = painel(http)
     assert 'id="btn-lote"' in pagina and 'id="barra-lote"' in pagina and "/agenda/marcar-lote" in pagina
-    assert pagina.count('data-pincel="') == 4
+    assert pagina.count('data-pincel="') == 5   # Feita, Faltou, Desmarcou, Cancelada, Limpar
 
 
 # ---- vários horários fixos de uma vez ----
@@ -1552,3 +1561,372 @@ def test_banco_novo_tem_reposicao_zero_por_padrao(http):
     ana = aluno("Ana Silva")
     grava("INSERT INTO agenda_avulsas (cliente_id, data, hora, local) VALUES (?, ?, 7, 'CIA')", ana, TER)
     assert consulta("SELECT reposicao FROM agenda_avulsas") == [(0,)]
+
+
+# ---------- 8. Cancelada (não repõe), Hoje no topo, ações do Controle, tem_aulas, pausa, ficha ----------
+def eid_de(cid, data, tipo="desmarcou"):
+    return consulta("SELECT id FROM cliente_eventos WHERE cliente_id=? AND data=? AND tipo=? AND excluido_em IS NULL", cid, data, tipo)[0][0]
+
+
+def test_cancelada_nao_gera_reposicao_e_conta_como_marcada(http):
+    ana = aluno("Ana Silva")
+    fixo(ana, 1, 7)
+    fixo(ana, 2, 7)
+    grava("DELETE FROM campanha_fases WHERE tipo='bloqueio'")
+    quinta = dt.date(2026, 10, 15)
+    assert sem_marcar(quinta) == 2
+    r = marcar(http, ana, SEG, 7, "cancelada")
+    assert erro(r) is None and msg(r) == "Ana: cancelada (não repõe)."
+    assert ativos(ana, SEG) == [("cancelada", 7, "Agenda — Seg 07h CIA")]
+    assert saldo(ana) == {"devidas": 0, "usadas": 0, "saldo": 0, "agendadas": 0}   # nunca vira reposição
+    assert [(a["estado"], a["situacao"]) for a in aulas() if a["data"] == SEG] == [("cancelada", "cancelada")]
+    assert sem_marcar(quinta) == 1   # cancelada conta como marcada
+
+    desmarcou(http, ana, TER)
+    assert saldo(ana)["saldo"] == 1
+    marcar(http, ana, TER, 7, "cancelada")   # a marcação nova substitui a Desmarcou: o saldo cai
+    assert [t for t, *_ in ativos(ana, TER)] == ["cancelada"] and saldo(ana)["saldo"] == 0 and sem_marcar(quinta) == 0
+    r = lote(http, [item(ana, QUA, 8, "cancelada"), item(ana, QUI, 8, "desmarcou")])
+    assert msg(r) == "2 aulas marcadas: 1 desmarcou, 1 cancelada." and saldo(ana)["saldo"] == 1
+    marcar(http, ana, SEG, 7, "")   # Desfazer também tira a cancelada
+    assert ativos(ana, SEG) == []
+
+
+def test_cancelada_numa_reposicao_tira_ela_das_agendadas_sem_usar_o_saldo(http):
+    ana = aluno("Ana Silva")
+    desmarcou(http, ana)
+    repor(ana, QUI, 8)
+    assert saldo(ana)["agendadas"] == 1
+    marcar(http, ana, QUI, 8, "cancelada", avulsa=1)
+    assert saldo(ana) == {"devidas": 1, "usadas": 0, "saldo": 1, "agendadas": 0}   # não usou a reposição: o saldo continua 1
+
+
+def test_botoes_rotulos_pincel_e_legenda_da_cancelada(http):
+    ana = aluno("Ana Silva")
+    fixo(ana, 2, 7)
+    pagina = painel(http)
+    assert 'data-pincel="cancelada"' in pagina and "Cancelada (não repõe)" in pagina and "Desmarcou (repõe)" in pagina
+    assert '<i class="l-cancelada"></i>' in pagina
+    marcar(http, ana, TER, 7, "cancelada")
+    (info, botao), = cards(painel(http), 2, 7)
+    assert info["alunos"][0]["estado"] == "cancelada" and "cel aula cancelada" in botao and "cancelada" in botao
+
+
+def test_cancelada_aparece_no_painel_do_aluno_com_o_proprio_contador(http):
+    ana = aluno("Ana Silva")
+    marcar(http, ana, TER, 7, "cancelada")
+    marcar(http, ana, QUA, 7, "feita")
+    pagina = painel(http, aluno=ana, mes="2026-10")
+    assert contador(pagina, "cancelada") == 1 and contador(pagina, "feita") == 1 and contador(pagina, "desmarcou") == 0
+    assert 'class="tag neutro">cancelada<' in pagina and "Reposições a fazer: 0" in pagina
+
+
+# ---- Hoje no topo ----
+def test_hoje_fica_no_topo_e_marcar_volta_para_o_card(http):
+    ana = aluno("Ana Silva")
+    hoje = dt.date.today()
+    if hoje.isoweekday() != 7:
+        fixo(ana, hoje.isoweekday(), 7)
+    pagina = http.get("/agenda").text
+    assert 'id="hoje"' in pagina
+    assert pagina.index('id="hoje"') < pagina.index("Controle do aluno") < pagina.index('class="agenda-nav')
+    if hoje.isoweekday() != 7:
+        card = pagina.split('id="hoje"', 1)[1].split("Controle do aluno", 1)[0]
+        assert 'name="ancora" value="hoje"' in card
+        assert all(rot in card for rot in (">Feita<", ">Faltou<", ">Desmarcou (repõe)<", ">Cancelada (não repõe)<"))
+    base = {"cliente_id": ana, "data": TER, "hora": 7, "local": "CIA", "estado": "feita", "semana": SEMANA, "aluno": ana, "mes": "2026-10"}
+    r = http.post("/agenda/marcar", data={**base, "ancora": "hoje"}, follow_redirects=False)
+    loc = r.headers["location"]
+    assert loc.startswith(f"/agenda?semana={SEMANA}&aluno={ana}&mes=2026-10&msg=") and loc.endswith("#hoje") and loc.count("#") == 1
+    assert "#" not in http.post("/agenda/marcar", data=base, follow_redirects=False).headers["location"]
+    assert "#" not in http.post("/agenda/marcar", data={**base, "ancora": "x"}, follow_redirects=False).headers["location"]
+    r = http.post("/agenda/marcar", data={**base, "ancora": "hoje", "hora": 99}, follow_redirects=False)   # erro também volta para o card
+    assert erro(r) is not None and r.headers["location"].endswith("#hoje")
+
+
+def test_dia_de_bloqueio_mostra_a_dica_da_cancelada(http):
+    ana = aluno("Ana Silva")
+    fixo(ana, 2, 7)
+    hoje = dt.date.today()
+    grava("INSERT INTO campanha_fases (nome, inicio, fim, tipo, ordem) VALUES ('Viagem', ?, ?, 'bloqueio', 99)", TER, TER)
+    pagina = painel(http)
+    (info, _), = cards(pagina, 2, 7)
+    assert info["alunos"][0]["bloqueio"] is True
+    assert "Dia de bloqueio: use Cancelada (não repõe)" in pagina   # no JS da janelinha
+    if hoje.isoweekday() != 7:   # e no card Hoje, quando a aula é de hoje
+        grava("DELETE FROM campanha_fases WHERE tipo='bloqueio'")
+        grava("INSERT INTO campanha_fases (nome, inicio, fim, tipo, ordem) VALUES ('Viagem', ?, ?, 'bloqueio', 99)", hoje.isoformat(), hoje.isoformat())
+        fixo(ana, hoje.isoweekday(), 9)
+        card = http.get("/agenda").text.split('id="hoje"', 1)[1].split("Controle do aluno", 1)[0]
+        assert '<div class="dica-bloq">Dia de bloqueio: use Cancelada (não repõe)</div>' in card
+
+
+# ---- Controle do aluno: Agendar reposição, Não repõe, Desfazer ----
+def test_painel_so_da_os_tres_botoes_para_o_desmarcou(http):
+    ana = aluno("Ana Silva")
+    desmarcou(http, ana, TER)
+    marcar(http, ana, QUA, 7, "feita")
+    marcar(http, ana, QUI, 7, "cancelada")
+    marcar(http, ana, SEX, 7, "faltou")
+    pagina = painel(http, aluno=ana, mes="2026-10")
+    e = eid_de(ana, TER)
+    assert pagina.count('class="claro pequeno btn-repor-evento"') == 1
+    assert f'data-evento="{e}"' in pagina and f"/agenda/evento/{e}/nao-repoe" in pagina and f"/agenda/evento/{e}/excluir" in pagina
+    assert pagina.count("/nao-repoe") == 1 and pagina.count("/agenda/evento/") == 2   # feita, cancelada e faltou não têm botões
+    assert 'name="repoe_evento_id"' in pagina
+
+
+def test_nao_repoe_vira_cancelada_e_baixa_o_saldo(http):
+    ana, bia = aluno("Ana Silva"), aluno("Bia Costa")
+    desmarcou(http, ana, TER)
+    desmarcou(http, ana, QUA)
+    desmarcou(http, bia, TER)
+    assert saldo(ana)["saldo"] == 2
+    e = eid_de(ana, TER)
+    r = http.post(f"/agenda/evento/{e}/nao-repoe", data={"semana": SEMANA}, follow_redirects=False)
+    assert erro(r) is None and msg(r) == "Aula de 13/10 agora é Cancelada (não repõe)."
+    assert r.headers["location"].startswith(f"/agenda?semana={SEMANA}&aluno={ana}&mes=2026-10&msg=")   # volta para o mesmo aluno e mês
+    assert consulta("SELECT tipo, excluido_em FROM cliente_eventos WHERE id=?", e) == [("cancelada", None)]
+    assert saldo(ana) == {"devidas": 1, "usadas": 0, "saldo": 1, "agendadas": 0} and saldo(bia)["saldo"] == 1   # só a dela caiu
+    assert contador(painel(http, aluno=ana, mes="2026-10"), "cancelada") == 1
+    r = http.post(f"/agenda/evento/{e}/nao-repoe", data={"semana": SEMANA, "aluno": ana, "mes": "2026-10"}, follow_redirects=False)
+    assert erro(r) == "Essa aula desmarcada não existe mais." and f"&aluno={ana}&mes=2026-10&" in r.headers["location"]   # já era cancelada
+    assert erro(http.post("/agenda/evento/9999/nao-repoe", data={}, follow_redirects=False)) == "Essa aula desmarcada não existe mais."
+    marcar(http, ana, QUA, 7, "feita")   # não é mais desmarcou
+    assert erro(http.post(f"/agenda/evento/{eid_de(ana, QUA, 'aula')}/nao-repoe", data={}, follow_redirects=False))
+    assert consulta("SELECT tipo FROM cliente_eventos WHERE cliente_id=? AND data=? AND excluido_em IS NULL", ana, QUA) == [("aula",)]
+
+
+def test_nao_repoe_de_evento_na_lixeira_ou_de_outro_mes_usa_o_mes_da_aula(http):
+    ana = aluno("Ana Silva")
+    desmarcou(http, ana, "2026-09-29")
+    e = eid_de(ana, "2026-09-29")
+    r = http.post(f"/agenda/evento/{e}/nao-repoe", data={}, follow_redirects=False)
+    assert f"&aluno={ana}&mes=2026-09&" in r.headers["location"]   # sem mes no formulário: o mês da própria aula
+    d2 = "2026-10-20"
+    desmarcou(http, ana, d2)
+    e2 = eid_de(ana, d2)
+    grava("UPDATE cliente_eventos SET excluido_em=datetime('now') WHERE id=?", e2)
+    assert erro(http.post(f"/agenda/evento/{e2}/nao-repoe", data={}, follow_redirects=False)) and \
+        consulta("SELECT tipo FROM cliente_eventos WHERE id=?", e2) == [("desmarcou",)]
+
+
+def test_desfazer_tira_das_contas_e_volta_pela_lixeira(http):
+    ana = aluno("Ana Silva")
+    desmarcou(http, ana, TER)
+    e = eid_de(ana, TER)
+    r = http.post(f"/agenda/evento/{e}/excluir", data={"semana": SEMANA}, follow_redirects=False)
+    assert erro(r) is None and "msg=" in r.headers["location"] and f"&aluno={ana}&mes=2026-10&" in r.headers["location"]
+    assert consulta("SELECT excluido_em IS NOT NULL FROM cliente_eventos WHERE id=?", e) == [(1,)]
+    assert saldo(ana)["saldo"] == 0 and contador(painel(http, aluno=ana, mes="2026-10"), "desmarcou") == 0
+    assert "Ana Silva — desmarcou 2026-10-13 — Agenda — Ter 07h CIA" in http.get("/dados").text   # a lixeira diz quem, o quê e quando
+    assert erro(http.post(f"/agenda/evento/{e}/excluir", data={}, follow_redirects=False)) == "Esse registro não existe mais."   # já desfeito
+    r = http.post("/lixeira/restaurar", data={"tabela": "cliente_eventos", "rid": e}, follow_redirects=False)
+    assert erro(r) is None and saldo(ana)["saldo"] == 1
+
+
+def test_restaurar_marcacao_nao_duplica_a_aula_que_ja_tem_outra(http):
+    ana = aluno("Ana Silva")
+    desmarcou(http, ana, TER)
+    e = eid_de(ana, TER)
+    http.post(f"/agenda/evento/{e}/excluir", data={})
+    marcar(http, ana, TER, 7, "feita")
+    r = http.post("/lixeira/restaurar", data={"tabela": "cliente_eventos", "rid": e}, follow_redirects=False)
+    assert "outra marcação" in unquote(r.headers["location"]) and ativos(ana, TER) == [("aula", 7, "Agenda — Ter 07h CIA")]
+    marcar(http, ana, TER, 9, "faltou")   # outra hora do mesmo dia não atrapalha
+    marcar(http, ana, TER, 7, "")
+    http.post("/lixeira/restaurar", data={"tabela": "cliente_eventos", "rid": e})
+    assert sorted(t for t, *_ in ativos(ana, TER)) == ["desmarcou", "falta"]
+
+
+def test_desfazer_na_ficha_volta_para_a_ficha(http):
+    ana = aluno("Ana Silva")
+    da_ficha(ana, TER)
+    e = consulta("SELECT id FROM cliente_eventos")[0][0]
+    pagina = http.get(f"/clientes/{ana}").text
+    assert f'action="/agenda/evento/{e}/excluir"' in pagina and 'name="destino" value="ficha"' in pagina and "data-confirmar=" in pagina
+    r = http.post(f"/agenda/evento/{e}/excluir", data={"destino": "ficha"}, follow_redirects=False)
+    assert r.headers["location"].startswith(f"/clientes/{ana}?msg=") and consulta("SELECT excluido_em IS NOT NULL FROM cliente_eventos") == [(1,)]
+    assert "aula dada" not in http.get(f"/clientes/{ana}").text
+
+
+def test_reposicao_agendada_de_uma_desmarcacao_guarda_repoe_evento_id(http):
+    ana, bia = aluno("Ana Silva"), aluno("Bia Costa")
+    desmarcou(http, ana, TER)
+    desmarcou(http, bia, TER)
+    e = eid_de(ana, TER)
+    dados = {"cliente_id": ana, "local": "CIA", "repetir": 0, "data": QUI, "hora": 8, "reposicao": 1, "semana": SEMANA, "aluno": ana, "mes": "2026-10"}
+    r = http.post("/agenda/incluir", data={**dados, "repoe_evento_id": e}, follow_redirects=False)
+    assert erro(r) is None and msg(r) == "Reposição de Ana Silva em 15/10 às 08h (repõe a de 13/10)."
+    assert consulta("SELECT cliente_id, data, hora, reposicao, repoe_evento_id FROM agenda_avulsas") == [(ana, QUI, 8, 1, e)]
+    assert saldo(ana) == {"devidas": 1, "usadas": 0, "saldo": 1, "agendadas": 1}   # a regra do saldo não mudou: só a Feita desconta
+    marcar(http, ana, QUI, 8, "feita", avulsa=1)
+    assert saldo(ana) == {"devidas": 1, "usadas": 1, "saldo": 0, "agendadas": 0}
+    assert "repõe a de 13/10" in painel(http, aluno=ana, mes="2026-10")
+    (info, _), = cards(painel(http), 4, 8)   # a janelinha da reposição também diz de qual aula ela é
+    assert info["alunos"][0]["repoe"] == "13/10" and info["alunos"][0]["reposicao"] is True
+    # sem o vínculo (ou de outro aluno, de evento que não é desmarcou, desfeito ou inventado): nada de vínculo estranho
+    r = http.post("/agenda/incluir", data={**dados, "data": SEX}, follow_redirects=False)
+    assert msg(r) == "Reposição de Ana Silva em 16/10 às 08h." and consulta("SELECT repoe_evento_id FROM agenda_avulsas ORDER BY id")[-1] == (None,)
+    antes = consulta("SELECT COUNT(*) FROM agenda_avulsas")
+    for ruim in (eid_de(bia, TER), 9999, eid_de(ana, QUI, "aula")):
+        r = http.post("/agenda/incluir", data={**dados, "repoe_evento_id": ruim}, follow_redirects=False)
+        assert erro(r) == "Essa aula desmarcada não existe mais.", ruim
+    http.post(f"/agenda/evento/{e}/excluir", data={})
+    assert erro(http.post("/agenda/incluir", data={**dados, "repoe_evento_id": e}, follow_redirects=False))
+    assert consulta("SELECT COUNT(*) FROM agenda_avulsas") == antes
+    r = http.post("/agenda/incluir", data={**dados, "reposicao": 0, "data": SEG, "repoe_evento_id": eid_de(bia, TER)}, follow_redirects=False)   # avulsa comum ignora o campo
+    assert erro(r) is None and consulta("SELECT repoe_evento_id FROM agenda_avulsas ORDER BY id")[-1] == (None,)
+
+
+def test_reposicao_agendada_de_uma_desmarcacao_mostra_repoe_a_de_na_lista(http):
+    ana = aluno("Ana Silva")
+    desmarcou(http, ana, TER)
+    e = eid_de(ana, TER)
+    grava("INSERT INTO agenda_avulsas (cliente_id, data, hora, local, reposicao, repoe_evento_id) VALUES (?, '2099-05-04', 9, 'CIA', 1, ?)", ana, e)
+    pagina = painel(http, aluno=ana, mes="2099-05")
+    assert "Seg 04/05 · 09h" in pagina and "repõe a de 13/10" in pagina and 'class="tag azul">agendada<' in pagina
+    grava("UPDATE cliente_eventos SET excluido_em=datetime('now') WHERE id=?", e)
+    assert "repõe a de 13/10" not in painel(http, aluno=ana, mes="2099-05")   # a desmarcação foi desfeita: sem vínculo para mostrar
+
+
+# ---- tem_aulas ----
+def test_tem_aulas_regras():
+    def c(tipo, plano=None, i=1):
+        return {"id": i, "tipo_servico": tipo, "plano": plano}
+    com = {7}
+    for tipo in ("Pacote de Aulas", "Mensalidade"):
+        assert main.tem_aulas(c(tipo), set())
+    for tipo in ("Consultoria Online", "Consultoria Híbrida", "Avaliação Física"):
+        assert not main.tem_aulas(c(tipo), com) and main.tem_aulas(c(tipo, i=7), com)   # só com horário fixo
+    assert not main.tem_aulas(c("Consultoria Híbrida", "Consultoria Híbrida"), set())      # aulas_mes dá 1, mas o serviço não vale
+    for vazio in (None, "", "  "):
+        assert main.tem_aulas(c(vazio, "Pacote 8 aulas"), set()) and main.tem_aulas(c(vazio, "Mensalidade 2x/semana"), set())
+        assert not main.tem_aulas(c(vazio, "Consultoria Online"), set()) and not main.tem_aulas(c(vazio), set())
+    assert main.tem_aulas(c(None, i=7), com)
+
+
+def test_alunos_com_horario_so_conta_horario_ativo(http):
+    ana, bia = aluno("Ana Silva"), aluno("Bia Costa")
+    f = fixo(ana, 1, 7)
+    fixo(bia, 2, 7)
+    grava("UPDATE agenda_fixos SET excluido_em=datetime('now') WHERE id=?", f)
+    con = db.conectar()
+    try:
+        assert main.alunos_com_horario(con) == {bia}
+    finally:
+        con.close()
+
+
+def test_controle_do_aluno_lista_so_quem_tem_aulas(http):
+    pacote = aluno("Ana Pacote")
+    online = grava("INSERT INTO clientes (nome, status, tipo_servico, local) VALUES ('Bia Online', 'ativo', 'Consultoria Online', 'CIA')")
+    online_fixo = grava("INSERT INTO clientes (nome, status, tipo_servico, local) VALUES ('Caio Online com Horario', 'ativo', 'Consultoria Online', 'CIA')")
+    sem_tipo = grava("INSERT INTO clientes (nome, status, plano, local) VALUES ('Dora Sem Tipo', 'ativo', 'Pacote 8 aulas', 'CIA')")
+    sem_nada = grava("INSERT INTO clientes (nome, status, local) VALUES ('Edu Sem Nada', 'ativo', 'CIA')")
+    fixo(online_fixo, 3, 8)
+    pagina = painel(http)
+    picker = pagina.split('id="sel-aluno"', 1)[1].split("</select>", 1)[0]
+    nomes = re.findall(r"<option value=\"(\d+)\"[^>]*>([^<]*)</option>", picker)
+    assert [int(i) for i, _ in nomes] == [pacote, online_fixo, sem_tipo]
+    # Incluir aula e horário fixo seguem listando todos os ativos: é assim que o aluno ganha aula
+    for sel in ('name="cliente_id" required', 'name="aluno1"'):
+        bloco = pagina.split(sel, 1)[1].split("</select>", 1)[0]
+        assert all(f'value="{i}"' in bloco for i in (pacote, online, online_fixo, sem_tipo, sem_nada)), sel
+    # aluno de fora do seletor abre pelo endereço (link da ficha) e aparece na lista com o status
+    aberto = painel(http, aluno=online)
+    assert 'class="painel-aluno"' in aberto and f'<option value="{online}" selected>Bia Online (ativo)</option>' in aberto
+
+
+# ---- pausa ("Pulou o mês") ----
+def test_pausa_marca_as_aulas_do_periodo_e_o_sem_marcar_nao_conta(http):
+    ana = aluno("Ana Silva")
+    for dia in (1, 2, 3):
+        fixo(ana, dia, 7)
+    grava("DELETE FROM campanha_fases WHERE tipo='bloqueio'")
+    r = http.post(f"/clientes/{ana}/evento", data={"tipo": "pausa", "data": TER, "nova_renovacao": "2026-10-15"}, follow_redirects=False)   # a ficha
+    assert erro(r) is None and consulta("SELECT data, ate FROM cliente_eventos WHERE tipo='pausa'") == [(TER, "2026-10-15")]
+    sexta = dt.date(2026, 10, 16)
+    assert [(a["data"], a["situacao"], a["pausa"]) for a in aulas(hoje=sexta)] == [(SEG, "pendente", False), (TER, "pausa", True), (QUA, "pausa", True)]
+    assert sem_marcar(sexta) == 1   # só a de segunda; terça e quarta estão no mês pulado
+    marcar(http, ana, TER, 7, "feita")   # se ele veio mesmo assim, vale a marcação
+    assert [(a["data"], a["situacao"]) for a in aulas(hoje=sexta)][1] == (TER, "feita")
+    (info, botao), = cards(painel(http), 3, 7)
+    assert info["alunos"][0]["pausa"] is True and "cel aula pausa" in botao and ">pausa<" in botao
+    assert "pausa" not in cards(painel(http), 2, 7)[0][1].split("cel aula ")[1].split('"')[0]
+
+
+def test_pausa_nao_vale_depois_da_volta_nem_para_outro_aluno(http):
+    ana, bia = aluno("Ana Silva"), aluno("Bia Costa")
+    fixo(ana, 4, 7)
+    fixo(bia, 3, 7)
+    grava("INSERT INTO cliente_eventos (cliente_id, tipo, data, ate) VALUES (?, 'pausa', ?, ?)", ana, QUA, QUI)   # volta na quinta: quarta é o último dia
+    por_aluno = {a["nome"]: a["situacao"] for a in aulas(hoje=dt.date(2026, 10, 20))}
+    assert por_aluno == {"Ana Silva": "pendente", "Bia Costa": "pendente"}
+    grava("UPDATE cliente_eventos SET ate=? WHERE tipo='pausa'", SEX)
+    por_aluno = {a["nome"]: a["situacao"] for a in aulas(hoje=dt.date(2026, 10, 20))}
+    assert por_aluno == {"Ana Silva": "pausa", "Bia Costa": "pendente"}
+
+
+# ---- ficha: só anotação e mês pulado ----
+def test_ficha_so_aceita_anotacao_e_pausa(http):
+    ana = aluno("Ana Silva")
+    for tipo in ("aula", "falta", "desmarcou", "cancelada", "renovacao", "pagamento", "status", "xyz"):
+        r = http.post(f"/clientes/{ana}/evento", data={"tipo": tipo, "data": TER, "descricao": "x"}, follow_redirects=False)
+        assert r.status_code == 303 and erro(r) and r.headers["location"].startswith(f"/clientes/{ana}?"), tipo
+    assert consulta("SELECT COUNT(*) FROM cliente_eventos") == [(0,)]
+    r = http.post(f"/clientes/{ana}/evento", data={"tipo": "anotacao", "data": TER, "descricao": "Voltou de viagem"}, follow_redirects=False)
+    assert erro(r) is None and msg(r) == "Registrado."
+    assert consulta("SELECT tipo, data, descricao FROM cliente_eventos") == [("anotacao", TER, "Voltou de viagem")]
+
+
+def test_ficha_so_tem_anotacao_e_o_atalho_para_a_agenda(http):
+    ana = aluno("Ana Silva")
+    da_ficha(ana, TER, "aula")
+    da_ficha(ana, QUA, "falta")
+    da_ficha(ana, QUI, "desmarcou")
+    marcar(http, ana, SEX, 7, "cancelada")
+    pagina = http.get(f"/clientes/{ana}").text
+    form = pagina.split("Registrar no histórico", 1)[1].split("Histórico</h2>", 1)[0]
+    assert 'name="tipo" value="anotacao"' in form and "<select" not in form and 'name="nova_renovacao"' not in form
+    assert f'<a href="/agenda?aluno={ana}">Aulas: marque na Agenda.</a>' in form
+    historico = pagina.split("Histórico</h2>", 1)[1].split("Pagamentos", 1)[0]   # os antigos continuam aparecendo
+    assert all(t in historico for t in ("aula dada", "faltou", "desmarcou", "cancelada (não repõe)"))
+    assert historico.count("/excluir") == 4 and 'tag neutro">cancelada (não repõe)<' in historico
+    assert f'class="painel-aluno"' in painel(http, aluno=ana)   # o link da ficha abre o Controle desse aluno
+
+
+def test_card_pulou_o_mes_da_ficha_continua_igual(http):
+    ana = aluno("Ana Silva")
+    grava("UPDATE clientes SET data_renovacao='2026-10-06' WHERE id=?", ana)
+    pagina = http.get(f"/clientes/{ana}").text
+    assert "Pulou o mês? Volta em" in pagina and 'name="tipo" value="pausa"' in pagina and "Pular sem cobrança" in pagina
+
+
+# ---------- 9. banco antigo: reposição ligada à desmarcação ----------
+def test_banco_antigo_de_avulsas_ganha_repoe_evento_id(tmp_path, monkeypatch):
+    caminho = tmp_path / "antigo.db"
+    con = sqlite3.connect(caminho)
+    con.execute("CREATE TABLE clientes (id INTEGER PRIMARY KEY, nome TEXT NOT NULL)")
+    con.execute("""CREATE TABLE agenda_avulsas (id INTEGER PRIMARY KEY, cliente_id INTEGER NOT NULL, data TEXT NOT NULL, hora INTEGER NOT NULL,
+                   local TEXT NOT NULL, reposicao INTEGER DEFAULT 0, criado_em TEXT, excluido_em TEXT)""")
+    con.execute("INSERT INTO clientes (nome) VALUES ('Antigo')")
+    con.execute("INSERT INTO agenda_avulsas (cliente_id, data, hora, local, reposicao) VALUES (1, '2026-09-01', 7, 'CIA', 1)")
+    con.commit()
+    con.close()
+    monkeypatch.setattr(db, "BACKUP_DIR", tmp_path / "backups")
+    db.iniciar_banco(caminho)
+    db.iniciar_banco(caminho)   # idempotente
+    con = db.conectar(caminho)
+    try:
+        assert "repoe_evento_id" in {r[1] for r in con.execute("PRAGMA table_info(agenda_avulsas)")}
+        assert [tuple(r) for r in con.execute("SELECT data, reposicao, repoe_evento_id FROM agenda_avulsas")] == [("2026-09-01", 1, None)]
+    finally:
+        con.close()
+
+
+def test_banco_novo_aceita_cancelada_sem_restricao_no_tipo(http):
+    ana = aluno("Ana Silva")
+    grava("INSERT INTO cliente_eventos (cliente_id, tipo, data, hora) VALUES (?, 'cancelada', ?, 7)", ana, TER)   # sem CHECK em tipo: nada a migrar
+    assert consulta("SELECT tipo FROM cliente_eventos") == [("cancelada",)]
+    assert "repoe_evento_id" in {r[0] for r in consulta("SELECT name FROM pragma_table_info('agenda_avulsas')")}

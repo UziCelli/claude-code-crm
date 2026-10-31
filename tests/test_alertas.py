@@ -185,12 +185,14 @@ def test_alerta_de_renovacao_some_com_pagamento_e_vira_cobranca_sem_ele(con_temp
 def test_ficha_renovacao_sem_data_e_pulou_o_mes(con_temp):
     http = TestClient(main.app, base_url="http://localhost")
     v = cliente(con_temp, "Caio", "2026-10-25")
-    r = http.post(f"/clientes/{v}/evento", data={"tipo": "renovacao", "data": "2026-10-31"}, follow_redirects=False)
-    assert "Renova%C3%A7%C3%A3o%20registrada" in r.headers["location"]
+    msg, erro = main.registrar_evento(con_temp, v, "renovacao", "2026-10-31")   # a ficha não registra mais renovação; a função segue valendo
+    assert msg.startswith("Renovação registrada") and erro is None
     assert financeiro.renovacoes(con_temp, v)[v]["efetiva"] == "2026-11-25"
-    r = http.post(f"/clientes/{v}/evento", data={"tipo": "renovacao", "data": "2026-10-31"}, follow_redirects=False)
+    msg, _ = main.registrar_evento(con_temp, v, "renovacao", "2026-10-31")
     assert financeiro.renovacoes(con_temp, v)[v]["efetiva"] == "2026-11-25"           # marcar de novo não pula outro mês
-    assert "continua" in r.headers["location"]
+    assert "continua" in msg
+    r = http.post(f"/clientes/{v}/evento", data={"tipo": "renovacao", "data": "2026-10-31"}, follow_redirects=False)
+    assert "erro=" in r.headers["location"]                                           # a rota recusa
 
     g = cliente(con_temp, "Elisa", "2026-10-06")
     r = http.post(f"/clientes/{g}/evento", data={"tipo": "pausa", "data": "2026-10-31", "nova_renovacao": "2026-11-01"},
@@ -276,3 +278,70 @@ def test_alerta_de_propostas_abre_o_simulador(con_temp):
         con_temp.execute("INSERT INTO propostas (tipo_servico, preco_total, status) VALUES ('Pacote de Aulas', 500, 'enviada')")
     [a] = [x for x in main.alertas(con_temp) if "esperando resposta" in x["texto"]]
     assert a["url"] == "/simulador" and a["texto"] == "1 proposta enviada esperando resposta"
+
+
+# ---------- "tem aula": uma regra só (main.tem_aulas) para os alertas de sem aula ----------
+def _novo(con, nome, tipo, plano=None, ultima=None, inicio=None, horario=False):
+    """Aluno ativo com (ou sem) aula registrada, plano e horário fixo na Agenda."""
+    cid = cliente(con, nome, dia(30), tipo=tipo, inicio=inicio)
+    with con:
+        con.execute("UPDATE clientes SET plano=? WHERE id=?", (plano, cid))
+        if ultima is not None:
+            con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data) VALUES (?, 'aula', ?)", (cid, dia(-ultima)))
+        if horario:
+            con.execute("INSERT INTO agenda_fixos (cliente_id, dia, hora, local) VALUES (?, 2, 7, 'CIA')", (cid,))
+    return cid
+
+
+def _sem_aula(con):
+    return sorted(a["nome"] for a in main.alertas(con) if "sem aula desde" in a["texto"])
+
+
+def test_sem_aula_online_sem_horario_nao_alerta_e_com_horario_alerta(con_temp):
+    with con_temp:
+        con_temp.execute("DELETE FROM campanha_fases WHERE tipo='bloqueio'")
+    _novo(con_temp, "Online sem horario", "Consultoria Online", ultima=40)
+    _novo(con_temp, "Online com horario", "Consultoria Online", ultima=40, horario=True)
+    _novo(con_temp, "Avaliacao sem horario", "Avaliação Física", ultima=40)
+    _novo(con_temp, "Pacote", "Pacote de Aulas", ultima=40)
+    _novo(con_temp, "Mensalidade", "Mensalidade", ultima=40)
+    assert _sem_aula(con_temp) == ["Mensalidade", "Online com horario", "Pacote"]
+
+
+def test_sem_aula_hibrida_com_horario_mantem_o_alerta_de_35_dias(con_temp):
+    with con_temp:
+        con_temp.execute("DELETE FROM campanha_fases WHERE tipo='bloqueio'")
+    _novo(con_temp, "Hibrida com horario", "Consultoria Híbrida", ultima=36, horario=True)
+    _novo(con_temp, "Hibrida no limite", "Consultoria Híbrida", ultima=30, horario=True)   # abaixo de 35: sem alerta
+    _novo(con_temp, "Hibrida sem horario", "Consultoria Híbrida", ultima=60)
+    _novo(con_temp, "Pacote 20 dias", "Pacote de Aulas", ultima=20)
+    assert _sem_aula(con_temp) == ["Hibrida com horario", "Pacote 20 dias"]
+
+
+def test_sem_aula_sem_tipo_de_servico_vale_pelo_plano(con_temp):
+    with con_temp:
+        con_temp.execute("DELETE FROM campanha_fases WHERE tipo='bloqueio'")
+    _novo(con_temp, "Sem tipo plano pacote", None, plano="Pacote 8", ultima=20)
+    _novo(con_temp, "Sem tipo plano mensalidade", "", plano="Mensalidade 2x/semana", ultima=20)
+    _novo(con_temp, "Sem tipo sem plano", None, ultima=20)
+    _novo(con_temp, "Sem tipo plano online", None, plano="Consultoria Online", ultima=20)
+    assert _sem_aula(con_temp) == ["Sem tipo plano mensalidade", "Sem tipo plano pacote"]
+
+
+def test_sem_nenhuma_aula_segue_a_mesma_regra(con_temp):
+    for nome, tipo, kw in (("Ana Pacote", "Pacote de Aulas", {}), ("Bia Mensalidade", "Mensalidade", {}),
+                           ("Caio Online com horario", "Consultoria Online", {"horario": True}), ("Dora Sem Tipo", None, {"plano": "Pacote 8"}),
+                           ("Edu Online", "Consultoria Online", {}), ("Fabi Hibrida", "Consultoria Híbrida", {}), ("Gil Sem Nada", None, {})):
+        _novo(con_temp, nome, tipo, inicio=dia(-60), **kw)
+    [a] = [x for x in main.alertas(con_temp) if "sem nenhuma aula" in x["texto"]]
+    assert a["texto"] == "4 alunos sem nenhuma aula registrada: Ana Pacote, Bia Mensalidade, Caio Online com horario e mais 1"
+
+
+def test_sem_aula_continua_descontando_bloqueio_e_mes_pulado_para_quem_so_tem_horario(con_temp):
+    with con_temp:
+        con_temp.execute("DELETE FROM campanha_fases WHERE tipo='bloqueio'")
+    cid = _novo(con_temp, "Online com horario", "Consultoria Online", ultima=20, horario=True)
+    assert _sem_aula(con_temp) == ["Online com horario"]
+    with con_temp:   # 20 dias sem aula, 10 deles de mês pulado: 10 < 14
+        con_temp.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, ate) VALUES (?, 'pausa', ?, ?)", (cid, dia(-15), dia(-5)))
+    assert _sem_aula(con_temp) == []
