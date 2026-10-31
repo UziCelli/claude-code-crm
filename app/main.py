@@ -2159,7 +2159,9 @@ def financeiro_painel(request: Request, mes: str = "", con=Depends(get_db)):
 # ASSISTENTE (chat com o Claude: lê e edita financeiro, contas e tarefas)
 # =====================================================================
 def _custo_br(v) -> str:
-    return f"≈ US$ {v:.2f}".replace(".", ",") if v else ""
+    if not v:
+        return ""
+    return "< US$ 0,01" if v < 0.01 else f"≈ US$ {v:.2f}".replace(".", ",")
 
 
 @app.get("/assistente", response_class=HTMLResponse)

@@ -26,18 +26,23 @@ from markupsafe import Markup, escape
 
 from . import db, financeiro
 
-MODELO_PADRAO = "claude-opus-5-5"
+MODELO_PADRAO = "claude-haiku-5-5"
 ESFORCOS = ("low", "medium", "high", "xhigh", "max")
 MAX_PASSOS = 8            # rodadas de ferramentas por mensagem
 MAX_TEXTO = 4000          # caracteres por mensagem digitada
 MAX_TOKENS = 32000        # raciocínio + resposta
 LIMITE_RESULTADO = 20000  # caracteres por resultado de ferramenta
 LIMITE_LINHAS = 200
-CONVERSA_LONGA = 150_000  # tokens de entrada: sugere começar outra conversa
+CONVERSA_LONGA = 80_000   # tokens de entrada: sugere outra conversa antes dos 100 mil (lá o padrão fica 5x mais caro)
 VIVO = 15                 # segundos sem nada chegando: manda um sinal de vida para a conexão não ser fechada no caminho
-BETAS = ["thinking-binding-controls-2026-08-01", "server-side-fallback-2026-07-01"]
-# US$ por milhão de tokens: entrada, saída, leitura do cache, gravação do cache (5 min). Só para a estimativa na tela.
-PRECOS = {"claude-opus-5-5": (4, 20, 0.20, 5), "claude-sonnet-5-5": (2, 10, 0.20, 2.5), "claude-fable-5-1": (10, 50, 0.25, 12.5)}
+BETA_RACIOCINIO = "thinking-binding-controls-2026-08-01"
+BETA_TROCA = "server-side-fallback-2026-07-01"
+BETAS = [BETA_RACIOCINIO, BETA_TROCA]
+# US$ por milhão de tokens: (entrada, saída, leitura do cache, gravação do cache de 5 min). Só para a estimativa na tela.
+PRECOS = {"claude-haiku-5-5": (0.10, 0.50, 0.01, 0.125), "claude-opus-5-5": (4, 20, 0.20, 5),
+          "claude-sonnet-5-5": (2, 10, 0.20, 2.5), "claude-fable-5-1": (10, 50, 0.25, 12.5)}
+# Acima desse tamanho de pedido (entrada + cache lido + cache gravado) o preço muda: modelo -> (limite em tokens, preços)
+PRECOS_PEDIDO_LONGO = {"claude-haiku-5-5": (100_000, (0.50, 2.50, 0.05, 0.625))}
 DIAS_SEMANA = ("segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo")
 PREFIXO_DATA = re.compile(r"^\(Hoje: [^)\n]*\)\n\n")
 _estado = {"basico": False}   # a API recusou os recursos novos uma vez: segue só com o básico até reiniciar
@@ -1043,9 +1048,13 @@ def custo(uso) -> float | None:
     """Estimativa em US$ (preço de tabela; a fatura é a do console da Anthropic)."""
     if not uso:
         return None
-    p = PRECOS.get(str(uso.get("modelo") or ""))
+    m = str(uso.get("modelo") or "")
+    p = PRECOS.get(m)
     if p is None:
         return None
+    longo = PRECOS_PEDIDO_LONGO.get(m)
+    if longo and uso["entrada"] + uso["cache_leitura"] + uso["cache_gravacao"] > longo[0]:
+        p = longo[1]
     return (uso["entrada"] * p[0] + uso["saida"] * p[1] + uso["cache_leitura"] * p[2] + uso["cache_gravacao"] * p[3]) / 1e6
 
 
@@ -1053,7 +1062,7 @@ def custo_conversa(con, cid) -> float | None:
     valores = [custo(json.loads(r["uso"])) for r in con.execute(
         "SELECT uso FROM assistente_mensagens WHERE conversa_id=? AND uso IS NOT NULL", (cid,))]
     valores = [v for v in valores if v is not None]
-    return round(sum(valores), 4) if valores else None
+    return round(sum(valores), 6) if valores else None
 
 
 def _com_data(texto, agora=None) -> str:
@@ -1071,10 +1080,16 @@ def _trava(cid):
         return _travas.setdefault(cid, threading.Lock())
 
 
+def _troca_no_servidor(m) -> bool:
+    """Se o modelo tem troca no servidor (fallbacks); o modelo padrão, o mais barato, não tem."""
+    return "haiku" not in m.lower()
+
+
 def _parametros(historico) -> tuple[dict, bool]:
     """(parâmetros do pedido, se usa a API completa). Instruções e ferramentas são as mesmas em todo pedido.
-    Completo (API da Anthropic): raciocínio que não trava se o histórico mudar (drop_block), troca de modelo no servidor
-    quando um modelo recusa (fallbacks), cache automático da conversa e esforço escolhido. Básico: o que qualquer conta aceita."""
+    Completo (API da Anthropic): raciocínio que não trava se o histórico mudar (drop_block), cache automático da conversa e
+    esforço escolhido; troca de modelo no servidor quando um modelo recusa (fallbacks) só nos modelos que têm.
+    Básico: o que qualquer conta aceita."""
     if compativel():   # proxy (OmniRoute): só o essencial, com as instruções em texto simples
         return {"model": modelo(), "max_tokens": MAX_TOKENS, "system": SISTEMA, "tools": FERRAMENTAS, "messages": historico}, False
     p = {"model": modelo(), "max_tokens": MAX_TOKENS, "tools": FERRAMENTAS, "messages": historico,
@@ -1082,7 +1097,11 @@ def _parametros(historico) -> tuple[dict, bool]:
     if _estado["basico"]:
         return p, False
     p.update(thinking={"type": "adaptive", "block_binding": {"prefix_mismatch_behavior": "drop_block"}},
-             output_config={"effort": esforco()}, cache_control={"type": "ephemeral"}, fallbacks="default", betas=BETAS)
+             output_config={"effort": esforco()}, cache_control={"type": "ephemeral"})
+    if _troca_no_servidor(p["model"]):
+        p.update(fallbacks="default", betas=[BETA_RACIOCINIO, BETA_TROCA])
+    else:
+        p.update(betas=[BETA_RACIOCINIO])
     return p, True
 
 
@@ -1282,7 +1301,7 @@ def _rodar(cid, texto, conectar, cliente):
         yield {"tipo": "aviso", "texto": aviso, "guardado": True}
     if contexto > CONVERSA_LONGA:
         yield {"tipo": "aviso", "texto": "Esta conversa ficou longa: comece uma nova (botão Nova conversa) para ficar mais rápido e barato."}
-    yield {"tipo": "uso", "custo": round(gasto, 4) if gasto else None}
+    yield {"tipo": "uso", "custo": round(gasto, 6) if gasto else None}
 
 
 # ---------- tela ----------
