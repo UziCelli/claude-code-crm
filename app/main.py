@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import acesso, assistente, atualizar, db, exportar, financeiro, importar, precos, vigia
+from . import indicacoes   # quem indicou quem e o presente da indicação (brinde, nunca desconto)
 from . import alunos as alu   # estado de cada aluno (um algoritmo só); 'alunos' é nome de variável em várias rotas
 
 ROOT = Path(__file__).resolve().parent
@@ -336,6 +337,11 @@ def alertas(con):
     n = con.execute("SELECT COUNT(*) FROM propostas WHERE excluido_em IS NULL AND status='enviada'").fetchone()[0]
     if n:
         add("azul", f"{n} proposta{s(n)} enviada{s(n)} esperando resposta", "/simulador")
+    for p in indicacoes.pendentes(con):   # presente da indicação: o indicado já fez o 1º pagamento
+        add("azul", f"Dar o presente a {p['indicador']} (indicou {p['indicado']})", f"/clientes/{p['indicador_id']}",
+            acoes=[{"rotulo": "Registrar presente", "dialogo": "dlg-presente", "classe": "verde",
+                    "dados": {"acao": f"/clientes/{p['indicador_id']}/indicacao/{p['indicado_id']}/presente",
+                              "titulo": f"Presente para {p['indicador']}, que indicou {p['indicado']}"}}])
     if n := len(incompletos):
         add("azul", f"{n} aluno{s(n)} ativo{s(n)} com cadastro incompleto (telefone ou renovação)",
             "/clientes?ids=" + ",".join(map(str, incompletos[:MAX_IDS])) + "&motivo=incompleto")
@@ -458,7 +464,7 @@ def fechar_mes(con=Depends(get_db)):
 # 1. CLIENTES
 # =====================================================================
 CAMPOS_CLIENTE = ["nome", "telefone", "local", "tipo_servico", "plano", "pessoas", "dias_horarios", "valor",
-                  "forma_pagamento", "status", "canal_origem", "data_inicio", "data_renovacao", "observacoes"]
+                  "forma_pagamento", "status", "canal_origem", "data_inicio", "data_renovacao", "observacoes", "indicado_por"]
 
 
 def _num_br(v) -> float:
@@ -521,9 +527,18 @@ def _form_cliente(form) -> dict:
     return d
 
 
+def _indicado_por(con, d: dict, proprio_id=None) -> str | None:
+    """Confere o 'Indicado por' de d (troca o texto pelo id) e marca o canal como Indicação. Devolve o erro, se houver."""
+    d["indicado_por"], erro = indicacoes.validar(con, d.get("indicado_por"), proprio_id)
+    if d["indicado_por"]:
+        d["canal_origem"] = indicacoes.CANAL
+    return erro
+
+
 @app.get("/clientes/novo", response_class=HTMLResponse)
 def cliente_novo(request: Request, con=Depends(get_db)):
-    return render(request, "cliente.html", con, c=None, eventos=[], estimativa=None, propostas=[])
+    return render(request, "cliente.html", con, c=None, eventos=[], estimativa=None, propostas=[],
+                  indicadores=indicacoes.alunos_para_escolher(con))
 
 
 @app.post("/clientes")
@@ -531,6 +546,8 @@ async def cliente_criar(request: Request, con=Depends(get_db)):
     d = _form_cliente(await request.form())
     if not d["nome"]:
         return voltar("/clientes/novo", erro="Informe o nome.")
+    if erro := _indicado_por(con, d):
+        return voltar("/clientes/novo", erro=erro)
     with con:
         cur = con.execute(f"INSERT INTO clientes ({','.join(CAMPOS_CLIENTE)}) VALUES ({','.join(':' + k for k in CAMPOS_CLIENTE)})", d)
     return voltar(f"/clientes/{cur.lastrowid}", msg="Cliente cadastrado.")
@@ -557,13 +574,16 @@ def cliente_ficha(request: Request, cid: int, con=Depends(get_db)):
         pago_ate = f"{m[5:7]}/{m[:4]}"
     return render(request, "cliente.html", con, c=c, eventos=eventos, estimativa=estimativa, propostas=propostas, pagamentos=pagamentos,
                   renovacao=renovacao, cobranca=cob, texto_cob=texto_cobranca(cob) if cob else None, pago_ate=pago_ate,
-                  estado=alu.estado_aluno(con, cid))
+                  estado=alu.estado_aluno(con, cid), indicadores=indicacoes.alunos_para_escolher(con, cid),
+                  indicou=indicacoes.do_aluno(con, cid), indicado_por=indicacoes.quem_indicou(con, cid))
 
 
 @app.post("/clientes/{cid}")
 async def cliente_salvar(request: Request, cid: int, con=Depends(get_db)):
     d = _form_cliente(await request.form())
     d["id"] = cid
+    if erro := _indicado_por(con, d, cid):
+        return voltar(f"/clientes/{cid}", erro=erro)
     antigo = con.execute("SELECT status, data_renovacao FROM clientes WHERE id=?", (cid,)).fetchone()
     ren = financeiro.renovacoes(con, cid).get(cid)
     if antigo and ren and d["data_renovacao"] == ren["efetiva"]:
@@ -678,6 +698,20 @@ def cliente_excluir(cid: int, con=Depends(get_db)):
     return voltar("/clientes", msg="Cliente enviado para a lixeira (restaurável em Dados).")
 
 
+# ---------- indicações: o presente de quem indicou ----------
+@app.post("/clientes/{cid}/indicacao/{iid}/presente")
+def indicacao_presente(cid: int, iid: int, o_que: str = Form(""), custo: str = Form(""), data: str = Form(""),
+                       destino: str = Form("", alias="voltar"), con=Depends(get_db)):
+    """Registra o presente (brinde, nunca desconto) que o aluno `cid` ganhou por ter indicado `iid`. Um presente só por indicado."""
+    url = _caminho_seguro(destino) or f"/clientes/{cid}"
+    try:
+        v = _num_br(custo) if custo.strip() else None
+    except ValueError:
+        return voltar(url, erro="Custo inválido: use só números, como 35,90.")
+    msg, erro = indicacoes.registrar_presente(con, cid, iid, o_que, data_iso(data) or dt.date.today().isoformat(), v or None)
+    return voltar(url, msg=msg, erro=erro)
+
+
 # =====================================================================
 # 2. LEADS (kanban)
 # =====================================================================
@@ -705,28 +739,38 @@ def leads(request: Request, con=Depends(get_db)):
         parado = dias_parado(con, l, hoje)
         colunas[l["etapa"]].append({**dict(l), "atrasado": atrasado, "dias": parado, "parado": bool(parado)})
     return render(request, "leads.html", con, colunas=colunas, destaque=request.query_params.get("destaque"),
-                  previsao=previsao_funil(con), motivos=motivos_perda(con))
+                  previsao=previsao_funil(con), motivos=motivos_perda(con), indicadores=indicacoes.alunos_para_escolher(con))
 
 
 @app.post("/leads")
 def lead_criar(nome: str = Form(...), telefone: str = Form(""), canal_origem: str = Form(...), interesse: str = Form(""),
-               proxima_acao: str = Form(""), data_proxima_acao: str = Form(""), observacoes: str = Form(""), con=Depends(get_db)):
+               proxima_acao: str = Form(""), data_proxima_acao: str = Form(""), observacoes: str = Form(""),
+               indicado_por: str = Form(""), con=Depends(get_db)):
+    indicador, erro = indicacoes.validar(con, indicado_por)
+    if erro:
+        return voltar("/leads", erro=erro)
     with con:
-        cur = con.execute("""INSERT INTO leads (nome, telefone, canal_origem, interesse, proxima_acao, data_proxima_acao, observacoes)
-                             VALUES (?,?,?,?,?,?,?)""", (nome, telefone or None, canal_origem, interesse or None, proxima_acao or None,
-                                                         data_proxima_acao or None, observacoes or None))
+        cur = con.execute("""INSERT INTO leads (nome, telefone, canal_origem, interesse, proxima_acao, data_proxima_acao, observacoes, indicado_por)
+                             VALUES (?,?,?,?,?,?,?,?)""", (nome, telefone or None, indicacoes.CANAL if indicador else canal_origem,
+                                                           interesse or None, proxima_acao or None, data_proxima_acao or None,
+                                                           observacoes or None, indicador))
         con.execute("INSERT INTO lead_etapas_log (lead_id, etapa) VALUES (?, 'lead')", (cur.lastrowid,))
     return voltar("/leads", msg="Lead adicionado.")
 
 
 @app.post("/leads/{lid}")
 def lead_salvar(lid: int, nome: str = Form(...), telefone: str = Form(""), canal_origem: str = Form(...), interesse: str = Form(""),
-                proxima_acao: str = Form(""), data_proxima_acao: str = Form(""), observacoes: str = Form(""), con=Depends(get_db)):
+                proxima_acao: str = Form(""), data_proxima_acao: str = Form(""), observacoes: str = Form(""),
+                indicado_por: str = Form(""), con=Depends(get_db)):
+    antigo = con.execute("SELECT cliente_id FROM leads WHERE id=?", (lid,)).fetchone()
+    indicador, erro = indicacoes.validar(con, indicado_por, antigo["cliente_id"] if antigo else None)   # o lead já virou aluno: esse aluno não se indica
+    if erro:
+        return voltar("/leads", erro=erro)
     with con:
         con.execute("""UPDATE leads SET nome=?, telefone=?, canal_origem=?, interesse=?, proxima_acao=?, data_proxima_acao=?,
-                       observacoes=?, atualizado_em=datetime('now','localtime') WHERE id=?""",
-                    (nome, telefone or None, canal_origem, interesse or None, proxima_acao or None, data_proxima_acao or None,
-                     observacoes or None, lid))
+                       observacoes=?, indicado_por=?, atualizado_em=datetime('now','localtime') WHERE id=?""",
+                    (nome, telefone or None, indicacoes.CANAL if indicador else canal_origem, interesse or None, proxima_acao or None,
+                     data_proxima_acao or None, observacoes or None, indicador, lid))
     return voltar("/leads", msg="Lead salvo.")
 
 
@@ -741,10 +785,10 @@ def lead_etapa(lid: int, etapa: str = Form(...), motivo_perda: str = Form(""), c
         con.execute("INSERT INTO lead_etapas_log (lead_id, etapa) VALUES (?, ?)", (lid, etapa))
         if etapa == "cliente" and not l["cliente_id"]:
             partes = (l["interesse"] or "").split("/")
-            cur = con.execute("""INSERT INTO clientes (nome, telefone, canal_origem, observacoes, lead_id, tipo_servico, local, data_inicio)
-                                 VALUES (?,?,?,?,?,?,?,date('now','localtime'))""",
+            cur = con.execute("""INSERT INTO clientes (nome, telefone, canal_origem, observacoes, lead_id, tipo_servico, local, indicado_por, data_inicio)
+                                 VALUES (?,?,?,?,?,?,?,?,date('now','localtime'))""",
                               (l["nome"], l["telefone"], l["canal_origem"], l["observacoes"], lid,
-                               partes[0].strip() or None, partes[1].strip() if len(partes) > 1 else None))
+                               partes[0].strip() or None, partes[1].strip() if len(partes) > 1 else None, l["indicado_por"]))
             con.execute("UPDATE leads SET cliente_id=? WHERE id=?", (cur.lastrowid, lid))
             return voltar(f"/leads?destaque={lid}", msg=f"Novo aluno: {l['nome']}")
     return voltar(f"/leads?destaque={lid}", msg="Etapa atualizada.")
@@ -2512,7 +2556,7 @@ def importar_planilha(con=Depends(get_db)):
 # =====================================================================
 LIXEIRA = [("clientes", "Cliente", "nome"), ("leads", "Lead", "nome"), ("propostas", "Proposta", "tipo_servico"),
            ("cliente_eventos", "Evento de cliente", "(SELECT nome FROM clientes WHERE clientes.id=cliente_eventos.cliente_id) || ' — ' || "
-            "CASE tipo WHEN 'aula' THEN 'aula feita' WHEN 'falta' THEN 'faltou' WHEN 'cancelada' THEN 'cancelada (não repõe)' WHEN 'credito' THEN 'crédito' ELSE tipo END || ' ' || data || "
+            "CASE tipo WHEN 'aula' THEN 'aula feita' WHEN 'falta' THEN 'faltou' WHEN 'cancelada' THEN 'cancelada (não repõe)' WHEN 'credito' THEN 'crédito' WHEN 'brinde' THEN 'presente' ELSE tipo END || ' ' || data || "
             "COALESCE(' — ' || descricao, '')"), ("lista_espera", "Lista de espera", "nome"),
            ("gastos_marketing", "Gasto de marketing", "canal"), ("campanha_itens", "Item de campanha", "texto"),
            ("campanha_checkpoints", "Checkpoint", "pergunta"), ("rotina_tarefas", "Tarefa da rotina", "texto"),
@@ -2600,6 +2644,10 @@ def lixeira_restaurar(tabela: str = Form(...), rid: int = Form(...), con=Depends
                 f"SELECT hora FROM cliente_eventos WHERE cliente_id=? AND data=? AND id != ? AND excluido_em IS NULL AND tipo IN ({TIPOS_MARCA})",
                 (ev["cliente_id"], ev["data"], rid))):
             return voltar("/dados", erro="Essa aula já tem outra marcação. Desfaça a que está valendo na Agenda antes de restaurar.")
+    if tabela == "cliente_eventos":   # 1 presente por indicado: restaurar não pode duplicar o que está valendo
+        if con.execute("""SELECT 1 FROM cliente_eventos b JOIN cliente_eventos o ON o.indicado_id = b.indicado_id AND o.tipo='brinde'
+                          AND o.excluido_em IS NULL AND o.id != b.id WHERE b.id=? AND b.tipo='brinde'""", (rid,)).fetchone():
+            return voltar("/dados", erro="Esse indicado já tem o presente registrado. Exclua o que está valendo antes de restaurar.")
     with con:
         con.execute(f"UPDATE {tabela} SET excluido_em=NULL WHERE id=?", (rid,))
         if fixo:   # a Agenda avisa a Grade, como ao salvar
