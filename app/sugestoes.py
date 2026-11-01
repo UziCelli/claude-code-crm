@@ -4,11 +4,12 @@ No mesmo molde de alunos.estado(): REGRAS é uma tupla de funções (ctx, marc) 
 O que é por pessoa ou para hoje continua nos alertas; aqui é estratégia (olha os 3 últimos meses fechados).
 Marcador cinza (sem dados) e mensalidades vencidas não geram sugestão: o botão do próprio marcador já leva à solução.
 REGRA DE MARKETING: recompensa e campanha agregam valor ao trabalho (presente, bônus, treino em dupla) e nunca dão desconto.
+A única exceção é a oferta de upsell (app/ofertas.py): é proposta que o usuário cria, sempre com o que inclui, o prazo e o valor a que volta.
 """
 import datetime as dt
 import math
 
-from . import marcadores
+from . import marcadores, ofertas
 from .marcadores import _lista, _m, _pct
 
 GRAV = {"vermelho": 1, "amarelo": 2, "azul": 3}
@@ -353,10 +354,32 @@ def regra_verba_por_canal(ctx, marc):
                     "vermelho" if not novos else "amarelo", [{"rotulo": "Ver campanhas", "href": "/campanhas"}])
 
 
+def regra_upsell(ctx, marc):
+    """Oferta ativa que alunos em dia ainda não receberam: manda a proposta (transparente) a quem pode querer mais. Uma sugestão só: a de mais impacto."""
+    melhor = None
+    for p in ctx["ofertas_pendentes"]:
+        el, o = p["elegiveis"], p["oferta"]
+        if not el:
+            continue
+        media = sum(e["valor"] or 0 for e in el) / len(el)
+        impacto = len(el) * max(o["valor_oferta"] - media, 0) * ofertas.TAXA_ESTIMADA
+        if melhor is None or (impacto, len(el)) > melhor[:2]:
+            melhor = (impacto, len(el), o, el, media)
+    if not melhor:
+        return None
+    impacto, n, o, el, media = melhor
+    titulo = o["titulo"] if len(o["titulo"]) <= 28 else o["titulo"][:27].rstrip() + "…"
+    return sugestao("upsell", f"Oferta '{titulo}': {n} aluno{'s' if n > 1 else ''} em dia ainda não {'receberam' if n > 1 else 'recebeu'}.",
+                    f"De {_m(o['valor_normal'])} por {_m(o['valor_oferta'])}/mês; se {round(ofertas.TAXA_ESTIMADA * 100)}% aceitarem, rende "
+                    f"{_m(impacto)} a mais por mês.", "faturamento", impacto, "mes", "azul",
+                    [{"rotulo": f"Enviar ({n})", "href": _lista([e["id"] for e in el], "upsell") + f"&oferta={o['id']}"}],
+                    ["A mensagem já sai pronta, com o que inclui e os dois valores."])
+
+
 REGRAS = (regra_equilibrio, regra_margem_contribuicao, regra_caixa_pj, regra_caixa_pf, regra_salario_alto, regra_subir_salario,
           regra_reserva, regra_cortar_custos, regra_gastos_pessoais, regra_moradia, regra_dividas, regra_reserva_pf, regra_reajuste,
           regra_indicacao, regra_reativar_ex_alunos, regra_reativar_leads, regra_horarios_de_vale, regra_espera_no_pico,
-          regra_treino_em_dupla, regra_verba_por_canal)
+          regra_treino_em_dupla, regra_verba_por_canal, regra_upsell)
 
 
 # =====================================================================

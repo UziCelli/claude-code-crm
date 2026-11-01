@@ -604,3 +604,9 @@ ol.passos li { margin: 4px 0; }
 .sg-titulo .tag, .selo-nota { overflow-wrap: normal; }
 .selo-nota { font-size: 13px; }
 #o-que-fazer details > summary { cursor: pointer; font-weight: 600; color: var(--aco); }
+
+/* upsell */
+.oferta-item { padding: 10px 0; border-top: 1px solid var(--borda); margin-top: 10px; min-width: 0; overflow-wrap: anywhere; }
+.oferta-item:first-of-type { margin-top: 6px; }
+.oferta-resultado { font-weight: 600; color: var(--marinho); margin-top: 2px; }
+.previa-wa { background: #e8f5e9; border: 1px solid #c8e6c9; border-radius: 10px; padding: 10px 12px; font-size: 14px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }

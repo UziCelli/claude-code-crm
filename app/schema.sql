@@ -354,3 +354,32 @@ CREATE TABLE IF NOT EXISTS segredos (
     valor TEXT NOT NULL,
     atualizado_em TEXT DEFAULT (datetime('now','localtime'))
 );
+
+-- Ofertas de upsell (Campanhas): proposta com valor de oferta, por quantos meses vale e até quando. Excluída vai para a lixeira.
+CREATE TABLE IF NOT EXISTS ofertas (
+    id INTEGER PRIMARY KEY,
+    titulo TEXT NOT NULL,
+    inclui TEXT NOT NULL,
+    valor_normal REAL NOT NULL,
+    valor_oferta REAL NOT NULL,
+    meses_desconto INTEGER,          -- NULL = o valor da oferta vale sempre
+    valida_ate TEXT,                 -- NULL = sem prazo para aceitar
+    ativa INTEGER DEFAULT 1,
+    criado_em TEXT DEFAULT (datetime('now','localtime')),
+    excluido_em TEXT
+);
+
+-- O que cada aluno respondeu a cada oferta (uma linha por oferta e aluno).
+CREATE TABLE IF NOT EXISTS oferta_respostas (
+    id INTEGER PRIMARY KEY,
+    oferta_id INTEGER NOT NULL REFERENCES ofertas(id),
+    cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+    status TEXT NOT NULL CHECK (status IN ('enviada','aceitou','recusou')),
+    data TEXT,                       -- dia do último envio / da resposta
+    ate_desconto TEXT,               -- aceitou: dia em que o valor da oferta acaba (NULL = sempre)
+    valor_antes REAL,                -- aceitou: a mensalidade do aluno antes de aceitar (mede a receita a mais)
+    criado_em TEXT DEFAULT (datetime('now','localtime')),
+    excluido_em TEXT,
+    encerrado_em TEXT,               -- aceitou: dia em que o desconto acabou e a mensalidade voltou (some do alerta)
+    UNIQUE (oferta_id, cliente_id)
+);

@@ -1,0 +1,29 @@
+{# Diálogos das ofertas de upsell (app/ofertas.py); vêm do base.html, em toda tela. Abrem por botão com data-abrir, data-acao (rota) e data-voltar.
+   dlg-oferta-aceitou: data-titulo (quem aceitou o quê), data-novo (valor da oferta) e data-nota (quando volta ao normal; some se não tem prazo).
+   dlg-oferta-encerrar: data-titulo (de quanto para quanto a mensalidade volta). #}
+<dialog id="dlg-oferta-aceitou">
+  <h2>Aceitou a oferta</h2>
+  <p data-titulo></p>
+  <form method="post" action="">
+    <input type="hidden" name="voltar" value="">
+    <label class="linha" style="gap:8px;align-items:flex-start;margin:8px 0"><input type="checkbox" name="atualizar" value="1" checked style="width:auto;margin-top:3px"><span>Atualizar a mensalidade para <strong data-novo></strong></span></label>
+    <p class="muted" data-nota hidden></p>
+    <div class="linha"><button class="verde">Aceitou</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
+  </form>
+</dialog>
+<dialog id="dlg-oferta-encerrar">
+  <h2>Fim do valor da oferta</h2>
+  <p data-titulo></p>
+  <form method="post" action="">
+    <input type="hidden" name="voltar" value="">
+    <div class="linha"><button class="verde">Atualizar valor</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
+  </form>
+</dialog>
+<script>
+// o app.js cuida do resto (action, título, nota); aqui só o valor em destaque do "Aceitou"
+document.addEventListener("click", function (e) {
+  var b = e.target.closest("[data-abrir='dlg-oferta-aceitou']");
+  var n = document.querySelector("#dlg-oferta-aceitou [data-novo]");
+  if (b && n) n.textContent = b.dataset.novo || "";
+});
+</script>

@@ -25,6 +25,31 @@
   {% endfor %}
 </div>
 
+<div class="card mt" id="ofertas">
+  <div class="linha" style="justify-content:space-between"><h2 style="margin:0">Ofertas (upsell)</h2>
+    <button data-abrir="dlg-oferta" data-titulo="Nova oferta">Nova oferta</button></div>
+  <p class="muted" style="margin:6px 0 0">Uma proposta clara para quem já treina: o que inclui, quanto custa, por quanto tempo e até quando.</p>
+  {% for o in ofertas %}
+  <div class="oferta-item">
+    <div class="linha" style="justify-content:space-between;gap:6px 10px">
+      <strong>{{ o.titulo }}</strong>
+      <span>{% if not o.ativa %}<span class="tag neutro">pausada</span>{% elif o.vencida %}<span class="tag amarelo">validade vencida</span>{% else %}<span class="tag verde">ativa</span>{% endif %}</span>
+    </div>
+    <div>De {{ o.valor_normal|moeda }} por <strong>{{ o.valor_oferta|moeda }}/mês</strong>{% if o.meses_desconto %} · {{ o.duracao }}, depois volta para {{ o.valor_normal|moeda }}{% else %} · sempre{% endif %}{% if o.valida_ate %} · válida até {{ o.valida_ate|data }}{% endif %}</div>
+    <div class="muted">{{ o.inclui }}</div>
+    <div class="oferta-resultado">{{ o.resumo }}</div>
+    <div class="acoes-alerta">
+      {% if o.ativa and not o.vencida and o.para_enviar %}<a class="btn pequeno" href="/clientes?ids={{ o.para_enviar[:200]|map(attribute='id')|join(',') }}&motivo=upsell&oferta={{ o.id }}">Enviar a {{ o.para_enviar|length }} aluno{{ 's' if o.para_enviar|length > 1 }}</a>{% endif %}
+      <form method="post" action="/campanhas/ofertas/{{ o.id }}/ativa" class="inline"><button class="claro pequeno">{{ 'Pausar' if o.ativa else 'Ativar' }}</button></form>
+      <button type="button" class="claro pequeno" data-abrir="dlg-oferta" data-titulo="Editar oferta" data-id="{{ o.id }}" data-titulo_oferta="{{ o.titulo }}" data-inclui="{{ o.inclui }}" data-valor_normal="{{ '%.2f'|format(o.valor_normal)|replace('.', ',') }}" data-valor_oferta="{{ '%.2f'|format(o.valor_oferta)|replace('.', ',') }}" data-meses_desconto="{{ o.meses_desconto or '' }}" data-valida_ate="{{ o.valida_ate or '' }}">Editar</button>
+      <form method="post" action="/campanhas/ofertas/{{ o.id }}/excluir" class="inline" data-confirmar="Excluir a oferta {{ o.titulo }}? Dá para restaurar em Dados."><button class="claro pequeno">Excluir</button></form>
+    </div>
+  </div>
+  {% else %}
+  <p class="muted mt">Nenhuma oferta ainda. Crie a primeira, por exemplo: Passar para 3x por semana.</p>
+  {% endfor %}
+</div>
+
 <div class="grid c2 mt">
   <div class="card">
     <h2>Checkpoints</h2>
@@ -76,4 +101,41 @@
     <div class="largo linha"><button>Salvar</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
   </form>
 </dialog>
+
+<dialog id="dlg-oferta">
+  <h2 data-titulo>Nova oferta</h2>
+  <form method="post" action="/campanhas/ofertas" class="form-grid" id="form-oferta">
+    <input type="hidden" name="id" value="">
+    <div class="largo"><label>Título</label><input name="titulo_oferta" id="of-titulo" required placeholder="Ex.: Passar para 3x por semana"></div>
+    <div class="largo"><label>O que inclui</label><input name="inclui" required placeholder="Ex.: 3 treinos por semana e avaliação todo mês"></div>
+    <div><label>Valor normal (R$/mês)</label><input name="valor_normal" inputmode="decimal" required placeholder="400,00"></div>
+    <div><label>Valor da oferta (R$/mês)</label><input name="valor_oferta" inputmode="decimal" required placeholder="350,00"></div>
+    <div><label>Por quantos meses? (vazio = sempre)</label><input name="meses_desconto" inputmode="numeric" placeholder="3"></div>
+    <div><label>Válida até</label><input name="valida_ate" type="date"></div>
+    <div class="largo"><label>Assim a mensagem vai sair</label><div class="previa-wa" id="of-previa" aria-live="polite">Preencha a oferta para ver a mensagem.</div></div>
+    <div class="largo linha"><button>Salvar oferta</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
+  </form>
+</dialog>
+<script>
+// Prévia exata da mensagem: o servidor monta o texto (mesma conta do envio) a cada mudança.
+(function () {
+  var f = document.getElementById("form-oferta"), alvo = document.getElementById("of-previa"), t, n = 0;
+  if (!f) return;
+  // o campo do título se chama titulo_oferta para o app.js (data-titulo = título do diálogo) não escrever nele
+  function consulta() {
+    var q = new URLSearchParams();
+    ["titulo_oferta", "inclui", "valor_normal", "valor_oferta", "meses_desconto", "valida_ate"].forEach(function (k) {
+      q.set(k === "titulo_oferta" ? "titulo" : k, f.elements[k].value);
+    });
+    return q.toString();
+  }
+  function atualizar() {
+    var minha = ++n;
+    fetch("/campanhas/ofertas/previa?" + consulta()).then(function (r) { return r.text(); }).then(function (x) { if (minha === n) alvo.textContent = x; });
+  }
+  function agendar() { clearTimeout(t); t = setTimeout(atualizar, 200); }
+  f.addEventListener("input", agendar);
+  document.addEventListener("click", function (e) { if (e.target.closest("[data-abrir='dlg-oferta']")) setTimeout(atualizar, 0); });
+})();
+</script>
 {% endblock %}

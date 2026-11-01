@@ -23,6 +23,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import acesso, assistente, atualizar, db, exportar, financeiro, importar, precos, sugestoes, vigia
 from . import indicacoes   # quem indicou quem e o presente da indicação (brinde, nunca desconto)
+from . import ofertas   # ofertas de upsell: proposta transparente, resposta do aluno e fim do valor da oferta
 from . import alunos as alu   # estado de cada aluno (um algoritmo só); 'alunos' é nome de variável em várias rotas
 
 ROOT = Path(__file__).resolve().parent
@@ -357,6 +358,13 @@ def alertas(con):
             acoes=[{"rotulo": "Registrar presente", "dialogo": "dlg-presente", "classe": "verde",
                     "dados": {"acao": f"/clientes/{p['indicador_id']}/indicacao/{p['indicado_id']}/presente",
                               "titulo": f"Presente para {p['indicador']}, que indicou {p['indicado']}"}}])
+    for d in ofertas.descontos_acabando(con, hoje):   # o valor da oferta acaba: a mensalidade volta ao normal com um clique
+        quando = data_br(d["ate_desconto"])[:5]
+        add("azul", f"O desconto de {d['nome']} {'acaba' if d['ate_desconto'] >= h else 'acabou'} em {quando}: volta para {moeda(d['valor_normal'])}",
+            f"/clientes/{d['cliente_id']}#ofertas",
+            acoes=[{"rotulo": "Atualizar valor", "dialogo": "dlg-oferta-encerrar", "classe": "verde",
+                    "dados": {"acao": f"/clientes/{d['cliente_id']}/oferta/{d['oferta_id']}/encerrar-desconto",
+                              "titulo": f"{d['nome']}: a mensalidade volta de {moeda(d['valor'])} para {moeda(d['valor_normal'])}."}}])
     if n := len(incompletos):
         add("azul", f"{n} aluno{s(n)} ativo{s(n)} com cadastro incompleto (telefone ou renovação)",
             "/clientes?ids=" + ",".join(map(str, incompletos[:MAX_IDS])) + "&motivo=incompleto")
@@ -499,20 +507,22 @@ def _num_br(v) -> float:
 
 MOTIVOS_LISTA = {"sem-aula": "Alunos sem nenhuma aula registrada", "incompleto": "Cadastro incompleto",   # /clientes?ids=..&motivo=..
                  "cobrar": "Mensalidades vencidas", "indicacao": "Alunos para pedir indicação", "reativar": "Ex-alunos para chamar de volta",
-                 "reajuste": "Alunos abaixo do preço mínimo", "dupla": "Alunos para convidar a treinar em dupla"}
+                 "reajuste": "Alunos abaixo do preço mínimo", "dupla": "Alunos para convidar a treinar em dupla",
+                 "upsell": "Alunos para receber a oferta"}
 AJUDA_LISTA = {"cobrar": "Cobre um por um: quem pagar sai da lista.",
                "indicacao": "Mande a mensagem: quando a pessoa indicada fechar, dê um presente a quem indicou.",
                "reativar": "Mande a mensagem; se voltar, abra a ficha e mude o status para ativo.",
                "reajuste": "Veja o valor de hoje e o mínimo, abra a ficha e ajuste o valor.",
-               "dupla": "Mande o convite: em dupla o treino rende mais para você e é mais animado para eles."}
+               "dupla": "Mande o convite: em dupla o treino rende mais para você e é mais animado para eles.",
+               "upsell": "Envie a proposta: quem recebe sai da lista. Depois marque Aceitou ou Recusou na ficha."}
 MODELO_LISTA = {"indicacao": "indicacao", "reativar": "reativacao", "dupla": "dupla"}   # modelo de WhatsApp de cada motivo
 STATUS_LISTA = {"reativar": "inativo", "cobrar": "ativo", "indicacao": "ativo", "dupla": "ativo", "reajuste": "ativo", "sem-aula": None,
-                "incompleto": "ativo"}
+                "incompleto": "ativo", "upsell": "ativo"}
 TIPOS_SEM_AULA = ("Consultoria Online", "Consultoria Híbrida")
 
 
 @app.get("/clientes", response_class=HTMLResponse)
-def clientes(request: Request, status: str = "ativo", busca: str = "", ids: str = "", motivo: str = "", con=Depends(get_db)):
+def clientes(request: Request, status: str = "ativo", busca: str = "", ids: str = "", motivo: str = "", oferta: int = 0, con=Depends(get_db)):
     # lista filtrada (link de um alerta): só estes alunos, sem os filtros de status e nome; quem já foi resolvido sai da lista
     filtro = list(dict.fromkeys(i for i in map(id_valido, ids.split(",")) if i))[:MAX_IDS]
     sql = "SELECT * FROM clientes WHERE excluido_em IS NULL"
@@ -539,6 +549,11 @@ def clientes(request: Request, status: str = "ativo", busca: str = "", ids: str 
         rows = [c for c in rows if c["id"] in estados and estados[c["id"]]["situacao"] in alu.SEM_AULA]
     if filtro and motivo == "cobrar":   # quem pagou ou pulou o mês sai da lista
         rows = [c for c in rows if c["id"] in estados and estados[c["id"]]["situacao"] == "cobrar"]
+    oferta_lista = None
+    if filtro and motivo == "upsell":   # só quem ainda não respondeu a esta oferta; oferta pausada, vencida ou excluída: lista vazia com o aviso
+        oferta_lista = next((o for o in ofertas.ativas(con) if o["id"] == oferta), None)
+        ja = {r[0] for r in con.execute("SELECT cliente_id FROM oferta_respostas WHERE oferta_id=? AND excluido_em IS NULL", (oferta,))}
+        rows = [c for c in rows if oferta_lista and c["id"] not in ja]
     minimos = {}
     if filtro and motivo == "reajuste":   # quem já paga o mínimo (ou mais) sai da lista
         p, bases = precos.carregar_parametros(con), carregar_bases(con)
@@ -562,8 +577,8 @@ def clientes(request: Request, status: str = "ativo", busca: str = "", ids: str 
     motivo_ok = motivo if motivo in MOTIVOS_LISTA else ""
     return render(request, "clientes.html", con, clientes=itens, status=status, busca=busca, totais=totais, filtrado=bool(filtro),
                   motivo=motivo_ok, titulo_lista=MOTIVOS_LISTA.get(motivo, "Alunos selecionados"), ajuda_lista=AJUDA_LISTA.get(motivo, ""),
-                  modelo_lista=MODELO_LISTA.get(motivo, ""),
-                  voltar_lista=f"/clientes?ids={','.join(map(str, filtro))}&motivo={motivo_ok}")
+                  modelo_lista=MODELO_LISTA.get(motivo, ""), oferta_lista=oferta_lista,
+                  voltar_lista=f"/clientes?ids={','.join(map(str, filtro))}&motivo={motivo_ok}" + (f"&oferta={oferta}" if motivo_ok == "upsell" else ""))
 
 
 def _form_cliente(form) -> dict:
@@ -622,7 +637,8 @@ def cliente_ficha(request: Request, cid: int, con=Depends(get_db)):
     return render(request, "cliente.html", con, c=c, eventos=eventos, estimativa=estimativa, propostas=propostas, pagamentos=pagamentos,
                   renovacao=renovacao, cobranca=cob, texto_cob=texto_cobranca(cob) if cob else None, pago_ate=pago_ate,
                   estado=alu.estado_aluno(con, cid), indicadores=indicacoes.alunos_para_escolher(con, cid),
-                  indicou=indicacoes.do_aluno(con, cid), indicado_por=indicacoes.quem_indicou(con, cid))
+                  indicou=indicacoes.do_aluno(con, cid), indicado_por=indicacoes.quem_indicou(con, cid),
+                  ofertas_ficha=ofertas.situacao_aluno(con, cid) if c["status"] == "ativo" else [])
 
 
 @app.post("/clientes/{cid}")
@@ -1836,7 +1852,75 @@ def campanhas(request: Request, mes: str = "", con=Depends(get_db)):
     meses = [r[0] for r in con.execute("SELECT DISTINCT mes FROM gastos_marketing WHERE excluido_em IS NULL ORDER BY mes DESC")]
     if mes not in meses:
         meses.insert(0, mes)
-    return render(request, "campanhas.html", con, fases=fases, checkpoints=checkpoints, gastos=gastos, mes=mes, meses=meses)
+    pend = {p["oferta"]["id"]: p["elegiveis"] for p in ofertas.pendentes(con)}
+    lista_ofertas = [{**o, "resumo": ofertas.resumo(res), "resultado": res, "duracao": ofertas.duracao_txt(o).strip(),
+                      "vencida": bool(o["valida_ate"] and o["valida_ate"] < hoje), "para_enviar": pend.get(o["id"], [])}
+                     for o in ofertas.todas(con) for res in [ofertas.resultado(con, o["id"])]]
+    return render(request, "campanhas.html", con, fases=fases, checkpoints=checkpoints, gastos=gastos, mes=mes, meses=meses,
+                  ofertas=lista_ofertas)
+
+
+# ---------- ofertas (upsell) ----------
+@app.post("/campanhas/ofertas")
+def oferta_salvar(id: str = Form(""), titulo: str = Form("", alias="titulo_oferta"), inclui: str = Form(""), valor_normal: str = Form(""), valor_oferta: str = Form(""),
+                  meses_desconto: str = Form(""), valida_ate: str = Form(""), con=Depends(get_db)):
+    dados, erro = ofertas.validar(titulo, inclui, valor_normal, valor_oferta, meses_desconto, valida_ate)
+    if erro:
+        return voltar("/campanhas#ofertas", erro=erro)
+    oid = int(id) if id.strip().isdigit() else None
+    if oid and not ofertas.obter(con, oid):
+        return voltar("/campanhas#ofertas", erro="Oferta não encontrada.")
+    ofertas.salvar(con, oid, dados)
+    return voltar("/campanhas#ofertas", msg="Oferta salva." if oid else "Oferta criada. Envie pela ficha do aluno ou pelo botão da oferta.")
+
+
+@app.get("/campanhas/ofertas/previa", response_class=PlainTextResponse)
+def oferta_previa(request: Request, con=Depends(get_db)):
+    """A mensagem exata, com um aluno de exemplo, enquanto a oferta é preenchida (a tela de Campanhas chama a cada tecla)."""
+    return ofertas.previa(request.query_params, db.parametros(con, "msg_whatsapp").get("upsell"))
+
+
+@app.post("/campanhas/ofertas/{oid}/ativa")
+def oferta_ativa(oid: int, con=Depends(get_db)):
+    novo = ofertas.alternar_ativa(con, oid)
+    if novo is None:
+        return voltar("/campanhas#ofertas", erro="Oferta não encontrada.")
+    return voltar("/campanhas#ofertas", msg="Oferta ativada." if novo else "Oferta pausada: não aparece nas fichas.")
+
+
+@app.post("/campanhas/ofertas/{oid}/excluir")
+def oferta_excluir(oid: int, con=Depends(get_db)):
+    if not ofertas.excluir(con, oid):
+        return voltar("/campanhas#ofertas", erro="Oferta não encontrada.")
+    return voltar("/campanhas#ofertas", msg="Oferta enviada para a lixeira (restaurável em Dados).")
+
+
+# ---------- ofertas na ficha do aluno ----------
+@app.post("/clientes/{cid}/oferta/{oid}/enviar")
+def oferta_enviar(cid: int, oid: int, destino: str = Form("", alias="voltar"), con=Depends(get_db)):
+    """Registra a oferta como enviada e abre o WhatsApp com a mensagem pronta (o redirecionamento vai só para wa.me)."""
+    link, erro = ofertas.registrar_envio(con, cid, oid, db.parametros(con, "msg_whatsapp").get("upsell"))
+    if erro:
+        return voltar(_caminho_seguro(destino) or f"/clientes/{cid}#ofertas", erro=erro)
+    return RedirectResponse(link, status_code=303)
+
+
+@app.post("/clientes/{cid}/oferta/{oid}/aceitou")
+def oferta_aceitou(cid: int, oid: int, atualizar: str = Form(""), destino: str = Form("", alias="voltar"), con=Depends(get_db)):
+    msg, erro = ofertas.aceitou(con, cid, oid, atualizar=bool(atualizar))
+    return voltar(_caminho_seguro(destino) or f"/clientes/{cid}#ofertas", msg=msg, erro=erro)
+
+
+@app.post("/clientes/{cid}/oferta/{oid}/recusou")
+def oferta_recusou(cid: int, oid: int, destino: str = Form("", alias="voltar"), con=Depends(get_db)):
+    msg, erro = ofertas.recusou(con, cid, oid)
+    return voltar(_caminho_seguro(destino) or f"/clientes/{cid}#ofertas", msg=msg, erro=erro)
+
+
+@app.post("/clientes/{cid}/oferta/{oid}/encerrar-desconto")
+def oferta_encerrar(cid: int, oid: int, destino: str = Form("", alias="voltar"), con=Depends(get_db)):
+    msg, erro = ofertas.encerrar_desconto(con, cid, oid)
+    return voltar(_caminho_seguro(destino) or f"/clientes/{cid}#ofertas", msg=msg, erro=erro)
 
 
 @app.post("/campanhas/item")
@@ -2620,7 +2704,7 @@ LIXEIRA = [("clientes", "Cliente", "nome"), ("leads", "Lead", "nome"), ("propost
            ("gastos_marketing", "Gasto de marketing", "canal"), ("campanha_itens", "Item de campanha", "texto"),
            ("campanha_checkpoints", "Checkpoint", "pergunta"), ("rotina_tarefas", "Tarefa da rotina", "texto"),
            ("lancamentos", "Lançamento", "COALESCE(descricao, categoria)"), ("recorrencias", "Conta recorrente", "descricao"),
-           ("assistente_conversas", "Conversa do assistente", "titulo"),
+           ("assistente_conversas", "Conversa do assistente", "titulo"), ("ofertas", "Oferta", "titulo"),
            ("agenda_avulsas", "Aula avulsa", "(SELECT nome FROM clientes WHERE clientes.id=agenda_avulsas.cliente_id) || ' ' || data"),
            ("agenda_fixos", "Horário fixo", "(SELECT nome FROM clientes WHERE clientes.id=agenda_fixos.cliente_id) || ' — ' || "
             "CASE dia WHEN 1 THEN 'Seg' WHEN 2 THEN 'Ter' WHEN 3 THEN 'Qua' WHEN 4 THEN 'Qui' WHEN 5 THEN 'Sex' WHEN 6 THEN 'Sáb' ELSE dia END || ' ' || "

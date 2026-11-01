@@ -29,6 +29,9 @@ PARAMETROS_INICIAIS = [
                                         "Quando a pessoa fechar, você ganha um presente meu 🎁 Victor | VFITCOACH", 6),
     ("msg_whatsapp", "dupla", None, "Oi, {nome}! Que tal treinar com um amigo ou amiga? Em dupla o treino rende mais, é mais animado e "
                                     "vocês se cobram um ao outro. Quer trazer alguém? Victor | VFITCOACH", 7),
+    # oferta de upsell (Campanhas): {duracao}, {depois} e {ate} já vêm escritos ou vazios; nada fica pendurado
+    ("msg_whatsapp", "upsell", None, "Oi, {nome}! Tenho uma proposta: {titulo}. Inclui: {inclui}. De {valor_normal} por {valor_oferta}/mês{duracao}{depois}.{ate} "
+                                     "Quer aproveitar? Victor | VFITCOACH", 8),
     # cobrança de mensalidade atrasada (botão "Cobrar" no alerta): multa uma vez + juros ao mês proporcional aos dias
     ("cobranca", "multa", 0.02, None, 1),
     ("cobranca", "juros_ao_mes", 0.01, None, 2),

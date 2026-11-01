@@ -333,6 +333,8 @@ def test_nenhuma_sugestao_fala_em_desconto(con_temp):
     assert {"equilibrio", "indicacao", "reativar_ex_alunos", "reativar_leads", "horarios_de_vale", "espera_no_pico", "treino_em_dupla",
             "verba_por_canal", "reajuste", "cortar_custos", "moradia", "dividas", "reserva_pf", "salario_alto"} <= set(s)
     for x in s.values():
+        if x["chave"] == "upsell":   # a oferta de upsell é uma proposta que o usuário cria (app/ofertas.py): a regra vale só para indicação, presente etc.
+            continue
         texto = json.dumps(x, ensure_ascii=False).lower()
         assert "desconto" not in texto and "abatimento" not in texto and "promoção" not in texto, x["chave"]
     modelos = db.parametros(con_temp, "msg_whatsapp")
