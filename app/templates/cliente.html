@@ -47,6 +47,37 @@
 </div>
 {% endif %}
 
+{% if c and ofertas_ficha %}
+<div class="card" id="ofertas" style="margin-bottom:14px">
+  <h2>Ofertas</h2>
+  {% for it in ofertas_ficha %}
+  {% set o = it.oferta %}
+  {% set volta = proxima_renovacao(hoje(), o.meses_desconto) if o.meses_desconto else '' %}
+  <div class="oferta-item">
+    <div class="linha" style="justify-content:space-between;gap:6px 10px">
+      <strong>{{ o.titulo }}</strong>
+      <span class="tag {{ {'nao_enviada':'neutro','enviada':'amarelo','aceitou':'verde','recusou':'vermelho'}[it.status] }}">{% if it.status == 'nao_enviada' %}não enviada{% elif it.status == 'enviada' %}enviada em {{ it.data|data }}{% elif it.status == 'aceitou' %}aceitou em {{ it.data|data }}{% else %}recusou em {{ it.data|data }}{% endif %}</span>
+    </div>
+    <div class="muted">De {{ o.valor_normal|moeda }} por {{ o.valor_oferta|moeda }}/mês{% if o.meses_desconto %}, {{ 'no primeiro mês' if o.meses_desconto == 1 else 'nos primeiros ' ~ o.meses_desconto ~ ' meses' }}{% endif %}</div>
+    {% if it.status == 'aceitou' %}
+    <div class="muted">{% if it.encerrado_em %}Valor da oferta encerrado em {{ it.encerrado_em|data }}: mensalidade em {{ o.valor_normal|moeda }}.{% elif it.ate_desconto %}Vale até {{ it.ate_desconto|data }}; depois volta para {{ o.valor_normal|moeda }}.{% else %}Vale sempre.{% endif %}</div>
+    {% if it.ate_desconto and not it.encerrado_em %}
+    <div class="acoes-alerta"><button type="button" class="claro pequeno" data-abrir="dlg-oferta-encerrar" data-acao="/clientes/{{ c.id }}/oferta/{{ o.id }}/encerrar-desconto" data-titulo="{{ c.nome }}: a mensalidade volta de {{ c.valor|moeda }} para {{ o.valor_normal|moeda }}." data-voltar="/clientes/{{ c.id }}#ofertas">Voltar para {{ o.valor_normal|moeda }}</button></div>
+    {% endif %}
+    {% else %}
+    <div class="acoes-alerta">
+      {% if c.telefone %}
+      <form method="post" action="/clientes/{{ c.id }}/oferta/{{ o.id }}/enviar" target="_blank" class="inline" onsubmit="setTimeout(function(){location.reload()},1500)"><button class="pequeno">{{ 'Enviar de novo' if it.status != 'nao_enviada' else 'Enviar (WhatsApp)' }}</button></form>
+      {% else %}<a class="btn claro pequeno" href="#cadastro">Sem telefone: completar</a>{% endif %}
+      <button type="button" class="verde pequeno" data-abrir="dlg-oferta-aceitou" data-acao="/clientes/{{ c.id }}/oferta/{{ o.id }}/aceitou" data-titulo="{{ c.nome }} aceitou: {{ o.titulo }}" data-novo="{{ o.valor_oferta|moeda }}" data-nota="{% if volta %}Volta para {{ o.valor_normal|moeda }} em {{ volta|data }}.{% endif %}" data-voltar="/clientes/{{ c.id }}#ofertas">Aceitou</button>
+      {% if it.status != 'recusou' %}<form method="post" action="/clientes/{{ c.id }}/oferta/{{ o.id }}/recusou" class="inline"><button class="claro pequeno">Recusou</button></form>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 {% if c and (indicou or indicado_por) %}
 <div class="card" id="indicacoes" style="margin-bottom:14px">
   <h2>Indicações</h2>

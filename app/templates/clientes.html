@@ -7,9 +7,9 @@
 </div>
 {% if filtrado %}
 <div class="card atencao linha topo">
-  <div><strong>{{ titulo_lista }}</strong> <span class="muted">({{ clientes|length }})</span>
-    <div class="muted">{% if clientes %}{{ ajuda_lista or ('Resolva um por um: quem fica certo sai da lista.' if motivo else 'Só os alunos escolhidos no alerta.') }}{% else %}Tudo resolvido por aqui.{% endif %}</div></div>
-  <a class="btn claro" href="/clientes">Ver todos</a>
+  <div><strong>{{ titulo_lista }}{% if motivo == 'upsell' and oferta_lista %}: {{ oferta_lista.titulo }}{% endif %}</strong> <span class="muted">({{ clientes|length }})</span>
+    <div class="muted">{% if motivo == 'upsell' and not oferta_lista %}Essa oferta não está ativa (pausada, vencida ou excluída). Veja em Campanhas.{% elif clientes %}{{ ajuda_lista or ('Resolva um por um: quem fica certo sai da lista.' if motivo else 'Só os alunos escolhidos no alerta.') }}{% else %}Tudo resolvido por aqui.{% endif %}</div></div>
+  <div class="linha">{% if motivo == 'upsell' %}<a class="btn" href="/campanhas#ofertas">Ver ofertas</a>{% endif %}<a class="btn claro" href="/clientes">Ver todos</a></div>
 </div>
 {% else %}
 <form class="linha" method="get">
@@ -49,6 +49,14 @@
     <div class="linha mt" style="margin-top:10px">
       <a class="btn pequeno" href="{{ wa(c.telefone, (modelos[modelo_lista]|preencher(c.nome)) if modelo_lista else '') }}" target="_blank" rel="noopener">WhatsApp</a>
       <a class="btn claro pequeno" href="/clientes/{{ c.id }}">Abrir ficha</a>
+    </div>
+    {% elif motivo == 'upsell' %}
+    <div style="margin-top:6px">Hoje <strong>{{ c.valor|moeda }}</strong> · oferta <strong>{{ oferta_lista.valor_oferta|moeda }}</strong></div>
+    <div class="linha mt" style="margin-top:10px">
+      {% if c.telefone %}
+      <form method="post" action="/clientes/{{ c.id }}/oferta/{{ oferta_lista.id }}/enviar" target="_blank" class="inline" onsubmit="setTimeout(function(){location.reload()},1500)"><button class="pequeno">Enviar oferta</button></form>
+      {% else %}<a class="btn pequeno" href="/clientes/{{ c.id }}#cadastro">Completar telefone</a>{% endif %}
+      <a class="btn claro pequeno" href="/clientes/{{ c.id }}#ofertas">Abrir ficha</a>
     </div>
     {% elif motivo == 'incompleto' %}
     <div class="linha mt" style="margin-top:10px">

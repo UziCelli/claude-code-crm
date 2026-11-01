@@ -42,6 +42,9 @@ PARAMETROS_INICIAIS = [
     ("msg_dados", "pix", None, "", 1),
     ("msg_dados", "link_avaliacao", None, "", 2),
     ("msg_dados", "vantagem", None, "uma avaliação física grátis", 3),
+    # oferta de upsell (Campanhas): {duracao}, {depois} e {ate} já vêm escritos ou vazios; nada fica pendurado
+    ("msg_whatsapp", "upsell", None, "Oi, {nome}! Tenho uma proposta: {titulo}. Inclui: {inclui}. De {valor_normal} por {valor_oferta}/mês{duracao}{depois}.{ate} "
+                                     "Quer aproveitar? Victor | VFITCOACH", 9),
     # cobrança de mensalidade atrasada (botão "Cobrar" no alerta): multa uma vez + juros ao mês proporcional aos dias
     ("cobranca", "multa", 0.02, None, 1),
     ("cobranca", "juros_ao_mes", 0.01, None, 2),

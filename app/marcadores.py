@@ -13,6 +13,7 @@ import math
 import re
 
 from . import alunos, db, financeiro
+from . import ofertas   # ofertas de upsell: quem ainda não recebeu cada uma (sugestão)
 
 try:
     from .migrar_financeiro import INICIO   # mês em que fixo/variável passam a existir
@@ -298,6 +299,7 @@ def contexto(con, hoje=None, metricas=None, estados=None) -> dict:
         "adiadas": adiadas, "receita_pico": round(receita_pico, 2),
         "valor_solo": round(sum(c["valor"] or 0 for c in ativos if c["id"] in solos) / len(solos), 2) if solos else 0.0,
         "grupo_mult2": float(parametros("grupo_multiplicador").get("2") or 1.6),
+        "ofertas_pendentes": ofertas.pendentes(con, estados, h),
     }
 
 
