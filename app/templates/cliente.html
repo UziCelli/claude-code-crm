@@ -31,7 +31,7 @@
 {% if estado %}
 <div class="card borda-{{ estado.cor }}" id="situacao" style="margin-bottom:14px">
   <div class="linha" style="justify-content:space-between"><h2 style="margin:0">Situação</h2><span class="tag {{ estado.cor }}">{{ estado.rotulo }}</span></div>
-  <p style="margin:8px 0">{{ estado.texto[:1]|upper ~ estado.texto[1:] }}.</p>
+  <p style="margin:8px 0">{{ estado.texto[:1]|upper ~ estado.texto[1:] }}{{ '' if estado.texto[-1:] in '?!.' else '.' }}</p>
   {% if estado.acoes %}<div class="acoes-alerta">{{ botoes(estado.acoes, estado, '/clientes/' ~ c.id) }}</div>{% endif %}
 </div>
 {% endif %}
