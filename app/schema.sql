@@ -33,13 +33,14 @@ CREATE TABLE IF NOT EXISTS clientes (
     criado_em TEXT DEFAULT (datetime('now','localtime')),
     atualizado_em TEXT DEFAULT (datetime('now','localtime')),
     excluido_em TEXT,
-    renovacao_em TEXT                -- quando a data de renovação foi trocada à mão (o que foi lançado antes já está nela)
+    renovacao_em TEXT,               -- quando a data de renovação foi trocada à mão (o que foi lançado antes já está nela)
+    indicado_por INTEGER REFERENCES clientes(id)   -- quem indicou este aluno (ganha um presente no 1º pagamento; nunca desconto)
 );
 
 CREATE TABLE IF NOT EXISTS cliente_eventos (
     id INTEGER PRIMARY KEY,
     cliente_id INTEGER NOT NULL REFERENCES clientes(id),
-    tipo TEXT NOT NULL,              -- pagamento | renovacao | pausa | credito | anotacao | status | aula | falta | desmarcou | cancelada (não repõe)
+    tipo TEXT NOT NULL,              -- pagamento | renovacao | pausa | credito | brinde (presente por indicação) | anotacao | status | aula | falta | desmarcou | cancelada (não repõe)
     data TEXT NOT NULL,              -- pausa: a renovação que foi pulada; credito: dia 1 do mês pago e não usado
     valor REAL,
     descricao TEXT,
@@ -48,7 +49,8 @@ CREATE TABLE IF NOT EXISTS cliente_eventos (
     hora INTEGER,                    -- aula marcada pela Agenda (5..23); NULL = lançada pela ficha
     ate TEXT,                        -- pausa: dia da volta
     usado_em TEXT,                   -- credito: dia em que foi descontado (NULL = ainda disponível)
-    usado_lancamento_id INTEGER      -- credito: o pagamento (lancamentos.id) que o descontou
+    usado_lancamento_id INTEGER,     -- credito: o pagamento (lancamentos.id) que o descontou
+    indicado_id INTEGER              -- brinde: o aluno indicado que rendeu o presente (1 presente por indicado)
 );
 
 CREATE TABLE IF NOT EXISTS leads (
@@ -67,7 +69,8 @@ CREATE TABLE IF NOT EXISTS leads (
     data_mudanca_etapa TEXT DEFAULT (date('now','localtime')),
     criado_em TEXT DEFAULT (datetime('now','localtime')),
     atualizado_em TEXT DEFAULT (datetime('now','localtime')),
-    excluido_em TEXT
+    excluido_em TEXT,
+    indicado_por INTEGER REFERENCES clientes(id)   -- quem indicou este lead; passa para o aluno quando ele fecha
 );
 
 CREATE TABLE IF NOT EXISTS lead_etapas_log (

@@ -1,0 +1,15 @@
+{# Diálogo único do presente da indicação (ficha e botão do alerta); vem do base.html, em toda tela. Abre por botão com data-abrir="dlg-presente",
+   data-acao (rota /clientes/{id}/indicacao/{id}/presente), data-titulo (quem ganha) e data-voltar (para onde ir depois). É presente, nunca desconto. #}
+<dialog id="dlg-presente">
+  <h2>Registrar presente</h2>
+  <p class="muted" data-titulo></p>
+  <form method="post" action="">
+    <input type="hidden" name="voltar" value="">
+    <div class="campo"><label>O que você deu?</label><input name="o_que" list="presentes" placeholder="ex.: Camiseta" autocomplete="off" required>
+      <datalist id="presentes">{% for p in ['Avaliação física', 'Camiseta', 'Garrafa', 'Treino extra para casa'] %}<option value="{{ p }}">{% endfor %}</datalist></div>
+    <div class="campo"><label>Custo (R$, se quiser anotar)</label><input name="custo" inputmode="decimal" placeholder="opcional"></div>
+    <div class="campo"><label>Data</label><input name="data" type="date" value="{{ hoje() }}" required></div>
+    <p class="muted">Só presente: não vira desconto nem crédito.</p>
+    <div class="linha"><button class="verde">Registrar presente</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
+  </form>
+</dialog>
