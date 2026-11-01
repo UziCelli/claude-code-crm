@@ -2325,6 +2325,24 @@ def _fin_valor(f):
     return valor
 
 
+def _meses_cobertos(v) -> int | None:
+    """"Cobre quantos meses?" do pagamento: 1 a 24. Vazio ou 1 = None (um mês, automático como sempre). ValueError em português se não vale."""
+    v = str(v if v is not None else "").strip()
+    if v in ("", "1"):
+        return None
+    try:
+        n = int(v)
+    except ValueError:
+        raise ValueError("Escolha de 1 a 24 meses.") from None
+    if not 1 <= n <= 24:
+        raise ValueError("Um pagamento cobre de 1 a 24 meses.")
+    return None if n == 1 else n
+
+
+def _mm_aaaa(mes: str) -> str:
+    return f"{mes[5:7]}/{mes[:4]}"
+
+
 @app.post("/financeiro/lancamento")
 async def financeiro_lancamento(request: Request, con=Depends(get_db)):
     f = dict((await request.form()).items())
@@ -2343,6 +2361,7 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
             raise ValueError("Confira as datas e os números.") from None
         if pago_em and not _ja_aconteceu(pago_em):
             raise ValueError("\"Pago em\" não pode ser no futuro: deixe vazio e dê baixa no dia em que pagar.")
+        meses = _meses_cobertos(f.get("meses"))   # None = 1 mês (automático)
         if parcela_num is not None and parcela_num < 1 or parcela_total is not None and parcela_total < 1:
             raise ValueError("Parcela e total começam em 1.")
         if parcela_num and not parcela_total:
@@ -2372,6 +2391,8 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
         atual = con.execute("SELECT recorrencia_id, competencia FROM lancamentos WHERE id=?", (lid,)).fetchone()
         if atual and atual["recorrencia_id"] == rec_id and atual["competencia"]:
             competencia = atual["competencia"]
+    if not (cliente_id and f["escopo"] == "PJ" and f["tipo"] == "entrada"):
+        meses = None   # "cobre N meses" é só de entrada de aluno
     aberta, parcial, aviso = None, None, ""
     if not lid and cliente_id and pago_em and f["escopo"] == "PJ" and f["tipo"] == "entrada":
         # o aluno já tem essa entrada lançada em aberto no mês: dar baixa nela em vez de criar outra (senão conta duas vezes)
@@ -2408,10 +2429,14 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
                 lid = con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao, contraparte, cliente_id,
                                      conta, forma, parcela_num, parcela_total, recorrencia_id, competencia)
                                      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (*campos, rec_id, competencia)).lastrowid
+            if "meses" in f:   # o diálogo de pagamento manda; a edição do livro-caixa não tem o campo e não mexe no que já está
+                con.execute("UPDATE lancamentos SET meses=? WHERE id=?", (meses, lid))
     except ValueError as e:
         return _fin_voltar(volta, erro=str(e))
     except sqlite3.IntegrityError:
         return _fin_voltar(volta, erro="Não foi possível salvar: confira o aluno e os campos.")
+    if meses and pago_em:
+        aviso += f"Cobre {meses} meses (até {_mm_aaaa(financeiro.somar_meses(f['data'][:7], meses - 1))}). "
     if f["escopo"] == "PJ" and f["tipo"] == "entrada" and pago_em and cliente_id:
         with con:
             if desconto := financeiro.usar_credito(con, lid):   # o crédito do aluno foi descontado neste pagamento
@@ -2448,6 +2473,27 @@ def financeiro_ligar_aluno(lid: int, cliente_id: int = Form(0), volta: str = For
     with con:
         con.execute("UPDATE lancamentos SET cliente_id=? WHERE id=? AND cliente_id IS NULL AND excluido_em IS NULL", (cliente_id, lid))
     return _fin_voltar(volta, msg=f"Entrada ligada a {c['nome']}.")
+
+
+@app.post("/financeiro/lancamento/{lid}/meses")
+def financeiro_meses(lid: int, meses: str = Form(""), cliente_id: int = Form(0), volta: str = Form(""), voltar_a: str = Form("", alias="voltar"),
+                     con=Depends(get_db)):
+    """"Cobre N meses" de um pagamento de aluno já lançado (parcelou no cartão ou pagou adiantado): a renovação e as mensalidades passam a contar
+    esses meses como pagos. 1 = volta ao automático. O lançamento tem que ser entrada PJ do aluno da ficha."""
+    volta = _caminho_seguro(voltar_a) or volta
+    try:
+        n = _meses_cobertos(meses)
+    except ValueError as e:
+        return _fin_voltar(volta, erro=str(e))
+    p = con.execute("""SELECT valor, data, cliente_id FROM lancamentos WHERE id=? AND escopo='PJ' AND tipo='entrada' AND excluido_em IS NULL
+                       AND cliente_id IS NOT NULL""", (lid,)).fetchone()
+    if p is None or (cliente_id and p["cliente_id"] != cliente_id):
+        return _fin_voltar(volta, erro="Esse pagamento não é desse aluno.")
+    with con:
+        con.execute("UPDATE lancamentos SET meses=? WHERE id=?", (n, lid))
+    if n is None:
+        return _fin_voltar(volta, msg=f"Pagamento de {moeda(p['valor'])} volta a valer o normal.")
+    return _fin_voltar(volta, msg=f"Pagamento de {moeda(p['valor'])} agora cobre {n} meses (até {_mm_aaaa(financeiro.somar_meses(p['data'][:7], n - 1))}).")
 
 
 @app.post("/financeiro/lancamento/{lid}/emprestimo")

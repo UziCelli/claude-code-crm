@@ -172,12 +172,20 @@
       {% else %}<p class="muted">Nada registrado ainda.</p>{% endfor %}
     </div>
 
-    <div class="card mt">
+    <div class="card mt" id="pagamentos">
       <div class="linha topo" style="margin-bottom:8px"><h2 style="margin:0">Pagamentos</h2>
         <button class="verde pequeno" data-abrir="dlg-pgto" data-titulo="Registrar pagamento de {{ c.nome }}" data-cliente_id="{{ c.id }}" data-valor="{{ ('%.2f'|format(a_pagar))|replace('.', ',') if a_pagar else '' }}"{% if cred %} data-nota="Crédito de {{ cred|moeda }} descontado"{% endif %} data-descricao="Mensalidade {{ hoje()[5:7] }}/{{ hoje()[:4] }}" data-voltar="/clientes/{{ c.id }}">Registrar pagamento</button></div>
       <p style="margin:0 0 8px">{% if pago_ate %}Pago até <strong>{{ pago_ate }}</strong>{% else %}<span class="muted">Sem pagamento registrado</span>{% endif %}{% if renovacao and data_iso(renovacao.efetiva) %} · próxima renovação <strong>{{ renovacao.efetiva|data }}</strong>{% endif %}</p>
       {% for p in pagamentos %}
-      <div class="linha" style="justify-content:space-between;padding:4px 0"><span>{{ p.descricao or p.categoria }} <span class="tag {{ 'verde' if p.pago_em else 'amarelo' }}">{{ 'pago' if p.pago_em else 'pendente' }}</span></span><span class="muted">{{ p.data|data }} · <span class="v-{{ p.tipo }}">{{ p.valor|moeda }}</span></span></div>
+      <div style="padding:4px 0">
+        <div class="linha" style="justify-content:space-between"><span>{{ p.descricao or p.categoria }} <span class="tag {{ 'verde' if p.pago_em else 'amarelo' }}">{{ 'pago' if p.pago_em else 'pendente' }}</span>{% if p.meses and p.meses > 1 %} <span class="tag azul">cobre {{ p.meses }} meses</span>{% endif %}</span><span class="muted">{{ p.data|data }} · <span class="v-{{ p.tipo }}">{{ p.valor|moeda }}</span></span></div>
+        {% if p.pago_em and p.tipo == 'entrada' and p.escopo == 'PJ' %}
+        <form method="post" action="/financeiro/lancamento/{{ p.id }}/meses" class="linha" style="margin-top:4px"><input type="hidden" name="cliente_id" value="{{ c.id }}"><input type="hidden" name="voltar" value="/clientes/{{ c.id }}#pagamentos">
+          <label class="muted" for="meses-{{ p.id }}" style="margin:0">Cobre</label>
+          <select id="meses-{{ p.id }}" name="meses" style="width:auto">{% for n in range(1, 25) %}<option value="{{ n }}" {{ 'selected' if n == (p.meses or 1) }}>{{ n }} {{ 'mês' if n == 1 else 'meses' }}</option>{% endfor %}</select>
+          <button class="claro pequeno">Salvar</button></form>
+        {% endif %}
+      </div>
       {% else %}<p class="muted">Nenhum lançamento financeiro deste aluno. Use Registrar pagamento para lançar o primeiro.</p>{% endfor %}
       {% if estado and estado.credito_total %}<p style="margin:0 0 8px">Crédito disponível <strong>{{ estado.credito_total|moeda }}</strong> <span class="muted">· sai sozinho do próximo pagamento</span></p>{% endif %}
       <p class="muted" style="margin:8px 0 0"><a href="/financeiro/mensalidades">Mensalidades</a></p>

@@ -802,13 +802,34 @@ def resumo_mes(con: sqlite3.Connection, mes: str, escopo: str = "PJ") -> dict:
     }
 
 
+def _cobertura_adiantada(con: sqlite3.Connection, mes: str) -> dict[int, dict]:
+    """{cliente_id: {de, ate}}: alunos cujo pagamento de um mês anterior (cobre 2+ meses) vai até `mes` ou além. de = mês do pagamento, ate = último mês coberto.
+    Se mais de um cobre, vale o que vai mais longe. Só olha os 2 últimos anos."""
+    valores = {r[0]: r[1] for r in con.execute("SELECT id, COALESCE(valor, 0) FROM clientes WHERE excluido_em IS NULL AND status='ativo'")}
+    out = {}
+    for r in con.execute("""SELECT cliente_id, data, valor, meses FROM lancamentos WHERE escopo='PJ' AND tipo='entrada' AND pago_em IS NOT NULL
+                            AND excluido_em IS NULL AND cliente_id IS NOT NULL AND substr(data,1,7) < ? AND substr(data,1,7) >= ?
+                            ORDER BY data, id""", (mes, somar_meses(mes, -24))):
+        if r["cliente_id"] not in valores:
+            continue
+        n = meses_do_pagamento(r["valor"], valores[r["cliente_id"]], r["meses"])
+        de = str(r["data"])[:7]
+        ate = somar_meses(de, n - 1) if n >= 2 else None
+        if ate and ate >= mes and ate >= out.get(r["cliente_id"], {"ate": ""})["ate"]:
+            out[r["cliente_id"]] = {"de": de, "ate": ate}
+    return out
+
+
 def mensalidades(con: sqlite3.Connection, mes: str) -> list[dict]:
     """Alunos ativos: previsto = clientes.valor; recebido = entradas PJ pagas do cliente no mês;
     abertos = entradas PJ do cliente no mês já lançadas e ainda sem baixa; falta = previsto − recebido − em aberto (nem foi lançado).
     Aluno que só começa depois do mês fica de fora. Qualquer pagamento quita o mês: recebido > 0 é 'recebido' com falta 0
     (os abertos dele ficam listados com quitado=True e não contam como a receber); senão 'em aberto'.
     Mês pulado (evento 'pausa' da ficha, sem cobrança): previsto 0 e situação 'pulou o mês'.
-    Crédito do aluno (mês pago e não usado) desconta do previsto: o ainda disponível e o já descontado em pagamento deste mês."""
+    Crédito do aluno (mês pago e não usado) desconta do previsto: o ainda disponível e o já descontado em pagamento deste mês.
+    Pagou adiantado (parcelou no cartão, vários meses de uma vez): um pagamento de N meses (lancamentos.meses, ou as mensalidades inteiras do valor
+    quando são 2 ou mais) feito no mês M cobre M .. M+N−1. Mês coberto sem pagamento próprio é 'pago adiantado': quitado, falta 0, e traz
+    coberto_ate (último mês coberto) e pago_em_mes (mês do pagamento)."""
     abertos = {}
     for r in con.execute("""SELECT id, cliente_id, data, valor, descricao, categoria, conta FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
                             AND excluido_em IS NULL AND pago_em IS NULL AND cliente_id IS NOT NULL AND substr(data,1,7)=? ORDER BY data, id""", (mes,)):
@@ -819,6 +840,7 @@ def mensalidades(con: sqlite3.Connection, mes: str) -> list[dict]:
     for r in con.execute("""SELECT e.cliente_id, e.valor FROM cliente_eventos e JOIN lancamentos l ON l.id = e.usado_lancamento_id
                             WHERE e.tipo='credito' AND e.excluido_em IS NULL AND substr(l.data,1,7)=?""", (mes,)):
         descontados[r[0]] = descontados.get(r[0], 0) + r[1]
+    adiantados = _cobertura_adiantada(con, mes)
     itens = []
     for c in con.execute(
         """SELECT c.id, c.nome, c.data_inicio, COALESCE(c.valor, 0) AS previsto,
@@ -837,15 +859,19 @@ def mensalidades(con: sqlite3.Connection, mes: str) -> list[dict]:
         previsto = round(previsto - credito, 2)
         if pulou:   # combinou de pular o mês: não deve nada nele (se pagou mesmo assim, aparece como recebido)
             previsto = 0.0
-        if pulou and recebido <= 0:
+        adiantado = adiantados.get(c["id"]) if recebido <= 0 else None   # sem pagamento neste mês, mas um anterior já o cobre
+        if adiantado:
+            sit = "pago adiantado"
+        elif pulou and recebido <= 0:
             sit = "pulou o mês"
         else:
             sit = "recebido" if recebido > 0 else "em aberto"
-        quitado = recebido > 0
+        quitado = recebido > 0 or bool(adiantado)
         meus = abertos.get(c["id"], [])
         aberto = 0.0 if quitado else round(sum(a["valor"] for a in meus), 2)
         itens.append({"id": c["id"], "nome": c["nome"], "previsto": previsto, "recebido": recebido, "situacao": sit, "credito": credito,
                       "abertos": meus, "aberto": aberto, "quitado": quitado,
+                      "coberto_ate": adiantado["ate"] if adiantado else None, "pago_em_mes": adiantado["de"] if adiantado else None,
                       "falta": 0.0 if quitado else round(max(previsto - recebido - aberto, 0), 2)})
     return itens
 
@@ -865,6 +891,15 @@ def _dias_antes(data: str, dias: int) -> str:
     return (dt.date.fromisoformat(data) - dt.timedelta(days=dias)).isoformat()
 
 
+def meses_do_pagamento(v, valor, explicito=None) -> int:
+    """Quantos meses um pagamento cobre: o `meses` dito no lançamento (pagou adiantado ou parcelou no cartão) ou, sem ele, as mensalidades
+    inteiras do valor (90% do valor mensal já é mês inteiro). 0 = pagamento menor que um mês."""
+    if explicito:
+        return int(explicito)
+    valor = float(valor or 0)
+    return int(float(v or 0) / valor + (1 - CHEIO) + 1e-9) if valor > 0 else 0
+
+
 def renovacoes(con: sqlite3.Connection, cliente_id: int | None = None) -> dict[int, dict]:
     """Renovação efetiva de cada aluno: {cliente_id: {gravada, efetiva, ciclos, falta, pendente, motivo, motivo_data}}. Não grava nada.
     Parte da data de renovação do cadastro e anda um mês a cada:
@@ -874,7 +909,7 @@ def renovacoes(con: sqlite3.Connection, cliente_id: int | None = None) -> dict[i
     Pagamento parcial também renova e dá baixa total no mês (nada fica devendo): pagamento menor que um mês, perto do vencimento,
     anda um mês com falta 0; o seguinte conta como qualquer outro pagamento.
     Renovação marcada sem pagamento fica pendente (falta = valor): o pagamento seguinte é dela, mesmo parcial, e quita (não anda outro mês).
-    Valor de 2 mensalidades de uma vez anda 2 meses. Pagamento pequeno longe do vencimento (aula extra, taxa) não renova.
+    Valor de 2 mensalidades de uma vez anda 2 meses; com `lancamentos.meses` (parcelou no cartão, pagou adiantado) anda exatamente esse tanto. Pagamento pequeno longe do vencimento (aula extra, taxa) não renova.
     Só conta o que é de até 7 dias antes da data gravada em diante e, se a data foi trocada à mão (renovacao_em),
     só o que foi lançado depois da troca. O crédito descontado no pagamento conta como pago (mensalidade − crédito renova).
     tipos = o que abriu cada ciclo mensal desde a data gravada ('pagamento', 'renovacao' ou 'pausa')."""
@@ -885,7 +920,7 @@ def renovacoes(con: sqlite3.Connection, cliente_id: int | None = None) -> dict[i
     pagos, eventos = {}, {}
     descontos = {r[0]: r[1] for r in con.execute("""SELECT usado_lancamento_id, SUM(valor) FROM cliente_eventos WHERE tipo='credito'
                  AND excluido_em IS NULL AND usado_lancamento_id IS NOT NULL GROUP BY usado_lancamento_id""")}
-    for r in con.execute(f"""SELECT id, cliente_id, data, valor, criado_em FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
+    for r in con.execute(f"""SELECT id, cliente_id, data, valor, meses, criado_em FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
                              AND pago_em IS NOT NULL AND excluido_em IS NULL {filtro}""", args):
         # pagou "mensalidade − crédito": o crédito descontado também conta como pago (senão pagamento antecipado não renovaria)
         pagos.setdefault(r["cliente_id"], []).append({**dict(r), "valor": (r["valor"] or 0) + (descontos.get(r["id"]) or 0)})
@@ -906,11 +941,11 @@ def _renovacao(c, pagos: list, eventos: list) -> dict:
     valor = float(c["valor"] or 0)
     desde, trocada = _dias_antes(gravada, ANTECEDENCIA), c["renovacao_em"]
     meses_pagos = {str(p["data"])[:7] for p in pagos}
-    itens = [("pagamento", p["data"], p["valor"], p["criado_em"]) for p in pagos]
-    itens += [(e["tipo"], e["data"], e["valor"], e["criado_em"]) for e in eventos
+    itens = [("pagamento", p["data"], p["valor"], p["criado_em"], p["meses"]) for p in pagos]
+    itens += [(e["tipo"], e["data"], e["valor"], e["criado_em"], None) for e in eventos
               if not (e["tipo"] == "pagamento" and str(e["data"])[:7] in meses_pagos)]   # já lançado no financeiro: conta uma vez
     k, pendente, ultimo = 0, False, None
-    for tipo, data, v, criado in sorted(itens, key=lambda i: (str(i[1]), str(i[3] or ""))):
+    for tipo, data, v, criado, explicito in sorted(itens, key=lambda i: (str(i[1]), str(i[3] or ""))):
         data = str(data or "").strip()[:10]
         if not ISO_DATA.fullmatch(data) or data < desde or (trocada and str(criado or "") <= trocada):
             continue   # é de antes da data gravada (ou da troca à mão): já está nela
@@ -923,7 +958,7 @@ def _renovacao(c, pagos: list, eventos: list) -> dict:
         anda = 0
         if tipo == "pagamento":
             v = float(v or 0)
-            meses = int(v / valor + (1 - CHEIO) + 1e-9) if valor > 0 else 0   # mensalidades inteiras neste pagamento
+            meses = meses_do_pagamento(v, valor, explicito)   # mensalidades inteiras neste pagamento (ou as que o aluno disse que cobre)
             if pendente:   # paga a Renovação marcada (mesmo parcial: baixa total); mensalidade a mais adianta
                 pendente, anda = False, max(meses - 1, 0)
             elif meses:

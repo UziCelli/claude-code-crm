@@ -291,6 +291,7 @@ CREATE TABLE IF NOT EXISTS lancamentos (
     parcela_total INTEGER,
     recorrencia_id INTEGER REFERENCES recorrencias(id),
     competencia TEXT,                                 -- AAAA-MM, só junto com recorrencia_id
+    meses INTEGER,                                    -- entrada de aluno: quantos meses este pagamento cobre (pago adiantado/parcelado); NULL = automático
     sem_recorrencia INTEGER,                          -- 1 = "não é a conta recorrente": sai da lista de contas parecidas
     nfse INTEGER,                                     -- 1 emitida, 0 não, NULL não se aplica
     observacao TEXT,

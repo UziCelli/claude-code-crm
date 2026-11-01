@@ -200,6 +200,7 @@ def iniciar_banco(caminho: Path = None) -> None:
             )
         _garantir_coluna(con, "campanha_checkpoints", "excluido_em", "TEXT")   # banco de antes de dar para excluir
         _garantir_coluna(con, "lancamentos", "sem_recorrencia", "INTEGER")     # banco de antes de ligar saída à recorrência
+        _garantir_coluna(con, "lancamentos", "meses", "INTEGER")               # banco de antes do pagamento adiantado (cobre N meses)
         _garantir_coluna(con, "recorrencias", "prioridade", "INTEGER")         # banco de antes da fila de pagamento
         _garantir_coluna(con, "cliente_eventos", "hora", "INTEGER")            # banco de antes da Agenda
         _garantir_coluna(con, "agenda_avulsas", "reposicao", "INTEGER DEFAULT 0")   # banco de antes do controle de reposições

@@ -133,12 +133,13 @@ def estado(con, hoje=None, ids=None) -> dict[int, dict]:
         ultima[r[0]] = m.data_iso(r[1])
     for r in con.execute(f"SELECT cliente_id, data FROM cliente_eventos WHERE tipo='aula' AND excluido_em IS NULL AND data >= ?{so}", (desde, *args_so)):
         aulas.setdefault(r["cliente_id"], []).append(str(r["data"])[:10])
-    pagos, ultimo_pago = {}, {}
-    for r in con.execute(f"""SELECT cliente_id, data FROM lancamentos WHERE escopo='PJ' AND tipo='entrada' AND pago_em IS NOT NULL AND excluido_em IS NULL
+    pagos, ultimo_pago, lotes = {}, {}, {}
+    for r in con.execute(f"""SELECT cliente_id, data, valor, meses FROM lancamentos WHERE escopo='PJ' AND tipo='entrada' AND pago_em IS NOT NULL AND excluido_em IS NULL
                              AND cliente_id IS NOT NULL{so}""", args_so):
         d = str(r["data"])[:10]
         pagos.setdefault(r["cliente_id"], []).append(d)
         ultimo_pago[r["cliente_id"]] = max(ultimo_pago.get(r["cliente_id"], ""), d)
+        lotes.setdefault(r["cliente_id"], []).append((d, r["valor"], r["meses"]))   # candidatos a pagamento adiantado (cobre vários meses)
     for r in con.execute(f"SELECT cliente_id, data FROM cliente_eventos WHERE tipo='pagamento' AND excluido_em IS NULL{so}", args_so):
         pagos.setdefault(r["cliente_id"], []).append(str(r["data"])[:10])   # o evento antigo 'pagamento' da ficha também vale
     pulos, meses_credito = {}, {}
@@ -183,7 +184,7 @@ def estado(con, hoje=None, ids=None) -> dict[int, dict]:
             inicio_aluno = m.data_iso(c["data_inicio"])
             tratado = ini[:7] in meses_credito.get(cid, ()) or any(ini <= d <= (dt.date.fromisoformat(fim) + dt.timedelta(days=7)).isoformat()
                                                                     for d in pulos.get(cid, []))
-            pagou = _pago_no_ciclo(r, i, ini, fim, pagos.get(cid, []))
+            pagou = _pago_no_ciclo(r, i, ini, fim, pagos.get(cid, []) + _datas_cobertas(lotes.get(cid, []), valor))
             julgar = (feitas == 0 and uteis >= DIAS_UTEIS_MIN and not tratado and pagou is not None
                       and (inicio_aluno is None or inicio_aluno <= janela))
             if tratado:   # crédito dado ou mês pulado: a ausência desse ciclo já foi resolvida, o relógio do "sem aula" recomeça depois dele
@@ -232,7 +233,8 @@ def estado(con, hoje=None, ids=None) -> dict[int, dict]:
              "situacao": sit, "rotulo": ROTULO[sit], "cor": COR[sit], "grav": GRAV[COR[sit]], "modelo": None, "botao": None, "extra": None,
              "data_modelo": None, "cobranca": None, "ordem": c["nome"]}
         e["frase_valor"] = frase_valor(valor, livres.get(cid))
-        _texto_e_acoes(e, c, sit, efetiva, ciclo, ult, faltas, par_cob, h, tem and cid not in com_horario)
+        recente_pgto = bool(ultimo_pago.get(cid)) and ultimo_pago[cid] >= (hoje - dt.timedelta(days=365)).isoformat()
+        _texto_e_acoes(e, c, sit, efetiva, ciclo, ult, faltas, par_cob, h, tem and cid not in com_horario, recente_pgto)
         out[cid] = e
     return out
 
@@ -244,7 +246,18 @@ def estado_aluno(con, cid, hoje=None) -> dict | None:
 
 def _pagamento(item, mes, ultimo) -> dict:
     return {"mes": mes, "situacao": item["situacao"] if item else None, "previsto": item["previsto"] if item else 0.0,
-            "recebido": item["recebido"] if item else 0.0, "ultimo_pago": ultimo[:7] if ultimo else None}
+            "recebido": item["recebido"] if item else 0.0, "ultimo_pago": ultimo[:7] if ultimo else None,
+            "coberto_ate": item.get("coberto_ate") if item else None}
+
+
+def _datas_cobertas(lotes, valor) -> list[str]:
+    """Pagamento que cobre N meses (lancamentos.meses ou o valor de N mensalidades) vale também nos N−1 meses seguintes: devolve essas datas,
+    para o ciclo de um mês coberto não parecer sem pagamento."""
+    out = []
+    for d, v, meses in lotes:
+        n = financeiro.meses_do_pagamento(v, valor, meses)
+        out += [financeiro.proxima_renovacao(d, k) for k in range(1, n)] if n >= 2 else []
+    return out
 
 
 def _pago_no_ciclo(r, i, ini, fim, datas) -> bool | None:
@@ -260,8 +273,14 @@ def _pago_no_ciclo(r, i, ini, fim, datas) -> bool | None:
     return any(antes(ini, financeiro.ANTECEDENCIA) <= d < antes(fim, financeiro.ANTECEDENCIA) for d in datas)
 
 
-def _texto_e_acoes(e, c, sit, efetiva, ciclo, ult, faltas, par_cob, h, converter) -> None:
-    """Preenche texto e acoes do estado, conforme a situação. converter = tem aula só pelo plano: pode ser consultoria."""
+def acao_adiantado(cid) -> dict:
+    """Botão "Já pagou adiantado": leva aos pagamentos da ficha, onde cada um diz quantos meses cobre."""
+    return {"rotulo": "Já pagou adiantado", "href": f"/clientes/{cid}#pagamentos"}
+
+
+def _texto_e_acoes(e, c, sit, efetiva, ciclo, ult, faltas, par_cob, h, converter, recente_pgto=False) -> None:
+    """Preenche texto e acoes do estado, conforme a situação. converter = tem aula só pelo plano: pode ser consultoria.
+    recente_pgto = tem pagamento nos últimos 12 meses: só então oferece "Já pagou adiantado" (sem pagamento nenhum seria ruído)."""
     m = _main()
     cid, valor, credito = c["id"], e["valor"], e["credito"]
     cobre_tudo = credito > 0 and credito >= valor - 0.005   # o crédito paga o mês inteiro: não há o que registrar, só pular
@@ -277,7 +296,9 @@ def _texto_e_acoes(e, c, sit, efetiva, ciclo, ult, faltas, par_cob, h, converter
         e["modelo"], e["data_modelo"], e["extra"] = ("cobranca" if cob else "renovacao"), _data_br(efetiva), (m.texto_cobranca(cob) if cob else {"valor": e["frase_valor"]})
         e["botao"] = f"Cobrar {m.moeda(cob['total'])}" if cob else None
         e["cobranca"] = cob
-        e["acoes"] = [pagar, wa, {"rotulo": "Pular mês", "href": f"/clientes/{cid}#renovacao"}] if pagar else [pulou, wa]
+        # no máximo 3 botões: com "Já pagou adiantado" o link "Pular mês" sai (ele está na ficha, junto da renovação)
+        e["acoes"] = ([pagar, wa, acao_adiantado(cid) if recente_pgto else {"rotulo": "Pular mês", "href": f"/clientes/{cid}#renovacao"}]
+                      if pagar else [pulou, wa])
     elif sit == "pago_sem_aula":
         e["texto"] = f"pagou e não teve aula em {mes_ciclo}"
         e["acoes"] = [pulou, acao_credito(c, e["credito_sugerido"], ciclo["mes"])] + extras
@@ -287,7 +308,7 @@ def _texto_e_acoes(e, c, sit, efetiva, ciclo, ult, faltas, par_cob, h, converter
     elif sit == "vence_logo":
         e["texto"] = f"renovação em {_data_br(efetiva)}"
         e["modelo"], e["data_modelo"], e["extra"] = "renovacao", _data_br(efetiva), {"valor": e["frase_valor"]}
-        e["acoes"] = [x for x in (pagar or pulou, wa) if x]
+        e["acoes"] = [x for x in (pagar or pulou, wa, acao_adiantado(cid) if pagar and recente_pgto else None) if x]
     elif sit == "sem_aula_recente":
         e["texto"] = f"sem aula desde {_data_br(ult)}" if ult else "nenhuma aula registrada"
         if ult:
