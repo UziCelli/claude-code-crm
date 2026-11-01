@@ -37,6 +37,7 @@ document.addEventListener("submit", function (e) {
   var msg = (e.submitter && e.submitter.dataset.confirmar) || f.dataset.confirmar;   // o botão pode ter a sua própria pergunta
   if (msg && !confirm(msg)) e.preventDefault();
   if (e.defaultPrevented) return;
+  if (f.target === "_blank") return;   // abre em outra aba (menu WhatsApp): esta página não troca, o botão não pode ficar travado
   // Botão ocupado: impede duplo envio. Desabilita depois do envio para o name/value do botão ir junto.
   var b = e.submitter || f.querySelector("button:not([type=button]), [type=submit]");
   if (!b) return;
@@ -265,3 +266,18 @@ document.querySelectorAll("table.grade").forEach(function (g) {
       .then(function () { texto.focus({ preventScroll: true }); });
   });
 })();
+
+// Menu WhatsApp da ficha: clicar fora fecha; escolher um item fecha (o formulário abre o WhatsApp em outra aba); "Cadastre o telefone" leva ao campo.
+document.addEventListener("click", function (e) {
+  var item = e.target.closest(".menu-wa-item");
+  document.querySelectorAll("details.menu-wa[open]").forEach(function (m) {
+    if (!m.contains(e.target) || item) setTimeout(function () { m.open = false; }, 0);   // depois do envio do formulário
+  });
+  if (item && item.matches("a[href='#telefone']")) {
+    var t = document.getElementById("telefone");
+    if (t) setTimeout(function () { t.focus(); }, 0);
+  }
+});
+document.addEventListener("keydown", function (e) {
+  if (e.key === "Escape") document.querySelectorAll("details.menu-wa[open]").forEach(function (m) { m.open = false; });
+});
