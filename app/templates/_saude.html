@@ -1,0 +1,47 @@
+{# Saúde financeira (app/marcadores.py e app/sugestoes.py): macros da tela /financeiro/painel e do card do Painel.
+   Importar assim: {% from "_saude.html" import card_escopo, sugestao_card %}. Um botão é link (href) ou abre diálogo (dialogo + dados). #}
+{% macro botao(x, voltar='') %}{% if x.dialogo %}<button type="button" class="{{ x.classe or 'claro' }} pequeno" data-abrir="{{ x.dialogo }}" data-voltar="{{ voltar }}"{% for k, v in x.dados.items() %} data-{{ k }}="{{ v }}"{% endfor %}>{{ x.rotulo }}</button>
+{% else %}<a class="btn claro pequeno" href="{{ x.href }}">{{ x.rotulo }}</a>{% endif %}{% endmacro %}
+
+{% macro selo_nota(n) %}<span class="tag {{ n.cor or 'neutro' }} selo-nota">{{ n.texto }}</span>{% endmacro %}
+
+{# um marcador que precisa de atenção: nome, valor, a frase (já diz o que é bom) e o botão da solução #}
+{% macro marcador_aberto(m) %}
+<li class="marcador {{ m.cor }}">
+  <div class="mk-topo"><strong>{{ m.nome }}</strong>
+    <span class="mk-valor">{{ m.texto }}{% if m.tendencia %} <span class="seta {{ 'verde' if m.tendencia_boa else ('vermelho' if m.tendencia_boa is false else '') }}" aria-label="{{ 'subiu' if m.tendencia == '↑' else 'caiu' }}">{{ m.tendencia }}</span>{% endif %}</span></div>
+  <div class="mk-frase">{{ m.frase }}</div>
+  <div class="acoes-alerta">{{ botao(m.acao) }}</div>
+</li>
+{% endmacro %}
+
+{# o card de PJ ou de PF: nota, os que precisam de atenção abertos (vermelho, amarelo, sem dados) e os verdes como selos #}
+{% macro card_escopo(titulo, grupos, nota) %}
+{% set todos = grupos|map(attribute='marcadores')|sum(start=[]) %}
+<div class="card saude-card">
+  <div class="linha topo" style="margin-bottom:8px"><h2 style="margin:0">{{ titulo }}</h2>{{ selo_nota(nota) }}</div>
+  {% set abertos = todos|rejectattr('cor', 'equalto', 'verde')|list %}
+  {% if abertos %}
+  <ul class="marcadores">
+    {% for cor in ['vermelho', 'amarelo', 'cinza'] %}{% for m in abertos if m.cor == cor %}{{ marcador_aberto(m) }}{% endfor %}{% endfor %}
+  </ul>
+  {% else %}<p class="muted">Tudo no verde. Continue assim.</p>{% endif %}
+  {% set verdes = todos|selectattr('cor', 'equalto', 'verde')|list %}
+  {% if verdes %}
+  <div class="selos">{% for m in verdes %}<a class="tag verde" href="{{ m.acao.href }}" title="{{ m.frase }}">✓ {{ m.nome }} · {{ m.texto }}</a>{% endfor %}</div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# uma sugestão: título (1 frase), por quê, impacto, passos, botões e "Já fiz" (esconde por 30 dias) #}
+{% macro sugestao_card(s, voltar, compacto=false) %}
+<article class="sugestao borda-{{ s.cor }}">
+  <div class="sg-titulo"><strong>{{ s.titulo }}</strong>{% if s.impacto_txt %} <span class="tag {{ s.cor }}">{{ s.impacto_txt }}</span>{% endif %}</div>
+  <div class="muted">{{ s.porque }}</div>
+  {% if s.passos and not compacto %}<ol class="passos">{% for p in s.passos %}<li>{{ p }}</li>{% endfor %}</ol>{% endif %}
+  <div class="acoes-alerta">
+    {% for x in s.acoes %}{{ botao(x, voltar) }}{% endfor %}
+    <form method="post" action="/financeiro/sugestao/adiar" class="inline"><input type="hidden" name="chave" value="{{ s.chave }}"><input type="hidden" name="voltar" value="{{ voltar }}"><button class="claro pequeno" title="A sugestão some por 30 dias">Já fiz</button></form>
+  </div>
+</article>
+{% endmacro %}

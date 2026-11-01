@@ -22,6 +22,16 @@
 <div class="card mt card-hoje"><h3>O que precisa de você hoje</h3>{% include "_alertas.html" %}</div>
 {% endif %}
 
+{% if saude %}
+{% from "_saude.html" import sugestao_card, selo_nota %}
+<div class="card mt" id="saude-financeira">
+  <div class="linha topo" style="margin-bottom:8px"><h2 style="margin:0">Saúde financeira</h2>
+    <div class="linha">Empresa {{ selo_nota(saude.marcadores.nota.PJ) }} Pessoal {{ selo_nota(saude.marcadores.nota.PF) }}</div></div>
+  {% if saude.sugestoes %}{{ sugestao_card(saude.sugestoes[0], '/', true) }}{% else %}<p class="muted" style="margin:0 0 8px">Nada urgente agora.</p>{% endif %}
+  <p style="margin:8px 0 0"><a class="btn claro pequeno" href="/financeiro/painel">Ver tudo</a></p>
+</div>
+{% endif %}
+
 <div class="grid c4 mt">
   {{ kpi('Clientes ativos', m.clientes_ativos, metas.clientes_dez26|int, metas.clientes_mar27|int,
          'verde' if m.clientes_ativos >= metas.clientes_dez26 else ('amarelo' if m.clientes_ativos >= metas.clientes_dez26 * 0.7 else 'vermelho'), atual=m.clientes_ativos, ant=ant.clientes_ativos) }}

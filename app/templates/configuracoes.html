@@ -40,7 +40,7 @@
 <form method="post" action="/configuracoes" class="mt">
   <div class="grid c2">
     {% for g in grupos %}
-    <div class="card">
+    <div class="card" id="cfg-{{ g.grupo }}">
       <h2>{{ g.titulo }}</h2>
       {% for it in g.itens %}
       <div class="campo linha">

@@ -584,3 +584,23 @@ ol.passos li { margin: 4px 0; }
   .msg .balao { max-width: 92%; }
 }
 @media (prefers-reduced-motion: reduce) { .acao.pensando::after { animation: none; } }
+
+/* Saúde financeira: marcadores (PJ e PF), sugestões e o card do Painel */
+.borda-azul { border-left: 5px solid var(--aco); }
+.marcadores { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.marcador { padding: 8px 12px; background: #fff; border: 1px solid var(--borda); border-left: 4px solid var(--cinza); border-radius: 6px; }
+.marcador.vermelho { border-left-color: var(--vermelho); }
+.marcador.amarelo { border-left-color: var(--amarelo); }
+.marcador.cinza { border-left-style: dashed; }
+.mk-topo { display: flex; justify-content: space-between; align-items: baseline; gap: 4px 10px; flex-wrap: wrap; }
+.mk-valor { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--marinho); }
+.mk-frase { font-size: 13px; margin-top: 2px; }
+.selos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.selos .tag { text-decoration: none; }
+.sugestoes { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); }
+.sugestao { background: #fff; border: 1px solid var(--borda); border-radius: 12px; padding: 12px 14px; min-width: 0; overflow-wrap: anywhere; }
+.card .sugestao { padding: 0 0 0 12px; border: 0; border-radius: 0; background: none; }
+.sg-titulo { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; margin-bottom: 2px; }
+.sg-titulo .tag, .selo-nota { overflow-wrap: normal; }
+.selo-nota { font-size: 13px; }
+#o-que-fazer details > summary { cursor: pointer; font-weight: 600; color: var(--aco); }

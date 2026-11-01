@@ -40,7 +40,7 @@
     <a class="btn claro" href="/financeiro/conferir">Conferir{% if n_conferir %} ({{ n_conferir }}){% endif %}</a>
     <a class="btn claro" href="/financeiro/mensalidades?mes={{ mes }}">Mensalidades</a>
     <a class="btn claro" href="/financeiro/previsao">Próximos 90 dias</a>
-    <a class="btn claro" href="/financeiro/painel?mes={{ mes }}">Painel financeiro</a>
+    <a class="btn claro" href="/financeiro/painel?mes={{ mes }}">Saúde financeira</a>
     <button data-abrir="dlg-lanc" data-titulo="Novo lançamento">Novo lançamento</button>
   </div>
 </div>
@@ -157,7 +157,7 @@
   </table>
 </div>
 
-<div class="card mt">
+<div class="card mt" id="recorrentes">
   <div class="linha topo" style="margin-bottom:8px">
     <h3 style="margin:0">Contas recorrentes</h3>
     <button class="claro pequeno" data-abrir="dlg-rec" data-titulo="Nova conta recorrente">Nova conta recorrente</button>

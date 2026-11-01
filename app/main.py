@@ -9,6 +9,7 @@ import secrets
 import signal
 import sqlite3
 import threading
+import traceback
 import unicodedata
 from contextlib import asynccontextmanager, closing
 from pathlib import Path
@@ -20,7 +21,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse,
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import acesso, assistente, atualizar, db, exportar, financeiro, importar, precos, vigia
+from . import acesso, assistente, atualizar, db, exportar, financeiro, importar, precos, sugestoes, vigia
 from . import indicacoes   # quem indicou quem e o presente da indicação (brinde, nunca desconto)
 from . import alunos as alu   # estado de cada aluno (um algoritmo só); 'alunos' é nome de variável em várias rotas
 
@@ -205,22 +206,36 @@ def tem_aulas(c, com_horario) -> bool:
     return tipo in ("Pacote de Aulas", "Mensalidade") or c["id"] in com_horario or (not tipo and aulas_mes(c) > 0)
 
 
-def base_do_cliente(con, c):
-    """Linha de precos_base mais parecida com o plano do cliente (para estimar custo e lucro)."""
+def carregar_bases(con) -> dict:
+    """Todos os preços base de uma vez: {(tipo_servico, local, qtd_aulas, freq_semanal): [linhas por forma de pagamento]}.
+    Evita uma consulta por aluno em base_do_cliente(bases=...)."""
+    bases = {}
+    for b in con.execute("SELECT * FROM precos_base ORDER BY forma_pagamento"):
+        bases.setdefault((b["tipo_servico"], b["local"], b["qtd_aulas"], b["freq_semanal"]), []).append(b)
+    return bases
+
+
+def base_do_cliente(con, c, bases=None):
+    """Linha de precos_base mais parecida com o plano do cliente (para estimar custo e lucro).
+    bases = carregar_bases(con): usa o que já foi carregado, na mesma ordem da consulta (a forma de pagamento do aluno primeiro)."""
     qtd = int(aulas_mes(c)) if c["tipo_servico"] == "Pacote de Aulas" else 0
     m = re.search(r"Mensalidade (\d+)x", c["plano"] or "")
     freq = int(m.group(1)) if m else 0
     forma = c["forma_pagamento"] if c["forma_pagamento"] in db.LISTAS_INICIAIS["lista_formas_pagamento"] else "PIX"
+    if bases is not None:
+        linhas = bases.get((c["tipo_servico"], c["local"], qtd, freq), [])
+        return next((b for b in linhas if b["forma_pagamento"] == forma), linhas[0] if linhas else None)
     return con.execute(
         """SELECT * FROM precos_base WHERE tipo_servico=? AND local=? AND qtd_aulas=? AND freq_semanal=?
            ORDER BY (forma_pagamento=?) DESC, forma_pagamento LIMIT 1""",
         (c["tipo_servico"], c["local"], qtd, freq, forma)).fetchone()
 
 
-def estimativa_cliente(con, c, p):
+def estimativa_cliente(con, c, p, bases=None):
     """Preço, custo e lucro do aluno pelo motor de preços (o mesmo da ficha, do simulador e da grade). None sem preço base ou sem valor.
-    O valor da ficha é o que o aluno paga de verdade: o multiplicador de grupo do motor não se aplica por cima dele."""
-    base = base_do_cliente(con, c)
+    O valor da ficha é o que o aluno paga de verdade: o multiplicador de grupo do motor não se aplica por cima dele.
+    bases = carregar_bases(con) evita uma consulta por aluno."""
+    base = base_do_cliente(con, c, bases)
     if not (base and c["valor"]):
         return None
     pessoas = c["pessoas"] or 1
@@ -358,6 +373,7 @@ def calcular_metricas(con, mes=None):
     p = precos.carregar_parametros(con)
     metas = db.parametros(con, "metas")
     clientes = con.execute("SELECT * FROM clientes WHERE excluido_em IS NULL AND status='ativo'").fetchall()
+    bases = carregar_bases(con)   # uma consulta só, não uma por aluno
     horas = horas_com_preco = lucro_total = 0.0
     receita = receita_grupos = 0.0
     for c in clientes:
@@ -366,7 +382,7 @@ def calcular_metricas(con, mes=None):
         receita += c["valor"] or 0
         if (c["pessoas"] or 1) > 1:
             receita_grupos += c["valor"] or 0
-        est = estimativa_cliente(con, c, p)
+        est = estimativa_cliente(con, c, p, bases)
         if est:   # lucro/h só sobre as horas de quem tem preço base: sem ele o aluno não tem lucro calculado
             horas_com_preco += h
             lucro_total += est["lucro"]
@@ -444,8 +460,13 @@ def painel(request: Request, con=Depends(get_db)):
     ant = con.execute("SELECT * FROM metricas_mensais WHERE mes=?", (ant_mes,)).fetchone()
     historico = [dict(r) for r in con.execute("SELECT * FROM metricas_mensais ORDER BY mes")]
     historico = [h for h in historico if h["mes"] != m["mes"]] + [m]
+    try:
+        saude = sugestoes.painel(con, metricas=m, limite=1)   # o card da Saúde financeira nunca derruba o Painel
+    except Exception:
+        traceback.print_exc()
+        saude = None
     return render(request, "painel.html", con, m=m, ant=ant, metas=metas, canais=metricas_por_canal(con, m["mes"]),
-                  historico=historico[-12:], fases=fase_atual(con))
+                  historico=historico[-12:], fases=fase_atual(con), saude=saude)
 
 
 @app.post("/painel/fechar-mes")
@@ -476,7 +497,17 @@ def _num_br(v) -> float:
     return float(s or 0)
 
 
-MOTIVOS_LISTA = {"sem-aula": "Alunos sem nenhuma aula registrada", "incompleto": "Cadastro incompleto"}   # /clientes?ids=..&motivo=..
+MOTIVOS_LISTA = {"sem-aula": "Alunos sem nenhuma aula registrada", "incompleto": "Cadastro incompleto",   # /clientes?ids=..&motivo=..
+                 "cobrar": "Mensalidades vencidas", "indicacao": "Alunos para pedir indicação", "reativar": "Ex-alunos para chamar de volta",
+                 "reajuste": "Alunos abaixo do preço mínimo", "dupla": "Alunos para convidar a treinar em dupla"}
+AJUDA_LISTA = {"cobrar": "Cobre um por um: quem pagar sai da lista.",
+               "indicacao": "Mande a mensagem: quando a pessoa indicada fechar, dê um presente a quem indicou.",
+               "reativar": "Mande a mensagem; se voltar, abra a ficha e mude o status para ativo.",
+               "reajuste": "Veja o valor de hoje e o mínimo, abra a ficha e ajuste o valor.",
+               "dupla": "Mande o convite: em dupla o treino rende mais para você e é mais animado para eles."}
+MODELO_LISTA = {"indicacao": "indicacao", "reativar": "reativacao", "dupla": "dupla"}   # modelo de WhatsApp de cada motivo
+STATUS_LISTA = {"reativar": "inativo", "cobrar": "ativo", "indicacao": "ativo", "dupla": "ativo", "reajuste": "ativo", "sem-aula": None,
+                "incompleto": "ativo"}
 TIPOS_SEM_AULA = ("Consultoria Online", "Consultoria Híbrida")
 
 
@@ -491,6 +522,9 @@ def clientes(request: Request, status: str = "ativo", busca: str = "", ids: str 
         args += filtro
         if motivo == "incompleto":
             sql += " AND status='ativo' AND (telefone IS NULL OR telefone='' OR data_renovacao IS NULL)"
+        elif STATUS_LISTA.get(motivo):   # cobrar, indicação, reajuste e dupla: só ativos; reativar: só quem está inativo
+            sql += " AND status=?"
+            args.append(STATUS_LISTA[motivo])
     else:
         if status != "todos":
             sql += " AND status=?"
@@ -503,6 +537,16 @@ def clientes(request: Request, status: str = "ativo", busca: str = "", ids: str 
     estados = alu.estado(con, hoje, ids=[c["id"] for c in rows if c["status"] == "ativo"])   # a situação de cada aluno vem do algoritmo central
     if filtro and motivo == "sem-aula":   # quem não está indo: sem aula registrada ou o mês pago/pulado sem aula (quem virou consultoria sai: mesma regra tem_aulas)
         rows = [c for c in rows if c["id"] in estados and estados[c["id"]]["situacao"] in alu.SEM_AULA]
+    if filtro and motivo == "cobrar":   # quem pagou ou pulou o mês sai da lista
+        rows = [c for c in rows if c["id"] in estados and estados[c["id"]]["situacao"] == "cobrar"]
+    minimos = {}
+    if filtro and motivo == "reajuste":   # quem já paga o mínimo (ou mais) sai da lista
+        p, bases = precos.carregar_parametros(con), carregar_bases(con)
+        for c in rows:
+            est = estimativa_cliente(con, c, p, bases)
+            if est and est["abaixo_margem"] and est["preco_minimo"] > (c["valor"] or 0):
+                minimos[c["id"]] = est["preco_minimo"]
+        rows = [c for c in rows if c["id"] in minimos]
     ren = financeiro.renovacoes(con)
     itens = []
     for c in rows:
@@ -512,11 +556,14 @@ def clientes(request: Request, status: str = "ativo", busca: str = "", ids: str 
             dias = (dt.date.fromisoformat(data_iso(renova)) - hoje).days
             alerta = "vermelho" if dias < 0 else ("amarelo" if dias <= 7 else None)
         faltas = [t for t, falta in (("falta telefone", not c["telefone"]), ("falta data de renovação", not c["data_renovacao"])) if falta]
-        itens.append({**dict(c), "data_renovacao": renova, "alerta": alerta, "faltas": faltas, "estado": estados.get(c["id"])})
+        itens.append({**dict(c), "data_renovacao": renova, "alerta": alerta, "faltas": faltas, "estado": estados.get(c["id"]),
+                      "minimo": minimos.get(c["id"])})
     totais = {r[0]: r[1] for r in con.execute("SELECT status, COUNT(*) FROM clientes WHERE excluido_em IS NULL GROUP BY status")}
+    motivo_ok = motivo if motivo in MOTIVOS_LISTA else ""
     return render(request, "clientes.html", con, clientes=itens, status=status, busca=busca, totais=totais, filtrado=bool(filtro),
-                  motivo=motivo if motivo in MOTIVOS_LISTA else "", titulo_lista=MOTIVOS_LISTA.get(motivo, "Alunos selecionados"),
-                  voltar_lista=f"/clientes?ids={','.join(map(str, filtro))}&motivo={motivo if motivo in MOTIVOS_LISTA else ''}")
+                  motivo=motivo_ok, titulo_lista=MOTIVOS_LISTA.get(motivo, "Alunos selecionados"), ajuda_lista=AJUDA_LISTA.get(motivo, ""),
+                  modelo_lista=MODELO_LISTA.get(motivo, ""),
+                  voltar_lista=f"/clientes?ids={','.join(map(str, filtro))}&motivo={motivo_ok}")
 
 
 def _form_cliente(form) -> dict:
@@ -2387,7 +2434,17 @@ def financeiro_painel(request: Request, mes: str = "", con=Depends(get_db)):
     maximo = max([s["receita"] for s in serie] + [s["custos_fixos"] + s["custos_variaveis"] for s in serie] + [abs(s["lucro"]) for s in serie] + [1])
     das_pct = f"{db.parametros(con, 'imposto').get('DAS', 0.06) * 100:g}".replace(".", ",")
     return render(request, "financeiro_painel.html", con, mes=mes, r=serie[-1], serie=serie, maximo=maximo, das_pct=das_pct,
-                  salario=financeiro.salario_mes(con, mes, dt.date.today().isoformat()), colchao=financeiro.colchao(con, mes))
+                  salario=financeiro.salario_mes(con, mes, dt.date.today().isoformat()), colchao=financeiro.colchao(con, mes),
+                  saude=sugestoes.painel(con, limite=sugestoes.LIMITE), voltar_saude=f"/financeiro/painel?mes={mes}")
+
+
+@app.post("/financeiro/sugestao/adiar")
+def financeiro_sugestao_adiar(chave: str = Form(...), destino: str = Form("", alias="voltar"), con=Depends(get_db)):
+    """"Já fiz": a sugestão some por 30 dias."""
+    if not re.fullmatch(r"[a-z0-9_]{1,40}", chave):
+        return voltar(_caminho_seguro(destino) or "/financeiro/painel", erro="Sugestão inválida.")
+    sugestoes.adiar(con, chave)
+    return voltar(_caminho_seguro(destino) or "/financeiro/painel", msg="Combinado: essa sugestão volta daqui a 30 dias.")
 
 
 # =====================================================================
@@ -2459,7 +2516,9 @@ GRUPOS_CONFIG = [("imposto", "Imposto (DAS)", "pct"), ("taxa_pagamento", "Taxas 
                  ("impacto_curto", "Fila de pagamento: o quanto atrasar atrapalha agora (0 a 40; quanto maior, mais cedo na fila)", "num"),
                  ("impacto_juros", "Fila de pagamento: juros e multa por mês de atraso (quanto maior, mais cedo na fila)", "pct"),
                  ("cobranca", "Cobrança de aluno atrasado: multa (uma vez) e juros ao mês, proporcional aos dias. "
-                              "Só cobre se estiver no contrato; pelo Código do Consumidor a multa vai até 2%", "pct")]
+                              "Só cobre se estiver no contrato; pelo Código do Consumidor a multa vai até 2%", "pct"),
+                 ("familia", "Família: quantas pessoas vivem da renda da PF (Saúde financeira)", "num"),
+                 ("saude", "Saúde financeira: reserva mensal desejada em R$ (entra no ponto de equilíbrio econômico)", "num")]
 
 
 @app.get("/configuracoes", response_class=HTMLResponse)

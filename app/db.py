@@ -24,6 +24,11 @@ PARAMETROS_INICIAIS = [
     ("msg_whatsapp", "cobranca", None, "Oi, {nome}! Tudo bem? Passando para lembrar do pagamento em aberto desde {data} ({dias} dias de atraso): "
                                        "{valor} + multa de {multa} + juros de {juros} = {total}. Pode me mandar o comprovante quando pagar? "
                                        "Obrigado! Victor | VFITCOACH", 5),
+    # campanhas que o CRM sugere (Saúde financeira): agregam valor ao trabalho, nunca dão desconto
+    ("msg_whatsapp", "indicacao", None, "Oi, {nome}! Tá curtindo os treinos? Se você conhece alguém que quer começar, me indica! "
+                                        "Quando a pessoa fechar, você ganha um presente meu 🎁 Victor | VFITCOACH", 6),
+    ("msg_whatsapp", "dupla", None, "Oi, {nome}! Que tal treinar com um amigo ou amiga? Em dupla o treino rende mais, é mais animado e "
+                                    "vocês se cobram um ao outro. Quer trazer alguém? Victor | VFITCOACH", 7),
     # cobrança de mensalidade atrasada (botão "Cobrar" no alerta): multa uma vez + juros ao mês proporcional aos dias
     ("cobranca", "multa", 0.02, None, 1),
     ("cobranca", "juros_ao_mes", 0.01, None, 2),
@@ -82,6 +87,8 @@ PARAMETROS_INICIAIS = [
     ("previsao", "dia_recebimento", 10, None, 1),  # dia em que a previsão põe as mensalidades que faltam receber
     ("previsao", "dia_das", 20, None, 2),          # vencimento do DAS (sobre a receita do mês anterior)
     ("colchao", "meses", 0, None, 1),              # meta da Reserva em meses de custo fixo; 0 = sem meta ainda
+    ("familia", "pessoas", 2, None, 1),            # quantas pessoas vivem da renda da PF (renda e custo de vida por pessoa na Saúde financeira)
+    ("saude", "reserva_mensal_desejada", 0, None, 1),   # R$ por mês que o negócio deveria render para a reserva (ponto de equilíbrio econômico)
     # frente de cada conta no Saldo livre: PF, PJ, Reserva (dinheiro guardado, fica fora do livre) ou Fora (cartões)
     ("conta_escopo", "Contabilizei Bank", None, "PJ", 1),
     ("conta_escopo", "Inter", None, "PF", 2),

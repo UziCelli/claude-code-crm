@@ -128,7 +128,7 @@ def test_whatsapp(con_temp):
     assert main.wa("", "oi") == "https://wa.me/?text=oi"
     assert main.wa(None, "Olá & tchau").endswith("?text=Ol%C3%A1%20%26%20tchau")
     modelos = db.parametros(con_temp, "msg_whatsapp")
-    assert set(modelos) == {"renovacao", "falta", "boas_vindas", "reativacao", "cobranca"}
+    assert set(modelos) == {"renovacao", "falta", "boas_vindas", "reativacao", "cobranca", "indicacao", "dupla"}
     assert main.preencher(modelos["falta"], "Ana", "01/01/2026").startswith("Oi, Ana!")
     txt = main.preencher(modelos["cobranca"], "Dora", "11/10/2026", {"dias": 20, "valor": "R$ 400,00", "multa": "R$ 8,00",
                                                                      "juros": "R$ 2,67", "total": "R$ 410,67"})
