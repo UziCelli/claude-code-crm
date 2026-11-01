@@ -1,11 +1,31 @@
 {% extends "base.html" %}
-{% block titulo %}Painel financeiro · VFITCOACH CRM{% endblock %}
+{% block titulo %}Saúde financeira · VFITCOACH CRM{% endblock %}
 {% block conteudo %}
+{% from "_saude.html" import card_escopo, sugestao_card %}
 <a class="voltar" href="/financeiro">← Financeiro</a>
 <div class="linha topo">
-  <h1 style="margin:0">Painel financeiro — {{ mes[5:] }}/{{ mes[:4] }}</h1>
+  <h1 style="margin:0">Saúde financeira</h1>
   <div class="linha"><a class="btn claro" href="/financeiro?mes={{ mes }}">Livro-caixa</a><a class="btn claro" href="/financeiro/mensalidades?mes={{ mes }}">Mensalidades</a><a class="btn claro" href="/financeiro/previsao">Próximos 90 dias</a></div>
 </div>
+<p class="muted">Visão de hoje, pelos 3 últimos meses fechados ({{ saude.janela[0][5:] }}/{{ saude.janela[0][:4] }} a {{ saude.janela[2][5:] }}/{{ saude.janela[2][:4] }}). Só os que precisam de você aparecem abertos.</p>
+<div class="grid c2">
+  {{ card_escopo('Empresa (PJ)', saude.marcadores.PJ, saude.marcadores.nota.PJ) }}
+  {{ card_escopo('Pessoal (PF)', saude.marcadores.PF, saude.marcadores.nota.PF) }}
+</div>
+
+<section class="mt" id="o-que-fazer" aria-labelledby="t-fazer">
+  <h2 id="t-fazer">O que fazer agora</h2>
+  {% if saude.sugestoes %}
+  <div class="sugestoes">{% for s in saude.sugestoes %}{{ sugestao_card(s, voltar_saude) }}{% endfor %}</div>
+  {% if saude.mais %}
+  <details class="mt"><summary>Ver mais {{ saude.mais|length }} sugest{{ 'ões' if saude.mais|length > 1 else 'ão' }}</summary>
+    <div class="sugestoes mt">{% for s in saude.mais %}{{ sugestao_card(s, voltar_saude) }}{% endfor %}</div>
+  </details>
+  {% endif %}
+  {% else %}<div class="card"><p style="margin:0">Nada urgente agora. Olhe de novo no começo do mês.</p></div>{% endif %}
+</section>
+
+<h2 class="mt">Números do mês — {{ mes[5:] }}/{{ mes[:4] }}</h2>
 <form class="linha" method="get">
   <input type="month" name="mes" value="{{ mes }}" aria-label="Mês" style="width:auto" required>
   <button class="claro">Ver mês</button>
@@ -36,7 +56,7 @@
     </div>
     {% else %}<p class="muted">Nada pago no pessoal neste mês. Lance entradas e saídas com escopo PF no <a href="/financeiro?mes={{ mes }}&escopo=PF">livro-caixa</a>.</p>{% endif %}
   </div>
-  <div class="card">
+  <div class="card" id="reserva">
     <h2>Reserva para meses fracos</h2>
     <p class="muted">Custo fixo de 1 mês: contas fixas da PJ + {{ 'o salário da PF' if salario.ligado else 'contas fixas da PF' }} = {{ colchao.mensal|moeda }}.</p>
     <div class="linha" style="gap:24px">

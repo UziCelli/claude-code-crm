@@ -437,7 +437,7 @@ def test_assistente_situacao_alunos_e_dar_credito(con_temp):
 def test_assistente_avisa_que_a_situacao_vem_do_algoritmo_central():
     assert "algoritmo central" in assistente.SISTEMA and "situacao_alunos" in assistente.SISTEMA and "dar_credito" in assistente.SISTEMA
     nomes = [f["name"] for f in assistente.FERRAMENTAS]
-    assert nomes[-2:] == ["situacao_alunos", "dar_credito"]
+    assert nomes[-3:-1] == ["situacao_alunos", "dar_credito"]
     assert assistente.rotulo("situacao_alunos") != "situacao_alunos" and assistente.rotulo("dar_credito") != "dar_credito"
     esquema = next(f for f in assistente.FERRAMENTAS if f["name"] == "dar_credito")["input_schema"]
     assert esquema["required"] == ["aluno"] and set(esquema["properties"]) == {"aluno", "valor", "mes"}

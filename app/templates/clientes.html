@@ -8,7 +8,7 @@
 {% if filtrado %}
 <div class="card atencao linha topo">
   <div><strong>{{ titulo_lista }}</strong> <span class="muted">({{ clientes|length }})</span>
-    <div class="muted">{% if clientes %}{{ 'Resolva um por um: quem fica certo sai da lista.' if motivo else 'Só os alunos escolhidos no alerta.' }}{% else %}Tudo resolvido por aqui.{% endif %}</div></div>
+    <div class="muted">{% if clientes %}{{ ajuda_lista or ('Resolva um por um: quem fica certo sai da lista.' if motivo else 'Só os alunos escolhidos no alerta.') }}{% else %}Tudo resolvido por aqui.{% endif %}</div></div>
   <a class="btn claro" href="/clientes">Ver todos</a>
 </div>
 {% else %}
@@ -41,6 +41,14 @@
         <select id="ts{{ c.id }}" name="tipo_servico" style="width:auto">{% for t in ['Consultoria Online', 'Consultoria Híbrida'] %}<option>{{ t }}</option>{% endfor %}</select>
         <button class="claro pequeno">Salvar</button>
       </form>
+    </div>
+    {% elif motivo == 'cobrar' %}
+    <div class="acoes-alerta" style="margin-top:10px">{% if c.estado %}{{ botoes(c.estado.acoes, c.estado, voltar_lista) }}{% endif %}</div>
+    {% elif motivo in ('indicacao', 'dupla', 'reativar', 'reajuste') %}
+    {% if motivo == 'reajuste' %}<div style="margin-top:6px">Hoje <strong>{{ c.valor|moeda }}</strong> · mínimo <strong>{{ c.minimo|moeda }}</strong></div>{% endif %}
+    <div class="linha mt" style="margin-top:10px">
+      <a class="btn pequeno" href="{{ wa(c.telefone, (modelos[modelo_lista]|preencher(c.nome)) if modelo_lista else '') }}" target="_blank" rel="noopener">WhatsApp</a>
+      <a class="btn claro pequeno" href="/clientes/{{ c.id }}">Abrir ficha</a>
     </div>
     {% elif motivo == 'incompleto' %}
     <div class="linha mt" style="margin-top:10px">

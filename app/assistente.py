@@ -24,7 +24,7 @@ from contextlib import closing, contextmanager
 
 from markupsafe import Markup, escape
 
-from . import alunos, db, financeiro
+from . import alunos, db, financeiro, sugestoes
 
 MODELO_PADRAO = "claude-haiku-5-5"
 ESFORCOS = ("low", "medium", "high", "xhigh", "max")
@@ -160,7 +160,10 @@ Aulas
 
 Situação dos alunos
 - A situação de cada aluno (vencida, pagou sem aula, sem aula nem pagamento, vence logo, sem aula, cadastro incompleto, em dia) vem de um algoritmo central, o mesmo dos alertas, da lista de Clientes, da ficha e das Mensalidades: use situacao_alunos, nunca deduza por conta própria.
-- Pagou o mês e não teve aula: ou pulou o mês (registrar_no_aluno, pausa) ou fica com crédito para o próximo pagamento (dar_credito, que o desconta sozinho)."""
+- Pagou o mês e não teve aula: ou pulou o mês (registrar_no_aluno, pausa) ou fica com crédito para o próximo pagamento (dar_credito, que o desconta sozinho).
+
+Saúde financeira
+- A saúde da empresa (PJ) e da vida pessoal (PF), os marcadores e o que fazer agora vêm de saude_financeira: use essa ferramenta, nunca recalcule. Nas sugestões de marketing a recompensa soma valor (presente, bônus) e nunca é desconto."""
 
 
 # ---------- ferramentas (ordem fixa) ----------
@@ -283,6 +286,10 @@ FERRAMENTAS = [
                       "Sem valor: o sugerido pelas aulas não usadas. Não passa da mensalidade; um crédito por mês.",
        {"aluno": {"type": "string", "description": "nome ou id do aluno"}, "valor": {"type": "number"},
         "mes": {"type": "string", "description": "AAAA-MM do mês não usado (vazio = o último mês pago sem aula)"}}, ["aluno"]),
+    _f("saude_financeira", "Saúde financeira da empresa (PJ) e da vida pessoal (PF): nota, marcadores (margens, ponto de equilíbrio, caixa, reserva, "
+                           "renda, sobra, moradia, dívidas), cada um com cor, frase e a tela que resolve, e as sugestões do que fazer agora com o impacto em R$. "
+                           "Olha os 3 últimos meses fechados.",
+       {"escopo": _ESCOPO}),
 ]
 
 ROTULOS = {"ver_painel": "Lendo os alertas do Painel", "resumo_do_mes": "Somando o mês", "listar_lancamentos": "Buscando lançamentos",
@@ -296,7 +303,8 @@ ROTULOS = {"ver_painel": "Lendo os alertas do Painel", "resumo_do_mes": "Somando
            "atualizar_saldo": "Atualizando saldo", "pagar_salario": "Pagando o salário", "marcar_tarefa": "Marcando tarefa",
            "criar_tarefa": "Criando tarefa", "excluir_tarefa": "Tirando tarefa da rotina", "agendar_lead": "Agendando ação do lead",
            "responder_checkpoint": "Respondendo checkpoint", "registrar_no_aluno": "Registrando na ficha do aluno",
-           "marcar_aula": "Marcando a aula na Agenda", "situacao_alunos": "Vendo a situação dos alunos", "dar_credito": "Dando crédito ao aluno"}
+           "marcar_aula": "Marcando a aula na Agenda", "situacao_alunos": "Vendo a situação dos alunos", "dar_credito": "Dando crédito ao aluno",
+           "saude_financeira": "Vendo a saúde financeira"}
 
 
 def rotulo(nome: str) -> str:
@@ -1077,6 +1085,24 @@ def _situacao_alunos(con, a):
                         "solucoes": [x.get("rotulo") or "WhatsApp" for x in e["acoes"]]} for e in itens[:LIMITE_LINHAS]]}
 
 
+def _saude_financeira(con, a):
+    escopo = _opcao(a, "escopo", ("PF", "PJ"))
+    r = sugestoes.painel(con, _hoje(), limite=sugestoes.LIMITE)
+
+    def marcador(m):
+        return {"chave": m["chave"], "nome": m["nome"], "valor": m["texto"], "cor": m["cor"], "frase": m["frase"], "tendencia": m["tendencia"],
+                "botao": m["acao"]["rotulo"], "tela": m["acao"]["href"]}
+
+    def sugestao(s):
+        return {"chave": s["chave"], "titulo": s["titulo"], "porque": s["porque"], "gravidade": s["cor"], "impacto": s["impacto_txt"] or None,
+                "passos": s["passos"], "botoes": [{"rotulo": x["rotulo"], "tela": x.get("href")} for x in s["acoes"]]}
+    escopos = (escopo,) if escopo else ("PJ", "PF")
+    return {"hoje": r["hoje"], "janela": f"{r['janela'][0]} a {r['janela'][-1]}",
+            "nota": {e: r["marcadores"]["nota"][e]["texto"] for e in escopos},
+            "marcadores": {e: [marcador(m) for g in r["marcadores"][e] for m in g["marcadores"]] for e in escopos},
+            "sugestoes": [sugestao(s) for s in r["sugestoes"] + r["mais"]]}
+
+
 def _dar_credito(con, a):
     aluno = _aluno_da_entrada(con, a)
     valor = _valor(a, obrigatorio=False)
@@ -1097,7 +1123,8 @@ EXECUTORES = {"ver_painel": _ver_painel, "resumo_do_mes": _resumo_do_mes, "lista
               "atualizar_saldo": _atualizar_saldo, "pagar_salario": _pagar_salario, "marcar_tarefa": _marcar_tarefa,
               "criar_tarefa": _criar_tarefa, "excluir_tarefa": _excluir_tarefa, "agendar_lead": _agendar_lead,
               "responder_checkpoint": _responder_checkpoint, "registrar_no_aluno": _registrar_no_aluno,
-              "marcar_aula": _marcar_aula, "situacao_alunos": _situacao_alunos, "dar_credito": _dar_credito}
+              "marcar_aula": _marcar_aula, "situacao_alunos": _situacao_alunos, "dar_credito": _dar_credito,
+              "saude_financeira": _saude_financeira}
 
 
 def executar(con, nome: str, entrada) -> tuple[str, bool]:

@@ -1149,6 +1149,11 @@ def _fixos_mes(con: sqlite3.Connection, mes: str, escopo: str, so_fixos: bool) -
         if not eh_das(r["descricao"], r["categoria"]))
 
 
+def fixos_previstos(con: sqlite3.Connection, mes: str, escopo: str = "PJ", so_fixos: bool = True) -> float:
+    """Soma prevista das contas recorrentes do escopo no mês (fixas por padrão), sem a Retirada e sem o DAS: o custo fixo de 1 mês."""
+    return round(_fixos_mes(con, mes, escopo, so_fixos), 2)
+
+
 def colchao(con: sqlite3.Connection, mes: str) -> dict:
     """Custo fixo de 1 mês para a reserva: recorrências fixas da PJ + o salário da PF
     (sem salário fixo, as recorrências fixas da PF). Mostra 1 e 3 meses, o guardado e a meta."""
