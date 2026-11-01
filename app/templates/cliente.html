@@ -36,6 +36,22 @@
 </div>
 {% endif %}
 
+{% if c and (indicou or indicado_por) %}
+<div class="card" id="indicacoes" style="margin-bottom:14px">
+  <h2>Indicações</h2>
+  {% if indicado_por %}<p style="margin:8px 0">Indicado por <a href="/clientes/{{ indicado_por.id }}">{{ indicado_por.nome }}</a>.</p>{% endif %}
+  {% for i in indicou %}
+  <div class="linha" style="justify-content:space-between;padding:6px 0;border-top:1px solid var(--borda)">
+    <span>Indicou: <a href="/clientes/{{ i.indicado_id }}">{{ i.indicado }}</a> —
+      {% if i.status == 'pendente' %}<strong>presente pendente</strong>
+      {% elif i.status == 'entregue' %}presente entregue em {{ i.data|data }}{% if i.o_que %} ({{ i.o_que }}){% endif %}
+      {% else %}<span class="muted">aguardando o 1º pagamento</span>{% endif %}</span>
+    {% if i.status == 'pendente' %}<button type="button" class="verde pequeno" data-abrir="dlg-presente" data-acao="/clientes/{{ c.id }}/indicacao/{{ i.indicado_id }}/presente" data-titulo="Presente para {{ c.nome }}, que indicou {{ i.indicado }}" data-voltar="/clientes/{{ c.id }}">Registrar presente</button>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 <div class="grid c2">
   <div>
   {% if c and data_iso(renova) %}
@@ -68,6 +84,7 @@
       <div><label>Forma de pagamento</label><select name="forma_pagamento"><option value="">—</option>{% for f in listas.lista_formas_pagamento %}<option {{ 'selected' if c and c.forma_pagamento == f }}>{{ f }}</option>{% endfor %}{% if c and c.forma_pagamento and c.forma_pagamento not in listas.lista_formas_pagamento %}<option selected>{{ c.forma_pagamento }}</option>{% endif %}</select></div>
       <div><label>Status</label><select name="status">{% for s in ['ativo','pausado','inativo'] %}<option {{ 'selected' if c and c.status == s }}>{{ s }}</option>{% endfor %}</select></div>
       <div><label>Canal de origem</label><select name="canal_origem"><option value="">—</option>{% for k in listas.lista_canais %}<option {{ 'selected' if c and c.canal_origem == k }}>{{ k }}</option>{% endfor %}</select></div>
+      <div><label>Indicado por (se alguém indicou)</label><select name="indicado_por" onchange="if (this.value) this.form.elements['canal_origem'].value = 'Indicação'"><option value="">—</option>{% for a in indicadores %}<option value="{{ a.id }}" {{ 'selected' if c and c.indicado_por == a.id }}>{{ a.nome }}{{ ' (' ~ a.status ~ ')' if a.status != 'ativo' }}</option>{% endfor %}</select></div>
       <div><label>Data de início</label><input name="data_inicio" type="date" value="{{ c.data_inicio or '' if c else hoje() }}"></div>
       <div><label>Data de renovação</label><input name="data_renovacao" type="date" value="{{ renova }}"></div>
       <div class="largo"><label>Observações</label><textarea name="observacoes" rows="3">{{ c.observacoes or '' if c else '' }}</textarea></div>
@@ -106,7 +123,7 @@
       <h2>Histórico</h2>
       {% for e in eventos %}
       <div class="linha" style="justify-content:space-between;border-bottom:1px solid var(--borda);padding:6px 0">
-        <span><span class="tag {{ {'aula':'azul','falta':'vermelho','desmarcou':'amarelo','cancelada':'neutro','pagamento':'verde','renovacao':'amarelo','pausa':'azul','credito':'verde','status':'neutro','anotacao':'neutro'}[e.tipo] }}">{{ {'aula':'aula dada','falta':'faltou','pausa':'pulou o mês','cancelada':'cancelada (não repõe)','credito':'crédito'}.get(e.tipo, e.tipo) }}</span> {{ e.descricao or '' }}{% if e.tipo == 'credito' and e.usado_em %} <span class="muted">(já descontado em {{ e.usado_em|data }})</span>{% endif %}</span>
+        <span><span class="tag {{ {'aula':'azul','falta':'vermelho','desmarcou':'amarelo','cancelada':'neutro','pagamento':'verde','renovacao':'amarelo','pausa':'azul','credito':'verde','brinde':'verde','status':'neutro','anotacao':'neutro'}[e.tipo] }}">{{ {'aula':'aula dada','falta':'faltou','pausa':'pulou o mês','cancelada':'cancelada (não repõe)','credito':'crédito','brinde':'presente'}.get(e.tipo, e.tipo) }}</span> {{ e.descricao or '' }}{% if e.tipo == 'credito' and e.usado_em %} <span class="muted">(já descontado em {{ e.usado_em|data }})</span>{% endif %}</span>
         <div class="linha" style="gap:8px"><span class="muted">{{ e.data|data }}{% if e.valor %} · {{ e.valor|moeda }}{% endif %}</span>
           <form method="post" action="/agenda/evento/{{ e.id }}/excluir" class="inline" data-confirmar="Excluir este registro do histórico? Dá para restaurar em Dados."><input type="hidden" name="destino" value="ficha"><button class="claro pequeno">excluir</button></form></div>
       </div>

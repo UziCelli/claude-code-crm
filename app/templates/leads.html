@@ -13,6 +13,7 @@
     <div class="lead {{ 'atrasado' if l.atrasado }} {{ 'parado' if l.parado }} {{ 'chegou' if destaque|string == l.id|string }} {{ 'cliente' if chave == 'cliente' and destaque|string == l.id|string }}">
       <div class="nome">{{ l.nome }}</div>
       <div class="muted">{{ l.canal_origem }}{% if l.interesse %} · {{ l.interesse }}{% endif %}</div>
+      {% if l.indicado_por %}<div class="muted">Indicado por {% for a in indicadores if a.id == l.indicado_por %}{{ a.nome }}{% endfor %}</div>{% endif %}
       {% if l.telefone %}<div class="muted"><a href="{{ wa(l.telefone, (modelos.reativacao|preencher(l.nome)) if chave == 'perdido' else '') }}" target="_blank" rel="noopener">{{ l.telefone }}</a></div>{% endif %}
       {% if l.proxima_acao or l.data_proxima_acao %}<div style="margin-top:4px"><span class="tag {{ 'vermelho' if l.atrasado else 'azul' }}">{{ l.proxima_acao or 'Próxima ação' }} · {{ l.data_proxima_acao|data }}</span></div>{% endif %}
       {% if l.parado %}<div style="margin-top:4px"><span class="tag vermelho">parado há {{ l.dias }} dias</span></div>{% endif %}
@@ -30,7 +31,7 @@
         {% if chave == 'perdido' %}
         <form method="post" action="/leads/{{ l.id }}/etapa" class="inline"><input type="hidden" name="etapa" value="lead"><button class="claro">Reabrir</button></form>
         {% endif %}
-        <button class="claro" data-abrir="dlg-lead" data-titulo="Editar lead" data-id="{{ l.id }}" data-nome="{{ l.nome }}" data-telefone="{{ l.telefone or '' }}" data-canal_origem="{{ l.canal_origem }}" data-interesse="{{ l.interesse or '' }}" data-proxima_acao="{{ l.proxima_acao or '' }}" data-data_proxima_acao="{{ l.data_proxima_acao or '' }}" data-observacoes="{{ l.observacoes or '' }}">Editar</button>
+        <button class="claro" data-abrir="dlg-lead" data-titulo="Editar lead" data-id="{{ l.id }}" data-nome="{{ l.nome }}" data-telefone="{{ l.telefone or '' }}" data-canal_origem="{{ l.canal_origem }}" data-indicado_por="{{ l.indicado_por or '' }}" data-interesse="{{ l.interesse or '' }}" data-proxima_acao="{{ l.proxima_acao or '' }}" data-data_proxima_acao="{{ l.data_proxima_acao or '' }}" data-observacoes="{{ l.observacoes or '' }}">Editar</button>
         <a class="btn claro" style="padding:4px 8px;font-size:11px" href="/simulador?lead_id={{ l.id }}">Proposta</a>
         <form method="post" action="/leads/{{ l.id }}/excluir" class="inline" data-confirmar="Enviar este lead para a lixeira?"><button class="claro">x</button></form>
       </div>
@@ -60,6 +61,7 @@
     <div class="campo"><label>Nome</label><input name="nome" required></div>
     <div class="campo"><label>Telefone / WhatsApp</label><input name="telefone"></div>
     <div class="campo"><label>Canal de origem (obrigatório)</label><select name="canal_origem" required>{% for k in listas.lista_canais %}<option>{{ k }}</option>{% endfor %}</select></div>
+    <div class="campo"><label>Indicado por (se alguém indicou)</label><select name="indicado_por" onchange="if (this.value) this.form.elements['canal_origem'].value = 'Indicação'"><option value="">—</option>{% for a in indicadores %}<option value="{{ a.id }}">{{ a.nome }}{{ ' (' ~ a.status ~ ')' if a.status != 'ativo' }}</option>{% endfor %}</select></div>
     <div class="campo"><label>Interesse (tipo / local)</label><input name="interesse" placeholder="ex.: Pacote de Aulas / CIA" list="interesses"><datalist id="interesses">{% for t in listas.lista_tipos_servico %}{% for l in listas.lista_locais %}<option>{{ t }} / {{ l }}</option>{% endfor %}{% endfor %}</datalist></div>
     <div class="campo"><label>Próxima ação</label><input name="proxima_acao" placeholder="ex.: mandar mensagem, marcar avaliação"></div>
     <div class="campo"><label>Data da próxima ação</label><input name="data_proxima_acao" type="date"></div>
