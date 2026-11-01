@@ -187,7 +187,8 @@ def _meses_pf(con, meses) -> dict:
         """SELECT substr(l.data,1,7), l.tipo, l.categoria, l.descricao, r.fixo, SUM(l.valor) FROM lancamentos l
            LEFT JOIN recorrencias r ON r.id = l.recorrencia_id
            WHERE l.escopo='PF' AND l.excluido_em IS NULL AND l.pago_em IS NOT NULL AND substr(l.data,1,7) BETWEEN ? AND ?
-           GROUP BY substr(l.data,1,7), l.tipo, l.categoria, l.descricao, r.fixo""", (meses[0], meses[-1])):
+                 AND NOT (l.tipo='entrada' AND l.categoria=?)   -- empréstimo recebido não é renda
+           GROUP BY substr(l.data,1,7), l.tipo, l.categoria, l.descricao, r.fixo""", (meses[0], meses[-1], financeiro.EMPRESTIMO)):
         d = out.get(mes)
         if d is None:
             continue

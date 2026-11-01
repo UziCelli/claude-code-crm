@@ -213,6 +213,13 @@ def test_pf_renda_por_pessoa_sobra_e_familia(con_temp):
     assert renda["dados"]["por_pessoa"] == 3000 and renda["cor"] == "vermelho"      # 3 pessoas: 3.000 ÷ 1.518 = 1,98 SM
 
 
+def test_pf_emprestimo_recebido_nao_e_renda(con_temp):
+    montar(con_temp)
+    antes = um(marcadores_de(con_temp)[1], "renda_pessoa")["dados"]["por_pessoa"]
+    lancar(con_temp, "entrada", 30000, "2026-11-05", escopo="PF", categoria=financeiro.EMPRESTIMO, descricao="Empréstimo do banco")
+    assert um(marcadores_de(con_temp)[1], "renda_pessoa")["dados"]["por_pessoa"] == antes
+
+
 def test_pf_dividas_proximos_30_dias(con_temp):
     montar(con_temp)
     assert um(marcadores_de(con_temp)[1], "dividas")["cor"] == "verde"               # sem parcelas
