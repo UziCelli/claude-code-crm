@@ -605,6 +605,26 @@ ol.passos li { margin: 4px 0; }
 .selo-nota { font-size: 13px; }
 #o-que-fazer details > summary { cursor: pointer; font-weight: 600; color: var(--aco); }
 
+/* menu WhatsApp da ficha */
+.menu-wa { position: relative; }
+.menu-wa > summary { list-style: none; cursor: pointer; }
+.menu-wa > summary::-webkit-details-marker { display: none; }
+.menu-wa[open] > summary { background: var(--neutro-f); }
+.menu-wa-lista { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; width: 260px; max-width: calc(100vw - 32px); display: grid; gap: 2px;
+  padding: 6px; background: #fff; border: 1px solid var(--borda); border-radius: 12px; box-shadow: 0 8px 24px rgba(15, 30, 60, .18); }
+.menu-wa-lista form { margin: 0; display: block; }
+.menu-wa-item { display: flex; flex-direction: column; justify-content: center; gap: 1px; width: 100%; min-height: 44px; padding: 8px 12px; border-radius: 8px;
+  background: transparent; color: var(--marinho); text-align: left; font-weight: 600; text-decoration: none; box-sizing: border-box; }
+.menu-wa-item:hover { background: var(--azul-f); color: var(--aco); text-decoration: none; }
+.menu-wa-item small { font-weight: 400; color: var(--cinza); font-size: 12px; }
+.menu-wa-item.destaque { background: var(--vermelho-f); color: #8f1d17; }
+.menu-wa-item.feito { opacity: .75; }
+.menu-wa-item.verde-claro { color: #17824a; border-top: 1px solid var(--borda); border-radius: 0 0 8px 8px; }
+@media (max-width: 760px) {
+  .menu-wa[open] { flex-basis: 100%; }   /* aberto, o menu ocupa a linha e empurra o resto: nada passa da tela */
+  .menu-wa-lista { position: static; width: auto; max-width: none; margin-top: 6px; box-shadow: none; }
+}
+
 /* upsell */
 .oferta-item { padding: 10px 0; border-top: 1px solid var(--borda); margin-top: 10px; min-width: 0; overflow-wrap: anywhere; }
 .oferta-item:first-of-type { margin-top: 6px; }

@@ -15,9 +15,17 @@ BACKUP_DIR = ROOT / "data" / "backups"   # local e fora do git (data/ é ignorad
 PLANILHA = Path(r"C:\Users\victo\OneDrive\Documentos\Contabilidade.xlsx")
 MANTER_BACKUPS = 30
 
+# textos padrão antigos dos modelos de WhatsApp: o banco só troca para o novo se o texto salvo ainda é exatamente o antigo (senão o usuário editou)
+RENOVACAO_ANTIGA = "Oi, {nome}! Sua renovação está marcada para {data}. Vamos combinar a continuação dos treinos? Victor | VFITCOACH"
+RENOVACAO_NOVA = ("Oi, {nome}! Sua renovação é em {data}: {valor}. PIX: {pix}. Pode me mandar o comprovante? Victor | VFITCOACH")
+INDICACAO_ANTIGA = ("Oi, {nome}! Tá curtindo os treinos? Se você conhece alguém que quer começar, me indica! "
+                                        "Quando a pessoa fechar, você ganha um presente meu 🎁 Victor | VFITCOACH")
+INDICACAO_NOVA = ("Oi, {nome}! Tá curtindo os treinos? Se você conhece alguém que quer começar, me indica! "
+                  "Quando a pessoa fechar, você ganha {vantagem} 🎁 Victor | VFITCOACH")
+
 # (grupo, chave, valor, valor_texto, ordem) — semeado só se ainda não existir (INSERT OR IGNORE)
 PARAMETROS_INICIAIS = [
-    ("msg_whatsapp", "renovacao", None, "Oi, {nome}! Sua renovação está marcada para {data}. Vamos combinar a continuação dos treinos? Victor | VFITCOACH", 1),
+    ("msg_whatsapp", "renovacao", None, RENOVACAO_NOVA, 1),
     ("msg_whatsapp", "falta", None, "Oi, {nome}! Senti sua falta nos treinos (última aula em {data}). Está tudo bem? Vamos remarcar? Victor | VFITCOACH", 2),
     ("msg_whatsapp", "boas_vindas", None, "Oi, {nome}! Seja bem-vindo(a) à VFITCOACH! Fico feliz em começar essa jornada com você. Victor | VFITCOACH", 3),
     ("msg_whatsapp", "reativacao", None, "Oi, {nome}! Faz tempo que não nos falamos. Que tal retomarmos os treinos? Tenho novidades para você. Victor | VFITCOACH", 4),
@@ -25,13 +33,18 @@ PARAMETROS_INICIAIS = [
                                        "{valor} + multa de {multa} + juros de {juros} = {total}. Pode me mandar o comprovante quando pagar? "
                                        "Obrigado! Victor | VFITCOACH", 5),
     # campanhas que o CRM sugere (Saúde financeira): agregam valor ao trabalho, nunca dão desconto
-    ("msg_whatsapp", "indicacao", None, "Oi, {nome}! Tá curtindo os treinos? Se você conhece alguém que quer começar, me indica! "
-                                        "Quando a pessoa fechar, você ganha um presente meu 🎁 Victor | VFITCOACH", 6),
+    ("msg_whatsapp", "indicacao", None, INDICACAO_NOVA, 6),
     ("msg_whatsapp", "dupla", None, "Oi, {nome}! Que tal treinar com um amigo ou amiga? Em dupla o treino rende mais, é mais animado e "
                                     "vocês se cobram um ao outro. Quer trazer alguém? Victor | VFITCOACH", 7),
+    ("msg_whatsapp", "depoimento", None, "Oi, {nome}! Seu treino comigo tem feito diferença? Você toparia me mandar um depoimento curto (texto ou vídeo)? "
+                                         "{link_avaliacao} Obrigado! 🙏 Victor | VFITCOACH", 8),
+    # dados que entram nas mensagens ({pix}, {link_avaliacao}, {vantagem}); a chave PIX começa vazia, o CRM avisa para cadastrar
+    ("msg_dados", "pix", None, "", 1),
+    ("msg_dados", "link_avaliacao", None, "", 2),
+    ("msg_dados", "vantagem", None, "uma avaliação física grátis", 3),
     # oferta de upsell (Campanhas): {duracao}, {depois} e {ate} já vêm escritos ou vazios; nada fica pendurado
     ("msg_whatsapp", "upsell", None, "Oi, {nome}! Tenho uma proposta: {titulo}. Inclui: {inclui}. De {valor_normal} por {valor_oferta}/mês{duracao}{depois}.{ate} "
-                                     "Quer aproveitar? Victor | VFITCOACH", 8),
+                                     "Quer aproveitar? Victor | VFITCOACH", 9),
     # cobrança de mensalidade atrasada (botão "Cobrar" no alerta): multa uma vez + juros ao mês proporcional aos dias
     ("cobranca", "multa", 0.02, None, 1),
     ("cobranca", "juros_ao_mes", 0.01, None, 2),
@@ -173,6 +186,8 @@ def iniciar_banco(caminho: Path = None) -> None:
             "INSERT OR IGNORE INTO parametros (grupo, chave, valor, valor_texto, ordem) VALUES (?,?,?,?,?)",
             PARAMETROS_INICIAIS,
         )
+        for chave, antigo, novo in (("renovacao", RENOVACAO_ANTIGA, RENOVACAO_NOVA), ("indicacao", INDICACAO_ANTIGA, INDICACAO_NOVA)):
+            con.execute("UPDATE parametros SET valor_texto=? WHERE grupo='msg_whatsapp' AND chave=? AND valor_texto=?", (novo, chave, antigo))
         for grupo, itens in LISTAS_INICIAIS.items():
             con.executemany(
                 "INSERT OR IGNORE INTO parametros (grupo, chave, valor_texto, ordem) VALUES (?,?,?,?)",

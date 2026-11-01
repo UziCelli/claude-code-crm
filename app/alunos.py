@@ -51,6 +51,21 @@ def sugerir_credito(valor, feitas, esperadas) -> float:
     return round(min(max(valor * (1 - feitas / esperadas), 0.0), valor), 2)
 
 
+def frase_valor(valor, creditos=None) -> str:
+    """O {valor} da mensagem de renovação, o mesmo na ficha, nos alertas e nas listas.
+    Sem crédito: 'R$ 400,00'. Com crédito: 'R$ 280,00 (R$ 400,00 − R$ 120,00 de crédito das aulas não usadas em 10/2026)'.
+    creditos = financeiro.creditos(con, cid)[cid] (ainda não descontados); só entra o que cabe no próximo pagamento."""
+    moeda = _main().moeda
+    valor = float(valor or 0)
+    if valor <= 0:
+        return ""
+    total, ids = financeiro.credito_aplicavel(creditos or [], valor)
+    if not total:
+        return moeda(valor)
+    meses = [_mm_aaaa(x["mes"] + "-01") for x in creditos if x["id"] in ids]
+    return f"{moeda(max(valor - total, 0))} ({moeda(valor)} − {moeda(total)} de crédito das aulas não usadas em {' e '.join(meses)})"
+
+
 # ---------- botões ----------
 def acao_pagamento(c, efetiva, valor, credito=0) -> dict:
     """Botão "Registrar pagamento": abre o diálogo único (dlg-pgto) com o valor (mensalidade − crédito) e o mês da renovação já preenchidos."""
@@ -216,6 +231,7 @@ def estado(con, hoje=None, ids=None) -> dict[int, dict]:
              "pausado_no_mes": any(i <= h and f >= h[:7] + "-01" for i, f in pausas.get(cid, [])),
              "situacao": sit, "rotulo": ROTULO[sit], "cor": COR[sit], "grav": GRAV[COR[sit]], "modelo": None, "botao": None, "extra": None,
              "data_modelo": None, "cobranca": None, "ordem": c["nome"]}
+        e["frase_valor"] = frase_valor(valor, livres.get(cid))
         _texto_e_acoes(e, c, sit, efetiva, ciclo, ult, faltas, par_cob, h, tem and cid not in com_horario)
         out[cid] = e
     return out
@@ -258,7 +274,7 @@ def _texto_e_acoes(e, c, sit, efetiva, ciclo, ult, faltas, par_cob, h, converter
     if sit == "cobrar":
         cob = financeiro.cobranca(valor, efetiva, h, par_cob)
         e["texto"] = f"renovação venceu em {_data_br(efetiva)}"
-        e["modelo"], e["data_modelo"], e["extra"] = ("cobranca" if cob else "renovacao"), _data_br(efetiva), (m.texto_cobranca(cob) if cob else None)
+        e["modelo"], e["data_modelo"], e["extra"] = ("cobranca" if cob else "renovacao"), _data_br(efetiva), (m.texto_cobranca(cob) if cob else {"valor": e["frase_valor"]})
         e["botao"] = f"Cobrar {m.moeda(cob['total'])}" if cob else None
         e["cobranca"] = cob
         e["acoes"] = [pagar, wa, {"rotulo": "Pular mês", "href": f"/clientes/{cid}#renovacao"}] if pagar else [pulou, wa]
@@ -270,7 +286,7 @@ def _texto_e_acoes(e, c, sit, efetiva, ciclo, ult, faltas, par_cob, h, converter
         e["acoes"] = [x for x in (pulou, pagar) if x] + extras
     elif sit == "vence_logo":
         e["texto"] = f"renovação em {_data_br(efetiva)}"
-        e["modelo"], e["data_modelo"] = "renovacao", _data_br(efetiva)
+        e["modelo"], e["data_modelo"], e["extra"] = "renovacao", _data_br(efetiva), {"valor": e["frase_valor"]}
         e["acoes"] = [x for x in (pagar or pulou, wa) if x]
     elif sit == "sem_aula_recente":
         e["texto"] = f"sem aula desde {_data_br(ult)}" if ult else "nenhuma aula registrada"

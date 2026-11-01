@@ -13,15 +13,26 @@
     {% for s in ['ativo','pausado','inativo'] if s != c.status %}
     <form method="post" action="/clientes/{{ c.id }}/status" class="inline"><input type="hidden" name="status" value="{{ s }}"><button class="claro pequeno">Marcar {{ s }}</button></form>
     {% endfor %}
-    {% if cobranca %}
-    <a class="btn claro pequeno" href="{{ wa(c.telefone, modelos['cobranca']|preencher(c.nome, renova|data, texto_cob)) }}" target="_blank" rel="noopener">WhatsApp: Cobrar {{ cobranca.total|moeda }}</a>
-    {% endif %}
-    {% for k, t in [('renovacao','Renovação'),('falta','Falta'),('boas_vindas','Boas-vindas'),('reativacao','Reativação')] %}
-    {% set d = (eventos|selectattr('tipo','equalto','aula')|map(attribute='data')|first) if k == 'falta' else renova %}
-    {% if '{data}' not in modelos[k] or d %}
-    <a class="btn claro pequeno" href="{{ wa(c.telefone, modelos[k]|preencher(c.nome, d|data)) }}" target="_blank" rel="noopener">WhatsApp: {{ t }}</a>
-    {% endif %}
-    {% endfor %}
+    <details class="menu-wa">
+      <summary class="btn claro pequeno">WhatsApp ▾</summary>
+      <div class="menu-wa-lista">
+        {% if not c.telefone %}
+        <a class="menu-wa-item" href="#telefone">Cadastre o telefone</a>
+        {% else %}
+        {% for it in menu_wa.itens %}
+        <form method="post" action="/clientes/{{ c.id }}/wa/{{ it.modelo }}" target="_blank" class="inline">
+          <button type="submit" class="menu-wa-item{{ ' destaque' if it.destaque }}{{ ' feito' if it.pedido_em }}">
+            <span>{{ it.rotulo }}{% if it.sub %} <small>{{ it.sub }}</small>{% endif %}</span>
+            {% if it.pedido_em %}<small>pedido em {{ it.pedido_em[8:10] }}/{{ it.pedido_em[5:7] }}</small>{% endif %}
+          </button>
+        </form>
+        {% endfor %}
+        {% if menu_wa.depoimento_aberto %}
+        <form method="post" action="/clientes/{{ c.id }}/depoimento" class="inline"><button type="submit" class="menu-wa-item verde-claro">Recebi o depoimento</button></form>
+        {% endif %}
+        {% endif %}
+      </div>
+    </details>
     <a class="btn claro pequeno" href="/simulador?cliente_id={{ c.id }}&local={{ c.local or 'CIA' }}">Nova proposta</a>
     <form method="post" action="/clientes/{{ c.id }}/excluir" class="inline" data-confirmar="Enviar {{ c.nome }} para a lixeira?"><button class="perigo pequeno">Excluir</button></form>
   </div>
@@ -105,7 +116,7 @@
     <h2>Cadastro</h2>
     <form method="post" action="{{ '/clientes/' ~ c.id if c else '/clientes' }}" class="form-grid">
       <div class="largo"><label>Nome</label><input name="nome" required value="{{ c.nome if c else '' }}"></div>
-      <div><label>Telefone / WhatsApp</label><input name="telefone" value="{{ c.telefone or '' if c else '' }}"></div>
+      <div><label>Telefone / WhatsApp</label><input id="telefone" name="telefone" value="{{ c.telefone or '' if c else '' }}"></div>
       <div><label>Local</label><select name="local"><option value="">—</option>{% for l in listas.lista_locais %}<option {{ 'selected' if c and c.local == l }}>{{ l }}</option>{% endfor %}</select></div>
       <div><label>Tipo de serviço</label><select name="tipo_servico"><option value="">—</option>{% for t in listas.lista_tipos_servico %}<option {{ 'selected' if c and c.tipo_servico == t }}>{{ t }}</option>{% endfor %}</select></div>
       <div><label>Plano (ex.: Pacote 8 aulas, Mensalidade 2x/semana)</label><input name="plano" value="{{ c.plano or '' if c else '' }}" list="planos"><datalist id="planos"><option>Pacote 4 aulas</option><option>Pacote 8 aulas</option><option>Pacote 12 aulas</option><option>Pacote 16 aulas</option><option>Pacote 20 aulas</option><option>Mensalidade 1x/semana</option><option>Mensalidade 2x/semana</option><option>Mensalidade 3x/semana</option><option>Mensalidade 4x/semana</option><option>Mensalidade 5x/semana</option><option>Consultoria Online</option><option>Consultoria Híbrida</option><option>Avaliação Física</option></datalist></div>
@@ -154,7 +165,7 @@
       <h2>Histórico</h2>
       {% for e in eventos %}
       <div class="linha" style="justify-content:space-between;border-bottom:1px solid var(--borda);padding:6px 0">
-        <span><span class="tag {{ {'aula':'azul','falta':'vermelho','desmarcou':'amarelo','cancelada':'neutro','pagamento':'verde','renovacao':'amarelo','pausa':'azul','credito':'verde','brinde':'verde','status':'neutro','anotacao':'neutro','mensagem':'neutro'}[e.tipo] }}">{{ {'aula':'aula dada','falta':'faltou','pausa':'pulou o mês','cancelada':'cancelada (não repõe)','credito':'crédito','brinde':'presente'}.get(e.tipo, e.tipo) }}</span> {{ e.descricao or '' }}{% if e.tipo == 'credito' and e.usado_em %} <span class="muted">(já descontado em {{ e.usado_em|data }})</span>{% endif %}</span>
+        <span><span class="tag {{ {'aula':'azul','falta':'vermelho','desmarcou':'amarelo','cancelada':'neutro','pagamento':'verde','renovacao':'amarelo','pausa':'azul','credito':'verde','brinde':'verde','mensagem':'neutro','depoimento':'verde','status':'neutro','anotacao':'neutro'}[e.tipo] }}">{{ {'aula':'aula dada','falta':'faltou','pausa':'pulou o mês','cancelada':'cancelada (não repõe)','credito':'crédito','brinde':'presente','mensagem':'mensagem enviada'}.get(e.tipo, e.tipo) }}</span> {{ e.descricao or '' }}{% if e.tipo == 'credito' and e.usado_em %} <span class="muted">(já descontado em {{ e.usado_em|data }})</span>{% endif %}</span>
         <div class="linha" style="gap:8px"><span class="muted">{{ e.data|data }}{% if e.valor %} · {{ e.valor|moeda }}{% endif %}</span>
           <form method="post" action="/agenda/evento/{{ e.id }}/excluir" class="inline" data-confirmar="Excluir este registro do histórico? Dá para restaurar em Dados."><input type="hidden" name="destino" value="ficha"><button class="claro pequeno">excluir</button></form></div>
       </div>

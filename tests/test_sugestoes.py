@@ -338,7 +338,7 @@ def test_nenhuma_sugestao_fala_em_desconto(con_temp):
         texto = json.dumps(x, ensure_ascii=False).lower()
         assert "desconto" not in texto and "abatimento" not in texto and "promoção" not in texto, x["chave"]
     modelos = db.parametros(con_temp, "msg_whatsapp")
-    assert "presente" in modelos["indicacao"] and "{nome}" in modelos["indicacao"] and "amigo" in modelos["dupla"]
+    assert "{vantagem}" in modelos["indicacao"] and "{nome}" in modelos["indicacao"] and "amigo" in modelos["dupla"]
     for chave in ("indicacao", "dupla"):
         assert "desconto" not in modelos[chave].lower()
 

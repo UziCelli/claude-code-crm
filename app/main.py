@@ -15,6 +15,7 @@ from contextlib import asynccontextmanager, closing
 from pathlib import Path
 from urllib.parse import quote
 
+from jinja2 import pass_context
 from fastapi import Depends, FastAPI, Form, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, StreamingResponse
@@ -124,12 +125,23 @@ def wa(tel, texto=""):
     return f"https://wa.me/{n}?text={quote(texto or '', safe='')}"
 
 
+VARIAVEIS_DADOS = ("valor", "pix", "link_avaliacao", "vantagem")   # variáveis que nunca podem sair "{pix}" literal na mensagem enviada
+RE_VARIAVEIS_DADOS = re.compile(r"\{(?:" + "|".join(VARIAVEIS_DADOS) + r")\}")
+
+
 def preencher(texto, nome="", data="", extra=None):
-    """Troca {nome} e {data} na mensagem; na cobrança também {valor}, {dias}, {multa}, {juros} e {total} (extra)."""
+    """Troca {nome} e {data} na mensagem; na cobrança também {valor}, {dias}, {multa}, {juros} e {total} (extra); na renovação {valor}.
+    {valor}, {pix}, {link_avaliacao} e {vantagem} sem valor ficam vazios: a mensagem nunca sai com a chave à mostra."""
     texto = (texto or "").replace("{nome}", nome or "").replace("{data}", data or "")
     for k, v in (extra or {}).items():
         texto = texto.replace("{" + k + "}", str(v))
-    return texto
+    return RE_VARIAVEIS_DADOS.sub("", texto)
+
+
+@pass_context
+def preencher_filtro(ctx, texto, nome="", data="", extra=None):
+    """O filtro |preencher dos templates: junta os dados das mensagens (pix, link, vantagem) em qualquer tela que o use."""
+    return preencher(texto, nome, data, {**(ctx.get("dados_msg") or {}), **(extra or {})})
 
 
 def texto_cobranca(cob) -> dict:
@@ -138,7 +150,13 @@ def texto_cobranca(cob) -> dict:
             "total": moeda(cob["total"])}
 
 
-templates.env.filters["preencher"] = preencher
+def dados_mensagem(con) -> dict:
+    """{pix, link_avaliacao, vantagem} de Configurações > Dados das mensagens (vazio se não cadastrado)."""
+    d = db.parametros(con, "msg_dados")
+    return {k: str(d.get(k) or "").strip() for k in ("pix", "link_avaliacao", "vantagem")}
+
+
+templates.env.filters["preencher"] = preencher_filtro
 templates.env.filters["markdown"] = assistente.markdown_simples   # respostas do assistente (escapa todo o resto)
 def versao(arquivo):
     """Etiqueta ?v= nos arquivos de /static: muda a cada atualização, então o navegador (celular) não usa o visual antigo do cache."""
@@ -164,7 +182,7 @@ def get_db():
 def render(request, nome, con, **ctx):
     ctx.update(request=request, msg=request.query_params.get("msg"), erro=request.query_params.get("erro"),
                listas={k: db.lista(con, k) for k in db.LISTAS_INICIAIS}, alertas=alertas(con),
-               modelos=db.parametros(con, "msg_whatsapp"))
+               modelos=db.parametros(con, "msg_whatsapp"), dados_msg=dados_mensagem(con))
     return templates.TemplateResponse(request, nome, ctx)
 
 
@@ -313,6 +331,9 @@ def alertas(con):
             continue
         add(e["cor"], alu.frase(e), f"/clientes/{e['id']}", e["tel"], e["modelo"], e["nome"], e["data_modelo"], extra=e["extra"],
             botao=e["botao"], acoes=e["acoes"])
+    if estados and not dados_mensagem(con)["pix"]:   # há aluno ativo e a mensagem de renovação não tem para onde mandar o dinheiro
+        add("azul", "Cadastre a chave PIX para a mensagem de renovação", "/configuracoes#cfg-msg_dados",
+            acoes=[{"rotulo": "Cadastrar PIX", "href": "/configuracoes#cfg-msg_dados"}])
     n = aulas_sem_marcar(con, hoje)
     if n:
         add("azul", f"{n} aula{s(n)} da agenda sem marcar nesta semana", "/agenda")
@@ -615,6 +636,80 @@ async def cliente_criar(request: Request, con=Depends(get_db)):
     return voltar(f"/clientes/{cur.lastrowid}", msg="Cliente cadastrado.")
 
 
+def renovacao_e_cobranca(con, c):
+    """(renovação efetiva, cobrança) do aluno; quem saiu não recebe cobrança de renovação."""
+    renovacao = financeiro.renovacoes(con, c["id"]).get(c["id"])
+    cob = (financeiro.cobranca(c["valor"], renovacao["efetiva"], dt.date.today().isoformat(), db.parametros(con, "cobranca"))
+           if renovacao and c["status"] == "ativo" else None)
+    return renovacao, cob
+
+
+# ---------- menu WhatsApp da ficha: os itens e o texto enviado saem do mesmo cálculo ----------
+WA_ROTULOS = {"cobranca": "Cobrar", "renovacao": "Renovação", "falta": "Falta", "boas_vindas": "Boas-vindas", "reativacao": "Reativação",
+              "indicacao": "Indicação", "dupla": "Treino em dupla", "depoimento": "Pedir depoimento"}
+WA_ORDEM = ("renovacao", "falta", "boas_vindas", "reativacao", "indicacao", "dupla", "depoimento")   # a cobrança, quando há, vem antes de todos
+DEPOIMENTO_DIAS = 90   # depois de pedir, o item fica marcado por tantos dias
+
+
+def wa_rotulo(modelo) -> str:
+    return WA_ROTULOS.get(modelo) or modelo.replace("_", " ").capitalize()
+
+
+def wa_contexto(con, c, renovacao=None, cob=None) -> dict:
+    """O que as mensagens de um aluno precisam: renova (data), cob, a data da última aula, o crédito e a frase do {valor} da renovação."""
+    if renovacao is None:
+        renovacao, cob = renovacao_e_cobranca(con, c)
+    ult = con.execute("SELECT MAX(data) FROM cliente_eventos WHERE cliente_id=? AND tipo='aula' AND excluido_em IS NULL", (c["id"],)).fetchone()[0]
+    livres = financeiro.creditos(con, c["id"]).get(c["id"], [])
+    return {"renova": (renovacao["efetiva"] if renovacao else c["data_renovacao"]) or "", "cob": cob, "ultima_aula": ult,
+            "credito": financeiro.credito_aplicavel(livres, c["valor"])[0], "valor": alu.frase_valor(c["valor"], livres)}
+
+
+def wa_data_modelo(modelo, ctx) -> str:
+    """A data que entra no {data} do modelo: a última aula (falta) ou a renovação."""
+    return ctx["ultima_aula"] if modelo == "falta" else ctx["renova"]
+
+
+def wa_texto(con, c, modelo) -> tuple[str | None, str | None]:
+    """O texto pronto do WhatsApp para o aluno, calculado aqui (nunca vem do navegador). Devolve (texto, erro)."""
+    modelos = db.parametros(con, "msg_whatsapp")
+    if modelo not in modelos:
+        return None, "Mensagem desconhecida."
+    ctx = wa_contexto(con, c)
+    d = wa_data_modelo(modelo, ctx)
+    if "{data}" in modelos[modelo] and not data_iso(d):
+        return None, "Falta a data para essa mensagem: complete o cadastro."
+    extra = dados_mensagem(con)
+    if modelo == "cobranca":
+        if not ctx["cob"]:
+            return None, "Esse aluno não tem cobrança em aberto."
+        extra.update(texto_cobranca(ctx["cob"]))
+    elif modelo == "renovacao":
+        extra["valor"] = ctx["valor"]
+    return preencher(modelos[modelo], c["nome"], data_br(d) if d else "", extra), None
+
+
+def wa_menu(con, c, renovacao, cob, eventos) -> dict:
+    """Menu WhatsApp da ficha: itens na ordem [{modelo, rotulo, sub, destaque, pedido_em}] e se há um pedido de depoimento esperando resposta."""
+    ctx = wa_contexto(con, c, renovacao, cob)
+    modelos = db.parametros(con, "msg_whatsapp")
+    limite = (dt.date.today() - dt.timedelta(days=DEPOIMENTO_DIAS)).isoformat()
+    pedido = next((e["data"] for e in eventos if e["tipo"] == "mensagem" and e["descricao"] == "WhatsApp: " + wa_rotulo("depoimento")
+                   and e["data"] >= limite), None)   # eventos vêm do mais novo para o mais antigo
+    recebido = bool(pedido) and any(e["tipo"] == "depoimento" and e["data"] >= pedido for e in eventos)
+    itens = []
+    for k in (["cobranca"] if cob else []) + [k for k in WA_ORDEM if k in modelos]:
+        if k != "cobranca" and "{data}" in modelos[k] and not data_iso(wa_data_modelo(k, ctx)):
+            continue   # precisa de data e o aluno não tem
+        rotulo, sub = wa_rotulo(k), ""
+        if k == "cobranca":
+            rotulo += " " + moeda(cob["total"])
+        elif k == "renovacao" and ctx["valor"]:
+            sub = moeda(max(float(c["valor"] or 0) - ctx["credito"], 0))
+        itens.append({"modelo": k, "rotulo": rotulo, "sub": sub, "destaque": k == "cobranca", "pedido_em": pedido if k == "depoimento" else None})
+    return {"itens": itens, "depoimento_aberto": bool(pedido) and not recebido}
+
+
 @app.get("/clientes/{cid}", response_class=HTMLResponse)
 def cliente_ficha(request: Request, cid: int, con=Depends(get_db)):
     c = con.execute("SELECT * FROM clientes WHERE id=?", (cid,)).fetchone()
@@ -624,10 +719,7 @@ def cliente_ficha(request: Request, cid: int, con=Depends(get_db)):
     estimativa = estimativa_cliente(con, c, precos.carregar_parametros(con))
     propostas = con.execute("SELECT * FROM propostas WHERE cliente_id=? AND excluido_em IS NULL ORDER BY id DESC", (cid,)).fetchall()
     pagamentos = con.execute("SELECT * FROM lancamentos WHERE cliente_id=? AND excluido_em IS NULL ORDER BY data DESC, id DESC LIMIT 8", (cid,)).fetchall()
-    renovacao = financeiro.renovacoes(con, cid).get(cid)
-    hoje = dt.date.today().isoformat()
-    cob = (financeiro.cobranca(c["valor"], renovacao["efetiva"], hoje, db.parametros(con, "cobranca"))
-           if renovacao and c["status"] == "ativo" else None)   # quem saiu não recebe cobrança de renovação
+    renovacao, cob = renovacao_e_cobranca(con, c)
     pago_ate = None   # mês da última mensalidade paga: o ciclo que fecha na renovação efetiva (só se há pagamento de verdade)
     if renovacao and renovacao["ciclos"] and con.execute(
             """SELECT 1 FROM lancamentos WHERE cliente_id=? AND escopo='PJ' AND tipo='entrada' AND pago_em IS NOT NULL AND excluido_em IS NULL
@@ -636,7 +728,8 @@ def cliente_ficha(request: Request, cid: int, con=Depends(get_db)):
         pago_ate = f"{m[5:7]}/{m[:4]}"
     return render(request, "cliente.html", con, c=c, eventos=eventos, estimativa=estimativa, propostas=propostas, pagamentos=pagamentos,
                   renovacao=renovacao, cobranca=cob, texto_cob=texto_cobranca(cob) if cob else None, pago_ate=pago_ate,
-                  estado=alu.estado_aluno(con, cid), indicadores=indicacoes.alunos_para_escolher(con, cid),
+                  estado=alu.estado_aluno(con, cid), menu_wa=wa_menu(con, c, renovacao, cob, eventos),
+                  indicadores=indicacoes.alunos_para_escolher(con, cid),
                   indicou=indicacoes.do_aluno(con, cid), indicado_por=indicacoes.quem_indicou(con, cid),
                   ofertas_ficha=ofertas.situacao_aluno(con, cid) if c["status"] == "ativo" else [])
 
@@ -669,6 +762,35 @@ def cliente_status(cid: int, status: str = Form(...), con=Depends(get_db)):
         con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, descricao) VALUES (?, 'status', date('now','localtime'), ?)",
                     (cid, f"Status alterado para {status}"))
     return voltar(f"/clientes/{cid}", msg=f"Status: {status}.")
+
+
+@app.post("/clientes/{cid}/wa/{modelo}")
+def cliente_wa(cid: int, modelo: str, con=Depends(get_db)):
+    """Registra no histórico que a mensagem foi enviada e abre o WhatsApp (wa.me) com o texto pronto. O texto é montado aqui."""
+    c = con.execute("SELECT * FROM clientes WHERE id=? AND excluido_em IS NULL", (cid,)).fetchone()
+    if not c:
+        return voltar("/clientes", erro="Cliente não encontrado.")
+    if modelo not in db.parametros(con, "msg_whatsapp"):
+        return PlainTextResponse("Mensagem desconhecida.", status_code=404)
+    if not "".join(ch for ch in str(c["telefone"] or "") if ch.isdigit()):
+        return voltar(f"/clientes/{cid}", erro="Cadastre o telefone para abrir o WhatsApp.")
+    texto, erro = wa_texto(con, c, modelo)
+    if erro:
+        return voltar(f"/clientes/{cid}", erro=erro)
+    with con:
+        con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, descricao) VALUES (?, 'mensagem', ?, ?)",
+                    (cid, dt.date.today().isoformat(), "WhatsApp: " + wa_rotulo(modelo)))
+    return RedirectResponse(wa(c["telefone"], texto), status_code=303)   # sempre https://wa.me/...: o destino não vem do navegador
+
+
+@app.post("/clientes/{cid}/depoimento")
+def cliente_depoimento(cid: int, descricao: str = Form(""), con=Depends(get_db)):
+    if not con.execute("SELECT 1 FROM clientes WHERE id=? AND excluido_em IS NULL", (cid,)).fetchone():
+        return voltar("/clientes", erro="Cliente não encontrado.")
+    with con:
+        con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, descricao) VALUES (?, 'depoimento', ?, ?)",
+                    (cid, dt.date.today().isoformat(), descricao.strip() or "Depoimento recebido"))
+    return voltar(f"/clientes/{cid}", msg="Depoimento registrado. Obrigado!")
 
 
 @app.post("/clientes/{cid}/evento")
@@ -2617,7 +2739,8 @@ def configuracoes(request: Request, con=Depends(get_db)):
     precos_ = con.execute("SELECT * FROM precos_base ORDER BY tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal").fetchall()
     ultima = con.execute("SELECT * FROM importacoes ORDER BY id DESC LIMIT 1").fetchone()
     msgs = con.execute("SELECT id, chave, valor_texto FROM parametros WHERE grupo='msg_whatsapp' ORDER BY ordem").fetchall()
-    return render(request, "configuracoes.html", con, grupos=grupos, msgs=msgs, listas_cfg=listas_, precos=precos_, ultima=ultima,
+    dados = con.execute("SELECT id, chave, valor_texto FROM parametros WHERE grupo='msg_dados' ORDER BY ordem").fetchall()
+    return render(request, "configuracoes.html", con, grupos=grupos, msgs=msgs, msgs_dados=dados, listas_cfg=listas_, precos=precos_, ultima=ultima,
                   planilha=str(db.PLANILHA), planilha_existe=db.PLANILHA.exists(), assistente=assistente.info())
 
 
@@ -2632,7 +2755,7 @@ async def configuracoes_salvar(request: Request, con=Depends(get_db)):
                 val = _num_br(v)
                 con.execute("UPDATE parametros SET valor=? WHERE id=?", (val / 100 if fmt == "pct" else val, pid))
             elif k.startswith("t_"):
-                con.execute("UPDATE parametros SET valor_texto=? WHERE id=? AND grupo='msg_whatsapp'", (v, int(k[2:])))
+                con.execute("UPDATE parametros SET valor_texto=? WHERE id=? AND grupo IN ('msg_whatsapp','msg_dados')", (v.strip(), int(k[2:])))
     return voltar("/configuracoes", msg="Parâmetros salvos.")
 
 
@@ -2699,7 +2822,7 @@ def importar_planilha(con=Depends(get_db)):
 # =====================================================================
 LIXEIRA = [("clientes", "Cliente", "nome"), ("leads", "Lead", "nome"), ("propostas", "Proposta", "tipo_servico"),
            ("cliente_eventos", "Evento de cliente", "(SELECT nome FROM clientes WHERE clientes.id=cliente_eventos.cliente_id) || ' — ' || "
-            "CASE tipo WHEN 'aula' THEN 'aula feita' WHEN 'falta' THEN 'faltou' WHEN 'cancelada' THEN 'cancelada (não repõe)' WHEN 'credito' THEN 'crédito' WHEN 'brinde' THEN 'presente' ELSE tipo END || ' ' || data || "
+            "CASE tipo WHEN 'aula' THEN 'aula feita' WHEN 'falta' THEN 'faltou' WHEN 'cancelada' THEN 'cancelada (não repõe)' WHEN 'credito' THEN 'crédito' WHEN 'brinde' THEN 'presente' WHEN 'mensagem' THEN 'mensagem enviada' ELSE tipo END || ' ' || data || "
             "COALESCE(' — ' || descricao, '')"), ("lista_espera", "Lista de espera", "nome"),
            ("gastos_marketing", "Gasto de marketing", "canal"), ("campanha_itens", "Item de campanha", "texto"),
            ("campanha_checkpoints", "Checkpoint", "pergunta"), ("rotina_tarefas", "Tarefa da rotina", "texto"),
