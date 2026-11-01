@@ -76,8 +76,9 @@ def test_financeiro_lancamento_baixa_e_recorrencia(cliente_http):
     http, _ = cliente_http
     hoje = dt.date.today()
     base = {"escopo": "PJ", "volta": f"mes={hoje:%Y-%m}&escopo=todos"}
-    # lançamento pendente (ontem) -> dar baixa -> pago
-    http.post("/financeiro/lancamento", data={**base, "tipo": "saida", "data": (hoje - dt.timedelta(days=1)).isoformat(),
+    # lançamento pendente (ontem; no dia 1, hoje, para não cair no mês anterior) -> dar baixa -> pago
+    ontem = hoje - dt.timedelta(days=1) if hoje.day > 1 else hoje
+    http.post("/financeiro/lancamento", data={**base, "tipo": "saida", "data": ontem.isoformat(),
                                               "valor": "1.234,50", "categoria": "Outros", "descricao": "Conta de teste"}, follow_redirects=False)
     con = db.conectar()
     lid, valor, pago = con.execute("SELECT id, valor, pago_em FROM lancamentos").fetchone()
