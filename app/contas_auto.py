@@ -7,6 +7,7 @@ import datetime as dt
 import re
 import sqlite3
 import traceback
+import unicodedata
 
 from . import db, financeiro, precos
 from .financeiro import moeda_br, somar_meses, vencimento_util
@@ -14,7 +15,14 @@ from .financeiro import moeda_br, somar_meses, vencimento_util
 DIA_CIA = 5   # padrão do parâmetro contas_auto.dia_cia
 CATEGORIA_CIA = "Aluguel"   # o espaço onde ele dá aula: cai na mesma nota de impacto do aluguel
 CATEGORIA_DAS = "Impostos/Taxas"
-RE_CIA = re.compile(r"\bcia\b", re.IGNORECASE)
+# 'CIA', '111' (o nome do espaço) ou 'crédito(s) de/da/das/do/dos aula(s)', já sem acento e em minúsculas
+RE_CIA = re.compile(r"\bcia\b|\b111\b|\bcreditos?\s+(?:d[aeo]s?\s+)?aulas?\b")
+
+
+def eh_cia(texto: str | None) -> bool:
+    """O texto (descrição, contraparte) é a conta da CIA: 'CIA', '111' ou 'Crédito(s) de aula(s)', sem acento nem maiúsculas."""
+    sem_acento = unicodedata.normalize("NFKD", texto or "").encode("ascii", "ignore").decode().lower()
+    return bool(RE_CIA.search(sem_acento))
 
 
 def eh_local_cia(local: str | None) -> bool:
@@ -104,46 +112,84 @@ def _ja_lancada_a_mao(con: sqlite3.Connection, tipo: str, mes_venc: str) -> bool
                             AND excluido_em IS NULL AND auto IS NULL AND substr(data,1,7)=?""", (mes_venc,)):
         if tipo == "das" and financeiro.eh_das(r["descricao"], r["categoria"]):
             return True
-        if tipo == "cia" and RE_CIA.search(f"{r['descricao'] or ''} {r['contraparte'] or ''}"):
+        if tipo == "cia" and eh_cia(f"{r['descricao'] or ''} {r['contraparte'] or ''}"):
             return True
     return False
 
 
 def _recorrencia(con: sqlite3.Connection, tipo: str, mes_venc: str):
-    """Recorrência PJ ativa nesse mês que é a mesma conta (DAS: eh_das; CIA: 'CIA' na descrição)."""
+    """Recorrência PJ ativa nesse mês (fixa ou variável) que é a mesma conta (DAS: eh_das; CIA: eh_cia na descrição).
+    Excluída ou já encerrada não conta: sem recorrência, o app lança a conta sem vínculo e não há item virtual a duplicar."""
     for r in con.execute("""SELECT * FROM recorrencias WHERE excluido_em IS NULL AND escopo='PJ' AND inicio <= ?
                             AND (fim IS NULL OR fim >= ?) ORDER BY id""", (mes_venc, mes_venc)):
-        if (financeiro.eh_das(r["descricao"], r["categoria"]) if tipo == "das" else RE_CIA.search(r["descricao"] or "")):
+        if (financeiro.eh_das(r["descricao"], r["categoria"]) if tipo == "das" else eh_cia(r["descricao"])):
             return r
     return None
 
 
+def _vaga_ligavel(con: sqlite3.Connection, rec, comp: str) -> bool:
+    """Solta a vaga (recorrência, competência) se estiver livre ou só com linha na lixeira (como liberar_vaga) e devolve True.
+    False se um lançamento ativo, pago ou em aberto, já ocupa o mês: a conta já existe. Quem chama já está em `with con`."""
+    try:
+        financeiro.liberar_vaga(con, rec["id"], comp, None)
+    except ValueError:
+        return False
+    return True
+
+
+def _ligar(con: sqlite3.Connection, tipo: str, lid: int, chave: str, data: str) -> bool:
+    """Liga a automática já existente (sem recorrencia_id) à recorrência que é a mesma conta, se a vaga do mês da data
+    estiver livre ou só com linha na lixeira. Sem recorrência que case, ou com o mês já baixado à mão, não mexe. True se ligou."""
+    rec = _recorrencia(con, tipo, data[:7])
+    if rec is None:
+        return False
+    try:
+        with con:   # `auto = ?` no WHERE: editou à mão entre a leitura e aqui? Então não mexe
+            if not _vaga_ligavel(con, rec, data[:7]):
+                return False
+            cur = con.execute("""UPDATE lancamentos SET recorrencia_id=?, competencia=?, conta=COALESCE(conta, ?)
+                                 WHERE id=? AND auto=? AND recorrencia_id IS NULL AND excluido_em IS NULL""",
+                              (rec["id"], data[:7], rec["conta"], lid, chave))
+    except sqlite3.IntegrityError:   # outro PC ocupou a vaga no meio do caminho
+        return False
+    return cur.rowcount > 0
+
+
 def _garantir(con: sqlite3.Connection, tipo: str, comp: str) -> bool:
-    """Cria (ou recalcula, se ainda em aberto) a conta automática da competência. True se mexeu no banco."""
+    """Cria (ou recalcula, se ainda em aberto) a conta automática da competência e a mantém ligada à recorrência da mesma conta,
+    para ela ser a conta do mês e a recorrência não mostrar um item a mais. True se mexeu no banco."""
     conta = _conta(con, tipo, comp)
     chave = f"{tipo}:{comp}"
-    atual = con.execute("SELECT id, valor, data, descricao, observacao, pago_em, excluido_em FROM lancamentos WHERE auto=?", (chave,)).fetchone()
-    if atual:   # excluído não volta; pago não mexe; sem valor não há o que recalcular
-        if atual["pago_em"] or atual["excluido_em"] or conta["valor"] <= 0:
+    atual = con.execute("""SELECT id, valor, data, descricao, observacao, pago_em, excluido_em, recorrencia_id
+                           FROM lancamentos WHERE auto=?""", (chave,)).fetchone()
+    if atual:   # excluído não volta; pago não é recalculado; sem valor não há o que recalcular
+        if atual["excluido_em"]:
             return False
-        if (round(atual["valor"], 2), atual["data"], atual["descricao"], atual["observacao"]) == \
+        mexeu, data = False, atual["data"]
+        if not atual["pago_em"] and conta["valor"] > 0 and \
+                (round(atual["valor"], 2), atual["data"], atual["descricao"], atual["observacao"]) != \
                 (conta["valor"], conta["data"], conta["descricao"], conta["observacao"]):
-            return False
-        with con:   # `auto = ?` no WHERE: editou à mão (a rota zera `auto`) entre a leitura e aqui? Então não mexe
-            con.execute("""UPDATE lancamentos SET valor=?, data=?, descricao=?, observacao=? WHERE id=? AND auto=?
-                           AND pago_em IS NULL AND excluido_em IS NULL""",
-                        (conta["valor"], conta["data"], conta["descricao"], conta["observacao"], atual["id"], chave))
-        return True
+            with con:   # `auto = ?` no WHERE: editou à mão (a rota zera `auto`) entre a leitura e aqui? Então não mexe
+                cur = con.execute("""UPDATE lancamentos SET valor=?, data=?, descricao=?, observacao=? WHERE id=? AND auto=?
+                                     AND pago_em IS NULL AND excluido_em IS NULL""",
+                                  (conta["valor"], conta["data"], conta["descricao"], conta["observacao"], atual["id"], chave))
+            mexeu, data = cur.rowcount > 0, conta["data"]
+        if atual["recorrencia_id"] is None and _ligar(con, tipo, atual["id"], chave, data):   # criada antes, sem vínculo
+            mexeu = True
+        return mexeu
     if conta["valor"] <= 0 or _ja_lancada_a_mao(con, tipo, conta["data"][:7]):
         return False
     rec = _recorrencia(con, tipo, conta["data"][:7])
-    if rec and con.execute("SELECT 1 FROM lancamentos WHERE recorrencia_id=? AND competencia=?", (rec["id"], conta["data"][:7])).fetchone():
-        return False   # o mês dessa recorrência já tem baixa (ou baixa na lixeira, que ainda ocupa a vaga)
-    with con:
-        cur = con.execute("""INSERT OR IGNORE INTO lancamentos (escopo, tipo, data, valor, categoria, descricao, observacao, conta,
-                             recorrencia_id, competencia, auto) VALUES ('PJ','saida',?,?,?,?,?,?,?,?,?)""",
-                          (conta["data"], conta["valor"], conta["categoria"], conta["descricao"], conta["observacao"],
-                           rec["conta"] if rec else None, rec["id"] if rec else None, conta["data"][:7] if rec else None, chave))
+    try:
+        with con:
+            if rec and not _vaga_ligavel(con, rec, conta["data"][:7]):
+                return False   # o mês dessa recorrência já tem baixa ativa (a da lixeira é solta da vaga)
+            cur = con.execute("""INSERT OR IGNORE INTO lancamentos (escopo, tipo, data, valor, categoria, descricao, observacao, conta,
+                                 recorrencia_id, competencia, auto) VALUES ('PJ','saida',?,?,?,?,?,?,?,?,?)""",
+                              (conta["data"], conta["valor"], conta["categoria"], conta["descricao"], conta["observacao"],
+                               rec["conta"] if rec else None, rec["id"] if rec else None, conta["data"][:7] if rec else None, chave))
+    except sqlite3.IntegrityError:   # outro PC ocupou a vaga no meio do caminho
+        return False
     return cur.rowcount > 0
 
 
