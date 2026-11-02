@@ -240,3 +240,22 @@ def test_assistente_grava_meses_ao_criar_e_editar(con_temp):
     assert meses_de(con_temp, r["id"]) == 3
     with pytest.raises(assistente.ErroFerramenta):
         assistente._editar_lancamento(con_temp, {"id": r["id"], "meses": 25})
+
+
+def test_pagou_dias_antes_do_vencimento_cobre_a_partir_do_mes_seguinte(con_temp):
+    """Pagou 30/10, vencimento dia 5, 3 meses: paga novembro, dezembro e janeiro (igual à renovação). Fevereiro em aberto."""
+    cid = aluno(con_temp, renova="2026-11-05")
+    pagar(con_temp, cid, 1200, data="2026-10-30", meses=3)
+    assert financeiro.renovacoes(con_temp, cid)[cid]["efetiva"] == "2027-02-05"
+    for mes in ("2026-11", "2026-12", "2027-01"):
+        i = mes_do_aluno(con_temp, cid, mes)
+        assert (i["situacao"], i["pago_em_mes"], i["coberto_ate"]) == ("pago adiantado", "2026-11", "2027-01"), mes
+    assert mes_do_aluno(con_temp, cid, "2027-02")["situacao"] == "em aberto"
+
+
+def test_pagou_longe_do_vencimento_seguinte_cobre_o_proprio_mes(con_temp):
+    """Pagou 20/10 com vencimento dia 5 (atrasado para outubro): cobre outubro, novembro e dezembro."""
+    cid = aluno(con_temp, renova="2026-10-05")
+    pagar(con_temp, cid, 1200, data="2026-10-20", meses=3)
+    assert mes_do_aluno(con_temp, cid, "2026-12")["situacao"] == "pago adiantado"
+    assert mes_do_aluno(con_temp, cid, "2027-01")["situacao"] == "em aberto"

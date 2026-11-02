@@ -802,10 +802,26 @@ def resumo_mes(con: sqlite3.Connection, mes: str, escopo: str = "PJ") -> dict:
     }
 
 
+def _mes_que_paga(data: str, dia: int | None) -> str:
+    """Mês que um pagamento começa a cobrir: o do pagamento, ou o seguinte se ele foi feito até 7 dias antes do vencimento do mês seguinte
+    (mesma regra da renovação: pagou 28/10 com vencimento dia 5 = paga novembro). Sem dia de renovação, o mês do pagamento."""
+    mes = data[:7]
+    if not dia or not ISO_DATA.fullmatch(data):
+        return mes
+    seguinte = somar_meses(mes, 1)
+    return seguinte if data >= _dias_antes(vencimento(dia, seguinte), ANTECEDENCIA) else mes
+
+
 def _cobertura_adiantada(con: sqlite3.Connection, mes: str) -> dict[int, dict]:
-    """{cliente_id: {de, ate}}: alunos cujo pagamento de um mês anterior (cobre 2+ meses) vai até `mes` ou além. de = mês do pagamento, ate = último mês coberto.
+    """{cliente_id: {de, ate}}: alunos cujo pagamento de um mês anterior (cobre 2+ meses) vai até `mes` ou além.
+    de = primeiro mês que ele paga (_mes_que_paga), ate = último mês coberto.
     Se mais de um cobre, vale o que vai mais longe. Só olha os 2 últimos anos."""
-    valores = {r[0]: r[1] for r in con.execute("SELECT id, COALESCE(valor, 0) FROM clientes WHERE excluido_em IS NULL AND status='ativo'")}
+    valores, dias = {}, {}
+    for r in con.execute("SELECT id, COALESCE(valor, 0), data_renovacao FROM clientes WHERE excluido_em IS NULL AND status='ativo'"):
+        valores[r[0]] = r[1]
+        d = str(r[2] or "").strip()[:10]
+        if ISO_DATA.fullmatch(d):
+            dias[r[0]] = int(d[8:10])
     out = {}
     for r in con.execute("""SELECT cliente_id, data, valor, meses FROM lancamentos WHERE escopo='PJ' AND tipo='entrada' AND pago_em IS NOT NULL
                             AND excluido_em IS NULL AND cliente_id IS NOT NULL AND substr(data,1,7) < ? AND substr(data,1,7) >= ?
@@ -813,7 +829,7 @@ def _cobertura_adiantada(con: sqlite3.Connection, mes: str) -> dict[int, dict]:
         if r["cliente_id"] not in valores:
             continue
         n = meses_do_pagamento(r["valor"], valores[r["cliente_id"]], r["meses"])
-        de = str(r["data"])[:7]
+        de = _mes_que_paga(str(r["data"])[:10], dias.get(r["cliente_id"]))
         ate = somar_meses(de, n - 1) if n >= 2 else None
         if ate and ate >= mes and ate >= out.get(r["cliente_id"], {"ate": ""})["ate"]:
             out[r["cliente_id"]] = {"de": de, "ate": ate}
@@ -828,7 +844,7 @@ def mensalidades(con: sqlite3.Connection, mes: str) -> list[dict]:
     Mês pulado (evento 'pausa' da ficha, sem cobrança): previsto 0 e situação 'pulou o mês'.
     Crédito do aluno (mês pago e não usado) desconta do previsto: o ainda disponível e o já descontado em pagamento deste mês.
     Pagou adiantado (parcelou no cartão, vários meses de uma vez): um pagamento de N meses (lancamentos.meses, ou as mensalidades inteiras do valor
-    quando são 2 ou mais) feito no mês M cobre M .. M+N−1. Mês coberto sem pagamento próprio é 'pago adiantado': quitado, falta 0, e traz
+    quando são 2 ou mais) feito no mês M cobre M .. M+N−1 (ou M+1 .. M+N, se foi feito até 7 dias antes do vencimento de M+1). Mês coberto sem pagamento próprio é 'pago adiantado': quitado, falta 0, e traz
     coberto_ate (último mês coberto) e pago_em_mes (mês do pagamento)."""
     abertos = {}
     for r in con.execute("""SELECT id, cliente_id, data, valor, descricao, categoria, conta FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
