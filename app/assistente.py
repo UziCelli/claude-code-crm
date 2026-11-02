@@ -145,6 +145,7 @@ Como o financeiro funciona
 - pago_em vazio = em aberto (a pagar ou a receber); com data = pago ou recebido.
 - Contas recorrentes (aluguel, internet, DAS...) geram a conta de cada mês. Pagar uma delas é dar_baixa com recorrencia_id e competencia (AAAA-MM).
 - Empréstimo na PJ não é receita: não paga DAS e não conta como mensalidade.
+- O DAS vem da tabela do Simples (Anexo III): alíquota efetiva pela receita dos últimos 12 meses, nunca um % fixo. O app lança sozinho, em Contas a pagar, o DAS e a conta da CIA (aulas Feitas) do mês anterior: lançamento com `auto` preenchido (ex.: das:2026-10) e o "Como calculei" em observacao. Editar à mão o torna do usuário.
 - Salário é a Retirada da PJ que entra como Salário na PF: use pagar_salario, que lança os dois lados.
 - Saldo livre = o que tem nas contas menos as contas em aberto dos próximos 30 dias, o DAS a guardar e o salário ainda não pago.
 - Mensalidade é uma entrada PJ paga ligada ao aluno (cliente_id). O pagamento ligado ao aluno faz a renovação dele andar sozinha.
@@ -212,7 +213,7 @@ FERRAMENTAS = [
                           "até 200 linhas). Tabelas principais (datas AAAA-MM-DD; excluido_em preenchido = na lixeira, filtre "
                           "excluido_em IS NULL): lancamentos(id, escopo PF|PJ, tipo entrada|saida, data, pago_em NULL=em aberto, "
                           "valor, categoria, descricao, contraparte, cliente_id, conta, forma, parcela_num, parcela_total, "
-                          "recorrencia_id, competencia AAAA-MM); recorrencias(id, escopo, descricao, categoria, valor, dia_vencimento, "
+                          "recorrencia_id, competencia AAAA-MM, observacao, auto NULL=lançado à mão ou das:AAAA-MM/cia:AAAA-MM=conta automática); recorrencias(id, escopo, descricao, categoria, valor, dia_vencimento, "
                           "fixo, conta, inicio AAAA-MM, fim, prioridade); saldos(conta, saldo, data); clientes(id, nome, telefone, "
                           "status ativo|pausado|inativo, plano, local, tipo_servico, valor, forma_pagamento, data_inicio, "
                           "data_renovacao, dias_horarios, canal_origem); cliente_eventos(cliente_id, tipo aula|falta|desmarcou|"
@@ -462,7 +463,7 @@ def _linha_lanc(r, hoje, nomes=None) -> dict:
 
 def _separe_imposto(con, lid) -> str:
     """' Separe R$ 60,00 para o imposto (DAS 6%).' para a entrada PJ paga (vazio se o DAS está em 0%)."""
-    aviso = financeiro.aviso_imposto(con, con.execute("SELECT valor FROM lancamentos WHERE id=?", (lid,)).fetchone()["valor"])
+    aviso = financeiro.aviso_imposto(con, con.execute("SELECT valor FROM lancamentos WHERE id=?", (lid,)).fetchone()["valor"], _hoje())
     return f" {aviso}" if aviso else ""
 
 
@@ -812,7 +813,7 @@ def _editar_lancamento(con, a):
     if atual["recorrencia_id"] and ("tipo" in mudou or "escopo" in mudou):
         raise ErroFerramenta("Este lançamento é a baixa de uma conta recorrente: continua saída e no mesmo escopo da conta.")
     with con:
-        con.execute(f"UPDATE lancamentos SET {', '.join(k + '=?' for k in mudou)} WHERE id=?", (*mudou.values(), lid))
+        con.execute(f"UPDATE lancamentos SET {', '.join(k + '=?' for k in mudou)}, auto=NULL WHERE id=?", (*mudou.values(), lid))   # editou: conta automática vira sua
     antes = {k: atual[k] for k in mudou}
     return {"ok": True, "id": lid, "antes": antes, "depois": mudou,
             "para_desfazer": f"editar_lancamento(id={lid}, " + ", ".join(f"{k}={json.dumps(v if v is not None else '', ensure_ascii=False)}"

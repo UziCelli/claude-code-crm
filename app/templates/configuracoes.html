@@ -37,6 +37,15 @@
   <p class="muted mt">A chave fica no banco do CRM (vai junto para o Turso e os backups). Crie em console.anthropic.com › API Keys.</p>
 </div>
 
+<div class="card mt" id="cfg-das">
+  <h2>Imposto (DAS)</h2>
+  <p>DAS pela tabela do Simples (Anexo III): alíquota efetiva hoje {{ das_txt }}% (faturamento dos últimos 12 meses: {{ das.rbt12|moeda }}).</p>
+  {% if das.base == 'media' %}<p class="muted">Ainda não há 12 meses de uso: o valor é a média dos {{ das.meses_base }} meses anteriores × 12.</p>
+  {% elif das.base == 'primeiro' %}<p class="muted">Primeiro mês com receita: o valor é a receita do mês × 12.</p>
+  {% elif das.base == 'sem receita' %}<p class="muted">Sem receita lançada ainda: vale a primeira faixa (6%).</p>{% endif %}
+  <p class="muted">A alíquota sobe sozinha quando o faturamento muda de faixa. O DAS do mês passado é lançado em Contas a pagar, vence dia 20 (fim de semana antecipa para a sexta).</p>
+</div>
+
 <form method="post" action="/configuracoes" class="mt">
   <div class="grid c2">
     {% for g in grupos %}

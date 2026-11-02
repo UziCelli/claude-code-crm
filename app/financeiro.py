@@ -103,7 +103,8 @@ def em_aberto_ate(con: sqlite3.Connection, ate: str, hoje: str) -> list[dict]:
         itens.append({"origem": "lancamento", "id": r["id"], "escopo": r["escopo"], "tipo": r["tipo"], "data": data,
                       "descricao": r["descricao"] or r["categoria"], "categoria": r["categoria"], "valor": r["valor"],
                       "prioridade": r["prioridade"], "status": status({"pago_em": None, "data": data}, hoje),
-                      "agendado": bool(r["pago_em"]), "recorrencia_id": r["recorrencia_id"], "competencia": r["competencia"]})
+                      "agendado": bool(r["pago_em"]), "recorrencia_id": r["recorrencia_id"], "competencia": r["competencia"],
+                      "auto": r["auto"], "observacao": r["observacao"]})
     comp, fim = somar_meses(hoje[:7], -3), ate[:7]
     while comp <= fim:
         itens += [i for i in _recorrencias_abertas(con, comp, hoje) if i["data"] <= ate]
@@ -128,11 +129,13 @@ def eh_das(descricao: str | None, categoria: str | None) -> bool:
     return not descricao and "imposto" in (categoria or "").lower()
 
 
+_RECEITA_PJ = """escopo='PJ' AND tipo='entrada' AND excluido_em IS NULL AND pago_em IS NOT NULL AND categoria != ?"""
+
+
 def _receita_pj(con: sqlite3.Connection, mes: str) -> float:
     """Entradas PJ recebidas no mês (por pago_em): a base do DAS que vence no mês seguinte. Empréstimo não é receita."""
-    return con.execute("""SELECT COALESCE(SUM(valor), 0) FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
-                          AND excluido_em IS NULL AND pago_em IS NOT NULL AND substr(pago_em,1,7)=? AND categoria != ?""",
-                       (mes, EMPRESTIMO)).fetchone()[0]
+    return con.execute(f"SELECT COALESCE(SUM(valor), 0) FROM lancamentos WHERE {_RECEITA_PJ} AND substr(pago_em,1,7)=?",
+                       (EMPRESTIMO, mes)).fetchone()[0]
 
 
 def _das_do_mes(con: sqlite3.Connection, mes: str, abertos: list[dict]) -> tuple[bool, float]:
@@ -160,18 +163,75 @@ def moeda_br(v: float) -> str:
     return f"−R$ {s}" if v < 0 else f"R$ {s}"
 
 
-def pct_das(con: sqlite3.Connection) -> float:
-    """DAS% das Configurações, como fração (0,06 = 6%)."""
-    return db.parametros(con, "imposto").get("DAS", 0.06)
+# Simples Nacional, Anexo III (serviços): (RBT12 até, alíquota nominal, parcela a deduzir). Acima da última faixa vale a última.
+SIMPLES_ANEXO_III = [(180_000, 0.06, 0), (360_000, 0.112, 9_360), (720_000, 0.135, 17_640),
+                     (1_800_000, 0.16, 35_640), (3_600_000, 0.21, 125_640), (4_800_000, 0.33, 648_000)]
+
+
+def util_anterior(iso: str) -> str:
+    """Sábado e domingo antecipam para a sexta (feriado não entra na conta)."""
+    d = dt.date.fromisoformat(iso)
+    return (d - dt.timedelta(days=max(d.weekday() - 4, 0))).isoformat()
+
+
+def vencimento_util(dia: int, mes: str) -> str:
+    """Vencimento no dia pedido do mês 'AAAA-MM', antecipado para a sexta se cair no fim de semana."""
+    return util_anterior(vencimento(dia, mes))
+
+
+def _rbt12(con: sqlite3.Connection, mes: str) -> tuple[float, str, int]:
+    """(RBT12, como foi achado, meses usados) da competência `mes`: a receita PJ recebida nos 12 meses anteriores.
+    Com menos de 12 meses de uso (contados do 1º mês com receita PJ na app): média dos meses anteriores × 12;
+    no 1º mês, a receita do próprio mês × 12. Como: '12 meses' | 'media' | 'primeiro' | 'sem receita'."""
+    primeiro = con.execute(f"SELECT MIN(substr(pago_em,1,7)) FROM lancamentos WHERE {_RECEITA_PJ}", (EMPRESTIMO,)).fetchone()[0]
+    if primeiro is None or primeiro > mes:
+        return 0.0, "sem receita", 0
+    if primeiro == mes:
+        return _receita_pj(con, mes) * 12, "primeiro", 0
+    de = max(primeiro, somar_meses(mes, -12))
+    soma = con.execute(f"SELECT COALESCE(SUM(valor), 0) FROM lancamentos WHERE {_RECEITA_PJ} AND substr(pago_em,1,7) BETWEEN ? AND ?",
+                       (EMPRESTIMO, de, somar_meses(mes, -1))).fetchone()[0]
+    n = (int(mes[:4]) - int(de[:4])) * 12 + int(mes[5:7]) - int(de[5:7])
+    return (soma, "12 meses", n) if n >= 12 else (soma / n * 12, "media", n)
+
+
+def das_competencia(con: sqlite3.Connection, mes: str) -> dict:
+    """DAS (Simples Nacional, Anexo III) da competência `mes`, que se paga no mês seguinte, sobre a receita PJ recebida em `mes`.
+    Alíquota efetiva = (RBT12 × nominal − dedução) / RBT12. Sem receita nenhuma ainda: faixa 1 (6%).
+    Devolve {mes, receita, rbt12, faixa, nominal, deducao, efetiva, valor, vencimento, base, meses_base};
+    base diz como o RBT12 foi achado ('12 meses', 'media', 'primeiro' ou 'sem receita') e meses_base quantos meses entraram."""
+    receita = _receita_pj(con, mes)
+    rbt12, base, n = _rbt12(con, mes)
+    faixa = next((i for i, (teto, _, _) in enumerate(SIMPLES_ANEXO_III, 1) if rbt12 <= teto), len(SIMPLES_ANEXO_III))
+    _, nominal, deducao = SIMPLES_ANEXO_III[faixa - 1]
+    efetiva = (rbt12 * nominal - deducao) / rbt12 if rbt12 > 0 else nominal
+    dia = int(db.parametros(con, "previsao").get("dia_das") or 20)
+    return {"mes": mes, "receita": round(receita, 2), "rbt12": round(rbt12, 2), "faixa": faixa, "nominal": nominal, "deducao": deducao,
+            "efetiva": efetiva, "valor": round(receita * efetiva, 2), "vencimento": vencimento_util(dia, somar_meses(mes, 1)),
+            "base": base, "meses_base": n}
+
+
+def pct_das(con: sqlite3.Connection, hoje: str | None = None) -> float:
+    """Alíquota efetiva do DAS do mês de hoje pela tabela do Simples, como fração (0,06 = 6%). É o número do aviso
+    "Separe R$ X", do "Guardar o DAS" e dos preços."""
+    return das_competencia(con, (hoje or dt.date.today().isoformat())[:7])["efetiva"]
 
 
 def texto_pct(fracao: float) -> str:
-    """0,06 -> '6'; 0,045 -> '4,5'."""
-    return f"{fracao * 100:g}".replace(".", ",")
+    """0,06 -> '6'; 0,045 -> '4,5'; 0,0753125 -> '7,53'."""
+    return f"{round(fracao * 100, 2):g}".replace(".", ",")
+
+
+def explicacao_das(d: dict) -> str:
+    """O 'Como calculei' do DAS: '6% (tabela do Simples, faixa 1; R$ 96.000,00 nos últimos 12 meses) × R$ 8.000,00 recebidos em 10/2026'."""
+    quando = {"12 meses": "nos últimos 12 meses", "sem receita": "sem receita ainda",
+              "media": f"média dos {d['meses_base']} meses anteriores × 12", "primeiro": "primeiro mês: receita do mês × 12"}[d["base"]]
+    return (f"{texto_pct(d['efetiva'])}% (tabela do Simples, faixa {d['faixa']}; {moeda_br(d['rbt12'])} {quando}) "
+            f"× {moeda_br(d['receita'])} recebidos em {d['mes'][5:7]}/{d['mes'][:4]}")
 
 
 def imposto_mes(con: sqlite3.Connection, mes: str, hoje: str | None = None, abertos: list[dict] | None = None) -> float:
-    """Imposto (DAS) a separar da receita PJ recebida em `mes`: DAS% × entradas pagas, sem empréstimo. Esse DAS vence no mês
+    """Imposto (DAS) a separar da receita PJ recebida em `mes`: alíquota efetiva do Simples × entradas pagas, sem empréstimo. Esse DAS vence no mês
     seguinte. Menos o que a recorrência de DAS já prevê; 0 se o DAS desse vencimento já está lançado ou pago.
     É a única conta do imposto: o saldo_livre soma estes valores e a tela mostra o do mês de hoje.
     `abertos`: saídas em aberto (o saldo_livre já tem); sem elas, usa as dos próximos 30 dias a partir de `hoje`."""
@@ -179,12 +239,12 @@ def imposto_mes(con: sqlite3.Connection, mes: str, hoje: str | None = None, aber
         hoje = hoje or dt.date.today().isoformat()
         ate = (dt.date.fromisoformat(hoje) + dt.timedelta(days=30)).isoformat()
         abertos = [i for i in em_aberto_ate(con, ate, hoje) if i["tipo"] == "saida"]
-    return round(_das_a_guardar(con, somar_meses(mes, 1), abertos, _receita_pj(con, mes), pct_das(con)), 2)
+    return round(_das_a_guardar(con, somar_meses(mes, 1), abertos, _receita_pj(con, mes), das_competencia(con, mes)["efetiva"]), 2)
 
 
-def aviso_imposto(con: sqlite3.Connection, valor: float) -> str:
-    """'Separe R$ 60,00 para o imposto (DAS 6%).' ao receber uma entrada PJ; vazio se o DAS está em 0%."""
-    pct = pct_das(con)
+def aviso_imposto(con: sqlite3.Connection, valor: float, hoje: str | None = None) -> str:
+    """'Separe R$ 60,00 para o imposto (DAS 6%).' ao receber uma entrada PJ; vazio se a alíquota é 0%."""
+    pct = pct_das(con, hoje)
     return f"Separe {moeda_br(round(pct * valor, 2))} para o imposto (DAS {texto_pct(pct)}%)." if pct > 0 and valor > 0 else ""
 
 
@@ -796,7 +856,7 @@ def resumo_mes(con: sqlite3.Connection, mes: str, escopo: str = "PJ") -> dict:
         "lucro": round(receita - fixos - variaveis, 2), "retirada": round(retirada, 2),
         "emprestimos": round(emprestimos, 2), "devolucoes": round(devolucoes, 2),
         "ponto_equilibrio": round(fixos / margem, 2) if margem > 0 and fixos > 0 else None,
-        "das": round(db.parametros(con, "imposto").get("DAS", 0.06) * receita, 2),
+        "das": round(das_competencia(con, mes)["efetiva"] * receita, 2),
         "pro_labore": round(pro_labore, 2), "inss": round(fiscal["inss_pct"] * pro_labore, 2),
         "pf": {"entradas": round(entradas, 2), "saidas": round(saidas, 2), "saldo": round(entradas - saidas, 2)},
     }
@@ -1242,7 +1302,7 @@ def previsao(con: sqlite3.Connection, hoje: str, semanas: int = 13) -> dict:
         meses.append(m)
         m = somar_meses(m, 1)
     par = db.parametros(con, "previsao")
-    das_pct = db.parametros(con, "imposto").get("DAS", 0.06)
+    das_pct = pct_das(con, hoje)
     sal_valor, sal_dia = _salario_parametros(con)
     quitados, m = set(), somar_meses(hoje[:7], -3)   # entradas em aberto de quem já pagou o mês: não são mais a receber
     while m <= fim[:7]:

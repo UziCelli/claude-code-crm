@@ -48,7 +48,6 @@ PARAMETROS_INICIAIS = [
     # cobrança de mensalidade atrasada (botão "Cobrar" no alerta): multa uma vez + juros ao mês proporcional aos dias
     ("cobranca", "multa", 0.02, None, 1),
     ("cobranca", "juros_ao_mes", 0.01, None, 2),
-    ("imposto", "DAS", 0.06, None, 1),
     ("taxa_pagamento", "PIX", 0.0, None, 1),
     ("taxa_pagamento", "Cartão 1x", 0.0581, None, 2),
     ("taxa_pagamento", "Cartão 3x", 0.0765, None, 3),
@@ -101,6 +100,7 @@ PARAMETROS_INICIAIS = [
     ("salario", "valor", 0, None, 1),              # R$ por mês que a PJ paga à PF; 0 = desligado
     ("salario", "dia", 5, None, 2),                # dia do mês do pagamento
     ("previsao", "dia_recebimento", 10, None, 1),  # dia em que a previsão põe as mensalidades que faltam receber
+    ("contas_auto", "dia_cia", 5, None, 1),         # dia do mês seguinte em que vence a conta da CIA (fim de semana antecipa para a sexta)
     ("previsao", "dia_das", 20, None, 2),          # vencimento do DAS (sobre a receita do mês anterior)
     ("colchao", "meses", 0, None, 1),              # meta da Reserva em meses de custo fixo; 0 = sem meta ainda
     ("familia", "pessoas", 2, None, 1),            # quantas pessoas vivem da renda da PF (renda e custo de vida por pessoa na Saúde financeira)
@@ -212,6 +212,10 @@ def iniciar_banco(caminho: Path = None) -> None:
         _garantir_coluna(con, "clientes", "indicado_por", "INTEGER")           # banco de antes das indicações
         _garantir_coluna(con, "leads", "indicado_por", "INTEGER")
         _garantir_coluna(con, "cliente_eventos", "indicado_id", "INTEGER")
+        _garantir_coluna(con, "lancamentos", "auto", "TEXT")                   # banco de antes das contas automáticas (DAS e CIA)
+        # um lançamento automático por conta e competência ('das:2026-10'); NULL (lançado à mão) pode repetir.
+        # PC e Render rodam ao mesmo tempo no Turso: o INSERT OR IGNORE em cima deste índice evita o duplicado.
+        con.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_lancamentos_auto ON lancamentos (auto)")
         if con.execute("SELECT COUNT(*) FROM campanha_checkpoints").fetchone()[0] == 0:
             con.executemany(
                 "INSERT INTO campanha_checkpoints (pergunta, canal, prazo) VALUES (?,?,?)", CHECKPOINTS_INICIAIS

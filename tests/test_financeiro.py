@@ -397,12 +397,11 @@ def test_saldo_livre_usa_o_mesmo_imposto_mes(con_temp):
 def test_aviso_imposto(con_temp):
     assert financeiro.aviso_imposto(con_temp, 1000) == "Separe R$ 60,00 para o imposto (DAS 6%)."
     assert financeiro.aviso_imposto(con_temp, 1234.5) == "Separe R$ 74,07 para o imposto (DAS 6%)."
-    with con_temp:
-        con_temp.execute("UPDATE parametros SET valor=0.045 WHERE grupo='imposto' AND chave='DAS'")
-    assert financeiro.aviso_imposto(con_temp, 1000) == "Separe R$ 45,00 para o imposto (DAS 4,5%)."
-    with con_temp:
-        con_temp.execute("UPDATE parametros SET valor=0 WHERE grupo='imposto' AND chave='DAS'")
-    assert financeiro.aviso_imposto(con_temp, 1000) == ""
+    assert financeiro.aviso_imposto(con_temp, 0) == ""
+    # a alíquota vem da tabela do Simples, não de um % fixo: faixa 2 com R$ 200 mil nos 12 meses = (200.000 × 11,2% − 9.360) / 200.000 = 6,52%
+    lancar(con_temp, "entrada", 100000, "2025-10-10", pago_em="2025-10-10")
+    lancar(con_temp, "entrada", 100000, "2026-06-10", pago_em="2026-06-10")
+    assert financeiro.aviso_imposto(con_temp, 1000, "2026-10-16") == "Separe R$ 65,20 para o imposto (DAS 6,52%)."
 
 
 def test_colchao(con_temp):
@@ -420,8 +419,6 @@ def test_colchao(con_temp):
 
 # ---------- Previsão 90 dias ----------
 def test_previsao_sem_duplicar_e_com_aperto(con_temp):
-    with con_temp:
-        con_temp.execute("UPDATE parametros SET valor=0 WHERE grupo='imposto' AND chave='DAS'")   # sem DAS para isolar
     financeiro.salvar_saldos(con_temp, "2026-10-16", {"Inter": 1000, "Contabilizei Bank": 500}, {})
     with con_temp:
         rid = con_temp.execute("""INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, fixo, inicio)
@@ -460,7 +457,6 @@ def test_previsao_mensalidades_salario_e_das(con_temp):
 def test_previsao_entrada_sem_aluno_nao_conta_duas_vezes(con_temp):
     """O caso do print: '10 aulas Elisa' em aberto sem ligar à aluna não pode entrar de novo em 'Mensalidades a receber'."""
     with con_temp:
-        con_temp.execute("UPDATE parametros SET valor=0 WHERE grupo='imposto' AND chave='DAS'")   # sem DAS para isolar
         con_temp.execute("INSERT INTO clientes (nome, valor, status) VALUES ('Elisa', 1123.37, 'ativo')")
         con_temp.execute("INSERT INTO clientes (nome, valor, status) VALUES ('Ana', 500, 'ativo')")
         con_temp.execute("INSERT INTO lancamentos (escopo, tipo, data, valor, categoria, descricao)"

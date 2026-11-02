@@ -16,6 +16,7 @@
   <div class="muted">{{ dm(i.data) }} <span class="tag neutro">{{ i.escopo }}</span>
     <span class="tag {{ 'vermelho' if i.status == 'atrasado' else ('amarelo' if i.dias <= 3 else 'neutro') }}">{{ i.prazo }}</span>
     {% if i.talvez_pago %}<span class="tag amarelo" title="Há um lançamento seu parecido neste mês. Veja em Conferir.">talvez já pago</span>{% endif %}</div>
+  {% if i.auto and i.observacao %}<div class="muted como-calculei"><small>Como calculei: {{ i.observacao }}</small></div>{% endif %}
   {% if i.custo_atraso >= 1 %}<div class="muted">Atrasar 1 mês custa ~{{ i.custo_atraso|moeda }}</div>{% endif %}
   <div class="linha">
     {% if i.origem == 'recorrencia' %}
@@ -87,6 +88,7 @@
     {% if salario.sugestao is not none and salario.sugestao < salario.valor %}<p class="muted">O salário passa da sugestão ({{ salario.sugestao|moeda }}, 80% do lucro médio dos últimos 3 meses{% if not salario.sugestao %}: nos últimos 3 meses a PJ não teve lucro{% endif %}). Nos meses fracos pode faltar na PJ.</p>{% endif %}
     {% endif %}
   </div>
+  {% for linha in previa %}<p class="muted" style="margin:4px 0">{{ linha }}</p>{% endfor %}
   <p class="mt"><strong>Imposto a separar este mês: {{ imposto|moeda }}</strong> <span class="muted">(DAS {{ das_txt }}%)</span></p>
   {% if resumo.reserva %}<p class="muted">Reserva: {{ resumo.reserva|moeda }}. Não entra nas contas acima.</p>{% endif %}
 </section>
@@ -137,7 +139,7 @@
     {% for l in lancs %}
     <tr>
       <td>{{ l.data|data }}</td>
-      <td>{{ l.descricao or '—' }}{% if l.parcela_total %} <span class="muted">{{ l.parcela_num or '?' }}/{{ l.parcela_total }}</span>{% endif %} <span class="tag neutro">{{ l.escopo }}</span>{% if l.escopo == 'PJ' and l.categoria.startswith('Empréstimo') %} <span class="tag azul">empréstimo</span>{% endif %}</td>
+      <td>{{ l.descricao or '—' }}{% if l.parcela_total %} <span class="muted">{{ l.parcela_num or '?' }}/{{ l.parcela_total }}</span>{% endif %} <span class="tag neutro">{{ l.escopo }}</span>{% if l.escopo == 'PJ' and l.categoria.startswith('Empréstimo') %} <span class="tag azul">empréstimo</span>{% endif %}{% if l.auto and l.observacao %}<div class="muted como-calculei"><small>Como calculei: {{ l.observacao }}</small></div>{% endif %}</td>
       <td>{{ l.categoria }}</td>
       <td>{{ l.contraparte or '—' }}</td>
       <td>{{ l.conta or '—' }}</td>

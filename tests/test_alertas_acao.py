@@ -136,7 +136,8 @@ def test_saldo_livre_negativo_nao_e_mais_alerta(con_temp, http):
     financeiro.salvar_saldos(con_temp, hoje, {"Itaú": 50.0}, {"Itaú": "PF"})
     with con_temp:
         con_temp.execute("INSERT INTO lancamentos (escopo, tipo, data, valor, categoria) VALUES ('PF','saida',?,500,'Outros')", (dia(-1),))
-    assert not [x for x in main.alertas(con_temp) if "Saldo livre" in x["texto"]]
+    # a tarefa de segunda da Rotina se chama "...olhar o Saldo livre": não é o alerta de saldo (e o teste não pode depender do dia da semana)
+    assert not [x for x in main.alertas(con_temp) if "Saldo livre" in x["texto"] and not x["texto"].startswith("Rotina de hoje")]
     assert 'id="livre"' not in http.get("/financeiro").text
 
 

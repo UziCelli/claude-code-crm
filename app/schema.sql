@@ -294,8 +294,9 @@ CREATE TABLE IF NOT EXISTS lancamentos (
     meses INTEGER,                                    -- entrada de aluno: quantos meses este pagamento cobre (pago adiantado/parcelado); NULL = automático
     sem_recorrencia INTEGER,                          -- 1 = "não é a conta recorrente": sai da lista de contas parecidas
     nfse INTEGER,                                     -- 1 emitida, 0 não, NULL não se aplica
-    observacao TEXT,
+    observacao TEXT,                                  -- conta automática: o "Como calculei"
     origem TEXT UNIQUE,                               -- 'PJ:17', 'PF:8', 'CC:11', 'EP:11'
+    auto TEXT,                                        -- 'das:2026-10' | 'cia:2026-10': conta lançada pelo app (índice único criado em db.py); editar à mão zera
     criado_em TEXT DEFAULT (datetime('now','localtime')),
     excluido_em TEXT,
     UNIQUE (recorrencia_id, competencia)

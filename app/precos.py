@@ -1,17 +1,24 @@
 """Motor de preços — função pura, sem banco. Todos os parâmetros vêm de fora (tela Configurações)."""
 
 
+def taxas_cia(con) -> tuple[dict, int]:
+    """({pessoas: preço da aula na CIA}, máximo de pessoas por horário), dos parâmetros `taxa_cia`."""
+    from . import db
+    cia = db.parametros(con, "taxa_cia")
+    return {int(k): v for k, v in cia.items() if k.isdigit()}, int(cia.get("maximo_pessoas", 3))
+
+
 def carregar_parametros(con) -> dict:
     """Monta o dicionário de parâmetros a partir da tabela `parametros`."""
-    from . import db
+    from . import db, financeiro
     g = lambda grupo: db.parametros(con, grupo)  # noqa: E731
-    cia = g("taxa_cia")
+    taxa_cia, cia_max = taxas_cia(con)
     return {
-        "das": g("imposto").get("DAS", 0.06),
+        "das": financeiro.pct_das(con),   # alíquota efetiva de hoje pela tabela do Simples
         "taxas": g("taxa_pagamento"),
         "margens": g("margem_minima"),
-        "taxa_cia": {int(k): v for k, v in cia.items() if k.isdigit()},
-        "cia_max": int(cia.get("maximo_pessoas", 3)),
+        "taxa_cia": taxa_cia,
+        "cia_max": cia_max,
         "grupo_mult": {int(k): v for k, v in g("grupo_multiplicador").items()},
         "grupo_mo": {int(k): v for k, v in g("grupo_mao_obra_extra").items()},
     }
