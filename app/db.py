@@ -222,10 +222,13 @@ def iniciar_banco(caminho: Path = None) -> None:
                 "INSERT OR IGNORE INTO rotina_tarefas (chave, texto, dia, ordem) VALUES (?,?,?,?)",
                 [(c, txt, d, k) for k, (c, txt, d) in enumerate(ROTINA_INICIAL, 1)],
             )
-        # tarefa que veio com o Saldo livre: entra também em banco antigo (excluída fica na lixeira e não volta)
+        # tarefa de atualizar saldos: entra também em banco antigo (excluída fica na lixeira e não volta)
         con.execute("""INSERT OR IGNORE INTO rotina_tarefas (chave, texto, dia, ordem)
-                       VALUES ('saldos', 'atualizar os saldos das contas e olhar o Saldo livre', 1,
+                       VALUES ('saldos', 'atualizar os saldos das contas', 1,
                                (SELECT COALESCE(MAX(ordem), 0) + 1 FROM rotina_tarefas))""")
+        # o Saldo livre saiu da tela: tira do texto antigo (se o usuário editou, fica como está)
+        con.execute("""UPDATE rotina_tarefas SET texto = 'atualizar os saldos das contas'
+                       WHERE chave = 'saldos' AND texto = 'atualizar os saldos das contas e olhar o Saldo livre'""")
     con.close()
 
 
