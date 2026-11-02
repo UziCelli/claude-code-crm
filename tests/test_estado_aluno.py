@@ -98,7 +98,7 @@ def test_vence_logo_com_aula_no_ciclo(con_temp):
     aula(con_temp, cid, -2)
     e = estado(con_temp, cid)
     assert (e["situacao"], e["cor"]) == ("vence_logo", "amarelo") and e["texto"] == f"renovação em {main.data_br(renova)}"
-    assert rotulos(e) == ["Registrar pagamento", "wa"] and e["modelo"] == "renovacao"
+    assert rotulos(e) == ["Registrar pagamento", "wa", "Já pagou adiantado"] and e["modelo"] == "renovacao"   # tem pagamento no último ano
 
 
 def test_sem_aula_recente_conta_14_dias_e_35_para_hibrida(con_temp):

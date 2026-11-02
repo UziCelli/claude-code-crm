@@ -17,8 +17,33 @@ document.addEventListener("click", function (e) {
   if (titulo && b.dataset.titulo) titulo.textContent = b.dataset.titulo;
   var nota = d.querySelector("[data-nota]");   // aviso opcional (ex.: "Crédito de R$ 100,00 descontado")
   if (nota) { nota.textContent = b.dataset.nota || ""; nota.hidden = !b.dataset.nota; }
+  if (d.id === "dlg-pgto") d.dataset.mensal = b.dataset.valor || "";   // o valor do botão é a mensalidade: base do "cobre quantos meses?"
   d.showModal();
 });
+// Pagamento de aluno: valor digitado a partir de 1,5× a mensalidade sugere "cobre N meses" (a pessoa pode trocar)
+(function () {
+  function numero(t) {
+    t = String(t || "").replace(/[^\d.,]/g, "");
+    if (t.indexOf(",") >= 0) t = t.replace(/\./g, "").replace(",", ".");
+    var n = parseFloat(t);
+    return isFinite(n) ? n : 0;
+  }
+  document.addEventListener("input", function (e) {
+    var campo = e.target;
+    if (!campo.matches || !campo.matches("#dlg-pgto [name=valor]")) return;
+    var d = campo.closest("dialog"), sel = d.querySelector("select[name=meses]");
+    var mensal = numero(d.dataset.mensal), v = numero(campo.value);
+    if (!sel || mensal <= 0 || sel.dataset.mexeu) return;   // quem escolheu à mão não é desfeito
+    sel.value = v >= 1.5 * mensal ? String(Math.min(Math.max(Math.round(v / mensal), 1), 12)) : "1";
+  });
+  document.addEventListener("change", function (e) {
+    if (e.target.matches && e.target.matches("#dlg-pgto select[name=meses]")) e.target.dataset.mexeu = "1";
+  });
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-abrir=dlg-pgto]"), sel = document.querySelector("#dlg-pgto select[name=meses]");
+    if (b && sel) delete sel.dataset.mexeu;   // diálogo reaberto: volta a sugerir
+  });
+})();
 document.addEventListener("click", function (e) {
   if (e.target.matches("[data-fechar]")) e.target.closest("dialog").close();
 });

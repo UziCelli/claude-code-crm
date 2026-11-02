@@ -228,14 +228,16 @@ FERRAMENTAS = [
         "valor": {"type": "number"}, "categoria": {"type": "string", "description": "uma das categorias do escopo"},
         "descricao": {"type": "string"}, "contraparte": {"type": "string"}, "pago_em": _DATA,
         "conta": {"type": "string"}, "forma": {"type": "string"}, "cliente_id": {"type": "integer"},
-        "parcela_num": {"type": "integer"}, "parcela_total": {"type": "integer"}},
+        "parcela_num": {"type": "integer"}, "parcela_total": {"type": "integer"},
+        "meses": {"type": "integer", "description": "só entrada de aluno: quantos meses este pagamento cobre (1 a 24; pagou adiantado ou parcelou no cartão). Vazio = 1"}},
        ["escopo", "tipo", "data", "valor", "categoria"]),
     _f("editar_lancamento", "Muda campos de um lançamento existente (só os informados). pago_em \"\" reabre (tira a baixa); "
                             "cliente_id 0 desliga do aluno. Devolve o antes e o depois.",
        {"id": {"type": "integer"}, "escopo": _ESCOPO, "tipo": {"type": "string", "enum": ["entrada", "saida"]},
         "data": _DATA, "pago_em": {"type": "string", "description": "AAAA-MM-DD ou \"\""}, "valor": {"type": "number"},
         "categoria": {"type": "string"}, "descricao": {"type": "string"}, "contraparte": {"type": "string"},
-        "conta": {"type": "string"}, "forma": {"type": "string"}, "cliente_id": {"type": "integer"}}, ["id"]),
+        "conta": {"type": "string"}, "forma": {"type": "string"}, "cliente_id": {"type": "integer"},
+        "meses": {"type": "integer", "description": "entrada de aluno: quantos meses o pagamento cobre (1 a 24; 1 = o normal)"}}, ["id"]),
     _f("dar_baixa", "Marca como pago: um lançamento em aberto (lancamento_id) ou a conta recorrente de um mês "
                     "(recorrencia_id + competencia). Sem pago_em: hoje. Sem valor: o valor previsto.",
        {"lancamento_id": {"type": "integer"}, "recorrencia_id": {"type": "integer"}, "competencia": _MES,
@@ -697,6 +699,16 @@ def _categoria(con, escopo, categoria):
     return _da_lista(con, categoria, "lista_categorias_pj" if escopo == "PJ" else "lista_categorias_pf", "Categoria")
 
 
+def _meses_pagamento(a) -> int | None:
+    """"meses" da ferramenta: 1 a 24 (1 ou vazio = None, o normal)."""
+    n = _inteiro(a, "meses")
+    if n is None or n == 1:
+        return None
+    if not 1 <= n <= 24:
+        raise ErroFerramenta("meses vai de 1 a 24.")
+    return n
+
+
 def _criar_lancamento(con, a):
     escopo = _opcao(a, "escopo", ("PF", "PJ"), obrigatorio=True)
     tipo = _opcao(a, "tipo", ("entrada", "saida"), obrigatorio=True)
@@ -716,6 +728,7 @@ def _criar_lancamento(con, a):
     if num and num > total:
         raise ErroFerramenta(f"Parcela {num} de {total} não existe.")
     cid = aluno["id"] if aluno else None
+    meses = _meses_pagamento(a) if (cid and escopo == "PJ" and tipo == "entrada") else None
     with con:
         aberta = None
         if cid and pago_em and escopo == "PJ" and tipo == "entrada":
@@ -747,6 +760,9 @@ def _criar_lancamento(con, a):
                                cid, conta, forma, num, total)).lastrowid
             msg = f"Lançamento {lid} salvo ({'pago' if pago_em else 'em aberto'})."
             desfazer = f"excluir_lancamento(id={lid})"
+        if meses:
+            con.execute("UPDATE lancamentos SET meses=? WHERE id=?", (meses, lid))
+            msg += f" Cobre {meses} meses."
     if escopo == "PJ" and tipo == "entrada" and pago_em and cid:
         with con:
             if desconto := financeiro.usar_credito(con, lid):
@@ -786,6 +802,10 @@ def _editar_lancamento(con, a):
     if "cliente_id" in a:
         aluno = _aluno(con, _inteiro(a, "cliente_id"))
         novo["cliente_id"] = aluno["id"] if aluno else None
+    if "meses" in a:
+        if (novo.get("escopo", atual["escopo"]), novo.get("tipo", atual["tipo"]), bool(novo.get("cliente_id", atual["cliente_id"]))) != ("PJ", "entrada", True):
+            raise ErroFerramenta("\"meses\" é só de entrada de aluno (PJ com cliente_id).")
+        novo["meses"] = _meses_pagamento(a)
     mudou = {k: v for k, v in novo.items() if v != atual[k]}
     if not mudou:
         return {"ok": True, "id": lid, "mensagem": "Nada mudou: os valores já eram esses."}
