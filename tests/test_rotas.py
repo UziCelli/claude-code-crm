@@ -1,4 +1,5 @@
 """Teste de fumaça: todas as telas abrem (200) num banco temporário. Rede de segurança para mudanças nos templates."""
+import re
 from urllib.parse import unquote
 
 import pytest
@@ -245,7 +246,8 @@ def test_atualizar_saldos_e_ver_quanto_tem_nas_contas(cliente_http):
     con.close()
     pagina = http.get("/financeiro").text
     assert f"Nas contas: R$ 1.150,00 (atualizado em {hoje:%d/%m})" in pagina      # −50 (PF) + 1.200 (PJ)
-    assert "Quanto dá para gastar" not in pagina and "Saldo livre" not in http.get("/").text
+    painel = re.sub(r"Rotina de hoje:[^<]*", "", http.get("/").text)   # a tarefa de segunda da Rotina cita "Saldo livre": não é o alerta
+    assert "Quanto dá para gastar" not in pagina and "Saldo livre" not in painel
     r = http.post("/financeiro/saldos", data={"data": "ontem", "conta_1": "Inter", "saldo_1": "10"}, follow_redirects=False)
     assert "erro=" in r.headers["location"]
 

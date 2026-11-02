@@ -22,7 +22,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse,
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import acesso, assistente, atualizar, db, exportar, financeiro, importar, precos, sugestoes, vigia
+from . import acesso, assistente, atualizar, contas_auto, db, exportar, financeiro, importar, precos, sugestoes, vigia
 from . import indicacoes   # quem indicou quem e o presente da indicação (brinde, nunca desconto)
 from . import ofertas   # ofertas de upsell: proposta transparente, resposta do aluno e fim do valor da oferta
 from . import alunos as alu   # estado de cada aluno (um algoritmo só); 'alunos' é nome de variável em várias rotas
@@ -61,6 +61,14 @@ async def lifespan(app):
         db.backup_diario()
     except Exception as e:  # o CRM abre mesmo se o backup falhar
         print(f"AVISO: backup diário falhou ({e}). Faça um backup manual em Dados.")
+    try:
+        con = db.conectar()
+        try:
+            contas_auto.garantir(con, dt.date.today().isoformat())   # DAS e CIA do mês passado em Contas a pagar
+        finally:
+            con.close()
+    except Exception as e:  # o CRM abre mesmo se as contas automáticas falharem
+        print(f"AVISO: não deu para lançar as contas automáticas ({e}).", flush=True)
     atualizar.iniciar()   # só no PC com Windows: baixa versão nova do GitHub e reinicia quando ninguém está usando
     yield
 
@@ -480,6 +488,7 @@ def gravar_mes(con, m):
 
 @app.get("/", response_class=HTMLResponse)
 def painel(request: Request, con=Depends(get_db)):
+    contas_auto.garantir(con, dt.date.today().isoformat())
     m = calcular_metricas(con)
     metas = db.parametros(con, "metas")
     ant_mes = (dt.date.fromisoformat(m["mes"] + "-01") - dt.timedelta(days=1)).strftime("%Y-%m")
@@ -2213,6 +2222,7 @@ def _fin_voltar(volta, msg=None, erro=None):
 @app.get("/financeiro", response_class=HTMLResponse)
 def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", conta: str = "", vencidas: int = 0, con=Depends(get_db)):
     h = dt.date.today().isoformat()
+    contas_auto.garantir(con, h, forcar=True)   # abrir o Financeiro recalcula a conta automática que ainda está em aberto
     mes = mes if RE_MES.match(mes) else mes_atual()
     escopo = escopo if escopo in ("PJ", "PF") else "todos"
     lista = ("PJ", "PF") if escopo == "todos" else (escopo,)
@@ -2254,7 +2264,7 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", cont
                   volta=f"mes={mes}&escopo={escopo}" + ("&vencidas=1" if vencidas else ""),   # pagou uma, continua vendo as outras
                   resumo=financeiro.saldos_resumo(con, h), saldos=financeiro.saldos_atuais(con), frentes=financeiro.FRENTES,
                   salario=financeiro.salario_mes(con, h[:7], h), imposto=financeiro.imposto_mes(con, h[:7], h),
-                  das_txt=financeiro.texto_pct(financeiro.pct_das(con)), parecidas=parecidas,
+                  das_txt=financeiro.texto_pct(financeiro.pct_das(con, h)), previa=contas_auto.previa(con, h), parecidas=parecidas,
                   n_conferir=len(repetidos) + len(parecidas) + len(financeiro.recorrencias_retirada(con)) + sum(not b["bate"] for b in bancos),
                   recs_todas=con.execute("SELECT * FROM recorrencias WHERE excluido_em IS NULL ORDER BY escopo, descricao").fetchall())
 
@@ -2397,7 +2407,7 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
                             (pago_em, valor, f.get("conta") or None, f.get("forma") or None, lid))
             elif lid:
                 con.execute("""UPDATE lancamentos SET escopo=?, tipo=?, data=?, pago_em=?, valor=?, categoria=?, descricao=?, contraparte=?,
-                               cliente_id=?, conta=?, forma=?, parcela_num=?, parcela_total=? WHERE id=?""", (*campos, lid))
+                               cliente_id=?, conta=?, forma=?, parcela_num=?, parcela_total=?, auto=NULL WHERE id=?""", (*campos, lid))   # editou à mão: o app não recalcula mais
                 if rec_id:
                     con.execute("UPDATE lancamentos SET recorrencia_id=?, competencia=?, sem_recorrencia=NULL WHERE id=?", (rec_id, competencia, lid))
                 elif not con.execute("""SELECT 1 FROM lancamentos l JOIN recorrencias r ON r.id = l.recorrencia_id
@@ -2420,7 +2430,7 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
         return _fin_voltar(volta, msg=(aviso or "Lançamento salvo. ") + "É empréstimo: não paga DAS e não conta como receita.")
     if f["escopo"] == "PJ" and f["tipo"] == "entrada" and pago_em:
         # dinheiro que entrou na PJ: diz na hora quanto separar para o imposto
-        if separe := financeiro.aviso_imposto(con, valor):
+        if separe := financeiro.aviso_imposto(con, valor, dt.date.today().isoformat()):
             return _fin_voltar(volta, msg=(aviso or "Lançamento salvo. ") + separe)
     return _fin_voltar(volta, msg=aviso.strip() or "Lançamento salvo.")
 
@@ -2638,7 +2648,7 @@ def financeiro_painel(request: Request, mes: str = "", con=Depends(get_db)):
     meses = [f"{(n - i) // 12}-{(n - i) % 12 + 1:02d}" for i in range(11, -1, -1)]
     serie = [financeiro.resumo_mes(con, x) for x in meses]
     maximo = max([s["receita"] for s in serie] + [s["custos_fixos"] + s["custos_variaveis"] for s in serie] + [abs(s["lucro"]) for s in serie] + [1])
-    das_pct = f"{db.parametros(con, 'imposto').get('DAS', 0.06) * 100:g}".replace(".", ",")
+    das_pct = financeiro.texto_pct(financeiro.das_competencia(con, mes)["efetiva"])
     return render(request, "financeiro_painel.html", con, mes=mes, r=serie[-1], serie=serie, maximo=maximo, das_pct=das_pct,
                   salario=financeiro.salario_mes(con, mes, dt.date.today().isoformat()), colchao=financeiro.colchao(con, mes),
                   saude=sugestoes.painel(con, limite=sugestoes.LIMITE), voltar_saude=f"/financeiro/painel?mes={mes}")
@@ -2710,7 +2720,7 @@ def assistente_excluir(cid: int, con=Depends(get_db)):
 # =====================================================================
 # CONFIGURAÇÕES + IMPORTAR
 # =====================================================================
-GRUPOS_CONFIG = [("imposto", "Imposto (DAS)", "pct"), ("taxa_pagamento", "Taxas por forma de pagamento", "pct"),
+GRUPOS_CONFIG = [("taxa_pagamento", "Taxas por forma de pagamento", "pct"),
                  ("margem_minima", "Margem mínima por serviço", "pct"), ("taxa_cia", "Taxa da CIA por pessoa (R$) e máximo de pessoas", "num"),
                  ("grupo_multiplicador", "Multiplicador de preço por nº de pessoas", "num"),
                  ("grupo_mao_obra_extra", "Mão de obra extra por nº de pessoas", "pct"), ("metas", "Metas do painel", "num"),
@@ -2718,6 +2728,8 @@ GRUPOS_CONFIG = [("imposto", "Imposto (DAS)", "pct"), ("taxa_pagamento", "Taxas 
                  ("funil_chance", "Chance de fechar por etapa do funil", "pct"),
                  ("fiscal", "Fiscal: salário mínimo (R$), pró-labore e INSS (frações, ex.: 0,28 = 28%)", "num"),
                  ("salario", "Salário fixo da PJ para a PF: valor (R$ por mês; 0 = desligado) e dia do pagamento", "num"),
+                 ("contas_auto", "Contas automáticas: dia do mês em que vence a conta da CIA (o app a lança sozinho em Contas a pagar; "
+                                 "fim de semana antecipa para a sexta)", "num"),
                  ("colchao", "Reserva: meta em meses de custo fixo (0 = sem meta)", "num"),
                  ("impacto_curto", "Fila de pagamento: o quanto atrasar atrapalha agora (0 a 40; quanto maior, mais cedo na fila)", "num"),
                  ("impacto_juros", "Fila de pagamento: juros e multa por mês de atraso (quanto maior, mais cedo na fila)", "pct"),
@@ -2741,7 +2753,8 @@ def configuracoes(request: Request, con=Depends(get_db)):
     msgs = con.execute("SELECT id, chave, valor_texto FROM parametros WHERE grupo='msg_whatsapp' ORDER BY ordem").fetchall()
     dados = con.execute("SELECT id, chave, valor_texto FROM parametros WHERE grupo='msg_dados' ORDER BY ordem").fetchall()
     return render(request, "configuracoes.html", con, grupos=grupos, msgs=msgs, msgs_dados=dados, listas_cfg=listas_, precos=precos_, ultima=ultima,
-                  planilha=str(db.PLANILHA), planilha_existe=db.PLANILHA.exists(), assistente=assistente.info())
+                  planilha=str(db.PLANILHA), planilha_existe=db.PLANILHA.exists(), assistente=assistente.info(),
+                  das=financeiro.das_competencia(con, mes_atual()), das_txt=financeiro.texto_pct(financeiro.pct_das(con, dt.date.today().isoformat())))
 
 
 @app.post("/configuracoes")

@@ -136,17 +136,15 @@ def cliente_http(tmp_path, monkeypatch):
     con.close()
 
 
-def test_painel_prejuizo_tem_barra_propria_e_das_com_o_parametro(cliente_http):
+def test_painel_prejuizo_tem_barra_propria_e_das_pela_tabela_do_simples(cliente_http):
     http, con = cliente_http
     hoje = dt.date.today()
     mes = hoje.strftime("%Y-%m")
     lancar(con, "entrada", 1000, f"{mes}-02", pago_em=f"{mes}-02", categoria="Mensalidade (Aulas Presenciais)")
     lancar(con, "saida", 3000, f"{mes}-03", pago_em=f"{mes}-03", categoria="Aluguel")
-    with con:
-        con.execute("UPDATE parametros SET valor=0.045 WHERE grupo='imposto' AND chave='DAS'")
     t = http.get(f"/financeiro/painel?mes={mes}").text
     assert 'class="b-prejuizo"' in t and "Prejuízo" in t
-    assert "Estimativa: 4,5% da receita" in t
+    assert "Estimativa: 6% da receita do mês (tabela do Simples)" in t
 
 
 def test_aviso_do_salario_aparece_no_prejuizo(cliente_http):

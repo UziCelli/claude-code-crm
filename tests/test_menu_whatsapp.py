@@ -262,7 +262,7 @@ def test_configuracoes_salva_os_dados_das_mensagens(http, con_temp):
 
 
 def test_configuracoes_nao_grava_texto_em_outro_grupo(http, con_temp):
-    pid = con_temp.execute("SELECT id FROM parametros WHERE grupo='imposto'").fetchone()[0]
+    pid = con_temp.execute("SELECT id FROM parametros WHERE grupo='taxa_pagamento'").fetchone()[0]
     http.post("/configuracoes", data={f"t_{pid}": "x"})
     assert con_temp.execute("SELECT valor_texto FROM parametros WHERE id=?", (pid,)).fetchone()[0] is None
 
