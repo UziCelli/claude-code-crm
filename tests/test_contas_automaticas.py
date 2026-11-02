@@ -375,6 +375,191 @@ def test_guardar_o_das_sai_do_a_guardar_quando_o_automatico_e_lancado(con_temp):
     assert pj["imposto"] == 0 and pj["comprometido"] >= 480        # o DAS está em Contas a pagar, não duas vezes
 
 
+# ---------- a automática substitui a recorrência do mês ----------
+def recorrencia(con, descricao, categoria="Aluguel", fixo=0, dia=5, inicio="2026-01", fim=None, excluida=False):
+    with con:
+        return con.execute("""INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, fixo, conta, inicio, fim, excluido_em)
+                              VALUES ('PJ',?,?,400,?,?,'Contabilizei Bank',?,?,?)""",
+                           (descricao, categoria, dia, fixo, inicio, fim, "2026-10-01" if excluida else None)).lastrowid
+
+
+def virtuais_novembro(con, rid=None):
+    """Itens virtuais (recorrências sem lançamento) de novembro/2026, só os da recorrência `rid` se vier."""
+    return [i for i in financeiro._recorrencias_abertas(con, "2026-11", HOJE) if rid is None or i["id"] == rid]
+
+
+def eh_conta_cia(item):
+    return contas_auto.eh_cia(item["descricao"])
+
+
+def eh_conta_das(item):
+    return financeiro.eh_das(item["descricao"], item["categoria"])
+
+
+def contas_de_novembro(con, quem):
+    """Itens em aberto de novembro/2026 (lançamentos e virtuais) que `quem` reconhece."""
+    return [i for i in financeiro.em_aberto_ate(con, "2026-12-31", HOJE) if i["data"][:7] == "2026-11" and quem(i)]
+
+
+def lixeira(con, rid, descricao="Crédito de aulas"):
+    """Baixa da recorrência em novembro que foi para a lixeira: ainda ocupa a vaga (UNIQUE)."""
+    with con:
+        return con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao, recorrencia_id, competencia, excluido_em)
+                              VALUES ('PJ','saida','2026-11-05','2026-11-05',90,'Aluguel',?,?,'2026-11',datetime('now'))""",
+                           (descricao, rid)).lastrowid
+
+
+@pytest.mark.parametrize("texto", ["CIA", "Cia Fit", "Academia Cia Fit", "CIA 111", "111", "Crédito de aulas", "Créditos de aula",
+                                   "credito das aulas", "CRÉDITOS DAS AULAS", "Aulas na CIA"])
+def test_eh_cia_reconhece_as_variacoes(texto):
+    assert contas_auto.eh_cia(texto)
+
+
+def test_eh_cia_nao_reconhece_outra_conta():
+    assert not contas_auto.eh_cia("Internet") and not contas_auto.eh_cia(None)
+
+
+@pytest.mark.parametrize("descricao, categoria", [("DAS", "Impostos/Taxas"), ("Das Simples", "Impostos/Taxas"),
+                                                  ("Simples Nacional", "Outros"), ("DAS", "Outros")])
+@pytest.mark.parametrize("fixo", [0, 1])
+def test_recorrencia_do_das_casa_fixa_ou_variavel(con_temp, descricao, categoria, fixo):
+    rid = recorrencia(con_temp, descricao, categoria, fixo=fixo, dia=20)
+    assert contas_auto._recorrencia(con_temp, "das", "2026-11")["id"] == rid
+    assert contas_auto._recorrencia(con_temp, "cia", "2026-11") is None
+
+
+@pytest.mark.parametrize("descricao", ["Crédito de aulas", "Créditos de aula", "CIA 111", "credito das aulas"])
+@pytest.mark.parametrize("fixo", [0, 1])
+def test_recorrencia_da_cia_casa_fixa_ou_variavel(con_temp, descricao, fixo):
+    rid = recorrencia(con_temp, descricao, fixo=fixo)
+    assert contas_auto._recorrencia(con_temp, "cia", "2026-11")["id"] == rid
+    assert contas_auto._recorrencia(con_temp, "das", "2026-11") is None
+
+
+def test_recorrencia_internet_nao_e_a_cia(con_temp):
+    recorrencia(con_temp, "Internet", "Despesas Fixas")
+    assert contas_auto._recorrencia(con_temp, "cia", "2026-11") is None
+
+
+def test_recorrencia_credito_de_aulas_vira_a_conta_da_cia_do_mes(con_temp):
+    cenario_outubro(con_temp)
+    rid = recorrencia(con_temp, "Crédito de aulas")
+    assert virtuais_novembro(con_temp, rid)                                           # antes: só o item virtual
+    assert "cia:2026-10" in contas_auto.gerar_contas_automaticas(con_temp, HOJE)
+    cia = automaticas(con_temp, "cia:2026-10")[0]
+    assert (cia["recorrencia_id"], cia["competencia"], cia["conta"]) == (rid, "2026-11", "Contabilizei Bank")
+    assert virtuais_novembro(con_temp, rid) == []
+    contas = contas_de_novembro(con_temp, eh_conta_cia)
+    assert [(c["origem"], c["id"]) for c in contas] == [("lancamento", cia["id"])]     # exatamente 1 conta da CIA a pagar
+
+
+def test_recorrencia_das_variavel_vira_o_das_do_mes(con_temp):
+    cenario_outubro(con_temp)
+    rid = recorrencia(con_temp, "DAS", "Impostos/Taxas", dia=20)
+    assert virtuais_novembro(con_temp, rid)
+    assert "das:2026-10" in contas_auto.gerar_contas_automaticas(con_temp, HOJE)
+    das = automaticas(con_temp, "das:2026-10")[0]
+    assert (das["recorrencia_id"], das["competencia"]) == (rid, "2026-11")
+    assert virtuais_novembro(con_temp, rid) == []
+    assert [c["id"] for c in contas_de_novembro(con_temp, eh_conta_das)] == [das["id"]]
+
+
+def test_pulo_do_mes_nao_impede_a_automatica(con_temp):
+    cenario_outubro(con_temp)
+    rid = recorrencia(con_temp, "Crédito de aulas")
+    with con_temp:
+        con_temp.execute("INSERT INTO recorrencia_pulos (recorrencia_id, competencia) VALUES (?, '2026-11')", (rid,))
+    contas_auto.gerar_contas_automaticas(con_temp, HOJE)
+    assert automaticas(con_temp, "cia:2026-10")[0]["recorrencia_id"] == rid
+
+
+def test_vaga_com_linha_na_lixeira_e_solta_e_a_automatica_nasce_ligada(con_temp):
+    cenario_outubro(con_temp)
+    rid = recorrencia(con_temp, "Crédito de aulas")
+    velha = lixeira(con_temp, rid)
+    assert "cia:2026-10" in contas_auto.gerar_contas_automaticas(con_temp, HOJE)
+    cia = automaticas(con_temp, "cia:2026-10")[0]
+    assert (cia["recorrencia_id"], cia["competencia"]) == (rid, "2026-11")
+    lix = con_temp.execute("SELECT recorrencia_id, competencia, excluido_em FROM lancamentos WHERE id=?", (velha,)).fetchone()
+    assert lix["recorrencia_id"] is None and lix["competencia"] is None and lix["excluido_em"] is not None
+    assert virtuais_novembro(con_temp, rid) == []
+
+
+@pytest.mark.parametrize("pago_em", [None, "2026-11-01"])
+def test_baixa_ativa_feita_a_mao_na_vaga_nao_cria_a_automatica(con_temp, pago_em):
+    cenario_outubro(con_temp)
+    rid = recorrencia(con_temp, "Crédito de aulas")
+    with con_temp:
+        con_temp.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao, recorrencia_id, competencia)
+                            VALUES ('PJ','saida','2026-11-05',?,350,'Aluguel','Boleto do espaço',?,'2026-11')""", (pago_em, rid))
+    assert contas_auto.gerar_contas_automaticas(con_temp, HOJE) == ["das:2026-10"]
+    assert automaticas(con_temp, "cia:2026-10") == []
+    assert len([i for i in financeiro.em_aberto_ate(con_temp, "2026-12-31", HOJE)
+                if i["data"][:7] == "2026-11" and i["categoria"] == "Aluguel"]) == (1 if pago_em is None else 0)
+    assert virtuais_novembro(con_temp, rid) == []
+
+
+def test_automatica_antiga_sem_vinculo_e_ligada_no_recalculo(con_temp):
+    cenario_outubro(con_temp)
+    contas_auto.gerar_contas_automaticas(con_temp, HOJE)             # a versão antiga: criada sem recorrência
+    rid = recorrencia(con_temp, "Crédito de aulas")                  # o usuário já tinha a recorrência
+    antiga = automaticas(con_temp, "cia:2026-10")[0]
+    assert antiga["recorrencia_id"] is None and virtuais_novembro(con_temp, rid)   # duplicidade
+    assert contas_auto.gerar_contas_automaticas(con_temp, HOJE) == ["cia:2026-10"]    # valor e descrição não mudaram: só liga
+    cia = automaticas(con_temp, "cia:2026-10")[0]
+    assert (cia["id"], cia["recorrencia_id"], cia["competencia"]) == (antiga["id"], rid, "2026-11")
+    assert cia["valor"] == antiga["valor"] and cia["auto"] == "cia:2026-10"
+    assert virtuais_novembro(con_temp, rid) == []
+    assert contas_auto.gerar_contas_automaticas(con_temp, HOJE) == []
+
+
+def test_automatica_antiga_paga_e_ligada_e_vaga_da_lixeira_e_solta(con_temp):
+    cenario_outubro(con_temp)
+    contas_auto.gerar_contas_automaticas(con_temp, HOJE)
+    with con_temp:
+        con_temp.execute("UPDATE lancamentos SET pago_em='2026-11-04' WHERE auto='cia:2026-10'")
+    rid = recorrencia(con_temp, "Crédito de aulas")
+    velha = lixeira(con_temp, rid)
+    assert contas_auto.gerar_contas_automaticas(con_temp, HOJE) == ["cia:2026-10"]
+    cia = automaticas(con_temp, "cia:2026-10")[0]
+    assert (cia["recorrencia_id"], cia["pago_em"]) == (rid, "2026-11-04")
+    assert con_temp.execute("SELECT recorrencia_id FROM lancamentos WHERE id=?", (velha,)).fetchone()[0] is None
+    assert virtuais_novembro(con_temp, rid) == []
+
+
+def test_automatica_antiga_nao_liga_se_a_vaga_tem_baixa_ativa(con_temp):
+    cenario_outubro(con_temp)
+    contas_auto.gerar_contas_automaticas(con_temp, HOJE)
+    rid = recorrencia(con_temp, "Crédito de aulas")
+    with con_temp:
+        con_temp.execute("""INSERT INTO lancamentos (escopo, tipo, data, valor, categoria, descricao, recorrencia_id, competencia)
+                            VALUES ('PJ','saida','2026-11-05',350,'Aluguel','Boleto do espaço',?,'2026-11')""", (rid,))
+    assert contas_auto.gerar_contas_automaticas(con_temp, HOJE) == []
+    assert automaticas(con_temp, "cia:2026-10")[0]["recorrencia_id"] is None
+
+
+@pytest.mark.parametrize("encerrada", ["excluida", "fim"])
+def test_recorrencia_excluida_ou_encerrada_e_ignorada(con_temp, encerrada):
+    cenario_outubro(con_temp)
+    rid = recorrencia(con_temp, "Crédito de aulas", excluida=encerrada == "excluida", fim="2026-10" if encerrada == "fim" else None)
+    assert contas_auto.gerar_contas_automaticas(con_temp, HOJE) == ["das:2026-10", "cia:2026-10"]
+    cia = automaticas(con_temp, "cia:2026-10")[0]
+    assert cia["recorrencia_id"] is None and cia["competencia"] is None
+    assert virtuais_novembro(con_temp, rid) == []
+    assert contas_auto.gerar_contas_automaticas(con_temp, HOJE) == []
+
+
+def test_rodar_duas_vezes_continua_com_uma_conta(con_temp):
+    cenario_outubro(con_temp)
+    recorrencia(con_temp, "Crédito de aulas")
+    recorrencia(con_temp, "DAS", "Impostos/Taxas", dia=20)
+    assert contas_auto.gerar_contas_automaticas(con_temp, HOJE) == ["das:2026-10", "cia:2026-10"]
+    assert contas_auto.gerar_contas_automaticas(con_temp, HOJE) == []
+    assert con_temp.execute("SELECT COUNT(*) FROM lancamentos WHERE auto='cia:2026-10'").fetchone()[0] == 1
+    assert len(contas_de_novembro(con_temp, eh_conta_cia)) == 1
+    assert len(contas_de_novembro(con_temp, eh_conta_das)) == 1
+
+
 # ---------- telas ----------
 def test_configuracoes_mostra_a_linha_do_simples_e_nao_tem_o_campo_fixo(con_temp, http, monkeypatch):
     congelar(monkeypatch, HOJE)
