@@ -26,8 +26,10 @@ def eh_cia(texto: str | None) -> bool:
 
 
 def eh_local_cia(local: str | None) -> bool:
-    """O local é a CIA: o nome 'CIA' ou que começa com 'CIA' (sem diferenciar maiúsculas)."""
-    return (local or "").strip().lower().startswith("cia")
+    """O local é a CIA: 'CIA' como palavra inteira no começo ('CIA', 'Cia 111'), sem diferenciar maiúsculas.
+    'Ciagym' ou 'Ciática Studio' não são a CIA (a taxa deles não pode virar conta da CIA)."""
+    sem_acento = unicodedata.normalize("NFKD", local or "").encode("ascii", "ignore").decode().strip().lower()
+    return bool(re.match(r"cia\b", sem_acento))
 
 
 def _mes_br(mes: str) -> str:

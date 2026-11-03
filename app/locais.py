@@ -23,6 +23,18 @@ def custo_aula_local(con, local: str) -> float:
     return precos.custo_por_aula(c) if c else 0.0
 
 
+def ajustar_custos_cia(con, antiga: float, nova: float) -> None:
+    """A taxa da CIA (1 pessoa) mudou em Configurações: o custo dos preços da CIA (que já traz a taxa embutida) acompanha.
+    Um UPDATE só, dentro da transação de quem chama. Sem isso a margem da CIA não mudava e o "+ Novo local" descontava a taxa nova
+    de um custo com a taxa velha."""
+    dif = float(nova or 0) - float(antiga or 0)
+    if abs(dif) < 1e-9:
+        return
+    con.execute("""UPDATE precos_base SET custo_operacional = COALESCE(custo_operacional,0) + ? * sessoes_mes,
+                   custo_total = COALESCE(custo_total,0) + ? * sessoes_mes
+                   WHERE local='CIA' AND sessoes_mes > 0 AND tipo_servico IN (?,?)""", (dif, dif, *TIPOS_COM_AULA))
+
+
 def referencias(con) -> list[str]:
     """Locais que servem de base para copiar: a CIA e os criados aqui (o sistema sabe quanto custam por aula).
     Locais da planilha ficam de fora: a taxa deles está misturada no custo e seria cobrada duas vezes."""
@@ -66,13 +78,17 @@ def _gravar(con, nome, referencia, modo, c, dif_aula, linhas) -> dict:
                     (nome, *(c[k] for k in CAMPOS), referencia, modo))
         con.execute("INSERT OR IGNORE INTO parametros (grupo, chave, valor_texto, ordem) "
                     "VALUES ('lista_locais', ?, ?, (SELECT COALESCE(MAX(ordem),0)+1 FROM parametros WHERE grupo='lista_locais'))", (nome, nome))
+        mantidos = 0
         for b in linhas:
             s = float(b["sessoes_mes"] or 0)
             custo_ref = float(b["custo_operacional"] or 0)
             custo = max(0.0, custo_ref + dif_aula * s)
             preco = float(b["preco_base"])
-            if modo == "margem" and custo_ref > 0:   # margem = 1 - taxas - custo/preço: mesma razão custo/preço = mesma margem
-                preco = preco * custo / custo_ref
+            if modo == "margem" and custo != custo_ref:
+                if custo_ref > 0 and custo > 0:   # margem = 1 - taxas - custo/preço: mesma razão custo/preço = mesma margem
+                    preco = preco * custo / custo_ref
+                else:   # custo zerou (ou a referência não tinha custo): a razão daria R$ 0, então o preço fica o da referência
+                    mantidos += 1
             total = float(b["custo_total"] or 0) - custo_ref + custo
             con.execute("""INSERT INTO precos_base (tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal, sessoes_mes, preco_base,
                            custo_operacional, mao_obra, custo_total, origem) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
@@ -85,4 +101,4 @@ def _gravar(con, nome, referencia, modo, c, dif_aula, linhas) -> dict:
         con.executemany("INSERT OR IGNORE INTO grade_slots (tipo_calculo, dia, local, hora, status, multiplicador) VALUES (?,?,?,?,'livre',?)",
                         [(s[0], s[1], nome, s[2], s[3] or 1) for s in slots])
         depois = con.execute("SELECT COUNT(*) FROM grade_slots WHERE local=?", (nome,)).fetchone()[0]
-    return {"precos": len(linhas), "horarios": depois - antes}
+    return {"precos": len(linhas), "horarios": depois - antes, "mantidos": mantidos}
