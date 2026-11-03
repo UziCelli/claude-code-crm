@@ -10,6 +10,8 @@ services:
     healthCheckPath: /saude
     autoDeploy: true      # cada mudança na main do GitHub publica sozinha
     envVars:
+      - key: TZ            # fuso do Brasil: sem isso o "hoje" do servidor é UTC (vira o dia às 21h)
+        value: America/Sao_Paulo
       - key: CRM_NUVEM    # liga a portaria do Cloudflare Access e esconde o botão Encerrar
         value: "1"
       - key: TURSO_DATABASE_URL

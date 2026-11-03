@@ -516,7 +516,7 @@ def fechar_mes(con=Depends(get_db)):
         # só marca na rotina se a tarefa "fim_mes" não foi excluída
         con.execute("""INSERT OR IGNORE INTO rotina_itens (semana, item) SELECT ?, 'fim_mes'
                        WHERE EXISTS (SELECT 1 FROM rotina_tarefas WHERE chave='fim_mes' AND excluido_em IS NULL)""", (semana_atual(),))
-        con.execute("UPDATE rotina_itens SET feito=1, data_feito=date('now','localtime') WHERE semana=? AND item='fim_mes'", (semana_atual(),))
+        con.execute("UPDATE rotina_itens SET feito=1, data_feito=? WHERE semana=? AND item='fim_mes'", (dt.date.today().isoformat(), semana_atual()))
     return voltar("/", msg=f"Mês {m['mes'][5:]}/{m['mes'][:4]} fechado e guardado no histórico.")
 
 
@@ -770,8 +770,8 @@ async def cliente_salvar(request: Request, cid: int, con=Depends(get_db)):
         if trocou:   # data trocada à mão: os pagamentos lançados até agora já estão nela
             con.execute("UPDATE clientes SET renovacao_em=datetime('now','localtime') WHERE id=?", (cid,))
         if antigo and antigo["status"] != d["status"]:
-            con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, descricao) VALUES (?, 'status', date('now','localtime'), ?)",
-                        (cid, f"Status alterado para {d['status']}"))
+            con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, descricao) VALUES (?, 'status', ?, ?)",
+                        (cid, dt.date.today().isoformat(), f"Status alterado para {d['status']}"))
     return voltar(f"/clientes/{cid}", msg="Salvo.")
 
 
@@ -779,8 +779,8 @@ async def cliente_salvar(request: Request, cid: int, con=Depends(get_db)):
 def cliente_status(cid: int, status: str = Form(...), con=Depends(get_db)):
     with con:
         con.execute("UPDATE clientes SET status=?, atualizado_em=datetime('now','localtime') WHERE id=?", (status, cid))
-        con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, descricao) VALUES (?, 'status', date('now','localtime'), ?)",
-                    (cid, f"Status alterado para {status}"))
+        con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, descricao) VALUES (?, 'status', ?, ?)",
+                    (cid, dt.date.today().isoformat(), f"Status alterado para {status}"))
     return voltar(f"/clientes/{cid}", msg=f"Status: {status}.")
 
 
@@ -955,10 +955,10 @@ def lead_criar(nome: str = Form(...), telefone: str = Form(""), canal_origem: st
     if erro:
         return voltar("/leads", erro=erro)
     with con:
-        cur = con.execute("""INSERT INTO leads (nome, telefone, canal_origem, interesse, proxima_acao, data_proxima_acao, observacoes, indicado_por)
-                             VALUES (?,?,?,?,?,?,?,?)""", (nome, telefone or None, indicacoes.CANAL if indicador else canal_origem,
-                                                           interesse or None, proxima_acao or None, data_proxima_acao or None,
-                                                           observacoes or None, indicador))
+        cur = con.execute("""INSERT INTO leads (nome, telefone, canal_origem, interesse, proxima_acao, data_proxima_acao, observacoes, indicado_por,
+                             data_entrada, data_mudanca_etapa) VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                          (nome, telefone or None, indicacoes.CANAL if indicador else canal_origem, interesse or None,
+                           proxima_acao or None, data_proxima_acao or None, observacoes or None, indicador, dt.date.today().isoformat(), dt.date.today().isoformat()))
         con.execute("INSERT INTO lead_etapas_log (lead_id, etapa) VALUES (?, 'lead')", (cur.lastrowid,))
     return voltar("/leads", msg="Lead adicionado.")
 
@@ -985,15 +985,15 @@ def lead_etapa(lid: int, etapa: str = Form(...), motivo_perda: str = Form(""), c
     if not l or etapa not in dict(ETAPAS):
         return voltar("/leads", erro="Etapa inválida.")
     with con:
-        con.execute("UPDATE leads SET etapa=?, motivo_perda=?, data_mudanca_etapa=date('now','localtime') WHERE id=?",
-                    (etapa, (motivo_perda or None) if etapa == "perdido" else None, lid))
+        con.execute("UPDATE leads SET etapa=?, motivo_perda=?, data_mudanca_etapa=? WHERE id=?",
+                    (etapa, (motivo_perda or None) if etapa == "perdido" else None, dt.date.today().isoformat(), lid))
         con.execute("INSERT INTO lead_etapas_log (lead_id, etapa) VALUES (?, ?)", (lid, etapa))
         if etapa == "cliente" and not l["cliente_id"]:
             partes = (l["interesse"] or "").split("/")
             cur = con.execute("""INSERT INTO clientes (nome, telefone, canal_origem, observacoes, lead_id, tipo_servico, local, indicado_por, data_inicio)
-                                 VALUES (?,?,?,?,?,?,?,?,date('now','localtime'))""",
+                                 VALUES (?,?,?,?,?,?,?,?,?)""",
                               (l["nome"], l["telefone"], l["canal_origem"], l["observacoes"], lid,
-                               partes[0].strip() or None, partes[1].strip() if len(partes) > 1 else None, l["indicado_por"]))
+                               partes[0].strip() or None, partes[1].strip() if len(partes) > 1 else None, l["indicado_por"], dt.date.today().isoformat()))
             con.execute("UPDATE leads SET cliente_id=? WHERE id=?", (cur.lastrowid, lid))
             return voltar(f"/leads?destaque={lid}", msg=f"Novo aluno: {l['nome']}")
     return voltar(f"/leads?destaque={lid}", msg="Etapa atualizada.")
@@ -2037,11 +2037,11 @@ def proposta_salvar(plano: str = Form(...), local: str = Form("CIA"), forma: str
     with con:
         cur = con.execute("""INSERT INTO propostas (lead_id, cliente_id, tipo_servico, qtd_aulas, freq_semanal, local, forma_pagamento, pessoas,
                              dia, hora, desconto, preco_total, preco_pessoa, custo_total, lucro, margem, lucro_hora, preco_minimo,
-                             desconto_maximo, abaixo_margem, observacoes, preco_cheio) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                             desconto_maximo, abaixo_margem, observacoes, preco_cheio, data) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                           (int(lead_id) if lead_id else None, int(cliente_id) if cliente_id else None, r["tipo"], r["qtd"], r["freq"],
                            " + ".join(locais), forma, pessoas, um.get("dia") or None, um.get("hora") or None, r["desconto"], r["preco_total"],
                            r["preco_pessoa"], r["custo_total"], r["lucro"], r["margem"], r["lucro_hora"], r["preco_minimo"],
-                           r["desconto_maximo"], int(r["abaixo_margem"]), observacoes or None, r["preco_cheio"]))
+                           r["desconto_maximo"], int(r["abaixo_margem"]), observacoes or None, r["preco_cheio"], dt.date.today().isoformat()))
         con.executemany("INSERT INTO proposta_horarios (proposta_id, dia, hora, local, multiplicador) VALUES (?,?,?,?,?)",
                         [(cur.lastrowid, d["dia"] or None, d["hora"] or None, d["local"], d["mult"]) for d in r["horarios"]])
     return voltar(f"/propostas/{cur.lastrowid}", msg=f"Proposta #{cur.lastrowid} salva.")
@@ -2209,7 +2209,7 @@ def campanha_item(fase_id: int = Form(...), texto: str = Form(...), con=Depends(
 @app.post("/campanhas/item/{iid}/toggle")
 def campanha_item_toggle(iid: int, con=Depends(get_db)):
     with con:
-        con.execute("UPDATE campanha_itens SET feito = 1-feito, data_feito = CASE WHEN feito=0 THEN date('now','localtime') ELSE NULL END WHERE id=?", (iid,))
+        con.execute("UPDATE campanha_itens SET feito = 1-feito, data_feito = CASE WHEN feito=0 THEN ? ELSE NULL END WHERE id=?", (dt.date.today().isoformat(), iid))
     return voltar("/campanhas")
 
 
@@ -2304,8 +2304,8 @@ def rotina(request: Request, con=Depends(get_db)):
 @app.post("/rotina/{item}/toggle")
 def rotina_toggle(item: str, con=Depends(get_db)):
     with con:
-        con.execute("UPDATE rotina_itens SET feito=1-feito, data_feito=CASE WHEN feito=0 THEN date('now','localtime') ELSE NULL END WHERE semana=? AND item=?",
-                    (semana_atual(), item))
+        con.execute("UPDATE rotina_itens SET feito=1-feito, data_feito=CASE WHEN feito=0 THEN ? ELSE NULL END WHERE semana=? AND item=?",
+                    (dt.date.today().isoformat(), semana_atual(), item))
     return voltar("/rotina")
 
 
@@ -2333,8 +2333,8 @@ def rotina_tarefa_excluir(tid: int, con=Depends(get_db)):
 def espera_add(nome: str = Form(...), telefone: str = Form(""), dia: int = Form(0), hora: int = Form(...), local: str = Form(""),
                observacao: str = Form(""), con=Depends(get_db)):
     with con:
-        con.execute("INSERT INTO lista_espera (nome, telefone, dia, hora, local, observacao) VALUES (?,?,?,?,?,?)",
-                    (nome, telefone or None, dia or None, hora, local or None, observacao or None))
+        con.execute("INSERT INTO lista_espera (nome, telefone, dia, hora, local, observacao, data) VALUES (?,?,?,?,?,?,?)",
+                    (nome, telefone or None, dia or None, hora, local or None, observacao or None, dt.date.today().isoformat()))
     return voltar("/rotina", msg="Adicionado à lista de espera.")
 
 
