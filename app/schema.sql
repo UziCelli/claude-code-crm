@@ -258,8 +258,9 @@ CREATE TABLE IF NOT EXISTS agenda_fixos (   -- horário fixo da Agenda: até 2 a
     dia INTEGER NOT NULL,            -- 1..6 (segunda a sábado)
     hora INTEGER NOT NULL,           -- 5..23
     local TEXT NOT NULL,
+    vigente_de TEXT,                 -- AAAA-MM-DD em que o horário passou a valer (NULL = desde a data de início do aluno)
     criado_em TEXT DEFAULT (datetime('now','localtime')),
-    excluido_em TEXT
+    excluido_em TEXT                 -- deixou de valer neste dia: as semanas de antes continuam com ele
 );
 
 CREATE TABLE IF NOT EXISTS lista_espera (

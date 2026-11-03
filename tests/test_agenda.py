@@ -345,11 +345,12 @@ def test_trocar_o_local_solta_a_celula_antiga_e_ocupa_a_nova(http):
     ana = aluno("Ana Silva")
     horario(http, 2, 8, ana, local="CIA")
     assert grade(2, 8, "CIA") == da_grade(ana, "Ana Silva") and grade(2, 8, "SmartFit") == []
-    antes = consulta("SELECT id, criado_em FROM agenda_fixos")
+    antes = consulta("SELECT id FROM agenda_fixos")
     assert msg(horario(http, 2, 8, ana, local="SmartFit")) == "Ter 08h: Ana (SmartFit)."
     assert grade(2, 8, "CIA") == livre()
     assert grade(2, 8, "SmartFit") == da_grade(ana, "Ana Silva")
-    assert consulta("SELECT id, criado_em, local, excluido_em FROM agenda_fixos") == [(antes[0][0], antes[0][1], "SmartFit", None)]   # a mesma linha, só mudou o local
+    linhas = consulta("SELECT id, local, excluido_em IS NOT NULL, vigente_de FROM agenda_fixos ORDER BY id")   # a antiga vai para a lixeira (o passado fica com ela)
+    assert linhas[0][:3] == (antes[0][0], "CIA", 1) and linhas[1][1:] == ("SmartFit", 0, None)   # criada hoje: é ajuste, a nova vale desde o início
     assert [a["local"] for a in aulas()] == ["SmartFit"]
 
 
@@ -693,8 +694,8 @@ def test_copiar_da_grade_grava_num_insert_so(http, espiar):
         r = copiar(http)
     assert erro(r) is None
     escritas = gravacoes(vistos)
-    assert len(escritas) == 1 and escritas[0].startswith("INSERT INTO agenda_fixos (cliente_id, dia, hora, local) VALUES (?,?,?,?),(?,?,?,?)")
-    assert escritas[0].count("(?,?,?,?)") == len(fixos_ativos())
+    assert len(escritas) == 1 and escritas[0].startswith("INSERT INTO agenda_fixos (cliente_id, dia, hora, local, vigente_de, criado_em) VALUES (?,?,?,?,?,?),(?,?,?,?,?,?)")
+    assert escritas[0].count("(?,?,?,?,?,?)") == len(fixos_ativos())
     assert len(fixos_ativos()) == 30   # cada aluno uma vez, sem repetir por local
 
 
@@ -708,12 +709,12 @@ def test_inserir_fixos_em_blocos_de_200_linhas(http):
         def execute(self, sql, params=()):
             self.chamadas.append((sql, list(params)))
 
-    for n, esperado in ((1, 1), (200, 1), (201, 2), (450, 3)):
+    for n, esperado in ((1, 1), (130, 1), (131, 2), (450, 4)):
         c = Contador()
         linhas = [(ana, 1 + k % 6, 5 + k % 19, "CIA") for k in range(n)]
         main.inserir_fixos(c, linhas)
         assert len(c.chamadas) == esperado
-        assert sum(sql.count("(?,?,?,?)") for sql, _ in c.chamadas) == n and sum(len(p) for _, p in c.chamadas) == 4 * n
+        assert sum(sql.count("(?,?,?,?,?,?)") for sql, _ in c.chamadas) == n and sum(len(p) for _, p in c.chamadas) == 6 * n
         assert all(len(p) <= 800 for _, p in c.chamadas)   # abaixo do limite de parâmetros do SQLite
     c = Contador()
     main.inserir_fixos(c, [])
@@ -1350,7 +1351,7 @@ def test_varios_horarios_3_pares_gravam_1_insert_na_agenda_e_1_upsert_na_grade(h
     assert erro(r) is None and msg(r) == "Ana entrou em Seg 07h, Qua 07h, Sex 18h (CIA)."
     escritas = gravacoes(vistos)
     assert len(escritas) == 2
-    assert escritas[0].startswith("INSERT INTO agenda_fixos") and escritas[0].count("(?,?,?,?)") == 3
+    assert escritas[0].startswith("INSERT INTO agenda_fixos") and escritas[0].count("(?,?,?,?,?,?)") == 3
     assert escritas[1].startswith("INSERT INTO grade_slots") and escritas[1].count("(?,?,?,?,?,?,?,?)") == 6 and "ON CONFLICT" in escritas[1]
     assert fixos_ativos() == [("Ana Silva", 1, 7, "CIA"), ("Ana Silva", 3, 7, "CIA"), ("Ana Silva", 5, 18, "CIA")]
     for dia, hora in ((1, 7), (3, 7), (5, 18)):
@@ -1523,7 +1524,7 @@ def test_banco_antigo_sem_agenda_fixos_ganha_a_tabela(tmp_path, monkeypatch):
     db.iniciar_banco(caminho)   # de novo: CREATE IF NOT EXISTS, sem perder linhas
     con = db.conectar(caminho)
     try:
-        assert {r[1] for r in con.execute("PRAGMA table_info(agenda_fixos)")} == {"id", "cliente_id", "dia", "hora", "local", "criado_em", "excluido_em"}
+        assert {r[1] for r in con.execute("PRAGMA table_info(agenda_fixos)")} == {"id", "cliente_id", "dia", "hora", "local", "vigente_de", "criado_em", "excluido_em"}
         with con:
             con.execute("INSERT INTO agenda_fixos (cliente_id, dia, hora, local) VALUES (1, 2, 7, 'CIA')")
         db.iniciar_banco(caminho)
