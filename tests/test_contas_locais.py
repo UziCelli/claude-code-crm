@@ -259,3 +259,26 @@ def test_leituras_nao_crescem_com_o_numero_de_locais(con_temp):
         return n[0]
     um = contar(1)
     assert contar(6) <= um + 2                                              # 7 locais custam o mesmo que 1
+
+
+def test_em_aberto_que_zera_sai_e_volta_se_o_valor_voltar(con_temp):
+    a, b = cenario(con_temp)
+    contas_auto.gerar_contas_automaticas(con_temp, HOJE)
+    assert automaticas(con_temp, CHAVE)
+    with con_temp:   # as aulas de outubro foram desmarcadas: o mês não tem mais o que cobrar do local
+        con_temp.execute("DELETE FROM cliente_eventos WHERE tipo='aula'")
+    assert contas_auto.gerar_contas_automaticas(con_temp, HOJE) == [CHAVE]
+    assert not automaticas(con_temp, CHAVE)
+    marca(con_temp, a, "2026-10-05")
+    assert contas_auto.gerar_contas_automaticas(con_temp, HOJE) == [CHAVE]
+    assert automaticas(con_temp, CHAVE)[0]["valor"] == 20 + 50
+
+
+def test_paga_ou_editada_nao_e_apagada_quando_zera(con_temp):
+    cenario(con_temp)
+    contas_auto.gerar_contas_automaticas(con_temp, HOJE)
+    with con_temp:
+        con_temp.execute("UPDATE lancamentos SET pago_em='2026-11-03' WHERE auto=?", (CHAVE,))
+        con_temp.execute("DELETE FROM cliente_eventos WHERE tipo='aula'")
+    contas_auto.gerar_contas_automaticas(con_temp, HOJE)
+    assert automaticas(con_temp, CHAVE)[0]["valor"] == VALOR

@@ -2028,7 +2028,7 @@ def _texto_preco(v: float | None) -> str:
 
 
 def _url_propostas(f: dict, horarios: list[dict]) -> str:
-    q = {k: f[k] for k in ("plano", "local", "forma", "pessoas", "desconto", "preco_final", "lead_id", "cliente_id") if f.get(k)}
+    q = {k: f[k] for k in ("plano", "local", "forma", "pessoas", "desconto", "preco_final", "lead_id", "cliente_id", "obs") if f.get(k)}
     q["h"] = [f"{x['dia']}-{x['hora']}-{x['local']}" for x in horarios]
     return "/propostas?" + urlencode(q, doseq=True)
 
@@ -2042,7 +2042,7 @@ def simulador_antigo(request: Request):
 
 @app.get("/propostas", response_class=HTMLResponse)
 def propostas_tela(request: Request, plano: str = "", local: str = "CIA", forma: str = "PIX", pessoas: int = 1, dia: int = 0, hora: int = 0,
-                   desconto: str = "", preco_final: str = "", ajuste: str = "", lead_id: int = 0, cliente_id: int = 0,
+                   desconto: str = "", preco_final: str = "", ajuste: str = "", lead_id: int = 0, cliente_id: int = 0, obs: str = "",
                    h: list[str] = Query([]), nd: list[int] = Query([]), nh: int = 0, nl: str = "", tira: int = -1, con=Depends(get_db)):
     horarios = _ler_horarios(h)
     if not h and dia:   # link antigo (Explorador, favoritos): um horário só
@@ -2079,7 +2079,7 @@ def propostas_tela(request: Request, plano: str = "", local: str = "CIA", forma:
     locais = db.lista(con, "lista_locais")
     locais += [x["local"] for x in horarios if x["local"] not in locais]
     f = dict(plano=plano, local=local, forma=forma, pessoas=pessoas, desconto=_texto_preco(desc) if desc else "",
-             preco_final=_texto_preco(pf), lead_id=lead_id, cliente_id=cliente_id)
+             preco_final=_texto_preco(pf), lead_id=lead_id, cliente_id=cliente_id, obs=obs[:2000])
     return render(request, "propostas.html", con, planos=opcoes_plano(con), f=f, r=resultado, erro_sim=erro,
                   horarios=[{**x, "codigo": f"{x['dia']}-{x['hora']}-{x['local']}", "texto": _texto_horario(x["dia"], x["hora"])}
                             for x in horarios],
@@ -2108,7 +2108,7 @@ def proposta_salvar(plano: str = Form(...), local: str = Form("CIA"), forma: str
                     cliente_id: str = Form(""), observacoes: str = Form(""), confirmar: int = Form(0), con=Depends(get_db)):
     horarios = _ler_horarios(h)
     f = dict(plano=plano, local=local, forma=forma, pessoas=pessoas, desconto=desconto, preco_final=preco_final,
-             lead_id=lead_id, cliente_id=cliente_id)
+             lead_id=lead_id, cliente_id=cliente_id, obs=observacoes[:2000])   # obs: o texto não some quando volta com erro
     url = _url_propostas(f, horarios)
     try:
         desc, pf = _num_campo(desconto, "Desconto") or 0.0, _num_campo(preco_final, "Preço final")

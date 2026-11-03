@@ -227,6 +227,10 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Aluno parado/inativo solta as células da Grade; voltando a ativo, retoma os horários fixos.
 - "+ Novo local" volta para a mesma tela (semana da Agenda, Propostas com filtros). Testes: `tests/test_bugs_medios.py`.
 
+## Bugs pequenos (PR `claude/bugs-pequenos`, 03/11/2026)
+- Propostas: as observações voltam preenchidas quando o salvar dá erro.
+- Contas automáticas: conta em aberto (do app, sem edição) cujo mês zerou é apagada; volta sozinha se o valor voltar. Paga ou editada fica.
+
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.
 - Nomes de serviço no CRM: Pacote de Aulas, Mensalidade, Consultoria Online, Consultoria Híbrida, Avaliação Física.

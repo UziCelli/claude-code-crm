@@ -73,7 +73,7 @@
       {% for x in horarios %}<input type="hidden" name="h" value="{{ x.codigo }}">{% endfor %}
       <div><label>Lead</label><select name="lead_id"><option value="">—</option>{% for l in leads %}<option value="{{ l.id }}" {{ 'selected' if l.id == f.lead_id }}>{{ l.nome }}</option>{% endfor %}</select></div>
       <div><label>Cliente</label><select name="cliente_id"><option value="">—</option>{% for cl in clientes %}<option value="{{ cl.id }}" {{ 'selected' if cl.id == f.cliente_id }}>{{ cl.nome }}</option>{% endfor %}</select></div>
-      <div class="largo"><label>Observações</label><input name="observacoes"></div>
+      <div class="largo"><label>Observações</label><input name="observacoes" value="{{ f.obs or '' }}"></div>
       {% if r.abaixo_margem %}<div class="largo"><label style="display:flex;gap:6px;align-items:center;color:#8f1d17"><input type="checkbox" name="confirmar" value="1"> Salvar mesmo assim (abaixo da margem mínima)</label></div>{% endif %}
       <div class="largo"><button>Salvar proposta</button></div>
     </form>
