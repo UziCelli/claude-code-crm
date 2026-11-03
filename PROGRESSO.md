@@ -188,6 +188,17 @@ Pedido: cadastrar academias novas direto da Grade, Agenda e Propostas, com taxas
 - **Base para copiar**: só a CIA ou um local criado pelo pop-up (dos locais da planilha o sistema não sabe a taxa por aula; copiar cobraria a taxa duas vezes). Nome repetido com outra caixa ("cia") dá erro.
 - Fora do escopo: conta mensal automática (como a da CIA) para o local novo; ajuste fino continua em Configurações > Preços base.
 
+## Bugs graves — PR 1: preços e locais (PR `claude/bugs-precos-locais`, 03/11/2026)
+Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos dos locais no financeiro).
+- **Taxa da CIA**: mudar `taxa_cia[1]` em Configurações agora ajusta o custo dos preços da CIA (Pacote/Mensalidade/Aula avulsa) em (nova − antiga) × sessões (`locais.ajustar_custos_cia`). Antes a margem da CIA não mudava e o "+ Novo local" descontava a taxa nova de um custo com a velha.
+- **Manter a margem com custo zero**: o preço não vira mais R$ 0; fica o da referência e o aviso diz em quantos planos ("Mantive o preço…").
+- **Grupo maior que a tabela** (5+ pessoas): usa o maior multiplicador/mão de obra/taxa da CIA configurado (`precos.por_grupo`). Antes um grupo de 5 custava o preço de 1.
+- **"Pacote de 8 aulas"** (rótulo das Propostas) agora é entendido por `aulas_mes` (antes só "Pacote 8").
+- **Local da CIA**: "CIA" no começo sem outra letra colada ("CIA", "Cia 111", "CIA2", "CIA Athletica"); "Ciagym" e "Ciática Studio" não geram conta da CIA.
+- Reimportar a planilha não desfaz a taxa da tela: o custo da CIA importado troca a taxa da planilha (Tabela18) pela de Configurações.
+- Configurações mostra números com vírgula ("70,125"): com ponto, salvar a tela lia "70.125" como 70 mil.
+- Testes: `tests/test_precos_bugs.py`.
+
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.
 - Nomes de serviço no CRM: Pacote de Aulas, Mensalidade, Consultoria Online, Consultoria Híbrida, Avaliação Física.

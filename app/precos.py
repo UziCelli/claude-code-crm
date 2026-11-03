@@ -37,6 +37,15 @@ def custo_por_aula(c: dict) -> float:
     return (c.get("taxa_aula") or 0) + (c.get("deslocamento") or 0) + fixo
 
 
+def por_grupo(tabela: dict, pessoas: int, padrao: float) -> float:
+    """Valor da tabela por nº de pessoas (multiplicador, mão de obra extra, taxa da CIA).
+    Grupo maior que a tabela usa o maior configurado: 5 pessoas não podem custar o preço de 1."""
+    if pessoas in tabela:
+        return tabela[pessoas]
+    menores = [k for k in tabela if k <= pessoas]
+    return tabela[max(menores)] if menores else padrao
+
+
 def _componentes(base: dict, p: dict, pessoas: int, mult_horario: float, local: str | None) -> tuple[float, float, float]:
     """(preço cheio, custo, horas por aula) de um horário: o que muda de um horário/local para outro."""
     local = local or base.get("local")
@@ -46,11 +55,12 @@ def _componentes(base: dict, p: dict, pessoas: int, mult_horario: float, local: 
     if outro and outro.get("max_pessoas") and pessoas > outro["max_pessoas"]:
         raise ValueError(f"Em {local} o máximo é {outro['max_pessoas']} pessoas")
     sessoes = float(base.get("sessoes_mes") or 0)
-    preco_cheio = float(base["preco_base"]) * mult_horario * p["grupo_mult"].get(pessoas, 1.0)
+    preco_cheio = float(base["preco_base"]) * mult_horario * por_grupo(p["grupo_mult"], pessoas, 1.0)
     custo = float(base.get("custo_operacional") or 0)
-    custo += float(base.get("mao_obra") or 0) * p["grupo_mo"].get(pessoas, 0.0)
+    custo += float(base.get("mao_obra") or 0) * por_grupo(p["grupo_mo"], pessoas, 0.0)
     if local == "CIA" and pessoas > 1:
-        custo += (p["taxa_cia"][pessoas] - p["taxa_cia"][1]) * sessoes
+        um = p["taxa_cia"].get(1, 0.0)
+        custo += (por_grupo(p["taxa_cia"], pessoas, um) - um) * sessoes
     horas_aula = 1.0
     if outro:
         custo += (outro.get("taxa_pessoa_extra") or 0) * (pessoas - 1) * sessoes

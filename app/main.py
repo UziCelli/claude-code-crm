@@ -211,7 +211,7 @@ def mes_atual():
 def aulas_mes(c) -> float:
     """Sessões por mês estimadas a partir do plano do cliente."""
     plano = (c["plano"] or "")
-    m = re.search(r"Pacote (\d+)", plano)
+    m = re.search(r"Pacote (?:de )?(\d+)", plano)   # "Pacote 8" (planilha) ou "Pacote de 8 aulas" (Propostas)
     if m:
         return int(m.group(1))
     m = re.search(r"Mensalidade (\d+)x", plano)
@@ -269,7 +269,7 @@ def estimativa_cliente(con, c, p, bases=None):
     pessoas = c["pessoas"] or 1
     forma = c["forma_pagamento"] if c["forma_pagamento"] in p["taxas"] else "PIX"
     try:
-        return precos.calcular({**dict(base), "preco_base": c["valor"] / (p["grupo_mult"].get(pessoas) or 1.0)}, p,
+        return precos.calcular({**dict(base), "preco_base": c["valor"] / (precos.por_grupo(p["grupo_mult"], pessoas, 1.0) or 1.0)}, p,
                                pessoas=pessoas, forma_pagamento=forma)
     except ValueError:
         return None
@@ -2951,6 +2951,7 @@ def configuracoes(request: Request, con=Depends(get_db)):
 async def configuracoes_salvar(request: Request, con=Depends(get_db)):
     form = await request.form()
     with con:
+        cia_antes = precos.taxas_cia(con)[0].get(1, 0.0)
         for k, v in form.items():
             if k.startswith("p_") and v != "":
                 pid = int(k[2:])
@@ -2959,6 +2960,7 @@ async def configuracoes_salvar(request: Request, con=Depends(get_db)):
                 con.execute("UPDATE parametros SET valor=? WHERE id=?", (val / 100 if fmt == "pct" else val, pid))
             elif k.startswith("t_"):
                 con.execute("UPDATE parametros SET valor_texto=? WHERE id=? AND grupo IN ('msg_whatsapp','msg_dados')", (v.strip(), int(k[2:])))
+        loc.ajustar_custos_cia(con, cia_antes, precos.taxas_cia(con)[0].get(1, 0.0))
     return voltar("/configuracoes", msg="Parâmetros salvos.")
 
 
@@ -3004,6 +3006,8 @@ def locais_novo(nome: str = Form(...), referencia: str = Form("CIA"), modo: str 
     if url.startswith("/grade"):
         url = "/grade?local=" + quote(nome)
     aviso = "" if r["precos"] else f" (sem preços: '{referencia}' não tem Pacote nem Mensalidade)"
+    if r.get("mantidos"):
+        aviso += f". Mantive o preço de {referencia} em {r['mantidos']} plano(s): com custo zero (na referência ou no local novo) a margem não dá para manter; ajuste esses preços à mão"
     return voltar(url, msg=f"Local {nome} criado: {r['precos']} preços e {r['horarios']} horários na grade{aviso}.")
 
 
