@@ -13,8 +13,8 @@
 </div>
 <div class="linha" style="justify-content:space-between">
   <div class="legenda">
-    <span><i style="background:var(--verde-f)"></i> margem ≥ 15%</span><span><i style="background:var(--amarelo-f)"></i> 10–15%</span>
-    <span><i style="background:var(--vermelho-f)"></i> &lt; 10%</span><span><i style="background:#f5c9c5"></i> prejuízo</span>
+    <span><i style="background:var(--verde-f)"></i> margem ≥ {{ (minima*100)|round|int }}%</span><span><i style="background:var(--amarelo-f)"></i> {{ ((minima-0.05)*100)|round|int }}–{{ (minima*100)|round|int }}%</span>
+    <span><i style="background:var(--vermelho-f)"></i> &lt; {{ ((minima-0.05)*100)|round|int }}%</span><span><i style="background:#f5c9c5"></i> prejuízo</span>
     <span><i style="background:var(--aco)"></i> ocupado</span><span><i style="background:#dfe3ea"></i> indisponível</span>
   </div>
   <div class="muted">{{ resumo.livres }} livres · {{ resumo.ocupados }} ocupados · {{ resumo.vale }} de vale{% if base %} · referência: {{ base.tipo_servico }} {{ base.qtd_aulas or base.freq_semanal ~ 'x/sem' }} {{ base.preco_base|moeda }}{% else %} · sem preço base para este local{% endif %}</div>
@@ -29,7 +29,7 @@
     {% set c = celulas.get((d, h)) %}
     <td>
       {% if c %}
-      <button class="cel {{ c.status if c.status != 'livre' else (c.margem|cor) }} {{ 'apagado' if c.apagado }} {{ 'vale' if c.status == 'livre' and c.multiplicador < 1 }}"
+      <button class="cel {{ c.status if c.status != 'livre' else (c.margem|cor(minima)) }} {{ 'apagado' if c.apagado }} {{ 'vale' if c.status == 'livre' and c.multiplicador < 1 }}"
         data-abrir="dlg-slot" data-titulo="{{ d|dia }} {{ '%02d'|format(h) }}h — {{ local }}" data-dia="{{ d }}" data-hora="{{ h }}" data-status="{{ c.status }}" data-cliente_id="{{ c.cliente_id or '' }}" data-multiplicador="{{ c.multiplicador }}">
         {% if c.status == 'ocupado' %}<span class="t">{{ c.cliente_nome or 'Ocupado' }}</span>
         {% elif c.status == 'indisponivel' %}<span class="t">Indisponível</span><br>{{ c.bloqueio or '' }}

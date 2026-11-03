@@ -819,7 +819,18 @@ def cliente_status(cid: int, status: str = Form(...), con=Depends(get_db)):
                     (cid, dt.date.today().isoformat(), f"Status alterado para {status}"))
         if status == "ativo" and antes and antes["status"] != "ativo":
             tirados = tirar_dos_lotados(con, cid)
+            _grade_reocupar(con, cid)
+        elif status != "ativo" and antes and antes["status"] == "ativo":
+            # parado/inativo não ocupa a Grade (a vaga aparece para venda). Os horários fixos ficam: voltando a ativo, ele os retoma
+            con.execute("UPDATE grade_slots SET status='livre', cliente_id=NULL, cliente_nome=NULL WHERE cliente_id=?", (cid,))
     return voltar(f"/clientes/{cid}", msg=f"Status: {status}." + aviso_lotados(tirados))
+
+
+def _grade_reocupar(con, cid) -> None:
+    """O aluno voltou a ativo: marca na Grade os horários fixos que ficaram com ele (grade_ocupar é melhor esforço)."""
+    nome = (con.execute("SELECT nome FROM clientes WHERE id=?", (cid,)).fetchone() or [""])[0]
+    for f in con.execute("SELECT DISTINCT dia, hora, local FROM agenda_fixos WHERE cliente_id=? AND excluido_em IS NULL", (cid,)).fetchall():
+        grade_ocupar(con, cid, nome, f["dia"], f["local"], f["hora"])
 
 
 @app.post("/clientes/{cid}/wa/{modelo}")
@@ -1066,6 +1077,7 @@ def grade(request: Request, tipo: str = "Pacotes", local: str = "CIA", vale: int
     col, servico = ("freq_semanal", "Mensalidade") if tipo == "Mensalidades" else ("qtd_aulas", "Pacote de Aulas")
     refs = [r[0] for r in con.execute(f"SELECT DISTINCT {col} FROM precos_base WHERE tipo_servico=? AND local=? AND forma_pagamento='PIX' AND {col} IS NOT NULL ORDER BY 1", (servico, local))]
     celulas = {}
+    minima = p["margens"].get(base["tipo_servico"], 0.15) if base else 0.15   # as cores seguem a margem mínima do plano
     for s in slots:
         cel = dict(s)
         cel["preco_aula"] = cel["margem"] = cel["preco_total"] = cel["lucro"] = None
@@ -1082,7 +1094,7 @@ def grade(request: Request, tipo: str = "Pacotes", local: str = "CIA", vale: int
     resumo = {"livres": sum(1 for c in celulas.values() if c["status"] == "livre"),
               "ocupados": sum(1 for c in celulas.values() if c["status"] == "ocupado"),
               "vale": sum(1 for c in celulas.values() if c["status"] == "livre" and (c["multiplicador"] or 1) < 1)}
-    return render(request, "grade.html", con, celulas=celulas, tipo=tipo, local=local, vale=vale, locais=locais,
+    return render(request, "grade.html", con, celulas=celulas, minima=minima, tipo=tipo, local=local, vale=vale, locais=locais,
                   horas=range(5, 24), clientes=clientes_, base=base, resumo=resumo, refs=refs, ref_atual=base[col] if base else None)
 
 
@@ -1116,7 +1128,7 @@ def grade_slot(tipo: str = Form(...), local: str = Form(...), dia: int = Form(0)
             continue
         if 1 <= d <= 6 and 5 <= h <= 23 and (d, h) not in pares:
             pares.append((d, h))
-    url = f"/grade?tipo={tipo}&local={local}&ref={ref}"
+    url = f"/grade?tipo={quote(tipo)}&local={quote(local)}&ref={ref}"
     if not pares or status not in ("", "livre", "ocupado", "indisponivel"):
         return voltar(url, erro="Nenhum horário selecionado." if not pares else "Situação inválida.")
     cid = int(cliente_id) if cliente_id else None
@@ -3028,18 +3040,31 @@ def configuracoes(request: Request, con=Depends(get_db)):
 @app.post("/configuracoes")
 async def configuracoes_salvar(request: Request, con=Depends(get_db)):
     form = await request.form()
-    with con:
-        cia_antes = precos.taxas_cia(con)[0].get(1, 0.0)
-        for k, v in form.items():
-            if k.startswith("p_") and v != "":
-                pid = int(k[2:])
-                fmt = form.get(f"f_{pid}", "num")
-                val = _num_br(v)
-                con.execute("UPDATE parametros SET valor=? WHERE id=?", (val / 100 if fmt == "pct" else val, pid))
-            elif k.startswith("t_"):
-                con.execute("UPDATE parametros SET valor_texto=? WHERE id=? AND grupo IN ('msg_whatsapp','msg_dados')", (v.strip(), int(k[2:])))
-        loc.ajustar_custos_cia(con, cia_antes, precos.taxas_cia(con)[0].get(1, 0.0))
+    try:
+        with con:
+            cia_antes = precos.taxas_cia(con)[0].get(1, 0.0)
+            for k, v in form.items():
+                if k.startswith("p_") and v != "":
+                    pid = int(k[2:])
+                    fmt = form.get(f"f_{pid}", "num")
+                    val = _num_br(v)
+                    con.execute("UPDATE parametros SET valor=? WHERE id=?", (val / 100 if fmt == "pct" else val, pid))
+                elif k.startswith("t_"):
+                    con.execute("UPDATE parametros SET valor_texto=? WHERE id=? AND grupo IN ('msg_whatsapp','msg_dados')", (v.strip(), int(k[2:])))
+            _checar_margens(con)
+            loc.ajustar_custos_cia(con, cia_antes, precos.taxas_cia(con)[0].get(1, 0.0))
+    except ValueError as e:   # nada é salvo (o with desfaz)
+        return voltar("/configuracoes", erro=str(e))
     return voltar("/configuracoes", msg="Parâmetros salvos.")
+
+
+def _checar_margens(con) -> None:
+    """Margem mínima + DAS + a maior taxa de pagamento precisa ficar abaixo de 100%: senão o preço mínimo não existe."""
+    p = precos.carregar_parametros(con)
+    taxa = p["das"] + max(p["taxas"].values(), default=0)
+    for servico, m in p["margens"].items():
+        if m >= 1 or taxa + m >= 1:
+            raise ValueError(f"Margem mínima de {servico} ({pct(m)}) + imposto e taxas passam de 100%. Use uma margem menor.")
 
 
 @app.post("/configuracoes/assistente")
@@ -3072,6 +3097,9 @@ def locais_novo(nome: str = Form(...), referencia: str = Form("CIA"), modo: str 
                 voltar_para: str = Form("/grade", alias="voltar"), con=Depends(get_db)):
     """Pop-up "+ Novo local" (Grade, Agenda, Propostas): grava os custos e cria os preços e a grade copiando a referência."""
     url = voltar_para if voltar_para.startswith("/") and not voltar_para.startswith("//") else "/grade"
+    caminho, _, q = url.partition("?")   # volta para a mesma tela (semana, proposta), sem o aviso velho
+    q = "&".join(x for x in q.split("&") if x and not x.startswith(("msg=", "erro=")))
+    url = caminho + ("?" + q if q else "")
     nums = dict(taxa_aula=taxa_aula, taxa_pessoa_extra=taxa_pessoa_extra, max_pessoas=max_pessoas, deslocamento=deslocamento,
                 tempo_deslocamento=tempo_deslocamento, taxa_mensal=taxa_mensal, aulas_mes=aulas_mes)
     try:

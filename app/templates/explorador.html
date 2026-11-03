@@ -20,7 +20,7 @@
     <td>{% if l.dia %}{{ l.dia|dia_curto }} {{ '%02d'|format(l.hora) }}h{% else %}—{% endif %}</td>
     <td class="num">{{ l.mult|num(2) }}</td><td class="num">{{ l.preco_total|moeda }}</td><td class="num">{{ l.preco_pessoa|moeda }}</td>
     <td class="num">{{ l.lucro|moeda }}</td><td class="num">{{ l.margem|pct(1) }}</td><td class="num"><strong>{{ l.lucro_hora|moeda }}</strong></td><td class="num">{{ l.desconto_maximo|pct }}</td>
-    <td><a class="btn claro pequeno" href="/propostas?plano={{ l.tipo_servico }}|{{ l.qtd_aulas }}|{{ l.freq_semanal }}&local={{ f.local }}&forma={{ f.forma }}&pessoas={{ f.pessoas }}&dia={{ l.dia or 0 }}&hora={{ l.hora or 0 }}">Simular</a></td>
+    <td><a class="btn claro pequeno" href="/propostas?plano={{ l.tipo_servico }}|{{ l.qtd_aulas }}|{{ l.freq_semanal }}&local={{ f.local|urlencode }}&forma={{ f.forma|urlencode }}&pessoas={{ f.pessoas }}&dia={{ l.dia or 0 }}&hora={{ l.hora or 0 }}">Simular</a></td>
   </tr>
   {% else %}<tr><td colspan="10" class="muted">Nada encontrado. Verifique os preços base em Configurações e os horários livres na Grade.</td></tr>{% endfor %}
 </table></div>

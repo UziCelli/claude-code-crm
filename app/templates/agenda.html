@@ -9,7 +9,7 @@
   <h1 style="margin:0">Agenda</h1>
   <div class="topo-acoes">
     <button type="button" class="claro" id="btn-lote">Marcar várias</button>
-    <button type="button" class="claro" data-abrir="dlg-local" data-voltar="/agenda">+ Novo local</button>
+    <button type="button" class="claro" data-abrir="dlg-local" data-voltar="{{ request.url.path }}{{ "?" ~ request.url.query if request.url.query }}">+ Novo local</button>
     <button type="button" data-abrir="dlg-incluir" data-titulo="Incluir aula">+ Incluir aula</button>
   </div>
 </div>

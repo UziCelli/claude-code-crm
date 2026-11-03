@@ -220,6 +220,13 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Fica para depois: conta em aberto não zera se a única aula for desfeita (igual à CIA); nome de local genérico ("Centro") pode casar gastos sem relação.
 - Testes: `tests/test_contas_locais.py`.
 
+## Bugs médios (PR `claude/bugs-medios`, 03/11/2026)
+- Cores da Grade seguem a margem mínima do plano (verde ≥ mínima, amarelo até 5 pontos abaixo); a legenda mostra os números.
+- Local com "&" no nome: links e redirecionamento da Grade codificados.
+- Margem mínima + imposto + taxas ≥ 100%: Configurações recusa e o cálculo dá mensagem em vez de cair.
+- Aluno parado/inativo solta as células da Grade; voltando a ativo, retoma os horários fixos.
+- "+ Novo local" volta para a mesma tela (semana da Agenda, Propostas com filtros). Testes: `tests/test_bugs_medios.py`.
+
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.
 - Nomes de serviço no CRM: Pacote de Aulas, Mensalidade, Consultoria Online, Consultoria Híbrida, Avaliação Física.
