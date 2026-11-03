@@ -9,6 +9,7 @@
   <h1 style="margin:0">Agenda</h1>
   <div class="topo-acoes">
     <button type="button" class="claro" id="btn-lote">Marcar várias</button>
+    <button type="button" class="claro" data-abrir="dlg-local" data-voltar="/agenda">+ Novo local</button>
     <button type="button" data-abrir="dlg-incluir" data-titulo="Incluir aula">+ Incluir aula</button>
   </div>
 </div>
@@ -595,4 +596,5 @@
   window.addEventListener("pageshow", function () { enviando = false; conta(); });   // voltou pelo histórico: libera o Salvar
 })();
 </script>
+{% include "_dlg_local.html" %}{# "+ Novo local" #}
 {% endblock %}

@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block conteudo %}
-<h1>Propostas</h1>
+<div class="linha topo">
+  <h1 style="margin:0">Propostas</h1>
+  <button type="button" class="claro" data-abrir="dlg-local" data-voltar="/propostas">+ Novo local</button>
+</div>
 <div class="grid c2">
   <div class="card">
     <form method="get" action="/propostas" id="f-prop" class="form-grid">
@@ -89,4 +92,5 @@
     <td><a href="/propostas/{{ p.id }}">Abrir</a> <form method="post" action="/propostas/{{ p.id }}/excluir" class="inline" data-confirmar="Enviar a proposta #{{ p.id }} para a lixeira?"><button class="claro pequeno">x</button></form></td></tr>
   {% else %}<tr><td colspan="11" class="muted">Nenhuma proposta salva.</td></tr>{% endfor %}
 </table></div>
+{% include "_dlg_local.html" %}{# "+ Novo local" #}
 {% endblock %}
