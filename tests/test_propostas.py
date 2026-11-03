@@ -95,3 +95,18 @@ def test_pdf_sem_desconto_nao_mostra_de_por(http):
     con.close()
     pdf = c.get(f"/propostas/{pid}").text
     assert "<s>" not in pdf and "R$ 1.200,00" in pdf
+
+
+@pytest.mark.parametrize("campo,valor", [("desconto", "10%"), ("preco_final", "1000 reais"), ("ajuste", "abc")])
+def test_numero_invalido_mostra_frase_sem_quebrar(http, campo, valor):
+    c, _ = http
+    r = c.get("/propostas", params={"plano": PLANO, "h": ["1-7-CIA"], campo: valor})
+    assert r.status_code == 200
+    assert "não é um número" in r.text and "could not convert" not in r.text
+
+
+def test_salvar_com_numero_invalido_volta_com_a_frase(http):
+    c, cid = http
+    r = c.post("/propostas", data={"plano": PLANO, "forma": "PIX", "h": ["1-7-CIA"], "desconto": "10%",
+                                   "cliente_id": str(cid)})
+    assert r.status_code == 200 and "não é um número" in r.text and "Proposta #" not in r.text

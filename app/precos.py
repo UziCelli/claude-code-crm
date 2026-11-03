@@ -71,7 +71,7 @@ def calcular_misto(horarios: list, p: dict, pessoas: int = 1, desconto: float = 
     if preco_final is not None and preco_final > 0 and preco_cheio:
         desconto = 1 - preco_final / preco_cheio
     if desconto >= 1 or desconto <= -9:
-        raise ValueError("Desconto deve estar entre 0% e 99%")
+        raise ValueError("Desconto deve ficar abaixo de 100% (e o acréscimo, no máximo 900%)")
 
     sessoes = float(base.get("sessoes_mes") or 0)
     horas = sessoes or 1.0

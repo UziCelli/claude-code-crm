@@ -535,6 +535,16 @@ def _num_br(v) -> float:
     return float(s or 0)
 
 
+def _num_campo(v, campo: str):
+    """_num_br de um campo opcional da tela: vazio = None; texto que não é número = ValueError com a frase para a tela."""
+    if not str(v or "").strip():
+        return None
+    try:
+        return _num_br(v)
+    except ValueError:
+        raise ValueError(f"{campo}: '{v}' não é um número. Use só números, ex.: 10 ou 1.250,50") from None
+
+
 MOTIVOS_LISTA = {"sem-aula": "Alunos sem nenhuma aula registrada", "incompleto": "Cadastro incompleto",   # /clientes?ids=..&motivo=..
                  "cobrar": "Mensalidades vencidas", "indicacao": "Alunos para pedir indicação", "reativar": "Ex-alunos para chamar de volta",
                  "reajuste": "Alunos abaixo do preço mínimo", "dupla": "Alunos para convidar a treinar em dupla",
@@ -1953,14 +1963,17 @@ def propostas_tela(request: Request, plano: str = "", local: str = "CIA", forma:
         if novo not in horarios:
             horarios.append(novo)
     horarios.sort(key=lambda x: (x["dia"] or 9, x["hora"]))
-    desc = _num_br(desconto) if desconto else 0.0
-    pf = _num_br(preco_final) if preco_final else None
-    if ajuste == "cheio":
-        desc, pf = 0.0, None
-    elif ajuste:
-        desc, pf = 0.0, _num_br(ajuste)
     resultado = erro = None
-    if plano:
+    try:
+        desc = _num_campo(desconto, "Desconto") or 0.0
+        pf = _num_campo(preco_final, "Preço final")
+        if ajuste == "cheio":
+            desc, pf = 0.0, None
+        elif ajuste:
+            desc, pf = 0.0, _num_campo(ajuste, "Ajuste")
+    except ValueError as e:   # número que não dá para ler: mostra a frase em vez de quebrar a tela
+        desc, pf, erro = 0.0, None, str(e)
+    if plano and not erro:
         try:
             resultado = simular(con, plano, horarios, forma, pessoas, desc, pf, local)
         except ValueError as e:
@@ -2007,8 +2020,11 @@ def proposta_salvar(plano: str = Form(...), local: str = Form("CIA"), forma: str
              lead_id=lead_id, cliente_id=cliente_id)
     url = _url_propostas(f, horarios)
     try:
-        r = simular(con, plano, horarios, forma, pessoas, _num_br(desconto) if desconto else 0.0,
-                    _num_br(preco_final) if preco_final else None, local)
+        desc, pf = _num_campo(desconto, "Desconto") or 0.0, _num_campo(preco_final, "Preço final")
+    except ValueError as e:   # volta sem o valor ruim, para a tela abrir normal
+        return voltar(_url_propostas({**f, "desconto": "", "preco_final": ""}, horarios), erro=str(e))
+    try:
+        r = simular(con, plano, horarios, forma, pessoas, desc, pf, local)
     except ValueError as e:
         return voltar(url, erro=str(e))
     if r["abaixo_margem"] and not confirmar:
