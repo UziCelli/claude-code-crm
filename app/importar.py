@@ -134,8 +134,31 @@ def _upsert_preco(con, dados, existentes: set) -> bool:
     return novo
 
 
+def _taxa_cia_planilha(wb) -> float | None:
+    """Taxa da CIA para 1 pessoa que a planilha usou no custo (Comparador > Tabela18); None se não achar."""
+    for r in ler_tabela(wb, "Comparador", "Tabela18"):
+        if (_txt(r.get("Taxas")) or "").startswith("CIA") and r.get("Nº de pessoas") not in (None, "", "N/A") \
+                and int(_num(r["Nº de pessoas"])) == 1:
+            return _num(r.get("Valor [R$]"))
+    return None
+
+
+def _ajustar_taxa_cia(dados, dif: float):
+    """O custo da CIA na planilha traz a taxa da planilha; a taxa que vale é a de Configurações. Troca uma pela outra
+    (sem isso, reimportar a planilha desfazia a mudança da taxa feita na tela)."""
+    from .locais import TIPOS_TAXA_CIA
+    if dif and dados["local"] == "CIA" and dados["sessoes_mes"] and dados["tipo_servico"] in TIPOS_TAXA_CIA:
+        extra = dif * dados["sessoes_mes"]
+        dados["custo_operacional"] += extra
+        dados["custo_total"] += extra
+
+
 def importar_precos(con: sqlite3.Connection, wb) -> dict:
+    from .precos import taxas_cia
     ins = upd = 0
+    planilha = _taxa_cia_planilha(wb)
+    atual = taxas_cia(con)[0].get(1)
+    dif_cia = (atual - planilha) if planilha is not None and atual is not None else 0.0
     existentes = {tuple(r) for r in con.execute(
         "SELECT tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal FROM precos_base")}
     for r in ler_tabela(wb, "Comparador", "tblComparadorPrecos"):
@@ -151,6 +174,7 @@ def importar_precos(con: sqlite3.Connection, wb) -> dict:
             preco_base=_num(r["Preço Sugerido"]), custo_operacional=_num(r.get("Custo Operacional")),
             mao_obra=_num(r.get("Mão-de-Obras")), custo_total=_num(r.get("Custo Total")), origem="comparador",
         )
+        _ajustar_taxa_cia(dados, dif_cia)
         if _upsert_preco(con, dados, existentes):
             ins += 1
         else:
@@ -164,6 +188,7 @@ def importar_precos(con: sqlite3.Connection, wb) -> dict:
             preco_base=_num(r["Preço Sugerido"]), custo_operacional=_num(r.get("Custo Operacional")),
             mao_obra=_num(r.get("Mão-de-Obra")), custo_total=_num(r.get("Custo Total")), origem="tabela12",
         )
+        _ajustar_taxa_cia(dados, dif_cia)
         if _upsert_preco(con, dados, existentes):
             ins += 1
         else:

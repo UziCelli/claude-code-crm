@@ -2,7 +2,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app import contas_auto, db, locais, main, precos
+from app import contas_auto, db, importar, locais, main, precos
 
 
 @pytest.fixture
@@ -56,6 +56,39 @@ def test_local_com_a_taxa_antiga_tem_o_mesmo_custo_da_cia(con):
 def test_salvar_sem_mudar_a_taxa_nao_mexe_no_custo(con):
     _salvar_taxa_cia(con, precos.taxas_cia(con)[0][1])
     assert _base(con, "CIA")["custo_operacional"] == 900
+
+
+def test_aula_avulsa_da_cia_tambem_acompanha_a_taxa(con):
+    antiga = precos.taxas_cia(con)[0][1]
+    with con:
+        con.execute("""INSERT INTO precos_base (tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal, preco_base,
+                     custo_operacional, mao_obra, custo_total, sessoes_mes) VALUES ('Aula avulsa', 'CIA', 'PIX', 1, 0, 160, 100, 50, 100, 1)""")
+    _salvar_taxa_cia(con, 90)
+    assert _base(con, "CIA", "Aula avulsa")["custo_operacional"] == pytest.approx(100 + 90 - antiga, abs=0.01)
+
+
+def test_reimportar_a_planilha_nao_desfaz_a_taxa_da_tela(con, monkeypatch):
+    planilha = precos.taxas_cia(con)[0][1]   # a planilha usou a taxa de hoje no custo (900)
+    _salvar_taxa_cia(con, 90)
+    linhas = {
+        "tblComparadorPrecos": [{"Tipo Serviço": "Pacote de Aulas", "Local": "CIA", "Forma Pagamento": "PIX", "Qtd Aulas/Planos": 8,
+                                 "Preço Sugerido": 1100, "Custo Operacional": 900, "Mão-de-Obras": 415.5, "Custo Total": 900}],
+        "Tabela18": [{"Taxas": "CIA 1 pessoa", "Nº de pessoas": 1, "Valor [R$]": planilha}],
+    }
+    monkeypatch.setattr(importar, "ler_tabela", lambda wb, aba, tabela: linhas.get(tabela, []))
+    with con:
+        importar.importar_precos(con, None)
+    assert _base(con, "CIA")["custo_operacional"] == pytest.approx(900 + (90 - planilha) * 8, abs=0.01)
+
+
+def test_taxa_com_tres_casas_sobrevive_a_salvar_a_tela(con):
+    _salvar_taxa_cia(con, 70.125)
+    http = TestClient(main.app, base_url="http://localhost")
+    html = http.get("/configuracoes").text
+    assert "70,125" in html   # vírgula: o "70.125" voltava como 70 mil e 125
+    pid = con.execute("SELECT id FROM parametros WHERE grupo='taxa_cia' AND chave='1'").fetchone()[0]
+    http.post("/configuracoes", data={f"p_{pid}": "70,125", f"f_{pid}": "num"}, follow_redirects=False)
+    assert precos.taxas_cia(con)[0][1] == pytest.approx(70.125)
 
 
 # --- bug 2: "manter a margem" com custo que zera
@@ -119,7 +152,7 @@ def test_aulas_mes_entende_os_dois_rotulos(plano, n):
 
 # --- bug 10: só a CIA é a CIA
 
-@pytest.mark.parametrize("local", ["CIA", "cia", " Cia 111", "CIA - centro"])
+@pytest.mark.parametrize("local", ["CIA", "cia", " Cia 111", "CIA - centro", "CIA111", "CIA2", "CIA_Centro"])
 def test_eh_local_cia(local):
     assert contas_auto.eh_local_cia(local)
 

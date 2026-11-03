@@ -13,6 +13,7 @@ from . import precos
 MODOS = ("margem", "preco")
 CAMPOS = ("taxa_aula", "taxa_pessoa_extra", "max_pessoas", "deslocamento", "tempo_deslocamento", "taxa_mensal", "aulas_mes")
 TIPOS_COM_AULA = ("Pacote de Aulas", "Mensalidade")
+TIPOS_TAXA_CIA = TIPOS_COM_AULA + ("Aula avulsa",)   # planos da CIA com a taxa por aula embutida no custo
 
 
 def custo_aula_local(con, local: str) -> float:
@@ -32,7 +33,7 @@ def ajustar_custos_cia(con, antiga: float, nova: float) -> None:
         return
     con.execute("""UPDATE precos_base SET custo_operacional = COALESCE(custo_operacional,0) + ? * sessoes_mes,
                    custo_total = COALESCE(custo_total,0) + ? * sessoes_mes
-                   WHERE local='CIA' AND sessoes_mes > 0 AND tipo_servico IN (?,?)""", (dif, dif, *TIPOS_COM_AULA))
+                   WHERE local='CIA' AND sessoes_mes > 0 AND tipo_servico IN (?,?,?)""", (dif, dif, *TIPOS_TAXA_CIA))
 
 
 def referencias(con) -> list[str]:

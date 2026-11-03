@@ -55,7 +55,7 @@
       <div class="campo linha">
         <label style="flex:1;margin:0">{{ it.chave }}</label>
         <input type="hidden" name="f_{{ it.id }}" value="{{ g.fmt }}">
-        <input name="p_{{ it.id }}" style="width:120px" value="{{ ((it.valor * 100)|round(2)) if g.fmt == 'pct' else (it.valor|round(4)) }}">
+        <input name="p_{{ it.id }}" style="width:120px" value="{{ (((it.valor * 100)|round(2)) if g.fmt == 'pct' else (it.valor|round(4)))|string|replace('.', ',') }}">
         <span class="muted" style="width:18px">{{ '%' if g.fmt == 'pct' }}</span>
       </div>
       {% endfor %}

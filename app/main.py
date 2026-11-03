@@ -3007,7 +3007,7 @@ def locais_novo(nome: str = Form(...), referencia: str = Form("CIA"), modo: str 
         url = "/grade?local=" + quote(nome)
     aviso = "" if r["precos"] else f" (sem preços: '{referencia}' não tem Pacote nem Mensalidade)"
     if r.get("mantidos"):
-        aviso += f". Mantive o preço de {referencia} em {r['mantidos']} plano(s): o custo ficou zero e a margem não dava para manter"
+        aviso += f". Mantive o preço de {referencia} em {r['mantidos']} plano(s): com custo zero (na referência ou no local novo) a margem não dá para manter; ajuste esses preços à mão"
     return voltar(url, msg=f"Local {nome} criado: {r['precos']} preços e {r['horarios']} horários na grade{aviso}.")
 
 
