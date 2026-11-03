@@ -14,14 +14,14 @@
       <div class="campo"><label>Tempo de deslocamento (min por aula)</label><input name="tempo_deslocamento" inputmode="numeric" placeholder="ida e volta; entra no lucro/hora"></div>
       <div class="campo"><label>Taxa mensal fixa (R$)</label><input name="taxa_mensal" inputmode="decimal" placeholder="0"></div>
       <div class="campo"><label>Aulas por mês nesse local</label><input name="aulas_mes" inputmode="numeric" placeholder="para dividir a taxa mensal"></div>
-      <div class="campo"><label>Copiar preços e grade de</label><select name="referencia">{% for l in listas.lista_locais %}<option {{ 'selected' if l == 'CIA' }}>{{ l }}</option>{% endfor %}</select></div>
+      <div class="campo"><label>Copiar preços e grade de</label><select name="referencia">{% for l in locais_ref %}<option {{ 'selected' if l == 'CIA' }}>{{ l }}</option>{% endfor %}</select></div>
     </div>
     <fieldset class="campo opcoes" style="border:0;padding:0;margin:8px 0">
       <legend><b>Como montar os preços?</b></legend>
       <label><input type="radio" name="modo" value="margem" checked> Manter a margem (o preço acompanha o custo)</label>
       <label><input type="radio" name="modo" value="preco"> Manter o preço (só a margem muda)</label>
     </fieldset>
-    <p class="muted">Todos os horários começam livres. Depois ajuste na Grade e em Configurações &gt; Preços base.</p>
+    <p class="muted">A base é a CIA ou um local criado aqui. Todos os horários começam livres. Depois ajuste na Grade e em Configurações &gt; Preços base.</p>
     <div class="linha"><button class="verde">Criar local</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
   </form>
 </dialog>

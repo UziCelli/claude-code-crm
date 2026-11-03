@@ -191,7 +191,7 @@ def get_db():
 def render(request, nome, con, **ctx):
     ctx.update(request=request, msg=request.query_params.get("msg"), erro=request.query_params.get("erro"),
                listas={k: db.lista(con, k) for k in db.LISTAS_INICIAIS}, alertas=alertas(con),
-               modelos=db.parametros(con, "msg_whatsapp"), dados_msg=dados_mensagem(con))
+               modelos=db.parametros(con, "msg_whatsapp"), dados_msg=dados_mensagem(con), locais_ref=loc.referencias(con))
     return templates.TemplateResponse(request, nome, ctx)
 
 

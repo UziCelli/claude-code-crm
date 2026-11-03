@@ -185,6 +185,7 @@ Pedido: cadastrar academias novas direto da Grade, Agenda e Propostas, com taxas
 - **Preços** (`app/locais.py`): copia Pacote de Aulas e Mensalidade da referência (origem `local:<ref>`), trocando o custo por aula da referência pelo do novo local × sessões.
 - **Motor** (`precos.py`): o local novo cobra a taxa por pessoa a mais, respeita o máximo de pessoas e soma o tempo de deslocamento às horas (o lucro/hora cai).
 - **Grade**: copia horários e multiplicadores da referência, todos livres (sem grade na referência: Seg–Sáb 05h–23h). A lista de locais da Grade agora junta a lista de Configurações + os locais que já têm grade.
+- **Base para copiar**: só a CIA ou um local criado pelo pop-up (dos locais da planilha o sistema não sabe a taxa por aula; copiar cobraria a taxa duas vezes). Nome repetido com outra caixa ("cia") dá erro.
 - Fora do escopo: conta mensal automática (como a da CIA) para o local novo; ajuste fino continua em Configurações > Preços base.
 
 ## Decisões tomadas

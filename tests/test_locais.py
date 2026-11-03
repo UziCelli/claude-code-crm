@@ -124,3 +124,29 @@ def test_rota_erro_volta_para_a_tela_com_a_frase(http):
     assert r.headers["location"].startswith("/propostas?erro=")
     r = http.post("/locais/novo", data={"nome": "X", "voltar": "https://mal.com"}, follow_redirects=False)
     assert r.headers["location"].startswith("/grade")
+
+
+def test_nome_igual_com_outra_caixa_da_erro(con):
+    with pytest.raises(ValueError, match="'CIA' já tem preços"):
+        locais.criar_local(con, "cia")
+
+
+def test_base_so_cia_ou_local_criado_aqui(con):
+    with con:   # local da planilha: a taxa dele está dentro do custo, copiar cobraria duas vezes
+        con.execute("""INSERT INTO precos_base (tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal, preco_base,
+                     custo_operacional, mao_obra, custo_total, sessoes_mes) VALUES ('Pacote de Aulas', 'SmartFit', 'PIX', 8, 0, 932, 736, 415.5, 736, 8)""")
+    with pytest.raises(ValueError, match="CIA ou um local criado aqui"):
+        locais.criar_local(con, "Novo", "SmartFit")
+    locais.criar_local(con, "Prédio", taxa_aula=30)
+    assert locais.referencias(con) == ["CIA", "Prédio"]
+    locais.criar_local(con, "Prédio 2", "Prédio", "preco", taxa_aula=30)
+    assert _base(con, "Prédio 2")["custo_operacional"] == _base(con, "Prédio")["custo_operacional"]
+
+
+def test_dialogo_so_oferece_bases_validas(http, con):
+    with con:
+        con.execute("INSERT OR IGNORE INTO parametros (grupo, chave, valor_texto, ordem) VALUES ('lista_locais','SmartFit','SmartFit',99)")
+    t = http.get("/grade").text
+    dlg = t[t.index('id="dlg-local"'):]
+    sel = dlg[dlg.index('name="referencia"'):dlg.index("</select>", dlg.index('name="referencia"'))]
+    assert "<option selected>CIA</option>" in sel and "SmartFit" not in sel

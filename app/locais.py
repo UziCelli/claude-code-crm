@@ -6,6 +6,8 @@ custo novo = custo da referência - (custo por aula da referência x sessões) +
   - modo "preco": o preço fica igual; só a margem muda.
 Grade: copia os horários e multiplicadores da referência, todos livres (sem grade na referência: Seg-Sáb, 05h-23h).
 """
+import sqlite3
+
 from . import precos
 
 MODOS = ("margem", "preco")
@@ -21,6 +23,13 @@ def custo_aula_local(con, local: str) -> float:
     return precos.custo_por_aula(c) if c else 0.0
 
 
+def referencias(con) -> list[str]:
+    """Locais que servem de base para copiar: a CIA e os criados aqui (o sistema sabe quanto custam por aula).
+    Locais da planilha ficam de fora: a taxa deles está misturada no custo e seria cobrada duas vezes."""
+    feitos = [r[0] for r in con.execute("SELECT local FROM locais_custos ORDER BY local")]
+    return ["CIA"] + [x for x in feitos if x != "CIA"]
+
+
 def criar_local(con, nome: str, referencia: str = "CIA", modo: str = "margem", **custos) -> dict:
     """Cria o local e devolve {"precos": n, "horarios": n}. ValueError com a frase para a tela."""
     nome = (nome or "").strip()
@@ -28,8 +37,11 @@ def criar_local(con, nome: str, referencia: str = "CIA", modo: str = "margem", *
         raise ValueError("Dê um nome ao local")
     if modo not in MODOS:
         raise ValueError("Escolha manter a margem ou manter o preço")
-    if con.execute("SELECT 1 FROM precos_base WHERE local=? LIMIT 1", (nome,)).fetchone():
-        raise ValueError(f"'{nome}' já tem preços. Para mudar, use Configurações > Preços base")
+    ja = next((r[0] for r in con.execute("SELECT DISTINCT local FROM precos_base") if (r[0] or "").casefold() == nome.casefold()), None)
+    if ja:   # "cia" = "CIA": não cria um segundo local com o mesmo nome
+        raise ValueError(f"'{ja}' já tem preços. Para mudar, use Configurações > Preços base")
+    if referencia not in referencias(con):
+        raise ValueError("Escolha a CIA ou um local criado aqui para copiar os preços")
     c = {k: max(0.0, float(custos.get(k) or 0)) for k in CAMPOS}
     c["max_pessoas"] = int(c["max_pessoas"])
     if c["taxa_mensal"] and not c["aulas_mes"]:
@@ -38,6 +50,13 @@ def criar_local(con, nome: str, referencia: str = "CIA", modo: str = "margem", *
     novo_aula = precos.custo_por_aula(c)
     linhas = con.execute(f"SELECT * FROM precos_base WHERE local=? AND tipo_servico IN ({','.join('?' * len(TIPOS_COM_AULA))})",
                          (referencia, *TIPOS_COM_AULA)).fetchall()
+    try:
+        return _gravar(con, nome, referencia, modo, c, novo_aula - ref_aula, linhas)
+    except sqlite3.IntegrityError:   # outro aparelho criou o mesmo local ao mesmo tempo
+        raise ValueError(f"'{nome}' já existe. Recarregue a tela") from None
+
+
+def _gravar(con, nome, referencia, modo, c, dif_aula, linhas) -> dict:
     with con:
         con.execute("""INSERT INTO locais_custos (local, taxa_aula, taxa_pessoa_extra, max_pessoas, deslocamento, tempo_deslocamento,
                        taxa_mensal, aulas_mes, referencia, modo) VALUES (?,?,?,?,?,?,?,?,?,?)
@@ -50,7 +69,7 @@ def criar_local(con, nome: str, referencia: str = "CIA", modo: str = "margem", *
         for b in linhas:
             s = float(b["sessoes_mes"] or 0)
             custo_ref = float(b["custo_operacional"] or 0)
-            custo = max(0.0, custo_ref + (novo_aula - ref_aula) * s)
+            custo = max(0.0, custo_ref + dif_aula * s)
             preco = float(b["preco_base"])
             if modo == "margem" and custo_ref > 0:   # margem = 1 - taxas - custo/preço: mesma razão custo/preço = mesma margem
                 preco = preco * custo / custo_ref
