@@ -205,8 +205,20 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - **Avulsa repetida** (clique duplo): recusada. Reposições e o controle do mês contam cada (data, hora) uma vez, mesmo com duplicatas antigas no banco.
 - **Mudar horário ou local não reescreve o passado**: nova coluna `agenda_fixos.vigente_de`. Tirar um horário é exclusão suave com data; trocar o local cria linha nova. `aulas_da_semana` usa a linha que valia em cada dia (`fixo_vale`). Linha criada e tirada no mesmo dia é ajuste e não conta. Aluno novo fica com `vigente_de` vazio (vale desde a data de início).
 - **Lixeira de horário fixo**: restaurar um horário tirado antes de hoje cria uma cópia que vale de hoje em diante (a linha antiga fica como estava). Tirado hoje, só desfaz. A lixeira mostra só a linha mais nova do aluno em cada dia e hora.
-- Falta (PR 3): a conta automática da CIA (`contas_auto._grupos_cia`) ainda olha o local atual do horário fixo, não o que valia no dia.
 - Testes: `tests/test_agenda_bugs.py`.
+
+## Bugs graves — PR 3: custos dos locais novos no financeiro (PR `claude/contas-locais`, 03/11/2026)
+- **Conta automática de cada local** criado pelo "+ Novo local" (menos a CIA, que tem a dela): chave `local:<nome>:AAAA-MM`, categoria Aluguel, descrição "<local>: aulas de MM/AAAA". Mesmo fluxo da CIA: nasce no mês seguinte, recalcula enquanto em aberto, não nasce se já foi lançada à mão (o nome do local inteiro na descrição) e liga na recorrência que cita o local.
+- **Valor**: cada (data, hora) com aula Feita no local = taxa por aula; + taxa por pessoa a mais × (pessoas − 1); + taxa mensal uma vez, só se teve aula no mês. Vence no dia `contas_auto.dia_locais` (padrão: o da CIA).
+- **Prévia do Financeiro** mostra "<local> este mês até agora".
+- **CIA e locais olham o local que valia no dia** (`app/vigencia.py: fixo_vale`, o mesmo da Agenda): mudar o local do horário não muda a conta do mês que passou.
+- **Deslocamento fica fora da conta**: é a gasolina do personal, não um pagamento ao local (continua no custo da proposta). Gasto com o nome do local na categoria Transporte não impede a conta do local.
+- **Nome mais específico ganha**: "Aluguel Smart Fit" é do "Smart Fit", não do "Fit"; "Aluguel Studio 111" é do Studio, não da CIA. Vale para a recorrência e para a conta lançada à mão.
+- **Aula sem hora (pela ficha) conta uma vez**: vai para o primeiro horário do aluno no dia (avulsa ou fixo, em qualquer local).
+- **Mesmo nome sem acento é o mesmo local**: "Acadêmia" com "Academia" já criado dá erro; dado antigo repetido gera uma conta só.
+- **Uma leitura por rodada**: aulas, custos, parâmetros e contas já lançadas são lidos uma vez, não um por local (Turso).
+- Fica para depois: conta em aberto não zera se a única aula for desfeita (igual à CIA); nome de local genérico ("Centro") pode casar gastos sem relação.
+- Testes: `tests/test_contas_locais.py`.
 
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.

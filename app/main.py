@@ -27,6 +27,7 @@ from . import locais as loc   # "+ Novo local": custos do local, preços e grade
 from . import indicacoes   # quem indicou quem e o presente da indicação (brinde, nunca desconto)
 from . import ofertas   # ofertas de upsell: proposta transparente, resposta do aluno e fim do valor da oferta
 from . import alunos as alu   # estado de cada aluno (um algoritmo só); 'alunos' é nome de variável em várias rotas
+from .vigencia import fixo_vale   # a linha do horário fixo valia naquele dia?
 
 ROOT = Path(__file__).resolve().parent
 DIAS = {1: "Segunda", 2: "Terça", 3: "Quarta", 4: "Quinta", 5: "Sexta", 6: "Sábado", 7: "Domingo"}
@@ -65,7 +66,7 @@ async def lifespan(app):
     try:
         con = db.conectar()
         try:
-            contas_auto.garantir(con, dt.date.today().isoformat())   # DAS e CIA do mês passado em Contas a pagar
+            contas_auto.garantir(con, dt.date.today().isoformat())   # DAS, CIA e locais do mês passado em Contas a pagar
         finally:
             con.close()
     except Exception as e:  # o CRM abre mesmo se as contas automáticas falharem
@@ -1330,15 +1331,6 @@ def vigencias(con, ids, hoje=None) -> dict:
     com = {r[0] for r in con.execute(f"SELECT DISTINCT cliente_id FROM agenda_fixos WHERE cliente_id IN ({','.join('?' * len(ids))})"
                                      " AND substr(criado_em,1,10) < ?", [*ids, h])}
     return {c: (h if c in com else None) for c in ids}
-
-
-def fixo_vale(r, data: str) -> bool:
-    """A linha do horário fixo vale na data? Vale de vigente_de (ou sempre) até o dia antes da exclusão.
-    Linha criada e excluída no mesmo dia foi engano: nunca vale."""
-    exc = str(r["excluido_em"] or "")[:10]
-    if exc and exc <= str(r["criado_em"] or "")[:10]:
-        return False
-    return (not r["vigente_de"] or data >= r["vigente_de"]) and (not exc or data < exc)
 
 
 def inserir_fixos(con, linhas, bloco=130, vigente=None):

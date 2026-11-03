@@ -7,6 +7,7 @@ custo novo = custo da referência - (custo por aula da referência x sessões) +
 Grade: copia os horários e multiplicadores da referência, todos livres (sem grade na referência: Seg-Sáb, 05h-23h).
 """
 import sqlite3
+import unicodedata
 
 from . import precos
 
@@ -43,6 +44,11 @@ def referencias(con) -> list[str]:
     return ["CIA"] + [x for x in feitos if x != "CIA"]
 
 
+def _chave_nome(nome: str | None) -> str:
+    """Nome do local sem acento, maiúsculas nem espaços nas pontas: como a agenda e as contas automáticas comparam."""
+    return unicodedata.normalize("NFKD", nome or "").encode("ascii", "ignore").decode().strip().lower()
+
+
 def criar_local(con, nome: str, referencia: str = "CIA", modo: str = "margem", **custos) -> dict:
     """Cria o local e devolve {"precos": n, "horarios": n}. ValueError com a frase para a tela."""
     nome = (nome or "").strip()
@@ -50,9 +56,13 @@ def criar_local(con, nome: str, referencia: str = "CIA", modo: str = "margem", *
         raise ValueError("Dê um nome ao local")
     if modo not in MODOS:
         raise ValueError("Escolha manter a margem ou manter o preço")
-    ja = next((r[0] for r in con.execute("SELECT DISTINCT local FROM precos_base") if (r[0] or "").casefold() == nome.casefold()), None)
-    if ja:   # "cia" = "CIA": não cria um segundo local com o mesmo nome
+    ja = next((r[0] for r in con.execute("SELECT DISTINCT local FROM precos_base") if _chave_nome(r[0]) == _chave_nome(nome)), None)
+    if ja:   # "cia" = "CIA" e "Acadêmia" = "Academia": não cria um segundo local com o mesmo nome (a agenda não separa)
         raise ValueError(f"'{ja}' já tem preços. Para mudar, use Configurações > Preços base")
+    outro = next((r[0] for r in con.execute("SELECT local FROM locais_custos")
+                  if r[0] != nome and _chave_nome(r[0]) == _chave_nome(nome)), None)
+    if outro:  # mesmo local escrito de outro jeito (sem preços ainda): seriam duas contas para as mesmas aulas
+        raise ValueError(f"'{outro}' já existe. Use esse nome")
     if referencia not in referencias(con):
         raise ValueError("Escolha a CIA ou um local criado aqui para copiar os preços")
     c = {k: max(0.0, float(custos.get(k) or 0)) for k in CAMPOS}
