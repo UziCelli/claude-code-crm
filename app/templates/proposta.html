@@ -6,12 +6,16 @@
   <h1>Proposta para {{ prop.para or '—' }}</h1>
   <p class="muted">{{ prop.data|data }} · Válida por 7 dias</p>
   <p><b>Serviço:</b> {{ prop.tipo_servico }}{% if prop.qtd_aulas %} · {{ prop.qtd_aulas }} aulas{% endif %}{% if prop.freq_semanal %} · {{ prop.freq_semanal }}x/sem{% endif %}</p>
-  <p><b>Local:</b> {{ prop.local or '—' }}{% if prop.dia %} · {{ prop.dia|dia }}{% if prop.hora %} {{ prop.hora }}h{% endif %}{% endif %}</p>
+  <p><b>Local e horários:</b> {{ horarios_txt }}</p>
   <p><b>Pagamento:</b> {{ prop.forma_pagamento or '—' }} · <b>Pessoas:</b> {{ prop.pessoas }}</p>
-  {% if prop.desconto and prop.desconto > 0 %}<p><b>Desconto:</b> {{ prop.desconto|pct }}</p>{% endif %}
+  {% if preco_de %}
+  <p class="proposta-preco"><b>Valor total:</b> de <s>{{ preco_de|moeda }}</s> por <b>{{ prop.preco_total|moeda }}</b> <span class="tag verde">−{{ prop.desconto|pct(1) }} de desconto</span></p>
+  <p class="muted">Você economiza {{ (preco_de - prop.preco_total)|moeda }}.</p>
+  {% else %}
   <p><b>Valor total:</b> {{ prop.preco_total|moeda }}</p>
-  <p><b>Valor por pessoa:</b> {{ prop.preco_pessoa|moeda }}</p>
+  {% endif %}
+  {% if prop.pessoas and prop.pessoas > 1 %}<p><b>Valor por pessoa:</b> {{ prop.preco_pessoa|moeda }}</p>{% endif %}
   {% if prop.observacoes %}<p><b>Observações:</b> {{ prop.observacoes }}</p>{% endif %}
-  <p class="nao-imprimir"><button onclick="window.print()">Imprimir / salvar PDF</button> <a href="/simulador">Voltar</a></p>
+  <p class="nao-imprimir"><button onclick="window.print()">Imprimir / salvar PDF</button> <a href="/propostas">Voltar</a></p>
 </div>
 {% endblock %}

@@ -60,7 +60,7 @@ def _meses_validos(ctx) -> list:
 def _acao_reajuste(ctx) -> dict:
     if ctx["abaixo"]:
         return {"rotulo": f"Reajustar ({len(ctx['abaixo'])})", "href": _lista([a["id"] for a in ctx["abaixo"]], "reajuste")}
-    return {"rotulo": "Ver preços", "href": "/simulador"}
+    return {"rotulo": "Ver preços", "href": "/propostas"}
 
 
 # =====================================================================

@@ -1,3 +1,5 @@
+import math
+
 import pytest
 
 from app.precos import calcular, cor_margem
@@ -74,3 +76,47 @@ def test_validacoes():
 
 def test_cor_margem():
     assert [cor_margem(m) for m in (0.2, 0.12, 0.05, -0.1, None)] == ["verde", "amarelo", "vermelho", "prejuizo", "neutro"]
+
+# ---------- vários horários na mesma proposta (aba Propostas) ----------
+from app.precos import calcular_misto  # noqa: E402
+
+
+def test_misto_com_horarios_iguais_fica_igual():
+    um = calcular(SMARTFIT_8, P)
+    dois = calcular_misto([(SMARTFIT_8, 1.0, "SmartFit"), (SMARTFIT_8, 1.0, "SmartFit")], P)
+    assert dois["preco_total"] == um["preco_total"] and dois["margem"] == um["margem"]
+
+
+def test_misto_tira_a_media_dos_horarios():
+    """Seg num horário de vale (x0,86) + Qua cheio: preço = média dos dois."""
+    r = calcular_misto([(SMARTFIT_8, 0.86, "SmartFit"), (SMARTFIT_8, 1.0, "SmartFit")], P)
+    assert r["preco_total"] == pytest.approx(932 * 0.93, abs=0.01)
+
+
+def test_misto_de_locais_diferentes_mistura_custo():
+    cia8 = {**SMARTFIT_8, "local": "CIA", "preco_base": 1100, "custo_operacional": 900}
+    r = calcular_misto([(SMARTFIT_8, 1.0, "SmartFit"), (cia8, 1.0, "CIA")], P)
+    assert r["preco_cheio"] == pytest.approx((932 + 1100) / 2)
+    assert r["custo_total"] == pytest.approx((736.2353 + 900) / 2, abs=0.01)
+
+
+def test_misto_respeita_o_maximo_de_pessoas_da_cia():
+    with pytest.raises(ValueError):
+        calcular_misto([(SMARTFIT_8, 1.0, "SmartFit"), (CIA_4, 1.0, "CIA")], P, pessoas=4)
+    with pytest.raises(ValueError):
+        calcular_misto([], P)
+
+
+def test_preco_final_vira_desconto_e_pode_ser_acrescimo():
+    r = calcular(SMARTFIT_8, P, preco_final=838.8)
+    assert r["preco_total"] == 838.8 and r["desconto"] == pytest.approx(0.10)
+    mais = calcular(SMARTFIT_8, P, preco_final=1000)
+    assert mais["desconto"] < 0 and mais["margem"] > 0.15
+
+
+def test_preco_sugerido_e_o_minimo_arredondado_para_cima():
+    r = calcular(SMARTFIT_8, P, forma_pagamento="Cartão 3x")
+    assert r["abaixo_margem"]
+    assert r["preco_sugerido"] == float(math.ceil(r["preco_minimo"]))
+    ajustado = calcular(SMARTFIT_8, P, forma_pagamento="Cartão 3x", preco_final=r["preco_sugerido"])
+    assert not ajustado["abaixo_margem"]

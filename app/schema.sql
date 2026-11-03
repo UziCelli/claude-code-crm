@@ -139,6 +139,16 @@ CREATE TABLE IF NOT EXISTS propostas (
     excluido_em TEXT
 );
 
+-- horários da proposta (vários dias/horas/locais: Seg 7h CIA, Qua 19h SmartFit...)
+CREATE TABLE IF NOT EXISTS proposta_horarios (
+    id INTEGER PRIMARY KEY,
+    proposta_id INTEGER NOT NULL,
+    dia INTEGER,
+    hora INTEGER,
+    local TEXT,
+    multiplicador REAL DEFAULT 1
+);
+
 CREATE TABLE IF NOT EXISTS campanha_fases (
     id INTEGER PRIMARY KEY,
     nome TEXT NOT NULL,

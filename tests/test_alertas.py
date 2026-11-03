@@ -285,12 +285,12 @@ def test_alunos_sem_nenhuma_aula_viram_um_alerta_cada_um(con_temp):
     assert not [a for a in main.alertas(con_temp) if "sem nenhuma aula" in a["texto"]]    # o alerta agrupado acabou
 
 
-def test_alerta_de_propostas_abre_o_simulador(con_temp):
-    """Proposta enviada gera alerta que abre /simulador (o antigo /propostas não tem tela GET, dava 405)."""
+def test_alerta_de_propostas_abre_a_aba_propostas(con_temp):
+    """Proposta enviada gera alerta que abre a aba Propostas (antes Simulador)."""
     with con_temp:
         con_temp.execute("INSERT INTO propostas (tipo_servico, preco_total, status) VALUES ('Pacote de Aulas', 500, 'enviada')")
     [a] = [x for x in main.alertas(con_temp) if "esperando resposta" in x["texto"]]
-    assert a["url"] == "/simulador" and a["texto"] == "1 proposta enviada esperando resposta"
+    assert a["url"] == "/propostas" and a["texto"] == "1 proposta enviada esperando resposta"
 
 
 # ---------- "tem aula": uma regra só (main.tem_aulas) para os alertas de sem aula ----------
