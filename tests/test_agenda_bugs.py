@@ -103,6 +103,59 @@ def test_reativar_pela_renovacao_tambem_tira_do_lotado(http):
     assert [n for n, *_ in fixos_ativos(1, 7)] == ["Bia", "Caio"]
 
 
+def test_reativar_pela_ficha_tambem_tira_do_lotado(http):
+    a, b, c = aluno("Ana", status="inativo"), aluno("Bia"), aluno("Caio")
+    fixo(a, 1, 7); fixo(b, 1, 7); fixo(c, 1, 7)
+    r = http.post(f"/clientes/{a}", data={"nome": "Ana", "status": "ativo"}, follow_redirects=False)
+    assert "Saiu do horário fixo de Seg 07h" in (msg(r) or "")
+    assert [n for n, *_ in fixos_ativos(1, 7)] == ["Bia", "Caio"]
+    r = http.post(f"/clientes/{b}", data={"nome": "Bia", "status": "ativo"}, follow_redirects=False)   # já era ativa: não mexe
+    assert "Saiu" not in (msg(r) or "") and [n for n, *_ in fixos_ativos(1, 7)] == ["Bia", "Caio"]
+
+
+def test_restaurar_aluno_da_lixeira_tira_do_horario_que_lotou(http):
+    a, b, c = aluno("Ana"), aluno("Bia"), aluno("Caio")
+    fixo(a, 1, 7); fixo(b, 1, 7); fixo(c, 1, 7)
+    grava("UPDATE clientes SET excluido_em=? WHERE id=?", main.agora_txt(), a)
+    r = http.post("/lixeira/restaurar", data={"tabela": "clientes", "rid": a}, follow_redirects=False)
+    assert "Registro restaurado. Saiu do horário fixo de Seg 07h" in (msg(r) or "")
+    assert [n for n, *_ in fixos_ativos(1, 7)] == ["Bia", "Caio"]
+
+
+def test_restaurar_horario_antigo_da_lixeira_vale_so_daqui_para_frente(http):
+    """Seg 07h no local A desde setembro; em 05/10 passou para B; em 19/10 saiu do horário. Restaurar a linha de A
+    não pode mudar outubro (12/10 foi em B, 26/10 não tinha aula): volta a valer de hoje em diante."""
+    a = aluno("Ana", data_inicio="2026-09-01")
+    r1 = grava("INSERT INTO agenda_fixos (cliente_id, dia, hora, local, criado_em, excluido_em) VALUES (?,1,7,'A',?,'2026-10-05 10:00:00')", a, ANTES)
+    grava("""INSERT INTO agenda_fixos (cliente_id, dia, hora, local, vigente_de, criado_em, excluido_em)
+             VALUES (?,1,7,'B','2026-10-05','2026-10-05 10:00:00','2026-10-19 10:00:00')""", a)
+    antes = aulas(dt.date(2026, 10, 12)), aulas(dt.date(2026, 10, 26))
+    assert [x[2] for x in antes[0]] == ["B"] and antes[1] == []
+    r = http.post("/lixeira/restaurar", data={"tabela": "agenda_fixos", "rid": r1}, follow_redirects=False)
+    assert msg(r) == "Registro restaurado."
+    assert (aulas(dt.date(2026, 10, 12)), aulas(dt.date(2026, 10, 26))) == antes
+    hoje = dt.date.today()
+    proxima = hoje + dt.timedelta(days=7 - hoje.weekday())
+    assert [x[2] for x in aulas(proxima, hoje)] == ["A"]
+    assert fixos_ativos(1, 7) == [("Ana", 1, 7, "A")]
+    assert consulta("SELECT excluido_em FROM agenda_fixos WHERE id=?", r1) == [("2026-10-05 10:00:00",)]   # a antiga fica como estava
+
+
+def test_lixeira_mostra_so_o_horario_mais_novo_e_excluido_hoje_volta_inteiro(http):
+    a = aluno("Ana")
+    r1 = grava("INSERT INTO agenda_fixos (cliente_id, dia, hora, local, criado_em, excluido_em) VALUES (?,1,7,'A',?,?)",
+               a, ANTES, main.agora_txt())
+    assert "Ana — Seg 07h (A)" in http.get("/dados").text
+    r = http.post("/lixeira/restaurar", data={"tabela": "agenda_fixos", "rid": r1}, follow_redirects=False)
+    assert msg(r) == "Registro restaurado."
+    assert consulta("SELECT COUNT(*), MAX(excluido_em) FROM agenda_fixos WHERE cliente_id=?", a) == [(1, None)]   # excluído hoje: só desfaz
+    b = aluno("Bia")
+    grava("INSERT INTO agenda_fixos (cliente_id, dia, hora, local, criado_em, excluido_em) VALUES (?,2,8,'A',?,?)",
+          b, ANTES, main.agora_txt())
+    grava("INSERT INTO agenda_fixos (cliente_id, dia, hora, local) VALUES (?,2,8,'B')", b)   # trocou de local: a linha antiga sai da lista
+    assert "Bia — Ter 08h (A)" not in http.get("/dados").text
+
+
 # ---------- bug 6: avulsa duplicada ----------
 
 def test_avulsa_duplicada_e_recusada_e_saldo_conta_uma(http):

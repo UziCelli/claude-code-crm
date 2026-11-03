@@ -769,10 +769,13 @@ async def cliente_salvar(request: Request, cid: int, con=Depends(get_db)):
         con.execute(f"UPDATE clientes SET {','.join(k + '=:' + k for k in CAMPOS_CLIENTE)}, atualizado_em=datetime('now','localtime') WHERE id=:id", d)
         if trocou:   # data trocada à mão: os pagamentos lançados até agora já estão nela
             con.execute("UPDATE clientes SET renovacao_em=datetime('now','localtime') WHERE id=?", (cid,))
+        tirados = []
         if antigo and antigo["status"] != d["status"]:
             con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, descricao) VALUES (?, 'status', ?, ?)",
                         (cid, dt.date.today().isoformat(), f"Status alterado para {d['status']}"))
-    return voltar(f"/clientes/{cid}", msg="Salvo.")
+            if d["status"] == "ativo":   # voltou pela ficha: o mesmo cuidado do botão de status
+                tirados = tirar_dos_lotados(con, cid)
+    return voltar(f"/clientes/{cid}", msg="Salvo." + aviso_lotados(tirados))
 
 
 def tirar_dos_lotados(con, cid) -> list:
@@ -3144,6 +3147,9 @@ LIXEIRA = [("clientes", "Cliente", "nome"), ("leads", "Lead", "nome"), ("propost
            ("agenda_fixos", "Horário fixo", "(SELECT nome FROM clientes WHERE clientes.id=agenda_fixos.cliente_id) || ' — ' || "
             "CASE dia WHEN 1 THEN 'Seg' WHEN 2 THEN 'Ter' WHEN 3 THEN 'Qua' WHEN 4 THEN 'Qui' WHEN 5 THEN 'Sex' WHEN 6 THEN 'Sáb' ELSE dia END || ' ' || "
             "substr('0' || hora, -2) || 'h (' || local || ')'")]
+# horário fixo trocado depois (outro local, saiu e voltou): só a linha mais nova do aluno naquele dia e hora aparece para restaurar
+LIXEIRA_FILTRO = {"agenda_fixos": " AND NOT EXISTS (SELECT 1 FROM agenda_fixos g WHERE g.cliente_id=agenda_fixos.cliente_id"
+                                  " AND g.dia=agenda_fixos.dia AND g.hora=agenda_fixos.hora AND g.id > agenda_fixos.id)"}
 
 
 @app.post("/encerrar", response_class=HTMLResponse)
@@ -3168,7 +3174,8 @@ def dados(request: Request, con=Depends(get_db)):
     lim = (dt.datetime.now() - dt.timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
     lixo = []
     for tabela, rotulo, campo in LIXEIRA:
-        for r in con.execute(f"SELECT id, {campo} AS nome, excluido_em FROM {tabela} WHERE excluido_em >= ? ORDER BY excluido_em DESC", (lim,)):
+        for r in con.execute(f"SELECT id, {campo} AS nome, excluido_em FROM {tabela} WHERE excluido_em >= ?{LIXEIRA_FILTRO.get(tabela, '')} "
+                             "ORDER BY excluido_em DESC", (lim,)):
             lixo.append({"tabela": tabela, "rotulo": rotulo, "id": r["id"], "nome": r["nome"], "quando": r["excluido_em"]})
     lixo.sort(key=lambda x: x["quando"], reverse=True)
     backups, erro_backup = [], None
@@ -3208,7 +3215,7 @@ def lixeira_restaurar(tabela: str = Form(...), rid: int = Form(...), con=Depends
         return voltar("/dados", erro="Tabela inválida.")
     fixo = None
     if tabela == "agenda_fixos":   # cabem 2 alunos por horário, sem repetir
-        fixo = con.execute("""SELECT f.dia, f.hora, f.local, f.cliente_id, c.nome FROM agenda_fixos f JOIN clientes c ON c.id=f.cliente_id
+        fixo = con.execute("""SELECT f.dia, f.hora, f.local, f.cliente_id, f.excluido_em, c.nome FROM agenda_fixos f JOIN clientes c ON c.id=f.cliente_id
                               WHERE f.id=?""", (rid,)).fetchone()
         if fixo:
             quem = {r["cliente_id"] for r in fixos_do_horario(con, fixo["dia"], fixo["hora"])}
@@ -3226,11 +3233,19 @@ def lixeira_restaurar(tabela: str = Form(...), rid: int = Form(...), con=Depends
         if con.execute("""SELECT 1 FROM cliente_eventos b JOIN cliente_eventos o ON o.indicado_id = b.indicado_id AND o.tipo='brinde'
                           AND o.excluido_em IS NULL AND o.id != b.id WHERE b.id=? AND b.tipo='brinde'""", (rid,)).fetchone():
             return voltar("/dados", erro="Esse indicado já tem o presente registrado. Exclua o que está valendo antes de restaurar.")
+    tirados = []
     with con:
-        con.execute(f"UPDATE {tabela} SET excluido_em=NULL WHERE id=?", (rid,))
+        if fixo and str(fixo["excluido_em"] or "")[:10] < dt.date.today().isoformat():
+            # excluído antes de hoje: volta a valer de hoje em diante (cópia nova); a linha antiga fica como estava,
+            # então as semanas em que ele não tinha esse horário (ou tinha outro local) continuam iguais
+            inserir_fixos(con, [(fixo["cliente_id"], fixo["dia"], fixo["hora"], fixo["local"])], vigente=vigencias(con, [fixo["cliente_id"]]))
+        else:
+            con.execute(f"UPDATE {tabela} SET excluido_em=NULL WHERE id=?", (rid,))
         if fixo:   # a Agenda avisa a Grade, como ao salvar
             grade_ocupar(con, fixo["cliente_id"], fixo["nome"], fixo["dia"], fixo["local"], fixo["hora"])
-    return voltar("/dados", msg="Registro restaurado.")
+        if tabela == "clientes" and con.execute("SELECT 1 FROM clientes WHERE id=? AND status='ativo'", (rid,)).fetchone():
+            tirados = tirar_dos_lotados(con, rid)   # os horários dele voltam junto: cabem 2 por horário
+    return voltar("/dados", msg="Registro restaurado." + aviso_lotados(tirados))
 
 
 @app.get("/exportar/{nome}.{fmt}")
