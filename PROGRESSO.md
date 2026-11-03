@@ -169,6 +169,14 @@ Pedido: os painéis de Potes e Banco × CRM eram incompreensíveis. Agora são f
 - **Salário na PF com conta**: `pagar_salario` grava a entrada PF na conta PF com a foto de saldo mais recente (sem foto, fica sem conta). Antes a PF sempre "tinha a mais" o valor do salário.
 - **Telas de dentro do Financeiro** têm todas o mesmo link "← Financeiro" no topo.
 
+## Propostas com vários horários (PR `claude/propostas-varios-horarios`, 03/11/2026)
+Pedido: a aba Simulador vira **Propostas**; vários dias/horas/locais na mesma proposta; ajuste de preço; PDF com desconto.
+- **Aba renomeada**: `/propostas` (o antigo `/simulador` redireciona com os mesmos filtros). Links do menu, ficha, Leads, Explorador e alertas atualizados.
+- **Vários horários**: marque os dias (Seg…Sáb), escolha hora e local e "+ Adicionar horário". Cada horário vira `dia-hora-local` na URL (`h=`) e, ao salvar, uma linha em `proposta_horarios`. Pode misturar locais (ex.: Seg SmartFit + Sex CIA).
+- **Preço**: `precos.calcular_misto` faz a média do preço cheio e do custo de todos os horários (mesmo preço = fica igual). Aviso se o horário está ocupado/indisponível na grade ou se o nº de horários não bate com o plano (ex.: 3x/sem com 1 horário).
+- **Ajuste**: abaixo da margem, botão "Subir para R$ Y (margem mínima)"; acima, "Dar o desconto máximo"; "Voltar ao preço cheio". Desconto (%) ou Preço final (R$): um apaga o outro; preço acima do cheio aparece como acréscimo.
+- **PDF**: com desconto mostra "de ~~R$ X~~ por **R$ Y**", o "−Z% de desconto" e quanto economiza (`propostas.preco_cheio`, coluna nova). Sem desconto, só o valor.
+
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.
 - Nomes de serviço no CRM: Pacote de Aulas, Mensalidade, Consultoria Online, Consultoria Híbrida, Avaliação Física.

@@ -32,7 +32,7 @@
         <form method="post" action="/leads/{{ l.id }}/etapa" class="inline"><input type="hidden" name="etapa" value="lead"><button class="claro">Reabrir</button></form>
         {% endif %}
         <button class="claro" data-abrir="dlg-lead" data-titulo="Editar lead" data-id="{{ l.id }}" data-nome="{{ l.nome }}" data-telefone="{{ l.telefone or '' }}" data-canal_origem="{{ l.canal_origem }}" data-indicado_por="{{ l.indicado_por or '' }}" data-interesse="{{ l.interesse or '' }}" data-proxima_acao="{{ l.proxima_acao or '' }}" data-data_proxima_acao="{{ l.data_proxima_acao or '' }}" data-observacoes="{{ l.observacoes or '' }}">Editar</button>
-        <a class="btn claro" style="padding:4px 8px;font-size:11px" href="/simulador?lead_id={{ l.id }}">Proposta</a>
+        <a class="btn claro" style="padding:4px 8px;font-size:11px" href="/propostas?lead_id={{ l.id }}">Proposta</a>
         <form method="post" action="/leads/{{ l.id }}/excluir" class="inline" data-confirmar="Enviar este lead para a lixeira?"><button class="claro">x</button></form>
       </div>
     </div>

@@ -213,6 +213,7 @@ def iniciar_banco(caminho: Path = None) -> None:
         _garantir_coluna(con, "leads", "indicado_por", "INTEGER")
         _garantir_coluna(con, "cliente_eventos", "indicado_id", "INTEGER")
         _garantir_coluna(con, "lancamentos", "auto", "TEXT")                   # banco de antes das contas automáticas (DAS e CIA)
+        _garantir_coluna(con, "propostas", "preco_cheio", "REAL")              # banco de antes do "de R$ X por R$ Y" na proposta
         # um lançamento automático por conta e competência ('das:2026-10'); NULL (lançado à mão) pode repetir.
         # PC e Render rodam ao mesmo tempo no Turso: o INSERT OR IGNORE em cima deste índice evita o duplicado.
         con.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_lancamentos_auto ON lancamentos (auto)")

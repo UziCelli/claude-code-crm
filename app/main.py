@@ -13,10 +13,10 @@ import traceback
 import unicodedata
 from contextlib import asynccontextmanager, closing
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 from jinja2 import pass_context
-from fastapi import Depends, FastAPI, Form, Request
+from fastapi import Depends, FastAPI, Form, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -381,7 +381,7 @@ def alertas(con):
         add("amarelo", f"Saldos das contas sem atualizar há {saldos['dias_velho']} dias: atualize para saber quanto tem", "/financeiro?abrir=saldos")
     n = con.execute("SELECT COUNT(*) FROM propostas WHERE excluido_em IS NULL AND status='enviada'").fetchone()[0]
     if n:
-        add("azul", f"{n} proposta{s(n)} enviada{s(n)} esperando resposta", "/simulador")
+        add("azul", f"{n} proposta{s(n)} enviada{s(n)} esperando resposta", "/propostas")
     for p in indicacoes.pendentes(con):   # presente da indicação: o indicado já fez o 1º pagamento
         add("azul", f"Dar o presente a {p['indicador']} (indicou {p['indicado']})", f"/clientes/{p['indicador_id']}",
             acoes=[{"rotulo": "Registrar presente", "dialogo": "dlg-presente", "classe": "verde",
@@ -533,6 +533,16 @@ def _num_br(v) -> float:
     elif re.fullmatch(r"\d{1,3}(\.\d{3})+", s):   # "1.500" = mil e quinhentos
         s = s.replace(".", "")
     return float(s or 0)
+
+
+def _num_campo(v, campo: str):
+    """_num_br de um campo opcional da tela: vazio = None; texto que não é número = ValueError com a frase para a tela."""
+    if not str(v or "").strip():
+        return None
+    try:
+        return _num_br(v)
+    except ValueError:
+        raise ValueError(f"{campo}: '{v}' não é um número. Use só números, ex.: 10 ou 1.250,50") from None
 
 
 MOTIVOS_LISTA = {"sem-aula": "Alunos sem nenhuma aula registrada", "incompleto": "Cadastro incompleto",   # /clientes?ids=..&motivo=..
@@ -1819,54 +1829,172 @@ def agenda_avulsa_excluir(aid: int, semana: str = Form(""), todas: int = Form(0)
 # =====================================================================
 # 4. SIMULADOR / PROPOSTAS / EXPLORADOR
 # =====================================================================
+def _rotulo_plano(tipo, qtd, freq) -> str:
+    if tipo == "Pacote de Aulas":
+        return f"Pacote de {qtd} aulas"
+    if tipo == "Mensalidade":
+        return f"Mensalidade {freq}x por semana"
+    return tipo
+
+
 def opcoes_plano(con):
     rows = con.execute("SELECT DISTINCT tipo_servico, qtd_aulas, freq_semanal FROM precos_base ORDER BY tipo_servico, qtd_aulas, freq_semanal").fetchall()
+    return [{"valor": f"{r['tipo_servico']}|{r['qtd_aulas']}|{r['freq_semanal']}",
+             "rotulo": _rotulo_plano(r["tipo_servico"], r["qtd_aulas"], r["freq_semanal"])} for r in rows]
+
+
+def _ler_horarios(h: list[str]) -> list[dict]:
+    """'dia-hora-local' (repetido na URL/formulário) -> [{'dia', 'hora', 'local'}]. O que não der para ler fica de fora."""
     out = []
-    for r in rows:
-        if r["tipo_servico"] == "Pacote de Aulas":
-            rotulo = f"Pacote de {r['qtd_aulas']} aulas"
-        elif r["tipo_servico"] == "Mensalidade":
-            rotulo = f"Mensalidade {r['freq_semanal']}x por semana"
-        else:
-            rotulo = r["tipo_servico"]
-        out.append({"valor": f"{r['tipo_servico']}|{r['qtd_aulas']}|{r['freq_semanal']}", "rotulo": rotulo})
+    for item in h:
+        partes = item.split("-", 2)
+        if len(partes) != 3 or not partes[2].strip():
+            continue
+        try:
+            novo = {"dia": int(partes[0]), "hora": int(partes[1]), "local": partes[2].strip()}
+        except ValueError:
+            continue
+        if novo not in out:
+            out.append(novo)
     return out
 
 
-def simular(con, plano, local, forma, pessoas, dia, hora, desconto):
+def _aulas_semana(tipo, qtd, freq) -> int:
+    """Quantos horários por semana o plano pede (0 = não dá para saber)."""
+    if tipo == "Mensalidade":
+        return freq
+    if tipo == "Pacote de Aulas" and qtd and qtd % 4 == 0:
+        return qtd // 4
+    return 0
+
+
+def _texto_horario(dia, hora) -> str:
+    txt = DIAS_CURTO.get(dia or 0, "Qualquer dia")
+    return f"{txt} {int(hora):02d}h" if hora else txt
+
+
+def resumo_horarios(horarios) -> str:
+    """'CIA: Seg 07h, Qua 19h · SmartFit: Sex 07h' — agrupado por local, na ordem em que aparecem."""
+    grupos: dict = {}
+    for hh in horarios:
+        grupos.setdefault(hh["local"] or "—", []).append(_texto_horario(hh["dia"], hh["hora"]))
+    return " · ".join(f"{loc}: {', '.join(v)}" for loc, v in grupos.items())
+
+
+def horarios_das_propostas(con, props) -> dict:
+    """{id da proposta: texto dos horários}. Proposta antiga (de antes dos vários horários) usa o dia/hora/local dela."""
+    ids = [p["id"] for p in props]
+    salvos: dict = {}
+    if ids:
+        for r in con.execute(f"SELECT * FROM proposta_horarios WHERE proposta_id IN ({','.join('?' * len(ids))}) ORDER BY id", ids):
+            salvos.setdefault(r["proposta_id"], []).append(r)
+    out = {}
+    for p in props:
+        lista = salvos.get(p["id"]) or ([{"dia": p["dia"], "hora": p["hora"], "local": p["local"]}] if p["dia"] else [])
+        out[p["id"]] = resumo_horarios(lista) if lista else (p["local"] or "—")
+    return out
+
+
+def simular(con, plano, horarios, forma, pessoas, desconto=0.0, preco_final=None, local="CIA"):
+    """Proposta de um plano em um ou vários horários (cada um com o seu local e o multiplicador da grade).
+    Sem horário: calcula no local escolhido, sem multiplicador. desconto em %; preco_final (R$) manda no desconto."""
     tipo, qtd, freq = plano.split("|")
-    base = con.execute("""SELECT * FROM precos_base WHERE tipo_servico=? AND qtd_aulas=? AND freq_semanal=? AND local=?
-                          ORDER BY (forma_pagamento=?) DESC LIMIT 1""", (tipo, int(qtd), int(freq), local, forma)).fetchone()
-    if not base:
-        raise ValueError(f"Não há preço base para {tipo} em {local}. Importe a planilha ou cadastre em Configurações.")
-    mult = 1.0
-    if dia and hora:
-        tc = "Mensalidades" if tipo == "Mensalidade" else "Pacotes"
-        s = con.execute("SELECT multiplicador FROM grade_slots WHERE tipo_calculo=? AND local=? AND dia=? AND hora=?", (tc, local, dia, hora)).fetchone()
-        mult = (s["multiplicador"] or 1.0) if s else 1.0
+    qtd, freq = int(qtd), int(freq)
+    tc = "Mensalidades" if tipo == "Mensalidade" else "Pacotes"
     p = precos.carregar_parametros(con)
-    r = precos.calcular(dict(base), p, pessoas=pessoas, mult_horario=mult, desconto=desconto / 100, forma_pagamento=forma, local=local)
-    r.update(base=dict(base), mult=mult, tipo=tipo, qtd=int(qtd), freq=int(freq))
+    bases, itens, detalhes, avisos = {}, [], [], []
+    for hh in horarios or [{"dia": 0, "hora": 0, "local": local}]:
+        loc = hh["local"]
+        if loc not in bases:
+            bases[loc] = con.execute("""SELECT * FROM precos_base WHERE tipo_servico=? AND qtd_aulas=? AND freq_semanal=? AND local=?
+                                        ORDER BY (forma_pagamento=?) DESC LIMIT 1""", (tipo, qtd, freq, loc, forma)).fetchone()
+            if not bases[loc]:
+                raise ValueError(f"Não há preço de {_rotulo_plano(tipo, qtd, freq)} em {loc}. Importe a planilha ou cadastre em Configurações.")
+        base = dict(bases[loc])
+        mult, status = 1.0, None
+        if hh["dia"] and hh["hora"]:
+            s = con.execute("SELECT multiplicador, status FROM grade_slots WHERE tipo_calculo=? AND local=? AND dia=? AND hora=?",
+                            (tc, loc, hh["dia"], hh["hora"])).fetchone()
+            if s:
+                mult, status = (s["multiplicador"] or 1.0), s["status"]
+        if status in ("ocupado", "indisponivel"):
+            avisos.append(f"{_texto_horario(hh['dia'], hh['hora'])} em {loc} está {'ocupado' if status == 'ocupado' else 'indisponível'} na grade.")
+        um = precos.calcular(base, p, pessoas=pessoas, mult_horario=mult, forma_pagamento=forma, local=loc)
+        itens.append((base, mult, loc))
+        detalhes.append({**hh, "mult": mult, "preco_cheio": um["preco_cheio"], "status": status})
+    r = precos.calcular_misto(itens, p, pessoas=pessoas, desconto=desconto / 100, forma_pagamento=forma, preco_final=preco_final)
+    esperado = _aulas_semana(tipo, qtd, freq)
+    if horarios and esperado and len(horarios) != esperado:
+        avisos.append(f"O plano é {esperado}x por semana e a proposta tem {len(horarios)} horário{'s' if len(horarios) != 1 else ''}.")
+    r.update(base=itens[0][0], mult=sum(i[1] for i in itens) / len(itens), tipo=tipo, qtd=qtd, freq=freq,
+             horarios=detalhes if horarios else [], avisos=avisos, media=len({d["preco_cheio"] for d in detalhes}) > 1)
     return r
 
 
-@app.get("/simulador", response_class=HTMLResponse)
-def simulador(request: Request, plano: str = "", local: str = "CIA", forma: str = "PIX", pessoas: int = 1, dia: int = 0,
-              hora: int = 0, desconto: float = 0, lead_id: int = 0, cliente_id: int = 0, con=Depends(get_db)):
+def _texto_preco(v: float | None) -> str:
+    """Preço para o campo do formulário: 1234.5 / 932 (o _num_br lê de volta)."""
+    return "" if v is None else ("%.2f" % v).rstrip("0").rstrip(".")
+
+
+def _url_propostas(f: dict, horarios: list[dict]) -> str:
+    q = {k: f[k] for k in ("plano", "local", "forma", "pessoas", "desconto", "preco_final", "lead_id", "cliente_id") if f.get(k)}
+    q["h"] = [f"{x['dia']}-{x['hora']}-{x['local']}" for x in horarios]
+    return "/propostas?" + urlencode(q, doseq=True)
+
+
+@app.get("/simulador")
+def simulador_antigo(request: Request):
+    """A aba Simulador virou Propostas: links e favoritos antigos continuam funcionando."""
+    q = request.url.query
+    return RedirectResponse("/propostas" + ("?" + q if q else ""), status_code=307)
+
+
+@app.get("/propostas", response_class=HTMLResponse)
+def propostas_tela(request: Request, plano: str = "", local: str = "CIA", forma: str = "PIX", pessoas: int = 1, dia: int = 0, hora: int = 0,
+                   desconto: str = "", preco_final: str = "", ajuste: str = "", lead_id: int = 0, cliente_id: int = 0,
+                   h: list[str] = Query([]), nd: list[int] = Query([]), nh: int = 0, nl: str = "", tira: int = -1, con=Depends(get_db)):
+    horarios = _ler_horarios(h)
+    if not h and dia:   # link antigo (Explorador, favoritos): um horário só
+        horarios = [{"dia": dia, "hora": hora, "local": local}]
+    if 0 <= tira < len(horarios):
+        horarios.pop(tira)
+    for d in nd or ([0] if nh else []):   # "+ Adicionar": um horário por dia marcado
+        novo = {"dia": d, "hora": nh, "local": nl or local}
+        if novo not in horarios:
+            horarios.append(novo)
+    horarios.sort(key=lambda x: (x["dia"] or 9, x["hora"]))
     resultado = erro = None
-    if plano:
+    try:
+        desc = _num_campo(desconto, "Desconto") or 0.0
+        pf = _num_campo(preco_final, "Preço final")
+        if ajuste == "cheio":
+            desc, pf = 0.0, None
+        elif ajuste:
+            desc, pf = 0.0, _num_campo(ajuste, "Ajuste")
+    except ValueError as e:   # número que não dá para ler: mostra a frase em vez de quebrar a tela
+        desc, pf, erro = 0.0, None, str(e)
+    if plano and not erro:
         try:
-            resultado = simular(con, plano, local, forma, pessoas, dia, hora, desconto)
+            resultado = simular(con, plano, horarios, forma, pessoas, desc, pf, local)
         except ValueError as e:
             erro = str(e)
+    if pf:   # preço final manda; o desconto/acréscimo aparece no resultado
+        desc = 0.0
     leads_ = con.execute("SELECT id, nome FROM leads WHERE excluido_em IS NULL AND etapa NOT IN ('cliente','perdido') ORDER BY nome").fetchall()
     clientes_ = con.execute("SELECT id, nome FROM clientes WHERE excluido_em IS NULL ORDER BY nome").fetchall()
     propostas = con.execute("""SELECT p.*, l.nome AS lead_nome, c.nome AS cliente_nome FROM propostas p
                                LEFT JOIN leads l ON l.id=p.lead_id LEFT JOIN clientes c ON c.id=p.cliente_id
                                WHERE p.excluido_em IS NULL ORDER BY p.id DESC LIMIT 30""").fetchall()
-    return render(request, "simulador.html", con, planos=opcoes_plano(con), f=dict(plano=plano, local=local, forma=forma, pessoas=pessoas,
-                  dia=dia, hora=hora, desconto=desconto, lead_id=lead_id, cliente_id=cliente_id), r=resultado, erro_sim=erro,
-                  leads=leads_, clientes=clientes_, propostas=propostas, horas=range(5, 24))
+    locais = db.lista(con, "lista_locais")
+    locais += [x["local"] for x in horarios if x["local"] not in locais]
+    f = dict(plano=plano, local=local, forma=forma, pessoas=pessoas, desconto=_texto_preco(desc) if desc else "",
+             preco_final=_texto_preco(pf), lead_id=lead_id, cliente_id=cliente_id)
+    return render(request, "propostas.html", con, planos=opcoes_plano(con), f=f, r=resultado, erro_sim=erro,
+                  horarios=[{**x, "codigo": f"{x['dia']}-{x['hora']}-{x['local']}", "texto": _texto_horario(x["dia"], x["hora"])}
+                            for x in horarios],
+                  detalhes={(d["dia"], d["hora"], d["local"]): d for d in (resultado or {}).get("horarios", [])},
+                  locais=locais, leads=leads_, clientes=clientes_, propostas=propostas,
+                  horarios_props=horarios_das_propostas(con, propostas), horas=range(5, 24), dias=range(1, 7))
 
 
 @app.get("/propostas/{pid}", response_class=HTMLResponse)
@@ -1875,46 +2003,61 @@ def proposta_ver(request: Request, pid: int, con=Depends(get_db)):
                        LEFT JOIN leads l ON l.id=p.lead_id LEFT JOIN clientes c ON c.id=p.cliente_id
                        WHERE p.id=? AND p.excluido_em IS NULL""", (pid,)).fetchone()
     if not p:
-        return voltar("/simulador", erro="Proposta não encontrada.")
-    return render(request, "proposta.html", con, prop=p)
+        return voltar("/propostas", erro="Proposta não encontrada.")
+    cheio = p["preco_cheio"]
+    if not cheio and p["desconto"] and p["desconto"] > 0 and p["preco_total"]:   # proposta de antes do preco_cheio
+        cheio = p["preco_total"] / (1 - p["desconto"])
+    return render(request, "proposta.html", con, prop=p, horarios_txt=horarios_das_propostas(con, [p])[p["id"]],
+                  preco_de=cheio if p["desconto"] and p["desconto"] > 0 else None)
 
 
 @app.post("/propostas")
-def proposta_salvar(plano: str = Form(...), local: str = Form(...), forma: str = Form(...), pessoas: int = Form(1), dia: int = Form(0),
-                    hora: int = Form(0), desconto: float = Form(0), lead_id: str = Form(""), cliente_id: str = Form(""),
-                    observacoes: str = Form(""), confirmar: int = Form(0), con=Depends(get_db)):
-    url = f"/simulador?plano={quote(plano)}&local={local}&forma={quote(forma)}&pessoas={pessoas}&dia={dia}&hora={hora}&desconto={desconto}"
+def proposta_salvar(plano: str = Form(...), local: str = Form("CIA"), forma: str = Form(...), pessoas: int = Form(1),
+                    desconto: str = Form(""), preco_final: str = Form(""), h: list[str] = Form([]), lead_id: str = Form(""),
+                    cliente_id: str = Form(""), observacoes: str = Form(""), confirmar: int = Form(0), con=Depends(get_db)):
+    horarios = _ler_horarios(h)
+    f = dict(plano=plano, local=local, forma=forma, pessoas=pessoas, desconto=desconto, preco_final=preco_final,
+             lead_id=lead_id, cliente_id=cliente_id)
+    url = _url_propostas(f, horarios)
     try:
-        r = simular(con, plano, local, forma, pessoas, dia, hora, desconto)
+        desc, pf = _num_campo(desconto, "Desconto") or 0.0, _num_campo(preco_final, "Preço final")
+    except ValueError as e:   # volta sem o valor ruim, para a tela abrir normal
+        return voltar(_url_propostas({**f, "desconto": "", "preco_final": ""}, horarios), erro=str(e))
+    try:
+        r = simular(con, plano, horarios, forma, pessoas, desc, pf, local)
     except ValueError as e:
         return voltar(url, erro=str(e))
     if r["abaixo_margem"] and not confirmar:
         return voltar(url, erro="Proposta abaixo da margem mínima. Marque 'Salvar mesmo assim' para confirmar.")
     if not lead_id and not cliente_id:
         return voltar(url, erro="Vincule a proposta a um lead ou cliente.")
+    locais = list(dict.fromkeys(x["local"] for x in horarios)) or [local]
+    um = horarios[0] if len(horarios) == 1 else {}
     with con:
         cur = con.execute("""INSERT INTO propostas (lead_id, cliente_id, tipo_servico, qtd_aulas, freq_semanal, local, forma_pagamento, pessoas,
                              dia, hora, desconto, preco_total, preco_pessoa, custo_total, lucro, margem, lucro_hora, preco_minimo,
-                             desconto_maximo, abaixo_margem, observacoes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                             desconto_maximo, abaixo_margem, observacoes, preco_cheio) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                           (int(lead_id) if lead_id else None, int(cliente_id) if cliente_id else None, r["tipo"], r["qtd"], r["freq"],
-                           local, forma, pessoas, dia or None, hora or None, desconto / 100, r["preco_total"], r["preco_pessoa"],
-                           r["custo_total"], r["lucro"], r["margem"], r["lucro_hora"], r["preco_minimo"], r["desconto_maximo"],
-                           int(r["abaixo_margem"]), observacoes or None))
-    return voltar("/simulador", msg=f"Proposta #{cur.lastrowid} salva.")
+                           " + ".join(locais), forma, pessoas, um.get("dia") or None, um.get("hora") or None, r["desconto"], r["preco_total"],
+                           r["preco_pessoa"], r["custo_total"], r["lucro"], r["margem"], r["lucro_hora"], r["preco_minimo"],
+                           r["desconto_maximo"], int(r["abaixo_margem"]), observacoes or None, r["preco_cheio"]))
+        con.executemany("INSERT INTO proposta_horarios (proposta_id, dia, hora, local, multiplicador) VALUES (?,?,?,?,?)",
+                        [(cur.lastrowid, d["dia"] or None, d["hora"] or None, d["local"], d["mult"]) for d in r["horarios"]])
+    return voltar(f"/propostas/{cur.lastrowid}", msg=f"Proposta #{cur.lastrowid} salva.")
 
 
 @app.post("/propostas/{pid}/status")
 def proposta_status(pid: int, status: str = Form(...), con=Depends(get_db)):
     with con:
         con.execute("UPDATE propostas SET status=? WHERE id=?", (status, pid))
-    return voltar("/simulador", msg=f"Proposta #{pid}: {status}.")
+    return voltar("/propostas", msg=f"Proposta #{pid}: {status}.")
 
 
 @app.post("/propostas/{pid}/excluir")
 def proposta_excluir(pid: int, con=Depends(get_db)):
     with con:
         con.execute("UPDATE propostas SET excluido_em=datetime('now','localtime') WHERE id=?", (pid,))
-    return voltar("/simulador", msg="Proposta enviada para a lixeira.")
+    return voltar("/propostas", msg="Proposta enviada para a lixeira.")
 
 
 @app.get("/explorador", response_class=HTMLResponse)
