@@ -80,3 +80,11 @@ def test_novo_local_volta_para_a_mesma_tela_sem_o_aviso_velho(http):
 def test_botao_novo_local_leva_a_url_atual(http):
     r = http.get("/agenda", params={"semana": "2026-11-02"})
     assert 'data-voltar="/agenda?semana=2026-11-02"' in r.text
+
+
+def test_observacoes_da_proposta_voltam_quando_da_erro(http, con):  # noqa: F811
+    r = http.post("/propostas", data={"plano": "Pacote de Aulas|8|0", "forma": "PIX", "h": "1-7-CIA",
+                                                "observacoes": "Prefere manhã & sábado"}, follow_redirects=False)
+    assert "erro=" in r.headers["location"] and "obs=" in r.headers["location"]
+    tela = http.get(r.headers["location"])
+    assert 'value="Prefere manhã &amp; sábado"' in tela.text

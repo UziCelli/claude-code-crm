@@ -300,7 +300,7 @@ def _ligar(con: sqlite3.Connection, tipo: str, lid: int, chave: str, data: str, 
 
 
 def _garantir(con: sqlite3.Connection, tipo: str, comp: str, rodada: "_Rodada") -> bool:
-    """Cria (ou recalcula, se ainda em aberto) a conta automática da competência e a mantém ligada à recorrência da mesma conta,
+    """Cria (ou recalcula, se ainda em aberto; em aberto e zerada, apaga) a conta automática da competência e a mantém ligada à recorrência da mesma conta,
     para ela ser a conta do mês e a recorrência não mostrar um item a mais. True se mexeu no banco."""
     conta = _conta(con, tipo, comp, rodada)
     chave = f"{tipo}:{comp}"
@@ -309,6 +309,11 @@ def _garantir(con: sqlite3.Connection, tipo: str, comp: str, rodada: "_Rodada") 
         if atual["excluido_em"]:
             return False
         mexeu, data = False, atual["data"]
+        if not atual["pago_em"] and conta["valor"] <= 0:   # em aberto e o mês não tem mais o que cobrar (aula desmarcada, local mudou)
+            with con:   # a conta é só do app (auto = chave: ninguém editou): sai de vez; se o valor voltar, é criada de novo
+                cur = con.execute("DELETE FROM lancamentos WHERE id=? AND auto=? AND pago_em IS NULL AND excluido_em IS NULL",
+                                  (atual["id"], chave))
+            return cur.rowcount > 0
         if not atual["pago_em"] and conta["valor"] > 0 and \
                 (round(atual["valor"], 2), atual["data"], atual["descricao"], atual["observacao"]) != \
                 (conta["valor"], conta["data"], conta["descricao"], conta["observacao"]):
