@@ -213,7 +213,7 @@ FERRAMENTAS = [
                           "até 200 linhas). Tabelas principais (datas AAAA-MM-DD; excluido_em preenchido = na lixeira, filtre "
                           "excluido_em IS NULL): lancamentos(id, escopo PF|PJ, tipo entrada|saida, data, pago_em NULL=em aberto, "
                           "valor, categoria, descricao, contraparte, cliente_id, conta, forma, parcela_num, parcela_total, "
-                          "recorrencia_id, competencia AAAA-MM, observacao, auto NULL=lançado à mão ou das:AAAA-MM/cia:AAAA-MM=conta automática); recorrencias(id, escopo, descricao, categoria, valor, dia_vencimento, "
+                          "recorrencia_id, competencia AAAA-MM, observacao, auto NULL=lançado à mão ou das:AAAA-MM/cia:AAAA-MM/local:<nome>:AAAA-MM=conta automática); recorrencias(id, escopo, descricao, categoria, valor, dia_vencimento, "
                           "fixo, conta, inicio AAAA-MM, fim, prioridade); saldos(conta, saldo, data); clientes(id, nome, telefone, "
                           "status ativo|pausado|inativo, plano, local, tipo_servico, valor, forma_pagamento, data_inicio, "
                           "data_renovacao, dias_horarios, canal_origem); cliente_eventos(cliente_id, tipo aula|falta|desmarcou|"

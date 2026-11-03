@@ -1,8 +1,9 @@
-"""Contas automáticas em Contas a pagar: o DAS e a conta da CIA do mês anterior, calculados pelo app.
+"""Contas automáticas em Contas a pagar: o DAS, a conta da CIA e a de cada local criado pelo "+ Novo local", do mês anterior.
 
-Ambas são retroativas. Em novembro o app lança o DAS de outubro (sobre o que entrou em outubro) e a CIA de outubro
-(as aulas Feitas em outubro). O lançamento é uma saída PJ em aberto, na data do vencimento, com `auto` = 'das:2026-10'
-ou 'cia:2026-10'. Idempotente e barato: roda em INSERT OR IGNORE (PC e Render escrevem no mesmo Turso)."""
+Todas são retroativas. Em novembro o app lança o DAS de outubro (sobre o que entrou em outubro), a CIA de outubro
+(as aulas Feitas em outubro) e a de cada local (as aulas Feitas lá, pelos custos do local). O lançamento é uma saída PJ
+em aberto, na data do vencimento, com `auto` = 'das:2026-10', 'cia:2026-10' ou 'local:<nome>:2026-10'.
+Idempotente e barato: roda em INSERT OR IGNORE (PC e Render escrevem no mesmo Turso)."""
 import datetime as dt
 import re
 import sqlite3
@@ -10,6 +11,7 @@ import traceback
 import unicodedata
 
 from . import db, financeiro, precos
+from .vigencia import fixo_vale
 from .financeiro import moeda_br, somar_meses, vencimento_util
 
 DIA_CIA = 5   # padrão do parâmetro contas_auto.dia_cia
@@ -32,40 +34,53 @@ def eh_local_cia(local: str | None) -> bool:
     return bool(re.match(r"cia(?![a-z])", sem_acento))
 
 
+def _sem_acento(texto: str | None) -> str:
+    return unicodedata.normalize("NFKD", texto or "").encode("ascii", "ignore").decode().strip().lower()
+
+
 def _mes_br(mes: str) -> str:
     return f"{mes[5:7]}/{mes[:4]}"
 
 
-# ---------- CIA ----------
-def _grupos_cia(con: sqlite3.Connection, mes: str) -> dict:
-    """{(data, hora): {aluno}} das aulas com marcação Feita (cliente_eventos tipo 'aula') na CIA no mês.
-    O local vem como na Agenda (controle do aluno): a avulsa daquele dia e hora, senão o horário fixo do dia da semana.
-    Aula lançada pela ficha (sem hora) vale no primeiro horário do aluno na CIA naquele dia; sem horário na CIA, não conta.
+# ---------- aulas Feitas por local ----------
+def _grupos(con: sqlite3.Connection, mes: str, eh_do_local) -> dict:
+    """{(data, hora): {aluno}} das aulas com marcação Feita (cliente_eventos tipo 'aula') no mês, no local que `eh_do_local(local)` aceita.
+    O local vem como na Agenda (controle do aluno): a avulsa daquele dia e hora, senão o horário fixo que valia naquele dia
+    (fixo_vale: mudar o horário ou o local não muda os meses que passaram).
+    Aula lançada pela ficha (sem hora) vale no primeiro horário do aluno nesse local naquele dia; sem horário lá, não conta.
     Faltou, desmarcou e cancelada não são Feita, então não entram."""
     ini, fim = f"{mes}-01", f"{somar_meses(mes, 1)}-01"
     avulsas = {(r["cliente_id"], r["data"], r["hora"]): r["local"] for r in con.execute(
         "SELECT cliente_id, data, hora, local FROM agenda_avulsas WHERE excluido_em IS NULL AND data >= ? AND data < ? ORDER BY id", (ini, fim))}
-    fixos = {(r["cliente_id"], r["dia"], r["hora"]): r["local"] for r in con.execute(
-        "SELECT cliente_id, dia, hora, local FROM agenda_fixos WHERE excluido_em IS NULL ORDER BY id")}
+    fixos = {}   # (aluno, dia da semana) -> linhas que podem ter valido no mês; a ativa primeiro
+    for r in con.execute("""SELECT cliente_id, dia, hora, local, vigente_de, criado_em, excluido_em FROM agenda_fixos
+                            WHERE (excluido_em IS NULL OR substr(excluido_em,1,10) > ?) AND (vigente_de IS NULL OR vigente_de < ?)
+                            ORDER BY excluido_em IS NOT NULL, id""", (ini, fim)):
+        fixos.setdefault((r["cliente_id"], r["dia"]), []).append(r)
 
-    def local(cid, data, hora):
-        dia = _dia_da_semana(data)
-        return avulsas.get((cid, data, hora)) or fixos.get((cid, dia, hora))
+    def fixo(cid, data, hora):
+        return next((r["local"] for r in fixos.get((cid, _dia_da_semana(data)), ()) if r["hora"] == hora and fixo_vale(r, data)), None)
 
     grupos = {}
     for e in con.execute("""SELECT DISTINCT e.cliente_id, e.data, e.hora FROM cliente_eventos e JOIN clientes c ON c.id = e.cliente_id
                             WHERE e.tipo='aula' AND e.excluido_em IS NULL AND c.excluido_em IS NULL AND e.data >= ? AND e.data < ?""",
                          (ini, fim)):
         cid, data, hora = e["cliente_id"], e["data"], e["hora"]
-        if hora is None:   # lançada pela ficha: acha o horário dele na CIA naquele dia
-            horas = sorted({h for (c, d, h), loc in avulsas.items() if c == cid and d == data and eh_local_cia(loc)}
-                           | {h for (c, dia, h), loc in fixos.items() if c == cid and dia == _dia_da_semana(data) and eh_local_cia(loc)})
+        if hora is None:   # lançada pela ficha: acha o horário dele nesse local naquele dia
+            horas = sorted({h for (c, d, h), loc in avulsas.items() if c == cid and d == data and eh_do_local(loc)}
+                           | {r["hora"] for r in fixos.get((cid, _dia_da_semana(data)), ()) if fixo_vale(r, data) and eh_do_local(r["local"])})
             hora = horas[0] if horas else None
             if hora is None:
                 continue
-        if eh_local_cia(local(cid, data, hora)):
+        if eh_do_local(avulsas.get((cid, data, hora)) or fixo(cid, data, hora)):
             grupos.setdefault((data, hora), set()).add(cid)
     return grupos
+
+
+# ---------- CIA ----------
+def _grupos_cia(con: sqlite3.Connection, mes: str) -> dict:
+    """{(data, hora): {aluno}} das aulas Feitas na CIA no mês (ver _grupos)."""
+    return _grupos(con, mes, eh_local_cia)
 
 
 def _dia_da_semana(data: str) -> int:
@@ -96,9 +111,71 @@ def cia_mes(con: sqlite3.Connection, mes: str) -> dict:
             "texto": _texto_cia(aulas, taxa)}
 
 
-# ---------- as duas contas ----------
+# ---------- locais criados pelo "+ Novo local" ----------
+def _mesmo_local(nome: str):
+    alvo = _sem_acento(nome)
+    return lambda local: bool(local) and _sem_acento(local) == alvo
+
+
+def eh_do_local(texto: str | None, nome: str) -> bool:
+    """O texto (descrição, contraparte) fala do local? O nome inteiro, sem acento nem maiúsculas ('SmartFit' casa com 'Aluguel smartfit')."""
+    alvo = _sem_acento(nome)
+    return bool(alvo) and bool(re.search(rf"(?<![a-z0-9]){re.escape(alvo)}(?![a-z0-9])", _sem_acento(texto)))
+
+
+def locais_com_conta(con: sqlite3.Connection) -> list[str]:
+    """Locais criados aqui que geram conta automática: todos os de locais_custos, menos a CIA (ela tem a conta dela)."""
+    return [n for n in precos.custos_locais(con) if not eh_local_cia(n)]
+
+
+def local_mes(con: sqlite3.Connection, nome: str, mes: str) -> dict:
+    """Conta do local pelas aulas Feitas lá no mês: {mes, aulas, pessoas_extra, valor, vencimento, texto}.
+    Cada (data, hora) com aula Feita é uma aula: taxa por aula + deslocamento + taxa por pessoa a mais × (pessoas − 1),
+    como no preço. A taxa mensal entra uma vez, só se houve aula no mês. Vence no dia `contas_auto.dia_locais`
+    (padrão: o mesmo da CIA) do mês seguinte, antecipado para a sexta se cair no fim de semana."""
+    c = precos.custos_locais(con).get(nome) or {}
+    taxa, desloc = float(c.get("taxa_aula") or 0), float(c.get("deslocamento") or 0)
+    extra, mensal = float(c.get("taxa_pessoa_extra") or 0), float(c.get("taxa_mensal") or 0)
+    grupos = _grupos(con, mes, _mesmo_local(nome)).values()
+    n, extras = len(grupos), sum(len(p) - 1 for p in grupos)
+    valor = round(n * (taxa + desloc) + extras * extra + (mensal if n else 0), 2)
+    p = db.parametros(con, "contas_auto")
+    dia = int(p.get("dia_locais") or p.get("dia_cia") or DIA_CIA)
+    partes = []
+    if n:
+        partes.append(f"{n} aula{'s' if n != 1 else ''} × {moeda_br(taxa)}")
+        if desloc:
+            partes.append(f"deslocamento {n} × {moeda_br(desloc)}")
+        if extras and extra:
+            partes.append(f"{extras} pessoa{'s' if extras != 1 else ''} a mais × {moeda_br(extra)}")
+        if mensal:
+            partes.append(f"taxa mensal {moeda_br(mensal)}")
+    return {"mes": mes, "aulas": n, "pessoas_extra": extras, "valor": valor, "vencimento": vencimento_util(dia, somar_meses(mes, 1)),
+            "texto": " + ".join(partes) or f"Nenhuma aula Feita em {nome}"}
+
+
+# ---------- as contas ----------
+def _local_do_tipo(tipo: str) -> str | None:
+    return tipo[len("local:"):] if tipo.startswith("local:") else None
+
+
+def _e_a_conta(con, tipo: str, texto: str, categoria=None) -> bool:
+    """O texto (descrição + contraparte) é a mesma conta do tipo? DAS: eh_das; CIA: eh_cia; local: o nome do local."""
+    nome = _local_do_tipo(tipo)
+    if nome:
+        return eh_do_local(texto, nome)
+    if tipo == "das":
+        return financeiro.eh_das(texto, categoria)
+    return eh_cia(texto)
+
+
 def _conta(con: sqlite3.Connection, tipo: str, comp: str) -> dict:
     """O que o app lançaria para a competência: {valor, data, descricao, categoria, observacao}."""
+    nome = _local_do_tipo(tipo)
+    if nome:
+        c = local_mes(con, nome, comp)
+        return {"valor": c["valor"], "data": c["vencimento"], "descricao": f"{nome}: aulas de {_mes_br(comp)}",
+                "categoria": CATEGORIA_CIA, "observacao": c["texto"]}
     if tipo == "das":
         d = financeiro.das_competencia(con, comp)
         return {"valor": d["valor"], "data": d["vencimento"], "descricao": f"DAS {_mes_br(comp)} (Simples)",
@@ -114,17 +191,17 @@ def _ja_lancada_a_mao(con: sqlite3.Connection, tipo: str, mes_venc: str) -> bool
                             AND excluido_em IS NULL AND auto IS NULL AND substr(data,1,7)=?""", (mes_venc,)):
         if tipo == "das" and financeiro.eh_das(r["descricao"], r["categoria"]):
             return True
-        if tipo == "cia" and eh_cia(f"{r['descricao'] or ''} {r['contraparte'] or ''}"):
+        if tipo != "das" and _e_a_conta(con, tipo, f"{r['descricao'] or ''} {r['contraparte'] or ''}"):
             return True
     return False
 
 
 def _recorrencia(con: sqlite3.Connection, tipo: str, mes_venc: str):
-    """Recorrência PJ ativa nesse mês (fixa ou variável) que é a mesma conta (DAS: eh_das; CIA: eh_cia na descrição).
+    """Recorrência PJ ativa nesse mês (fixa ou variável) que é a mesma conta (DAS: eh_das; CIA: eh_cia; local: o nome, na descrição).
     Excluída ou já encerrada não conta: sem recorrência, o app lança a conta sem vínculo e não há item virtual a duplicar."""
     for r in con.execute("""SELECT * FROM recorrencias WHERE excluido_em IS NULL AND escopo='PJ' AND inicio <= ?
                             AND (fim IS NULL OR fim >= ?) ORDER BY id""", (mes_venc, mes_venc)):
-        if (financeiro.eh_das(r["descricao"], r["categoria"]) if tipo == "das" else eh_cia(r["descricao"])):
+        if _e_a_conta(con, tipo, r["descricao"], r["categoria"]):
             return r
     return None
 
@@ -196,11 +273,12 @@ def _garantir(con: sqlite3.Connection, tipo: str, comp: str) -> bool:
 
 
 def gerar_contas_automaticas(con: sqlite3.Connection, hoje) -> list[str]:
-    """Lança em Contas a pagar o DAS e a CIA do mês anterior a `hoje` ('AAAA-MM-DD' ou date) que ainda não existem, e recalcula
-    os que ainda estão em aberto. Não cria DAS que já existe de verdade nem CIA lançada à mão; liga o lançamento à recorrência
-    da conta, se houver. Devolve as chaves que criou ou atualizou ('das:2026-10')."""
+    """Lança em Contas a pagar o DAS, a CIA e a conta de cada local do mês anterior a `hoje` ('AAAA-MM-DD' ou date) que ainda
+    não existem, e recalcula os que ainda estão em aberto. Não cria DAS que já existe de verdade nem CIA/local lançado à mão;
+    liga o lançamento à recorrência da conta, se houver. Devolve as chaves que criou ou atualizou ('das:2026-10', 'local:X:2026-10')."""
     comp = somar_meses(str(hoje)[:7], -1)
-    return [f"{tipo}:{comp}" for tipo in ("das", "cia") if _garantir(con, tipo, comp)]
+    tipos = ["das", "cia"] + [f"local:{n}" for n in locais_com_conta(con)]
+    return [f"{tipo}:{comp}" for tipo in tipos if _garantir(con, tipo, comp)]
 
 
 # cache por dia: Painel e startup não refazem a conta a cada requisição; /financeiro força (recalcula o que está em aberto)
@@ -225,10 +303,14 @@ def garantir(con: sqlite3.Connection, hoje, forcar: bool = False) -> None:
 
 # ---------- prévia e "Como calculei" ----------
 def previa(con: sqlite3.Connection, hoje) -> list[str]:
-    """Duas linhas para o Financeiro: o que a CIA e o DAS do mês corrente estão somando até agora."""
+    """Linhas para o Financeiro: o que a CIA, cada local com aula e o DAS do mês corrente estão somando até agora."""
     mes = str(hoje)[:7]
     cia, das = cia_mes(con, mes), financeiro.das_competencia(con, mes)
     n = sum(cia["aulas"].values())
     venc = das["vencimento"]
-    return [f"CIA este mês até agora: {n} aula{'s' if n != 1 else ''} = {moeda_br(cia['valor'])}",
-            f"DAS de {_mes_br(mes)} (vence {venc[8:10]}/{venc[5:7]}): {moeda_br(das['valor'])} até agora"]
+    linhas = [f"CIA este mês até agora: {n} aula{'s' if n != 1 else ''} = {moeda_br(cia['valor'])}"]
+    for nome in locais_com_conta(con):
+        c = local_mes(con, nome, mes)
+        if c["aulas"]:
+            linhas.append(f"{nome} este mês até agora: {c['aulas']} aula{'s' if c['aulas'] != 1 else ''} = {moeda_br(c['valor'])}")
+    return linhas + [f"DAS de {_mes_br(mes)} (vence {venc[8:10]}/{venc[5:7]}): {moeda_br(das['valor'])} até agora"]
