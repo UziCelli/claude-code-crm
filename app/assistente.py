@@ -965,8 +965,8 @@ def _marcar_tarefa(con, a):
         if i is None:
             raise ErroFerramenta(f"Item de campanha {iid} não encontrado (use ver_tarefas).")
         with con:
-            con.execute("UPDATE campanha_itens SET feito=?, data_feito=CASE WHEN ?=1 THEN date('now','localtime') END WHERE id=?",
-                        (feito, feito, iid))
+            con.execute("UPDATE campanha_itens SET feito=?, data_feito=CASE WHEN ?=1 THEN ? END WHERE id=?",
+                        (feito, feito, _hoje(), iid))
         return {"ok": True, "mensagem": f"{i['texto']}: {'feito' if feito else 'desmarcado'}."}
     chave = _texto(a, "chave", maximo=40)
     if not chave:
@@ -977,8 +977,8 @@ def _marcar_tarefa(con, a):
     semana = _main().semana_atual()
     with con:
         con.execute("INSERT OR IGNORE INTO rotina_itens (semana, item) VALUES (?, ?)", (semana, chave))
-        con.execute("UPDATE rotina_itens SET feito=?, data_feito=CASE WHEN ?=1 THEN date('now','localtime') END WHERE semana=? AND item=?",
-                    (feito, feito, semana, chave))
+        con.execute("UPDATE rotina_itens SET feito=?, data_feito=CASE WHEN ?=1 THEN ? END WHERE semana=? AND item=?",
+                    (feito, feito, _hoje(), semana, chave))
     return {"ok": True, "mensagem": f"{_main().rotina_texto(t)}: {'feita' if feito else 'desmarcada'} nesta semana."}
 
 

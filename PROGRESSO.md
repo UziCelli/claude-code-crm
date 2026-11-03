@@ -199,6 +199,15 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Configurações mostra números com vírgula ("70,125"): com ponto, salvar a tela lia "70.125" como 70 mil.
 - Testes: `tests/test_precos_bugs.py`.
 
+## Bugs graves — PR 2: agenda (PR `claude/bugs-agenda`, 03/11/2026)
+- **Fuso do Brasil**: `app/__init__.py` põe `TZ=America/Sao_Paulo` (e `render.yaml` também). Datas gravadas saem do Python (`dt.date.today()`), não de `date('now','localtime')`: no Turso o SQL roda em UTC e depois das 21h "hoje" virava amanhã.
+- **No máximo 2 por horário**: avulsa em horário com 2 alunos é recusada ("Horário cheio"; quem desmarcou/cancelou não conta). Avulsa no horário fixo do próprio aluno também. Aluno que volta a ficar ativo (status, ficha, mês pulado, renovação ou lixeira) sai do horário fixo que lotou enquanto estava parado, com aviso (`tirar_dos_lotados`).
+- **Avulsa repetida** (clique duplo): recusada. Reposições e o controle do mês contam cada (data, hora) uma vez, mesmo com duplicatas antigas no banco.
+- **Mudar horário ou local não reescreve o passado**: nova coluna `agenda_fixos.vigente_de`. Tirar um horário é exclusão suave com data; trocar o local cria linha nova. `aulas_da_semana` usa a linha que valia em cada dia (`fixo_vale`). Linha criada e tirada no mesmo dia é ajuste e não conta. Aluno novo fica com `vigente_de` vazio (vale desde a data de início).
+- **Lixeira de horário fixo**: restaurar um horário tirado antes de hoje cria uma cópia que vale de hoje em diante (a linha antiga fica como estava). Tirado hoje, só desfaz. A lixeira mostra só a linha mais nova do aluno em cada dia e hora.
+- Falta (PR 3): a conta automática da CIA (`contas_auto._grupos_cia`) ainda olha o local atual do horário fixo, não o que valia no dia.
+- Testes: `tests/test_agenda_bugs.py`.
+
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.
 - Nomes de serviço no CRM: Pacote de Aulas, Mensalidade, Consultoria Online, Consultoria Híbrida, Avaliação Física.
