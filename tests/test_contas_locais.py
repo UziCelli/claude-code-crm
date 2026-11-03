@@ -2,9 +2,9 @@
 como a da CIA. Hoje, nos testes, é segunda 02/11/2026: a competência é outubro."""
 import pytest
 
-from app import contas_auto, financeiro
+from app import contas_auto, financeiro, locais
 from tests.test_alertas import con_temp  # noqa: F401  (banco temporário)
-from tests.test_contas_automaticas import HOJE, aluno, automaticas, lancar_a_mao, marca
+from tests.test_contas_automaticas import HOJE, aluno, automaticas, cenario_outubro, lancar_a_mao, marca
 
 CHAVE = "local:SmartFit:2026-10"
 
@@ -27,15 +27,15 @@ def cenario(con):
     return a, b
 
 
-# 3 aulas × (20 + 5) + 1 pessoa a mais × 10 + taxa mensal 50
-VALOR = 3 * 25 + 10 + 50
+# 3 aulas × 20 + 1 pessoa a mais × 10 + taxa mensal 50. O deslocamento (combustível do personal) não é conta do local.
+VALOR = 3 * 20 + 10 + 50
 
 
-def test_local_mes_soma_taxa_deslocamento_pessoa_extra_e_taxa_mensal_uma_vez(con_temp):
+def test_local_mes_soma_taxa_pessoa_extra_e_taxa_mensal_uma_vez_sem_deslocamento(con_temp):
     cenario(con_temp)
     r = contas_auto.local_mes(con_temp, "SmartFit", "2026-10")
     assert (r["aulas"], r["pessoas_extra"], r["valor"]) == (3, 1, VALOR)
-    assert r["texto"] == "3 aulas × R$ 20,00 + deslocamento 3 × R$ 5,00 + 1 pessoa a mais × R$ 10,00 + taxa mensal R$ 50,00"
+    assert r["texto"] == "3 aulas × R$ 20,00 + 1 pessoa a mais × R$ 10,00 + taxa mensal R$ 50,00"
     assert r["vencimento"] == "2026-11-05"
 
 
@@ -157,3 +157,105 @@ def test_previa_mostra_o_local_com_aula(con_temp):
                                         ("Smart TV", False), ("SmartFitness", False), ("", False)])
 def test_eh_do_local_casa_o_nome_inteiro(texto, sim):
     assert contas_auto.eh_do_local(texto, "SmartFit") is sim
+
+
+# --- Revisão do PR: nomes parecidos, aula sem hora, acento e número de leituras ---
+
+def rec(con, descricao, valor=150):
+    with con:
+        return con.execute("""INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, inicio)
+                              VALUES ('PJ',?,'Aluguel',?,5,'2026-01')""", (descricao, valor)).lastrowid
+
+
+def test_recorrencia_fica_com_o_local_de_nome_mais_especifico(con_temp):
+    """Locais 'Smart Fit' e 'Fit': 'Aluguel Smart Fit' é do Smart Fit, e o Fit ganha a conta dele também."""
+    local(con_temp, "Smart Fit")
+    local(con_temp, "Fit")
+    a = aluno(con_temp, "Ana", local="Smart Fit")
+    b = aluno(con_temp, "Beto", local="Fit", hora=10)
+    marca(con_temp, a, "2026-10-05")
+    marca(con_temp, b, "2026-10-05", hora=10)
+    rid = rec(con_temp, "Aluguel Smart Fit")
+    feitas = contas_auto.gerar_contas_automaticas(con_temp, HOJE)
+    assert "local:Smart Fit:2026-10" in feitas and "local:Fit:2026-10" in feitas
+    assert automaticas(con_temp, "local:Smart Fit:2026-10")[0]["recorrencia_id"] == rid
+    assert automaticas(con_temp, "local:Fit:2026-10")[0]["recorrencia_id"] is None
+
+
+def test_recorrencia_de_local_com_111_no_nome_nao_rouba_a_cia(con_temp):
+    cenario_outubro(con_temp)
+    local(con_temp, "Studio 111")
+    s = aluno(con_temp, "Sara", local="Studio 111", hora=11)
+    marca(con_temp, s, "2026-10-05", hora=11)
+    rid = rec(con_temp, "Aluguel Studio 111")
+    feitas = contas_auto.gerar_contas_automaticas(con_temp, HOJE)
+    assert "cia:2026-10" in feitas and "local:Studio 111:2026-10" in feitas
+    assert automaticas(con_temp, "cia:2026-10")[0]["recorrencia_id"] != rid
+
+
+def test_conta_a_mao_de_um_local_nao_bloqueia_outro_local(con_temp):
+    local(con_temp, "Smart Fit")
+    local(con_temp, "Fit")
+    b = aluno(con_temp, "Beto", local="Fit")
+    marca(con_temp, b, "2026-10-05")
+    lancar_a_mao(con_temp, "Aluguel Smart Fit outubro", "2026-11-05", categoria="Aluguel")
+    assert "local:Fit:2026-10" in contas_auto.gerar_contas_automaticas(con_temp, HOJE)
+
+
+def test_conta_a_mao_do_local_com_111_nao_bloqueia_a_cia(con_temp):
+    cenario_outubro(con_temp)
+    local(con_temp, "Studio 111")
+    lancar_a_mao(con_temp, "Studio 111 outubro", "2026-11-05", categoria="Aluguel")
+    assert "cia:2026-10" in contas_auto.gerar_contas_automaticas(con_temp, HOJE)
+
+
+def test_gasto_de_transporte_com_o_nome_do_local_nao_bloqueia(con_temp):
+    cenario(con_temp)
+    lancar_a_mao(con_temp, "Gasolina SmartFit", "2026-11-05", categoria="Transporte")
+    assert contas_auto.gerar_contas_automaticas(con_temp, HOJE) == [CHAVE]
+
+
+def test_aula_sem_hora_com_dois_horarios_no_dia_conta_uma_vez_no_primeiro(con_temp):
+    """Ana: seg 9h CIA e seg 18h SmartFit. Aula pela ficha (sem hora) em 05/10: conta uma vez, na CIA (9h)."""
+    local(con_temp)
+    a = aluno(con_temp, "Ana", local="CIA")
+    with con_temp:
+        con_temp.execute("INSERT INTO agenda_fixos (cliente_id, dia, hora, local) VALUES (?, 1, 18, 'SmartFit')", (a,))
+        con_temp.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, hora) VALUES (?, 'aula', '2026-10-05', NULL)", (a,))
+    assert contas_auto.local_mes(con_temp, "SmartFit", "2026-10")["aulas"] == 0
+    assert sum(contas_auto.cia_mes(con_temp, "2026-10")["aulas"].values()) == 1
+
+
+def test_aula_sem_hora_em_dado_antigo_conta_uma_vez(con_temp):
+    """Antes do vigente_de, trocar a hora excluía a linha velha e criava outra com vigente_de NULL."""
+    local(con_temp)
+    a = aluno(con_temp, "Ana", local="SmartFit")
+    with con_temp:
+        con_temp.execute("UPDATE agenda_fixos SET criado_em='2026-09-01 10:00:00', excluido_em='2026-10-19 08:00:00' WHERE cliente_id=?", (a,))
+        con_temp.execute("INSERT INTO agenda_fixos (cliente_id, dia, hora, local, criado_em) VALUES (?, 1, 10, 'CIA', '2026-10-19 08:00:00')", (a,))
+        con_temp.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, hora) VALUES (?, 'aula', '2026-10-05', NULL)", (a,))
+    sf = contas_auto.local_mes(con_temp, "SmartFit", "2026-10")["aulas"]
+    cia = sum(contas_auto.cia_mes(con_temp, "2026-10")["aulas"].values())
+    assert sf + cia == 1
+
+
+def test_nomes_que_so_mudam_no_acento_sao_o_mesmo_local(con_temp):
+    locais.criar_local(con_temp, "Academia", taxa_aula=20)
+    with pytest.raises(ValueError):
+        locais.criar_local(con_temp, "Acadêmia", taxa_aula=20)
+    local(con_temp, "ACADÊMIA")                                            # dado antigo, gravado direto
+    assert contas_auto.locais_com_conta(con_temp) == ["Academia"]
+
+
+def test_leituras_nao_crescem_com_o_numero_de_locais(con_temp):
+    def contar(k):
+        for i in range(k):
+            local(con_temp, f"Local{k}x{i}")
+        n = [0]
+        con_temp.set_trace_callback(lambda s: n.__setitem__(0, n[0] + 1))
+        contas_auto.gerar_contas_automaticas(con_temp, HOJE)
+        contas_auto.previa(con_temp, "2026-11-03")
+        con_temp.set_trace_callback(None)
+        return n[0]
+    um = contar(1)
+    assert contar(6) <= um + 2                                              # 7 locais custam o mesmo que 1

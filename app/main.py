@@ -66,7 +66,7 @@ async def lifespan(app):
     try:
         con = db.conectar()
         try:
-            contas_auto.garantir(con, dt.date.today().isoformat())   # DAS e CIA do mês passado em Contas a pagar
+            contas_auto.garantir(con, dt.date.today().isoformat())   # DAS, CIA e locais do mês passado em Contas a pagar
         finally:
             con.close()
     except Exception as e:  # o CRM abre mesmo se as contas automáticas falharem
