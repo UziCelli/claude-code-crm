@@ -2,7 +2,7 @@
 {% block conteudo %}
 <div class="linha topo">
   <h1 style="margin:0">Propostas</h1>
-  <button type="button" class="claro" data-abrir="dlg-local" data-voltar="/propostas">+ Novo local</button>
+  <button type="button" class="claro" data-abrir="dlg-local" data-voltar="{{ request.url.path }}{{ "?" ~ request.url.query if request.url.query }}">+ Novo local</button>
 </div>
 <div class="grid c2">
   <div class="card">

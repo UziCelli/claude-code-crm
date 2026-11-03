@@ -112,6 +112,8 @@ def calcular_misto(horarios: list, p: dict, pessoas: int = 1, desconto: float = 
 
     lucro = preco * (1 - taxa) - custo
     margem = lucro / preco if preco else 0.0
+    if 1 - taxa - margem_min <= 1e-9:   # sem isso: divisão por zero (ou preço mínimo negativo) e a tela caía
+        raise ValueError("Imposto + taxa + margem mínima passam de 100%: ajuste em Configurações")
     preco_minimo = custo / (1 - taxa - margem_min)
     desconto_maximo = max(0.0, 1 - preco_minimo / preco_cheio) if preco_cheio else 0.0
 
@@ -135,14 +137,15 @@ def calcular_misto(horarios: list, p: dict, pessoas: int = 1, desconto: float = 
     }
 
 
-def cor_margem(margem: float | None) -> str:
-    """Classe de cor usada na grade e nas listas: verde / amarelo / vermelho / prejuizo."""
+def cor_margem(margem: float | None, minima: float = 0.15) -> str:
+    """Classe de cor usada na grade e nas listas: verde (>= margem mínima do plano) / amarelo (até 5 pontos abaixo) /
+    vermelho / prejuizo (< 0)."""
     if margem is None:
         return "neutro"
     if margem < 0:
         return "prejuizo"
-    if margem < 0.10:
+    if margem < minima - 0.05 - 1e-9:
         return "vermelho"
-    if margem < 0.15:
+    if margem < minima - 1e-9:
         return "amarelo"
     return "verde"

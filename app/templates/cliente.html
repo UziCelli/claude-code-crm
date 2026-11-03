@@ -33,7 +33,7 @@
         {% endif %}
       </div>
     </details>
-    <a class="btn claro pequeno" href="/propostas?cliente_id={{ c.id }}&local={{ c.local or 'CIA' }}">Nova proposta</a>
+    <a class="btn claro pequeno" href="/propostas?cliente_id={{ c.id }}&local={{ (c.local or 'CIA')|urlencode }}">Nova proposta</a>
     <form method="post" action="/clientes/{{ c.id }}/excluir" class="inline" data-confirmar="Enviar {{ c.nome }} para a lixeira?"><button class="perigo pequeno">Excluir</button></form>
   </div>
   {% endif %}
