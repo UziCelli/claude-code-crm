@@ -9,6 +9,7 @@
     <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" name="vale" value="1" {{ 'checked' if vale }} onchange="this.form.submit()"> Só horários de vale</label>
   </form>
   <button type="button" class="claro" id="modo-sel" aria-pressed="false">Selecionar vários</button>
+  <button type="button" class="claro" data-abrir="dlg-local" data-voltar="/grade">+ Novo local</button>
 </div>
 <div class="linha" style="justify-content:space-between">
   <div class="legenda">
@@ -121,4 +122,5 @@
   });
 })();
 </script>
+{% include "_dlg_local.html" %}{# "+ Novo local" #}
 {% endblock %}

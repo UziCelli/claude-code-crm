@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import acesso, assistente, atualizar, contas_auto, db, exportar, financeiro, importar, precos, sugestoes, vigia
+from . import locais as loc   # "+ Novo local": custos do local, preços e grade ('locais' é nome de variável nas telas)
 from . import indicacoes   # quem indicou quem e o presente da indicação (brinde, nunca desconto)
 from . import ofertas   # ofertas de upsell: proposta transparente, resposta do aluno e fim do valor da oferta
 from . import alunos as alu   # estado de cada aluno (um algoritmo só); 'alunos' é nome de variável em várias rotas
@@ -190,7 +191,7 @@ def get_db():
 def render(request, nome, con, **ctx):
     ctx.update(request=request, msg=request.query_params.get("msg"), erro=request.query_params.get("erro"),
                listas={k: db.lista(con, k) for k in db.LISTAS_INICIAIS}, alertas=alertas(con),
-               modelos=db.parametros(con, "msg_whatsapp"), dados_msg=dados_mensagem(con))
+               modelos=db.parametros(con, "msg_whatsapp"), dados_msg=dados_mensagem(con), locais_ref=loc.referencias(con))
     return templates.TemplateResponse(request, nome, ctx)
 
 
@@ -1034,7 +1035,7 @@ def grade(request: Request, tipo: str = "Pacotes", local: str = "CIA", vale: int
         if vale and not (s["status"] == "livre" and (s["multiplicador"] or 1) < 1):
             cel["apagado"] = True
         celulas[(s["dia"], s["hora"])] = cel
-    locais = [r[0] for r in con.execute("SELECT DISTINCT local FROM grade_slots ORDER BY local")] or db.lista(con, "lista_locais")
+    locais = list(dict.fromkeys(db.lista(con, "lista_locais") + [r[0] for r in con.execute("SELECT DISTINCT local FROM grade_slots ORDER BY local")]))
     clientes_ = con.execute("SELECT id, nome FROM clientes WHERE excluido_em IS NULL AND status='ativo' ORDER BY nome").fetchall()
     resumo = {"livres": sum(1 for c in celulas.values() if c["status"] == "livre"),
               "ocupados": sum(1 for c in celulas.values() if c["status"] == "ocupado"),
@@ -2982,6 +2983,28 @@ def configuracoes_lista(grupo: str = Form(...), nome: str = Form(...), con=Depen
         con.execute("INSERT OR IGNORE INTO parametros (grupo, chave, valor_texto, ordem) VALUES (?,?,?, (SELECT COALESCE(MAX(ordem),0)+1 FROM parametros WHERE grupo=?))",
                     (grupo, nome.strip(), nome.strip(), grupo))
     return voltar("/configuracoes", msg=f"'{nome}' adicionado.")
+
+
+@app.post("/locais/novo")
+def locais_novo(nome: str = Form(...), referencia: str = Form("CIA"), modo: str = Form("margem"), taxa_aula: str = Form("0"),
+                taxa_pessoa_extra: str = Form("0"), max_pessoas: str = Form("0"), deslocamento: str = Form("0"),
+                tempo_deslocamento: str = Form("0"), taxa_mensal: str = Form("0"), aulas_mes: str = Form("0"),
+                voltar_para: str = Form("/grade", alias="voltar"), con=Depends(get_db)):
+    """Pop-up "+ Novo local" (Grade, Agenda, Propostas): grava os custos e cria os preços e a grade copiando a referência."""
+    url = voltar_para if voltar_para.startswith("/") and not voltar_para.startswith("//") else "/grade"
+    nums = dict(taxa_aula=taxa_aula, taxa_pessoa_extra=taxa_pessoa_extra, max_pessoas=max_pessoas, deslocamento=deslocamento,
+                tempo_deslocamento=tempo_deslocamento, taxa_mensal=taxa_mensal, aulas_mes=aulas_mes)
+    try:
+        custos = {k: _num_br(v) for k, v in nums.items()}
+        r = loc.criar_local(con, nome, referencia, modo, **custos)
+    except ValueError as e:
+        msg = str(e) if "could not convert" not in str(e) else "Confira os números (use só algarismos e vírgula)"
+        return voltar(url, erro=msg)
+    nome = nome.strip()
+    if url.startswith("/grade"):
+        url = "/grade?local=" + quote(nome)
+    aviso = "" if r["precos"] else f" (sem preços: '{referencia}' não tem Pacote nem Mensalidade)"
+    return voltar(url, msg=f"Local {nome} criado: {r['precos']} preços e {r['horarios']} horários na grade{aviso}.")
 
 
 @app.post("/configuracoes/lista/{pid}/remover")

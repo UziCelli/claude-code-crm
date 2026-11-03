@@ -22,21 +22,40 @@ def carregar_parametros(con) -> dict:
         "cia_max": cia_max,
         "grupo_mult": {int(k): v for k, v in g("grupo_multiplicador").items()},
         "grupo_mo": {int(k): v for k, v in g("grupo_mao_obra_extra").items()},
+        "locais": custos_locais(con),
     }
 
 
-def _componentes(base: dict, p: dict, pessoas: int, mult_horario: float, local: str | None) -> tuple[float, float]:
-    """(preço cheio, custo) de um horário: o que muda de um horário/local para outro."""
+def custos_locais(con) -> dict:
+    """{local: custos} dos locais criados pelo "+ Novo local" (tabela locais_custos)."""
+    return {r["local"]: dict(r) for r in con.execute("SELECT * FROM locais_custos")}
+
+
+def custo_por_aula(c: dict) -> float:
+    """R$ por aula (1 pessoa) de um local: taxa + deslocamento + a taxa mensal dividida pelas aulas do mês."""
+    fixo = (c.get("taxa_mensal") or 0) / c["aulas_mes"] if c.get("aulas_mes") else 0.0
+    return (c.get("taxa_aula") or 0) + (c.get("deslocamento") or 0) + fixo
+
+
+def _componentes(base: dict, p: dict, pessoas: int, mult_horario: float, local: str | None) -> tuple[float, float, float]:
+    """(preço cheio, custo, horas por aula) de um horário: o que muda de um horário/local para outro."""
     local = local or base.get("local")
+    outro = p.get("locais", {}).get(local)
     if local == "CIA" and pessoas > p["cia_max"]:
         raise ValueError(f"Na CIA o máximo é {p['cia_max']} pessoas")
+    if outro and outro.get("max_pessoas") and pessoas > outro["max_pessoas"]:
+        raise ValueError(f"Em {local} o máximo é {outro['max_pessoas']} pessoas")
     sessoes = float(base.get("sessoes_mes") or 0)
     preco_cheio = float(base["preco_base"]) * mult_horario * p["grupo_mult"].get(pessoas, 1.0)
     custo = float(base.get("custo_operacional") or 0)
     custo += float(base.get("mao_obra") or 0) * p["grupo_mo"].get(pessoas, 0.0)
     if local == "CIA" and pessoas > 1:
         custo += (p["taxa_cia"][pessoas] - p["taxa_cia"][1]) * sessoes
-    return preco_cheio, custo
+    horas_aula = 1.0
+    if outro:
+        custo += (outro.get("taxa_pessoa_extra") or 0) * (pessoas - 1) * sessoes
+        horas_aula += (outro.get("tempo_deslocamento") or 0) / 60
+    return preco_cheio, custo, horas_aula
 
 
 def calcular(base: dict, p: dict, pessoas: int = 1, mult_horario: float = 1.0,
@@ -67,6 +86,7 @@ def calcular_misto(horarios: list, p: dict, pessoas: int = 1, desconto: float = 
     comps = [_componentes(b, p, pessoas, m, loc) for b, m, loc in horarios]
     preco_cheio = sum(c[0] for c in comps) / len(comps)
     custo = sum(c[1] for c in comps) / len(comps)
+    horas_aula = sum(c[2] for c in comps) / len(comps)   # 1h de aula + o deslocamento do local
 
     if preco_final is not None and preco_final > 0 and preco_cheio:
         desconto = 1 - preco_final / preco_cheio
@@ -74,7 +94,7 @@ def calcular_misto(horarios: list, p: dict, pessoas: int = 1, desconto: float = 
         raise ValueError("Desconto deve ficar abaixo de 100% (e o acréscimo, no máximo 900%)")
 
     sessoes = float(base.get("sessoes_mes") or 0)
-    horas = sessoes or 1.0
+    horas = (sessoes or 1.0) * horas_aula
     taxa = p["das"] + p["taxas"][forma_pagamento]
     margem_min = p["margens"].get(base["tipo_servico"], 0.15)
 

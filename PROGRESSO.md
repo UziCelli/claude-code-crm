@@ -177,6 +177,17 @@ Pedido: a aba Simulador vira **Propostas**; vários dias/horas/locais na mesma p
 - **Ajuste**: abaixo da margem, botão "Subir para R$ Y (margem mínima)"; acima, "Dar o desconto máximo"; "Voltar ao preço cheio". Desconto (%) ou Preço final (R$): um apaga o outro; preço acima do cheio aparece como acréscimo.
 - **PDF**: com desconto mostra "de ~~R$ X~~ por **R$ Y**", o "−Z% de desconto" e quanto economiza (`propostas.preco_cheio`, coluna nova). Sem desconto, só o valor.
 
+## Novo local pelo pop-up (PR `claude/novo-local-popup`, 03/11/2026, depende do PR anterior)
+Pedido: cadastrar academias novas direto da Grade, Agenda e Propostas, com taxas e deslocamento, gerando a grade com preços.
+- **Pop-up "+ Novo local"** (`_dlg_local.html`, rota `POST /locais/novo`): nome; taxa por aula (1 pessoa); taxa por pessoa a mais; máximo de pessoas; deslocamento (R$/aula); tempo de deslocamento (min/aula); taxa mensal fixa + aulas por mês; "copiar preços e grade de" (padrão CIA).
+- **Como montar os preços** (pergunta do pop-up): "Manter a margem" = o preço acompanha o custo; "Manter o preço" = só a margem muda.
+- **Custos** ficam na tabela nova `locais_custos`. Custo por aula = taxa + deslocamento + taxa mensal ÷ aulas do mês.
+- **Preços** (`app/locais.py`): copia Pacote de Aulas e Mensalidade da referência (origem `local:<ref>`), trocando o custo por aula da referência pelo do novo local × sessões.
+- **Motor** (`precos.py`): o local novo cobra a taxa por pessoa a mais, respeita o máximo de pessoas e soma o tempo de deslocamento às horas (o lucro/hora cai).
+- **Grade**: copia horários e multiplicadores da referência, todos livres (sem grade na referência: Seg–Sáb 05h–23h). A lista de locais da Grade agora junta a lista de Configurações + os locais que já têm grade.
+- **Base para copiar**: só a CIA ou um local criado pelo pop-up (dos locais da planilha o sistema não sabe a taxa por aula; copiar cobraria a taxa duas vezes). Nome repetido com outra caixa ("cia") dá erro.
+- Fora do escopo: conta mensal automática (como a da CIA) para o local novo; ajuste fino continua em Configurações > Preços base.
+
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.
 - Nomes de serviço no CRM: Pacote de Aulas, Mensalidade, Consultoria Online, Consultoria Híbrida, Avaliação Física.

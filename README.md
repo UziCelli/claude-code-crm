@@ -120,6 +120,7 @@ O código é público; os dados não. Nunca versionar: `.env` (chaves do Turso, 
 ## Telas
 Painel (metas e nível) · Clientes (cards, ficha, histórico, alertas de renovação em 7 dias e 14 dias sem aula) ·
 Leads (kanban; virar "Cliente" cria o cadastro) · Grade (segunda a sábado, 05h–23h, cores por margem, filtro de vale) ·
+"+ Novo local" na Grade, Agenda e Propostas (taxas, deslocamento e taxa mensal do local; cria os preços e a grade copiando um local, mantendo a margem ou o preço) ·
 Agenda (1 card por horário com até 2 alunos, escolhidos num seletor com o local; avisa a Grade; Copiar da Grade uma vez; aulas avulsas; marcar Feita, Faltou ou Desmarcou com 1 toque, que vai para o histórico do aluno; controle de reposições por aluno; marcar várias aulas e vários horários de uma vez) ·
 Propostas (vários dias, horas e locais na mesma proposta, com preço médio; margem, lucro/hora, preço mínimo, desconto máximo; botão que sobe o preço até a margem mínima ou dá o desconto máximo; PDF com "de R$ X por R$ Y") · Explorador (todas as combinações) ·
 Campanhas (fases, checklists, gastos por canal, checkpoints que você inclui e exclui) · Rotina (checklist semanal editável e lista de espera) · Configurações · Dados.

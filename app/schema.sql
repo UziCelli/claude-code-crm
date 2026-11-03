@@ -149,6 +149,20 @@ CREATE TABLE IF NOT EXISTS proposta_horarios (
     multiplicador REAL DEFAULT 1
 );
 
+-- custos de cada local criado pelo "+ Novo local" (a CIA continua nos parâmetros taxa_cia)
+CREATE TABLE IF NOT EXISTS locais_custos (
+    local TEXT PRIMARY KEY,
+    taxa_aula REAL DEFAULT 0,          -- R$ por aula com 1 pessoa
+    taxa_pessoa_extra REAL DEFAULT 0,  -- R$ por aula a mais para cada pessoa além da 1ª
+    max_pessoas INTEGER DEFAULT 0,     -- 0 = sem limite
+    deslocamento REAL DEFAULT 0,       -- R$ por aula (gasolina, estacionamento, Uber)
+    tempo_deslocamento REAL DEFAULT 0, -- minutos por aula: entra nas horas do lucro/hora
+    taxa_mensal REAL DEFAULT 0,        -- R$ por mês fixo (dividido pelas aulas do mês)
+    aulas_mes REAL DEFAULT 0,
+    referencia TEXT,                   -- local de onde os preços e a grade foram copiados
+    modo TEXT                          -- margem | preco
+);
+
 CREATE TABLE IF NOT EXISTS campanha_fases (
     id INTEGER PRIMARY KEY,
     nome TEXT NOT NULL,
