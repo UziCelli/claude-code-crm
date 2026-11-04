@@ -59,6 +59,7 @@
         <span class="muted" style="width:18px">{{ '%' if g.fmt == 'pct' }}</span>
       </div>
       {% endfor %}
+      {% if g.grupo == 'mao_obra' %}{% include "_salario_hora.html" %}{% endif %}
     </div>
     {% endfor %}
   </div>

@@ -1,0 +1,10 @@
+{# salario_hora = precos.valor_hora_automatico: de onde sai o valor da hora (pró-labore) que os preços usam #}
+{% set sh = salario_hora %}
+<p class="muted" style="margin:8px 0 0">
+  {% if sh.usado %}Salário por hora em uso: <strong>{{ sh.valor_hora|moeda }}</strong> = custos pessoais {{ sh.custo_pessoal|moeda }}/mês
+    (média de {{ sh.meses }} mês(es) da PF) ÷ {{ sh.horas|num(1) }} h de trabalho (agenda + planejamento + consultoria).
+  {% elif sh.ligado %}Salário por hora em uso: <strong>{{ sh.fixo|moeda }}</strong> (o fixo). O automático precisa de
+    {% if not sh.custo_pessoal %}saídas pagas na PF nos últimos 3 meses{% else %}alunos ativos{% endif %}.
+  {% elif sh.fixo %}Salário por hora em uso: <strong>{{ sh.fixo|moeda }}</strong> (fixo; valor_hora_auto = 0).
+  {% else %}Regra do tempo desligada (valor_hora = 0): vale a mão de obra da planilha.{% endif %}
+</p>

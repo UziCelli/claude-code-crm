@@ -1162,6 +1162,17 @@ def sugerir_aluno(texto: str, alunos) -> int | None:
     return primeiros[0] if not completos and len(primeiros) == 1 else None
 
 
+def custo_pessoal_medio(con: sqlite3.Connection, mes: str) -> tuple[float, int]:
+    """(R$ por mês, nº de meses) dos seus custos pessoais: média das saídas pagas da PF nos 3 meses antes de 'mes'
+    (só os meses com alguma saída). (0, 0) sem nada lançado. É o salário que o valor da hora automático precisa pagar."""
+    meses = [somar_meses(mes, -k) for k in (3, 2, 1)]
+    totais = [r[1] for r in con.execute(
+        """SELECT substr(data,1,7), SUM(valor) FROM lancamentos WHERE escopo='PF' AND tipo='saida' AND excluido_em IS NULL
+           AND pago_em IS NOT NULL AND substr(data,1,7) BETWEEN ? AND ? GROUP BY substr(data,1,7)""", (meses[0], meses[-1]))
+        if (r[1] or 0) > 0]
+    return (sum(totais) / len(totais), len(totais)) if totais else (0.0, 0)
+
+
 # ---------- Salário fixo PJ -> PF ----------
 RETIRADA = "Retirada"
 # Empréstimo da PJ (não emite nota): entra no caixa e paga contas, mas não é receita (não paga DAS, não é lucro, não é mensalidade)
