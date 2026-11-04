@@ -534,7 +534,10 @@ def _num_br(v) -> float:
         s = s.replace(".", "").replace(",", ".")
     elif re.fullmatch(r"\d{1,3}(\.\d{3})+", s):   # "1.500" = mil e quinhentos
         s = s.replace(".", "")
-    return float(s or 0)
+    v = float(s or 0)
+    if not math.isfinite(v):   # "inf"/"nan" o float aceita, mas não é número de tela
+        raise ValueError(f"could not convert string to float: {s!r}")
+    return v
 
 
 def _num_campo(v, campo: str):
@@ -2170,6 +2173,8 @@ def proposta_salvar(plano: str = Form(...), local: str = Form("CIA"), forma: str
         return voltar(url, erro="Proposta abaixo da margem mínima. Marque 'Salvar mesmo assim' para confirmar.")
     if not lead_id and not cliente_id:
         return voltar(url, erro="Vincule a proposta a um lead ou cliente.")
+    if not all(x.isdigit() for x in (lead_id, cliente_id) if x):   # id que não é número: aviso, não erro 500
+        return voltar(_url_propostas({**f, "lead_id": "", "cliente_id": ""}, horarios), erro="Lead ou cliente inválido. Escolha de novo na lista.")
     locais = list(dict.fromkeys(x["local"] for x in horarios)) or [local]
     um = horarios[0] if len(horarios) == 1 else {}
     with con:
@@ -3144,7 +3149,7 @@ def locais_novo(nome: str = Form(...), referencia: str = Form("CIA"), modo: str 
                 tempo_deslocamento: str = Form("0"), taxa_mensal: str = Form("0"), aulas_mes: str = Form("0"),
                 voltar_para: str = Form("/grade", alias="voltar"), con=Depends(get_db)):
     """Pop-up "+ Novo local" (Grade, Agenda, Propostas): grava os custos e cria os preços e a grade copiando a referência."""
-    url = voltar_para if voltar_para.startswith("/") and not voltar_para.startswith("//") else "/grade"
+    url = _caminho_seguro(voltar_para) or "/grade"   # "/\mal.com" o navegador lê como outro site
     caminho, _, q = url.partition("?")   # volta para a mesma tela (semana, proposta), sem o aviso velho
     q = "&".join(x for x in q.split("&") if x and not x.startswith(("msg=", "erro=")))
     url = caminho + ("?" + q if q else "")

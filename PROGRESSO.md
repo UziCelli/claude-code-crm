@@ -250,6 +250,14 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Aluno inativo: as aulas já marcadas da semana continuam aparecendo (histórico). As não marcadas não aparecem (não viram "pendente").
 - Testes: `tests/test_vigencia_hoje.py`.
 
+## Revisão de segurança (PR `claude/seguranca-revisao`, 04/11/2026)
+- Conferido e OK: portaria do Cloudflare Access (falha fechada), CSRF por Origin/Referer, Host localhost contra DNS rebinding, escape dos templates e do markdown do assistente, SQL com `?`.
+- "+ Novo local": o destino de volta usa `_caminho_seguro` (antes `/\mal.com` levava para outro site).
+- `_num_br`: "inf"/"nan" viram erro de número na tela (antes davam erro 500 ou preço infinito).
+- Proposta com lead/cliente que não é número: volta com aviso (antes erro 500).
+- Consulta SQL do assistente roda com `PRAGMA query_only=ON` (2ª trava contra gravação).
+- Testes: `tests/test_seguranca.py`.
+
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.
 - Nomes de serviço no CRM: Pacote de Aulas, Mensalidade, Consultoria Online, Consultoria Híbrida, Avaliação Física.
