@@ -686,11 +686,15 @@ def _consultar_banco(con, a):
     if "segredos" in sql.lower():
         raise ErroFerramenta("Essa tabela é reservada e não pode ser consultada.")
     try:
-        # dentro de um SELECT * FROM (...) só cabe consulta: INSERT/UPDATE/DELETE (mesmo depois de um WITH) é erro de sintaxe
+        # dentro de um SELECT * FROM (...) só cabe consulta: INSERT/UPDATE/DELETE (mesmo depois de um WITH) é erro de sintaxe;
+        # query_only é a 2ª trava: durante a consulta o banco recusa qualquer gravação
+        con.execute("PRAGMA query_only=ON")
         cur = con.execute(f"SELECT * FROM ({sql}) LIMIT {LIMITE_LINHAS + 1}")
         linhas = cur.fetchall()
     except sqlite3.Error as e:
         raise ErroFerramenta(f"O banco recusou a consulta: {e}") from None
+    finally:
+        con.execute("PRAGMA query_only=OFF")
     return {"colunas": [d[0] for d in cur.description or ()], "linhas": [list(r) for r in linhas[:LIMITE_LINHAS]],
             "mais_linhas": len(linhas) > LIMITE_LINHAS}
 
