@@ -320,3 +320,8 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Com o salário automático, a "mão de obra extra" de grupo não entra mais no custo (contava 2 vezes).
 - Painel: cartão "O mês cobre seus custos?". Mensalidades − impostos/taxas − custos do negócio − custos pessoais inteiros da PF (`main.cobre_custos`).
 - Tela `/calculos`: a conta acima, de onde vem o salário/hora e as variáveis editáveis (mão de obra, agenda cheia, margens, taxas, grupo). Salvar volta para ela.
+
+## Preço pelo custo no local (04/11/2026)
+- Academia sem taxa copiada da CIA no "Manter a margem" nascia barata: tirar a taxa derrubava o preço na mesma proporção do custo, e o pró-labore novo (regra do tempo + deslocamento) comia tudo. Ex. do teste: CIA 8 aulas R$ 1100 → local sem taxa R$ 408; com 30 min de deslocamento o lucro dava −R$ 217 e, no pico (x1,6), só +R$ 14.
+- Novo modo **"Montar pelo custo"** no "+ Novo local" e no "Editar local" (`locais._preco_pelo_custo`): o preço base = preço sugerido do motor (margem mínima do plano, 1 pessoa, sem multiplicador). No mesmo exemplo: R$ 760, margem 15% no horário normal.
+- Para a ALLP Fit: Grade › ALLP Fit › Editar local › "Montar pelo custo" › Salvar.

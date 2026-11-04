@@ -154,3 +154,29 @@ def test_dialogo_so_oferece_bases_validas(http, con):
     dlg = t[t.index('id="dlg-local"'):]
     sel = dlg[dlg.index('name="referencia"'):dlg.index("</select>", dlg.index('name="referencia"'))]
     assert "<option selected>CIA</option>" in sel and "SmartFit" not in sel
+
+
+def test_montar_pelo_custo_fica_na_margem_minima(con):
+    """Local sem taxa copiado da CIA: "manter a margem" derruba o preço junto com a taxa; "pelo custo" monta o preço
+    do pró-labore (regra do tempo + deslocamento) e fica na margem mínima, com lucro positivo sem multiplicador."""
+    locais.criar_local(con, "Barata", "CIA", "margem", tempo_deslocamento=30)
+    locais.criar_local(con, "Certa", "CIA", "custo", tempo_deslocamento=30)
+    p = precos.carregar_parametros(con)
+    barata, certa = precos.calcular(_base(con, "Barata"), p), precos.calcular(_base(con, "Certa"), p)
+    assert barata["lucro"] < 0   # o caso da academia sem taxa: nasce no prejuízo
+    assert certa["lucro"] > 0
+    assert certa["margem"] == pytest.approx(p["margens"]["Pacote de Aulas"], abs=0.005)
+    assert _base(con, "Certa")["preco_base"] == certa["preco_sugerido"]
+
+
+def test_editar_local_pelo_custo_refaz_o_preco(con):
+    locais.criar_local(con, "Prédio", "CIA", "margem", tempo_deslocamento=30)
+    r = locais.editar_local(con, "Prédio", "custo", tempo_deslocamento=30)
+    assert r["precos"] == 1 and r["mantidos"] == 0
+    p = precos.carregar_parametros(con)
+    m = precos.calcular(_base(con, "Prédio"), p)["margem"]
+    assert m == pytest.approx(p["margens"]["Pacote de Aulas"], abs=0.005)
+
+
+def test_dialogo_oferece_montar_pelo_custo(http):
+    assert 'value="custo"' in http.get("/grade").text
