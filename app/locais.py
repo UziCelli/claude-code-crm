@@ -3,7 +3,9 @@
 Preços: copia os planos com aula (Pacote de Aulas e Mensalidade) do local de referência e troca o custo do local:
 custo novo = custo da referência - (custo por aula da referência x sessões) + (custo por aula do novo local x sessões).
   - modo "margem": o preço sobe ou desce junto com o custo, para a margem ficar a mesma;
-  - modo "preco": o preço fica igual; só a margem muda.
+  - modo "preco": o preço fica igual; só a margem muda;
+  - modo "custo": o preço sai do custo de verdade do local (seu pró-labore pela regra do tempo, deslocamento, taxas),
+    na margem mínima do plano. Bom para local sem taxa: copiar a margem da CIA deixava o preço baixo demais.
 Grade: copia os horários e multiplicadores da referência, todos livres (sem grade na referência: Seg-Sáb, 05h-23h).
 """
 import sqlite3
@@ -11,7 +13,7 @@ import unicodedata
 
 from . import precos
 
-MODOS = ("margem", "preco")
+MODOS = ("margem", "preco", "custo")
 CAMPOS = ("taxa_aula", "taxa_pessoa_extra", "max_pessoas", "deslocamento", "tempo_deslocamento", "taxa_mensal", "aulas_mes")
 TIPOS_COM_AULA = ("Pacote de Aulas", "Mensalidade")
 TIPOS_TAXA_CIA = TIPOS_COM_AULA + ("Aula avulsa",)   # planos da CIA com a taxa por aula embutida no custo
@@ -55,7 +57,7 @@ def criar_local(con, nome: str, referencia: str = "CIA", modo: str = "margem", *
     if not nome:
         raise ValueError("Dê um nome ao local")
     if modo not in MODOS:
-        raise ValueError("Escolha manter a margem ou manter o preço")
+        raise ValueError("Escolha manter a margem, manter o preço ou montar pelo custo")
     ja = next((r[0] for r in con.execute("SELECT DISTINCT local FROM precos_base") if _chave_nome(r[0]) == _chave_nome(nome)), None)
     if ja:   # "cia" = "CIA" e "Acadêmia" = "Academia": não cria um segundo local com o mesmo nome (a agenda não separa)
         raise ValueError(f"'{ja}' já tem preços. Para mudar, use Configurações > Preços base")
@@ -93,6 +95,15 @@ def _preco_novo(preco: float, custo_ref: float, custo: float, modo: str) -> tupl
     return preco, True
 
 
+def _preco_pelo_custo(con, b, nome: str, custo: float) -> float:
+    """Preço do plano no local pelo custo: o preço sugerido do motor (R$ inteiro na margem mínima), com 1 pessoa,
+    sem multiplicador de horário, na forma de pagamento da linha. Lê os custos do local já gravados (deslocamento)."""
+    p = precos.carregar_parametros(con)
+    base = {**dict(b), "local": nome, "custo_operacional": custo}
+    forma = b["forma_pagamento"] if b["forma_pagamento"] in p["taxas"] else "PIX"
+    return precos.calcular(base, p, forma_pagamento=forma, local=nome)["preco_sugerido"]
+
+
 def _criado_aqui(con, nome: str):
     row = con.execute("SELECT * FROM locais_custos WHERE local=?", ((nome or "").strip(),)).fetchone()
     if not row or nome.strip() == "CIA":
@@ -104,7 +115,7 @@ def editar_local(con, nome: str, modo: str = "margem", **custos) -> dict:
     """Troca os custos de um local criado aqui e refaz os preços dele (Pacote e Mensalidade) pela diferença do custo por aula.
     O nome não muda: ele está gravado nos alunos, na agenda, na grade e nas contas. A grade fica como está."""
     if modo not in MODOS:
-        raise ValueError("Escolha manter a margem ou manter o preço")
+        raise ValueError("Escolha manter a margem, manter o preço ou montar pelo custo")
     antes = dict(_criado_aqui(con, nome))
     nome = antes["local"]
     c = _custos(custos)
@@ -119,7 +130,10 @@ def editar_local(con, nome: str, modo: str = "margem", **custos) -> dict:
             s = float(b["sessoes_mes"] or 0)
             custo_ref = float(b["custo_operacional"] or 0)
             custo = max(0.0, custo_ref + dif_aula * s)
-            preco, manteve = _preco_novo(float(b["preco_base"]), custo_ref, custo, modo)
+            if modo == "custo":
+                preco, manteve = _preco_pelo_custo(con, b, nome, custo), False
+            else:
+                preco, manteve = _preco_novo(float(b["preco_base"]), custo_ref, custo, modo)
             mantidos += manteve
             con.execute("UPDATE precos_base SET preco_base=?, custo_operacional=?, custo_total=? WHERE id=?",
                         (round(preco, 2), round(custo, 2), round(float(b["custo_total"] or 0) - custo_ref + custo, 2), b["id"]))
@@ -159,7 +173,10 @@ def _gravar(con, nome, referencia, modo, c, dif_aula, linhas) -> dict:
             s = float(b["sessoes_mes"] or 0)
             custo_ref = float(b["custo_operacional"] or 0)
             custo = max(0.0, custo_ref + dif_aula * s)
-            preco, manteve = _preco_novo(float(b["preco_base"]), custo_ref, custo, modo)
+            if modo == "custo":
+                preco, manteve = _preco_pelo_custo(con, b, nome, custo), False
+            else:
+                preco, manteve = _preco_novo(float(b["preco_base"]), custo_ref, custo, modo)
             mantidos += manteve
             total = float(b["custo_total"] or 0) - custo_ref + custo
             con.execute("""INSERT INTO precos_base (tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal, sessoes_mes, preco_base,
