@@ -225,3 +225,27 @@ def test_consultoria_e_avaliacao_sem_minutos_usam_a_planilha():
 def test_valor_hora_zero_desliga_a_regra():
     assert minutos_trabalho(SMARTFIT_8, {**PR, "mo": {**MO, "valor_hora": 0}}) is None
     assert calcular(SMARTFIT_8, {**PR, "mo": {**MO, "valor_hora": 0}}) == calcular(SMARTFIT_8, P)
+
+
+def test_minutos_medidos_viram_padrao_e_migram_banco_com_zero(tmp_path, monkeypatch):
+    """Consultoria 150 min/mês e avaliação 17,5 min: banco novo já nasce assim; banco com o 0 antigo recebe uma vez."""
+    from app import db
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "crm.db")
+    db.iniciar_banco()
+    con = db.conectar()
+    assert db.parametros(con, "mao_obra")["min_consultoria_mes"] == 150
+    assert db.parametros(con, "mao_obra")["min_avaliacao"] == 17.5
+    with con:
+        con.execute("UPDATE parametros SET valor=0 WHERE grupo='mao_obra' AND chave='min_avaliacao'")
+        con.execute("DELETE FROM parametros WHERE grupo='migracao'")
+    con.close()
+    db.iniciar_banco()
+    con = db.conectar()
+    assert db.parametros(con, "mao_obra")["min_avaliacao"] == 17.5
+    with con:   # depois da migração, um 0 digitado na tela fica
+        con.execute("UPDATE parametros SET valor=0 WHERE grupo='mao_obra' AND chave='min_avaliacao'")
+    con.close()
+    db.iniciar_banco()
+    con = db.conectar()
+    assert db.parametros(con, "mao_obra")["min_avaliacao"] == 0
+    con.close()

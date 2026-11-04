@@ -95,7 +95,8 @@ A auditoria financeira de 16/10 tinha 5 PRs: os 5 estão na `main` (#26 a #30). 
 
 **Decisão aberta**
 - [x] Custo do plano: resolvido pela regra do tempo da mão de obra (seção "Mão de obra = pró-labore", 04/11/2026).
-- [ ] Configurações → "Mão de obra": preencher os minutos da consultoria por mês e da avaliação (0 = ainda usa a planilha).
+- [x] Minutos medidos: consultoria 150 min/mês por aluno, avaliação 17,5 min (padrão e migração única do 0, `db.iniciar_banco`).
+- [ ] Configurações → "Mão de obra" → `valor_hora`: definir o salário por hora (hoje 46,17, o da planilha). Conta: salário mensal desejado ÷ horas de trabalho no mês.
 
 **Código: o que a auditoria achou e nenhum dos 5 PRs corrigiu (baixa gravidade, ordem sugerida)**
 - [ ] Pacote e avaliação entram em "Mensalidades a receber" todo mês (D2): só deveriam entrar no mês em que foram vendidos.
