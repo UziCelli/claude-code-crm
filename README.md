@@ -78,7 +78,7 @@ A imagem sai do `Dockerfile` deste repositório. Ele já deixa fixos o fuso, a p
 1. **Conta:** em console.cloud.google.com, crie um projeto (ex.: `vfitcoach-crm`) e ative o faturamento (pede cartão).
    Em **Faturamento › Orçamentos e alertas**, crie um orçamento de **US$ 1** com aviso por e-mail. Assim nenhuma cobrança passa despercebida.
 2. **Criar o serviço:** Cloud Run › **Implantar contêiner** › **Implantar continuamente a partir de um repositório (GitHub)**.
-   - Conecte o GitHub e escolha `UziCelli/crm-locais`, branch `^main$`, tipo de build **Dockerfile** (caminho `/Dockerfile`).
+   - Conecte o GitHub e escolha `UziCelli/claude-code-crm`, branch `^main$`, tipo de build **Dockerfile** (caminho `/Dockerfile`).
    - Nome: `vfitcoach-crm`. Região: `us-east1`. É perto do Turso: confira a região do banco no painel do Turso e escolha a mais próxima.
    - **Autenticação:** "Permitir acesso público" (quem barra é o Cloudflare Access e o próprio CRM).
    - **Faturamento:** "Com base em solicitações". **Escalonamento:** mínimo `0`, máximo **`1`** instância.
