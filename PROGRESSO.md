@@ -237,6 +237,12 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - O nome não muda: está gravado em alunos, agenda, grade e contas automáticas.
 - Excluir é recusado enquanto houver aluno não inativo, horário fixo ou célula ocupada no local; senão apaga custos, preços, grade e o nome da lista. Aulas e contas antigas ficam.
 
+## Aviso de dois locais seguidos (PR `claude/aviso-deslocamento`, 04/11/2026)
+- Ao incluir um horário fixo na Agenda ou salvar uma proposta, o sistema confere a mesma hora, a hora anterior e a seguinte do dia.
+- Se houver aula fixa (de aluno ativo) em **outro local**, a mensagem de sucesso ganha um "Atenção: ..." com o deslocamento em minutos (quando o local tem). Não bloqueia.
+- Uma consulta só (`aviso_deslocamento` em `app/main.py`). O próprio aluno na mesma hora não conta (é ele mudando de local).
+- Testes: `tests/test_aviso_deslocamento.py`.
+
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.
 - Nomes de serviço no CRM: Pacote de Aulas, Mensalidade, Consultoria Online, Consultoria Híbrida, Avaliação Física.

@@ -1328,6 +1328,44 @@ def fixos_do_horario(con, dia, hora) -> list:
                           ORDER BY f.id""", (dia, hora)).fetchall()
 
 
+def aviso_deslocamento(con, horarios, cliente_id=0) -> str:
+    """Frase de aviso (não bloqueia) quando um horário (dia, hora, local) cai na mesma hora ou colado (1h antes/depois)
+    de uma aula fixa em OUTRO local: o professor teria de estar em dois lugares ou sair correndo. "" se está tudo certo.
+    Uma consulta só; o próprio aluno na mesma hora não conta (é ele mudando de local)."""
+    horarios = [(int(d), int(h), (l or "").strip()) for d, h, l in horarios if d and h and (l or "").strip()]
+    if not horarios:
+        return ""
+    dias = sorted({d for d, _, _ in horarios})
+    ocupado = {}   # (dia, hora) -> {local: True}
+    for r in con.execute(f"""SELECT f.dia, f.hora, f.local, f.cliente_id FROM agenda_fixos f JOIN clientes c ON c.id=f.cliente_id
+                             WHERE f.dia IN ({','.join('?' * len(dias))}) AND f.excluido_em IS NULL AND c.status='ativo' AND c.excluido_em IS NULL""",
+                         dias):
+        ocupado.setdefault((r["dia"], r["hora"]), {}).setdefault(r["local"], set()).add(r["cliente_id"])
+    for d, h, l in horarios:   # os horários novos entre si também contam
+        ocupado.setdefault((d, h), {}).setdefault(l, set()).add(-1)
+    tempo = {k: v.get("tempo_deslocamento") or 0 for k, v in precos.custos_locais(con).items()}
+    achados = []
+    for d, h, l in horarios:
+        for h2 in (h - 1, h, h + 1):
+            for l2, quem in ocupado.get((d, h2), {}).items():
+                if loc._chave_nome(l2) == loc._chave_nome(l) or (h2 == h and quem <= {cliente_id, -1}):
+                    continue
+                par = tuple(sorted([(h, l), (h2, l2)]))
+                if (d, par) in [(x[0], x[1]) for x in achados]:
+                    continue
+                achados.append((d, par))
+    if not achados:
+        return ""
+    frases = []
+    for d, ((ha, la), (hb, lb)) in achados[:3]:
+        if ha == hb:
+            frases.append(f"{DIAS_CURTO[d]} {ha:02d}h em {la} e em {lb} ao mesmo tempo")
+        else:
+            m = max(tempo.get(la, 0), tempo.get(lb, 0))
+            frases.append(f"{DIAS_CURTO[d]} {ha:02d}h em {la} e {hb:02d}h em {lb}" + (f" (deslocamento de {m:g} min)" if m else ""))
+    return " Atenção: " + "; ".join(frases) + (f" e mais {len(achados) - 3}" if len(achados) > 3 else "") + "."
+
+
 def agora_txt() -> str:
     """Data e hora de agora no fuso do app ("AAAA-MM-DD HH:MM:SS"). No Turso o SQL roda em UTC: o carimbo vai calculado aqui."""
     return dt.datetime.now().isoformat(sep=" ", timespec="seconds")
@@ -1749,6 +1787,7 @@ def agenda_incluir(cliente_id: int = Form(0), local: str = Form(""), dia: int = 
                     inserir_fixos(con, [(cliente_id, d, h, local) for d, h in novos], vigente=vigencias(con, [cliente_id]))
                     grade_ocupar_lote(con, cliente_id, c["nome"], [(d, local, h) for d, h in novos])
         q = lambda lst: ", ".join(f"{DIAS_CURTO[x[0]]} {x[1]:02d}h" for x in lst)
+        aviso = aviso_deslocamento(con, [(x[0], x[1], local) for x in novos + mudam], cliente_id) if novos or mudam else ""
         if len(pares) == 1:
             quando = q(pares)
             if cheios:
@@ -1756,13 +1795,13 @@ def agenda_incluir(cliente_id: int = Form(0), local: str = Form(""), dia: int = 
             if ja:
                 return voltar(url, msg=f"{c['nome']} já está no horário fixo de {quando} ({local}).")
             acao = f"agora fica em {local} no horário fixo de {quando}" if mudam else f"entrou no horário fixo de {quando} ({local})"
-            return voltar(url, msg=f"{c['nome']} {acao}. A Grade também foi atualizada.")
+            return voltar(url, msg=f"{c['nome']} {acao}. A Grade também foi atualizada.{aviso}")
         primeiro = (c["nome"].split() or [c["nome"]])[0]
         frases = [f"{primeiro} entrou em {q(novos)} ({local})." if novos else "",
                   f"{primeiro} agora fica em {local} em {q(mudam)}." if mudam else "",
                   f"{q(ja)} já {'estava' if len(ja) == 1 else 'estavam'}." if ja else "",
                   f"{q(cheios)} já {'tem' if len(cheios) == 1 else 'têm'} 2 alunos." if cheios else ""]
-        texto = " ".join(f for f in frases if f)
+        texto = " ".join(f for f in frases if f) + aviso
         return voltar(url, erro=texto) if cheios and not (novos or mudam or ja) else voltar(url, msg=texto)
     try:
         d = dt.date.fromisoformat(data.strip())
@@ -2135,7 +2174,7 @@ def proposta_salvar(plano: str = Form(...), local: str = Form("CIA"), forma: str
                            r["desconto_maximo"], int(r["abaixo_margem"]), observacoes or None, r["preco_cheio"], dt.date.today().isoformat()))
         con.executemany("INSERT INTO proposta_horarios (proposta_id, dia, hora, local, multiplicador) VALUES (?,?,?,?,?)",
                         [(cur.lastrowid, d["dia"] or None, d["hora"] or None, d["local"], d["mult"]) for d in r["horarios"]])
-    return voltar(f"/propostas/{cur.lastrowid}", msg=f"Proposta #{cur.lastrowid} salva.")
+    return voltar(f"/propostas/{cur.lastrowid}", msg=f"Proposta #{cur.lastrowid} salva." + aviso_deslocamento(con, [(x["dia"], x["hora"], x["local"]) for x in horarios], int(cliente_id or 0)))
 
 
 @app.post("/propostas/{pid}/status")
