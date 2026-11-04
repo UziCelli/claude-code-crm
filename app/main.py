@@ -2309,7 +2309,55 @@ def simular(con, plano, horarios, forma, pessoas, desconto=0.0, preco_final=None
         avisos.append(f"O plano é {esperado}x por semana e a proposta tem {len(horarios)} horário{'s' if len(horarios) != 1 else ''}.")
     r.update(base=itens[0][0], mult=sum(i[1] for i in itens) / len(itens), tipo=tipo, qtd=qtd, freq=freq,
              horarios=detalhes if horarios else [], avisos=avisos, media=len({d["preco_cheio"] for d in detalhes}) > 1)
+    r["contra"] = contrapropostas(con, r, itens, p, pessoas, forma, consultoria, tuple(extra) if extra else None)
     return r
+
+
+def contrapropostas(con, r, itens, p, pessoas, forma, consultoria, extra=None) -> dict:
+    """O que oferecer quando o preço do cliente não chega no mínimo (o veredito não é "fechar"):
+      aulas:  pelo MESMO preço, o maior pacote que fica na margem mínima (só Pacote de Aulas, sem consultoria)
+      dupla:  o preço por pessoa de uma dupla na margem mínima (só proposta de 1 pessoa, se o local aceita 2)
+      pix:    o veredito desse mesmo preço no PIX (só se a forma é cartão)
+    Usa os mesmos horários (multiplicadores) e os parâmetros já carregados: nada de recalcular tudo."""
+    out = {}
+    if r["veredito"] == "fechar":
+        return out
+    preco = r["preco_total"]
+    if r["tipo"] == "Pacote de Aulas" and not consultoria and r["qtd"] > 1:
+        pacotes = {}
+        for loc in {i[2] for i in itens}:
+            rows, vistos = [], set()
+            for x in con.execute("""SELECT * FROM precos_base WHERE tipo_servico='Pacote de Aulas' AND local=? AND qtd_aulas>0
+                                    ORDER BY qtd_aulas, (forma_pagamento=?) DESC, freq_semanal""", (loc, forma)):
+                if x["qtd_aulas"] not in vistos:
+                    vistos.add(x["qtd_aulas"])
+                    rows.append(dict(x))
+            av = con.execute("SELECT * FROM precos_base WHERE tipo_servico='Aula avulsa' AND local=? ORDER BY (forma_pagamento=?) DESC LIMIT 1",
+                             (loc, forma)).fetchone()
+            pacotes[loc] = (rows, dict(av) if av else None)
+        for n in range(r["qtd"] - 1, 0, -1):
+            try:
+                hs = [(precos.base_pacote(pacotes[loc][0], n, pacotes[loc][1]) | {"local": loc}, m, loc) for _, m, loc in itens]
+                x = precos.calcular_misto(hs, p, pessoas=pessoas, forma_pagamento=forma, preco_final=preco)
+            except ValueError:
+                break
+            if x["veredito"] == "fechar":
+                out["aulas"] = {"qtd": n, "preco": preco, "lucro": x["lucro"]}
+                break
+    if int(pessoas) == 1:
+        try:
+            extra2 = None
+            if consultoria:
+                *extra2, _ = _extra_consultoria(con, consultoria, r["tipo"], r["qtd"], r["freq"], itens[0][2], forma, 2, p)
+            x = precos.calcular_misto(itens, p, pessoas=2, forma_pagamento=forma, extra=tuple(extra2) if extra2 else None)
+            out["dupla"] = {"pessoa": round(x["preco_sugerido"] / 2, 2), "total": x["preco_sugerido"]}
+        except ValueError:
+            pass
+    if forma != "PIX" and "PIX" in p["taxas"]:
+        x = precos.calcular_misto(itens, p, pessoas=pessoas, forma_pagamento="PIX", preco_final=preco, extra=extra)
+        if x["veredito"] != r["veredito"]:
+            out["pix"] = x["veredito"]
+    return out
 
 
 def _texto_preco(v: float | None) -> str:

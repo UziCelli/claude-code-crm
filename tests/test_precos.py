@@ -249,3 +249,19 @@ def test_minutos_medidos_viram_padrao_e_migram_banco_com_zero(tmp_path, monkeypa
     con = db.conectar()
     assert db.parametros(con, "mao_obra")["min_avaliacao"] == 0
     con.close()
+
+
+def test_pisos_e_veredito_por_faixa():
+    """Piso do negócio = custo sem pró-labore ÷ (1 − taxa); do salário = custo ÷ (1 − taxa); mínimo = com a margem."""
+    p = {"das": 0.06, "taxas": {"PIX": 0.0}, "margens": {"Pacote de Aulas": 0.15}, "taxa_cia": {}, "cia_max": 3,
+         "grupo_mult": {1: 1.0}, "grupo_mo": {}, "locais": {}, "mo": {}}
+    base = {"tipo_servico": "Pacote de Aulas", "preco_base": 1000, "custo_operacional": 600, "mao_obra": 400, "sessoes_mes": 8}
+    um = calcular(base, p)
+    assert um["piso_negocio"] == pytest.approx(200 / 0.94, abs=0.01)
+    assert um["piso_salario"] == pytest.approx(600 / 0.94, abs=0.01)
+    assert um["preco_minimo"] == pytest.approx(600 / 0.79, abs=0.01)
+    faixas = {800: "fechar", 700: "so_salario", 400: "parcial", 150: "recusar"}
+    for preco, v in faixas.items():
+        assert calcular(base, p, preco_final=preco)["veredito"] == v
+    r = calcular(base, p, preco_final=400)
+    assert r["ganho_hora"] == pytest.approx((400 * 0.94 - 200) / r["horas"], abs=0.01)
