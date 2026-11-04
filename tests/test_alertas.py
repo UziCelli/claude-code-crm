@@ -174,13 +174,39 @@ def test_alerta_de_renovacao_some_com_pagamento_e_vira_cobranca_sem_ele(con_temp
                          " VALUES ('PJ','entrada',?,?,200,'Pacotes de Aulas',?)", (dia(-3), dia(-3), a))
     assert all(x["cor"] != "vermelho" for x in do_aluno(con_temp, "Bruno"))   # renovou: no máximo o aviso do próximo mês
     [th] = do_aluno(con_temp, "Dora")
-    assert (th["cor"], th["modelo"], th["botao"]) == ("vermelho", "cobranca", "Cobrar R$ 410,67")
+    assert (th["cor"], th["modelo"], th["botao"]) == ("vermelho", "cobranca", "Cobrar R$ 410,67 · 20 dias")
     texto = main.preencher(db.parametros(con_temp, "msg_whatsapp")["cobranca"], th["nome"], th["data"], th["extra"])
     assert "R$ 400,00" in texto and "15/10/2026" in texto and "multa" not in texto   # o total atualizado vai no cartão
     sem_valor = cliente(con_temp, "Sem valor", dia(-5), valor=0)
     [sv] = do_aluno(con_temp, "Sem valor")
     assert (sv["modelo"], sv["botao"]) == ("renovacao", None)   # sem valor mensal não dá para calcular: WhatsApp normal
     assert t and sem_valor
+
+
+def pix_completo(con):
+    for chave, valor in (("pix", "vfitcoach@pix.com"), ("pix_nome", "Victor Célli"), ("pix_cidade", "São Paulo"), ("pix_banco", "Nubank")):
+        with con:
+            con.execute("UPDATE parametros SET valor_texto=? WHERE grupo='msg_dados' AND chave=?", (valor, chave))
+
+
+def test_alerta_vencido_traz_o_cartao_da_cobranca(con_temp):
+    """O botão WhatsApp do alerta gera o cartão (estágio + Pix) e registra, sem passar pela ficha."""
+    pix_completo(con_temp)
+    cid = cliente(con_temp, "Dora", dia(-5))
+    [al] = do_aluno(con_temp, "Dora")
+    assert al["cartao"]["cid"] == cid and al["cartao"]["codigo"].startswith("000201")
+    assert al["botao"].startswith("Cobrar R$") and al["botao"].endswith("· 5 dias")
+    html = TestClient(main.app, base_url="http://localhost").get("/").text
+    assert f'action="/clientes/{cid}/wa/cobranca"' in html and f'data-cartao="/clientes/{cid}/cobranca/cartao.svg"' in html
+
+
+def test_alerta_lembrete_e_sem_cartao_longe_do_vencimento(con_temp):
+    pix_completo(con_temp)
+    cliente(con_temp, "Ana", dia(2), inicio=dia(-3))   # aluno novo: não cai em "pulou o mês"
+    cliente(con_temp, "Caio", dia(6), inicio=dia(-3))
+    [ana] = do_aluno(con_temp, "Ana")
+    assert ana["botao"] == "Lembrete: vence em 2 dias" and ana["cartao"]
+    assert all(not x.get("cartao") for x in do_aluno(con_temp, "Caio"))   # 6 dias: segue o WhatsApp de renovação
 
 
 def test_alerta_de_cobranca_some_apos_pagamento_parcial(con_temp):

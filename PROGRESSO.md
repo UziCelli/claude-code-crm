@@ -266,6 +266,13 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - O botão gera o PNG: no celular abre o compartilhar (imagem + código); no PC baixa o PNG e abre o wa.me com só o código (anexar a imagem à mão). O evento registra o estágio.
 - Testes: `tests/test_pix.py`, `tests/test_menu_whatsapp.py`, `tests/test_alertas.py`.
 
+## Botão WhatsApp dos Alertas já envia o cartão (PR `claude/cobranca-whatsapp`, 04/11/2026)
+- Alerta de aluno vencido ou vencendo em até 2 dias: o botão tem o rótulo do estágio ("Cobrar R$ X · 5 dias" etc.) e faz o mesmo que o da ficha (gera o PNG, compartilha ou baixa + wa.me, registra o evento).
+- Depois de enviar, o botão vira "Enviado ✓".
+- O PNG só é gerado quando o botão fica visível na tela (`IntersectionObserver`), porque os alertas também estão no topo de todas as páginas.
+- Outros alertas (renovação com 3–7 dias, faltas etc.) continuam como antes.
+- Testes: `tests/test_alertas.py`.
+
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.
 - Nomes de serviço no CRM: Pacote de Aulas, Mensalidade, Consultoria Online, Consultoria Híbrida, Avaliação Física.
