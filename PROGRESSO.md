@@ -320,3 +320,9 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Com o salário automático, a "mão de obra extra" de grupo não entra mais no custo (contava 2 vezes).
 - Painel: cartão "O mês cobre seus custos?". Mensalidades − impostos/taxas − custos do negócio − custos pessoais inteiros da PF (`main.cobre_custos`).
 - Tela `/calculos`: a conta acima, de onde vem o salário/hora e as variáveis editáveis (mão de obra, agenda cheia, margens, taxas, grupo). Salvar volta para ela.
+
+## A fazer: preço próprio para cada local novo (pedido do Victor, 04/11/2026)
+- Hoje o "+ Novo local" copia a grade e os preços da CIA (ou de outro local) e só ajusta a diferença de custo por aula (`app/locais.py`: `criar_local`, `_gravar`). Os locais novos ficam presos aos preços da CIA.
+- Exemplo: Allp Fit (sem taxa; 33 min de deslocamento ida e volta; R$ 10,60 de passagem) ficou com margens ruins.
+- Quero: tirar a opção de copiar grade e preços. Cada local calcula os próprios preços pelos custos dele (as perguntas do cadastro do local: taxa por aula, taxa mensal, pessoa extra, máximo de pessoas, deslocamento em R$ e em minutos) + mão de obra (salário/hora) + impostos/taxas + margem mínima.
+- Conferir antes: se o "custo operacional" da CIA na planilha já traz passagem embutida, os locais copiados contam a passagem 2 vezes.
