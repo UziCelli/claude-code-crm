@@ -34,8 +34,12 @@
       {% else %}
       <button name="estado" value="feita" class="btn-estado feita">Feita</button>
       <button name="estado" value="faltou" class="btn-estado faltou">Faltou</button>
+      {% if a.reposicao %}
+      <button name="estado" value="cancelada" class="btn-estado cancelada" title="Só cancela esta reposição: não gera outra">Cancelar reposição</button>
+      {% else %}
       <button name="estado" value="desmarcou" class="btn-estado desmarcou">Desmarcou (repõe)</button>
       <button name="estado" value="cancelada" class="btn-estado cancelada">Cancelada (não repõe)</button>
+      {% endif %}
       {% endif %}
     </form>
   </div>
@@ -288,8 +292,14 @@
     oculto(f, "semana", fh.elements.semana.value); oculto(f, "todas", fh.elements.todas.value); contexto(f);
     f.appendChild(botao("Feita", "btn-estado feita", "feita"));
     f.appendChild(botao("Faltou", "btn-estado faltou", "faltou"));
-    f.appendChild(botao("Desmarcou (repõe)", "btn-estado desmarcou", "desmarcou"));
-    f.appendChild(botao("Cancelada (não repõe)", "btn-estado cancelada", "cancelada"));
+    if (a.reposicao) {   // reposição: cancelar é só cancelar (não gera outra reposição)
+      var cr = botao("Cancelar reposição", "btn-estado cancelada", "cancelada");
+      cr.title = "Só cancela esta reposição: não gera outra";
+      f.appendChild(cr);
+    } else {
+      f.appendChild(botao("Desmarcou (repõe)", "btn-estado desmarcou", "desmarcou"));
+      f.appendChild(botao("Cancelada (não repõe)", "btn-estado cancelada", "cancelada"));
+    }
     if (marcada) f.appendChild(botao("Desfazer", "claro btn-estado", ""));
     bloco.appendChild(f);
     var acoes = el("div", "linha mt-p");
@@ -522,10 +532,10 @@
   function pintar(e) {
     var m = e._marca;
     if (!m) return;
-    var k = chave(m);
-    if (atual(m) === pincel) mud.delete(k);                        // tocar de novo com o mesmo pincel desfaz
-    else if ((m.estado || "") === pincel) mud.delete(k);            // volta ao que já estava salvo
-    else mud.set(k, {m: m, estado: pincel});
+    var k = chave(m), alvo = m.reposicao && pincel === "desmarcou" ? "cancelada" : pincel;   // na reposição, desmarcou = só cancelar
+    if (atual(m) === alvo) mud.delete(k);                          // tocar de novo com o mesmo pincel desfaz
+    else if ((m.estado || "") === alvo) mud.delete(k);              // volta ao que já estava salvo
+    else mud.set(k, {m: m, estado: alvo});
     pinta(m);
     conta();
   }
