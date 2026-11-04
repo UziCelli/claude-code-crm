@@ -243,6 +243,13 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Uma consulta só (`aviso_deslocamento` em `app/main.py`). O próprio aluno na mesma hora não conta (é ele mudando de local).
 - Testes: `tests/test_aviso_deslocamento.py`.
 
+## Excluir horário hoje não some com a aula de hoje (PR `claude/vigencia-hoje`, 04/11/2026)
+- `fixo_vale`: o horário vale até o dia da exclusão, inclusive. Excluir hoje vale a partir de amanhã; a aula de hoje fica na Agenda e na chamada.
+- Trocar de hora ou de local hoje: vale só a linha nova no dia (`trocada_no_dia`), sem aula dupla.
+- Criado e excluído no mesmo dia continua sendo engano (nunca vale).
+- Aluno inativo: as aulas já marcadas da semana continuam aparecendo (histórico). As não marcadas não aparecem (não viram "pendente").
+- Testes: `tests/test_vigencia_hoje.py`.
+
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.
 - Nomes de serviço no CRM: Pacote de Aulas, Mensalidade, Consultoria Online, Consultoria Híbrida, Avaliação Física.
