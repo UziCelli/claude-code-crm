@@ -65,7 +65,7 @@ def aulas_por_local(con: sqlite3.Connection, mes: str) -> dict:
         avulsas_do_dia.setdefault((cid, data), set()).add(hora)
     fixos = {}   # (aluno, dia da semana) -> linhas que podem ter valido no mês; a ativa primeiro
     for r in con.execute("""SELECT cliente_id, dia, hora, local, vigente_de, criado_em, excluido_em FROM agenda_fixos
-                            WHERE (excluido_em IS NULL OR substr(excluido_em,1,10) > ?) AND (vigente_de IS NULL OR vigente_de < ?)
+                            WHERE (excluido_em IS NULL OR substr(excluido_em,1,10) >= ?) AND (vigente_de IS NULL OR vigente_de < ?)
                             ORDER BY excluido_em IS NOT NULL, id""", (ini, fim)):
         fixos.setdefault((r["cliente_id"], r["dia"]), []).append(r)
 

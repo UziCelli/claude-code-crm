@@ -27,7 +27,7 @@ from . import locais as loc   # "+ Novo local": custos do local, preços e grade
 from . import indicacoes   # quem indicou quem e o presente da indicação (brinde, nunca desconto)
 from . import ofertas   # ofertas de upsell: proposta transparente, resposta do aluno e fim do valor da oferta
 from . import alunos as alu   # estado de cada aluno (um algoritmo só); 'alunos' é nome de variável em várias rotas
-from .vigencia import fixo_vale   # a linha do horário fixo valia naquele dia?
+from .vigencia import fixo_vale, trocada_no_dia   # a linha do horário fixo valia naquele dia?
 
 ROOT = Path(__file__).resolve().parent
 DIAS = {1: "Segunda", 2: "Terça", 3: "Quarta", 4: "Quinta", 5: "Sexta", 6: "Sábado", 7: "Domingo"}
@@ -1227,29 +1227,36 @@ def aulas_da_semana(con, segunda, hoje=None) -> list:
     h = (hoje or dt.date.today()).isoformat()
     datas = {n: (segunda + dt.timedelta(days=n - 1)).isoformat() for n in range(1, 7)}
     aulas, vistos = [], set()
-    for r in con.execute("""SELECT f.dia, f.hora, f.local, f.vigente_de, f.criado_em, f.excluido_em, c.id AS cliente_id, c.nome, c.telefone, c.data_inicio
-                            FROM agenda_fixos f JOIN clientes c ON c.id=f.cliente_id
-                            WHERE (f.excluido_em IS NULL OR substr(f.excluido_em,1,10) > ?) AND (f.vigente_de IS NULL OR f.vigente_de <= ?)
+    # aluno que não está mais ativo: só entra com aula marcada na semana (o histórico não some; ver o filtro no fim)
+    marcado = f"""EXISTS (SELECT 1 FROM cliente_eventos e WHERE e.cliente_id=c.id AND e.excluido_em IS NULL
+                  AND e.tipo IN ({TIPOS_MARCA}) AND e.data BETWEEN ? AND ?)"""
+    linhas = con.execute(f"""SELECT f.dia, f.hora, f.local, f.vigente_de, f.criado_em, f.excluido_em, c.id AS cliente_id, c.nome, c.telefone,
+                            c.data_inicio, c.status FROM agenda_fixos f JOIN clientes c ON c.id=f.cliente_id
+                            WHERE (f.excluido_em IS NULL OR substr(f.excluido_em,1,10) >= ?) AND (f.vigente_de IS NULL OR f.vigente_de <= ?)
                             AND f.dia BETWEEN 1 AND 6 AND f.hora BETWEEN 5 AND 23
-                            AND c.status='ativo' AND c.excluido_em IS NULL ORDER BY f.excluido_em IS NOT NULL, f.id""", (datas[1], datas[6])):
-        if (r["dia"], r["hora"], r["cliente_id"]) in vistos or not fixo_vale(r, datas[r["dia"]]):   # linha repetida (voltou da lixeira): conta uma vez só
+                            AND (c.status='ativo' OR {marcado}) AND c.excluido_em IS NULL ORDER BY f.excluido_em IS NOT NULL, f.id""",
+                         (datas[1], datas[6], datas[1], datas[6])).fetchall()
+    comecam = {(r["cliente_id"], r["dia"]) for r in linhas if r["vigente_de"] == datas[r["dia"]]}
+    for r in linhas:
+        if ((r["dia"], r["hora"], r["cliente_id"]) in vistos or not fixo_vale(r, datas[r["dia"]])   # linha repetida (voltou da lixeira): conta uma vez só
+                or trocada_no_dia(r, datas[r["dia"]], comecam)):
             continue
         vistos.add((r["dia"], r["hora"], r["cliente_id"]))
         ini = str(r["data_inicio"] or "").strip()[:10]
         if ISO_DATA.fullmatch(ini) and datas[r["dia"]] < ini:
             continue
         aulas.append(dict(data=datas[r["dia"]], dia=r["dia"], hora=r["hora"], local=r["local"], cliente_id=r["cliente_id"],
-                          nome=r["nome"], telefone=r["telefone"], avulsa=False, avulsa_id=None, reposicao=False, repoe=""))
+                          nome=r["nome"], telefone=r["telefone"], avulsa=False, avulsa_id=None, reposicao=False, repoe="", ativo=r["status"] == "ativo"))
     dia_de = {d: n for n, d in datas.items()}
-    for r in con.execute("""SELECT a.id, a.data, a.hora, a.local, a.reposicao, c.id AS cliente_id, c.nome, c.telefone,
+    for r in con.execute(f"""SELECT a.id, a.data, a.hora, a.local, a.reposicao, c.id AS cliente_id, c.nome, c.telefone, c.status,
                             (SELECT o.data FROM cliente_eventos o WHERE o.id=a.repoe_evento_id AND o.excluido_em IS NULL) AS repoe
                             FROM agenda_avulsas a JOIN clientes c ON c.id=a.cliente_id
-                            WHERE a.excluido_em IS NULL AND a.data BETWEEN ? AND ? AND c.status='ativo' AND c.excluido_em IS NULL""",
-                         (datas[1], datas[6])):
+                            WHERE a.excluido_em IS NULL AND a.data BETWEEN ? AND ? AND (c.status='ativo' OR {marcado}) AND c.excluido_em IS NULL""",
+                         (datas[1], datas[6], datas[1], datas[6])):
         if r["data"] in dia_de:   # domingo (ou data torta) não entra
             aulas.append(dict(data=r["data"], dia=dia_de[r["data"]], hora=r["hora"], local=r["local"], cliente_id=r["cliente_id"],
                               nome=r["nome"], telefone=r["telefone"], avulsa=True, avulsa_id=r["id"], reposicao=bool(r["reposicao"]),
-                              repoe=data_br(r["repoe"])[:5] if r["reposicao"] and r["repoe"] else ""))   # dd/mm da aula desmarcada que ela repõe
+                              repoe=data_br(r["repoe"])[:5] if r["reposicao"] and r["repoe"] else "", ativo=r["status"] == "ativo"))   # dd/mm da aula desmarcada que ela repõe
     marcas = {}   # (aluno, data) -> [(hora, estado)] do mais antigo ao mais novo
     for e in con.execute(f"""SELECT cliente_id, data, hora, tipo FROM cliente_eventos WHERE excluido_em IS NULL
                              AND tipo IN ({TIPOS_MARCA}) AND data BETWEEN ? AND ? ORDER BY id""", (datas[1], datas[6])):
@@ -1261,6 +1268,7 @@ def aulas_da_semana(con, segunda, hoje=None) -> list:
         a["pausa"] = any(i <= a["data"] <= f for i, f in pausas.get(a["cliente_id"], []))   # "Pulou o mês" cobre o dia
         a["situacao"] = a["estado"] or ("pausa" if a["pausa"] else "pendente" if a["data"] < h else "futura")
         a["bloqueio"] = em_bloqueio(fases, a["data"])
+    aulas = [a for a in aulas if a.pop("ativo") or (a["estado"] and a["data"] < h)]   # inativo: só o que já foi marcado (histórico)
     return sorted(aulas, key=lambda a: (a["data"], a["hora"], a["nome"].lower()))
 
 

@@ -233,7 +233,7 @@ def test_fixo_vale():
     r = {"vigente_de": "2026-10-14", "criado_em": "2026-10-14 08:00:00", "excluido_em": "2026-10-20 09:00:00"}
     assert not main.fixo_vale(r, "2026-10-13")
     assert main.fixo_vale(r, "2026-10-14") and main.fixo_vale(r, "2026-10-19")
-    assert not main.fixo_vale(r, "2026-10-20")
+    assert main.fixo_vale(r, "2026-10-20") and not main.fixo_vale(r, "2026-10-21")   # excluído no dia 20: a aula do dia 20 fica
     assert main.fixo_vale({"vigente_de": None, "criado_em": "2026-10-01", "excluido_em": None}, "2020-01-01")
     assert not main.fixo_vale({"vigente_de": None, "criado_em": "2026-10-20 08:00", "excluido_em": "2026-10-20 09:00"}, "2026-10-19")
 
