@@ -33,20 +33,26 @@ def carregar_parametros(con) -> dict:
 
 
 def valor_hora_automatico(con, p: dict) -> dict:
-    """Salário por hora = seus custos pessoais do mês ÷ suas horas de trabalho no mês.
+    """Salário por hora = seus custos pessoais do mês ÷ as horas da agenda cheia (metas > horas_vendaveis).
       Custos pessoais: média das saídas pagas da PF nos 3 meses fechados (financeiro.custo_pessoal_medio).
-      Horas: as da agenda dos alunos ativos + planejamento + consultoria, pela regra do tempo (main.horas_trabalho_mes).
+      Horas de hoje: as da agenda dos alunos ativos + planejamento + consultoria (main.horas_trabalho_mes).
+      Divide pela maior das duas: dividir só pelas horas de hoje jogava o custo de vida inteiro nos poucos alunos atuais
+      (com 1 aluno, ele "custava" o salário todo) e toda margem dava -50%, -80%. Se cobre ou não os custos está em
+      main.cobre_custos, que usa o custo pessoal inteiro.
     usado=False (automático desligado, sem gasto na PF ou sem aluno): vale o valor_hora digitado em Configurações."""
-    from . import financeiro
+    from . import db, financeiro
     from .main import horas_trabalho_mes, mes_atual
     mo = p.get("mo") or {}
     fixo = float(mo.get("valor_hora") or 0)
     ligado = bool(float(mo.get("valor_hora_auto") or 0)) and fixo > 0   # valor_hora 0 desliga a regra toda
     custo, meses = financeiro.custo_pessoal_medio(con, mes_atual()) if ligado else (0.0, 0)
     horas = horas_trabalho_mes(con, p) if ligado else 0.0
+    cheia = float(db.parametros(con, "metas").get("horas_vendaveis") or 0)
+    base = max(horas, cheia)
     usado = custo > 0 and horas > 0
     return {"ligado": ligado, "usado": usado, "custo_pessoal": round(custo, 2), "meses": meses, "horas": round(horas, 1),
-            "valor_hora": round(custo / horas, 2) if usado else fixo, "fixo": fixo}
+            "horas_cheia": round(cheia, 1), "horas_base": round(base, 1),
+            "valor_hora": round(custo / base, 2) if usado else fixo, "fixo": fixo}
 
 
 # Serviços e o tempo de trabalho que a regra conta (minutos de Configurações > Mão de obra)
@@ -166,7 +172,9 @@ def _componentes(base: dict, p: dict, pessoas: int, mult_horario: float, local: 
     sessoes = float(base.get("sessoes_mes") or 0)
     preco_cheio = float(base["preco_base"]) * mult_horario * por_grupo(p["grupo_mult"], pessoas, 1.0)
     resto, mo, horas = custo_servico(base, p, local)
-    mo *= 1 + por_grupo(p["grupo_mo"], pessoas, 0.0)
+    # Com o salário automático, a hora já é o seu custo de vida: o grupo não aumenta esse custo (contaria 2 vezes).
+    if not (p.get("salario_hora") or {}).get("usado"):
+        mo *= 1 + por_grupo(p["grupo_mo"], pessoas, 0.0)
     custo = resto + mo
     if local == "CIA" and pessoas > 1:
         um = p["taxa_cia"].get(1, 0.0)

@@ -315,3 +315,8 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Nomes de serviço no CRM: Pacote de Aulas, Mensalidade, Consultoria Online, Consultoria Híbrida, Avaliação Física.
 - Local "CIA Athletica" da planilha vira "CIA". Valor do cliente importado = "Receita Mensal" da Tabela16.
 - Gate do plugin ECC bloqueia a 1ª criação de arquivo pelo Write: criar arquivos novos via PowerShell (`[IO.File]::WriteAllText`) ou criar vazio + Read + Write.
+## Auditoria do lucro e tela "Cálculos" (04/11/2026)
+- Margens de -50% a -80%: o salário automático dividia os custos pessoais só pelas horas de hoje, e cada aluno "pagava" o salário inteiro. Agora divide pela agenda cheia (`metas.horas_vendaveis`, ou pelas horas de hoje se forem mais).
+- Com o salário automático, a "mão de obra extra" de grupo não entra mais no custo (contava 2 vezes).
+- Painel: cartão "O mês cobre seus custos?". Mensalidades − impostos/taxas − custos do negócio − custos pessoais inteiros da PF (`main.cobre_custos`).
+- Tela `/calculos`: a conta acima, de onde vem o salário/hora e as variáveis editáveis (mão de obra, agenda cheia, margens, taxas, grupo). Salvar volta para ela.

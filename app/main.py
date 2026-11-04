@@ -429,6 +429,30 @@ def horas_trabalho_mes(con, p, bases=None) -> float:
     return horas
 
 
+def cobre_custos(con, p, bases=None) -> dict:
+    """O mês fecha? Mensalidades dos alunos ativos - impostos e taxas - custos do negócio (local, CIA, deslocamento)
+    - seus custos pessoais (o salário que a PF precisa). sobra < 0 = falta isso por mês para cobrir tudo.
+    Custos pessoais: os da PF (salário automático); sem eles, a soma da mão de obra dos alunos."""
+    bases = bases if bases is not None else carregar_bases(con)
+    receita = impostos = negocio = mo = 0.0
+    sem_base = 0
+    for c in con.execute("SELECT * FROM clientes WHERE excluido_em IS NULL AND status='ativo'"):
+        receita += c["valor"] or 0
+        est = estimativa_cliente(con, c, p, bases)
+        if not est:
+            sem_base += 1
+            continue
+        impostos += est["impostos_taxas"]
+        negocio += est["custo_total"] - est["mao_obra"]
+        mo += est["mao_obra"]
+    sh = p["salario_hora"]
+    pessoal = sh["custo_pessoal"] if sh["usado"] else mo
+    sobra = receita - impostos - negocio - pessoal
+    return {"receita": round(receita, 2), "impostos": round(impostos, 2), "negocio": round(negocio, 2),
+            "pessoal": round(pessoal, 2), "pessoal_pf": sh["usado"], "sobra": round(sobra, 2), "sem_base": sem_base,
+            "cobre": sobra >= 0}
+
+
 def calcular_metricas(con, mes=None):
     mes = mes or mes_atual()
     p = precos.carregar_parametros(con)
@@ -463,7 +487,7 @@ def calcular_metricas(con, mes=None):
     return dict(mes=mes, clientes_ativos=len(clientes), horas_ocupadas=round(horas, 1), lucro_hora=round(lucro_hora, 2),
                 pct_receita_grupos=(receita_grupos / receita) if receita else 0, faturamento_recorrente=round(receita, 2),
                 clientes_perdidos=perdidos, vendas_abaixo_10=abaixo10, nivel=nivel, espera_pico=espera_pico,
-                salario_hora=p["salario_hora"])
+                salario_hora=p["salario_hora"], cobre=cobre_custos(con, p, bases))
 
 
 def metricas_por_canal(con, mes):
@@ -3318,9 +3342,38 @@ def configuracoes(request: Request, con=Depends(get_db)):
                   das=financeiro.das_competencia(con, mes_atual()), das_txt=financeiro.texto_pct(financeiro.pct_das(con, dt.date.today().isoformat())))
 
 
+CALCULOS_GRUPOS = ["mao_obra", "metas", "margem_minima", "taxa_pagamento", "grupo_multiplicador", "grupo_mao_obra_extra"]
+CALCULOS_METAS = {"horas_vendaveis"}   # das metas, só as que entram no cálculo
+ROTULOS = {
+    "valor_hora": "Valor da hora fixo (R$), usado sem gastos da PF; 0 desliga a regra do tempo",
+    "valor_hora_auto": "Salário automático pelos gastos da PF (1 = sim, 0 = usa o fixo)",
+    "min_aula": "Minutos de cada aula", "min_planejamento_pacote": "Minutos de planejamento por pacote",
+    "min_planejamento_mes": "Minutos de planejamento por mês (mensalidade)",
+    "min_consultoria_mes": "Minutos de consultoria por aluno no mês", "min_avaliacao": "Minutos da avaliação física",
+    "horas_vendaveis": "Horas da agenda cheia no mês (divide o salário)",
+}
+
+
+@app.get("/calculos", response_class=HTMLResponse)
+def calculos(request: Request, con=Depends(get_db)):
+    """Tudo que entra no lucro do painel num lugar só: o mês fecha? de onde vem o salário/hora e as variáveis editáveis."""
+    titulos = {g: (t, f) for g, t, f in GRUPOS_CONFIG}
+    grupos = []
+    for g in CALCULOS_GRUPOS:
+        rows = [r for r in con.execute("SELECT * FROM parametros WHERE grupo=? ORDER BY ordem, chave", (g,))
+                if g != "metas" or r["chave"] in CALCULOS_METAS]
+        if rows:
+            t, f = titulos[g]
+            grupos.append({"grupo": g, "titulo": "Agenda cheia" if g == "metas" else t.split(":")[0], "fmt": f, "itens": rows})
+    p = precos.carregar_parametros(con)
+    return render(request, "calculos.html", con, grupos=grupos, rotulos=ROTULOS, salario_hora=p["salario_hora"],
+                  cobre=cobre_custos(con, p), das_txt=financeiro.texto_pct(p["das"]))
+
+
 @app.post("/configuracoes")
 async def configuracoes_salvar(request: Request, con=Depends(get_db)):
     form = await request.form()
+    destino = "/calculos" if form.get("voltar") == "/calculos" else "/configuracoes"   # lista fechada: nada de redirecionar para fora
     try:
         with con:
             cia_antes = precos.taxas_cia(con)[0].get(1, 0.0)
@@ -3335,8 +3388,8 @@ async def configuracoes_salvar(request: Request, con=Depends(get_db)):
             _checar_margens(con)
             loc.ajustar_custos_cia(con, cia_antes, precos.taxas_cia(con)[0].get(1, 0.0))
     except ValueError as e:   # nada é salvo (o with desfaz)
-        return voltar("/configuracoes", erro=str(e))
-    return voltar("/configuracoes", msg="Parâmetros salvos.")
+        return voltar(destino, erro=str(e))
+    return voltar(destino, msg="Parâmetros salvos.")
 
 
 def _checar_margens(con) -> None:

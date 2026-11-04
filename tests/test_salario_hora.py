@@ -61,10 +61,50 @@ def test_valor_da_hora_sai_dos_custos_pessoais_e_vai_para_os_precos(con):
     gasto_pf(con, 4500, -1)
     p = precos.carregar_parametros(con)
     sh = p["salario_hora"]
-    assert sh["usado"] and sh["horas"] == 18 and sh["custo_pessoal"] == 4500
-    assert p["mo"]["valor_hora"] == pytest.approx(250)
+    # 18 h de hoje, mas divide pela agenda cheia (97 h): o salário não cai inteiro nos 2 alunos atuais
+    assert sh["usado"] and sh["horas"] == 18 and sh["horas_base"] == 97 and sh["custo_pessoal"] == 4500
+    assert p["mo"]["valor_hora"] == pytest.approx(4500 / 97, abs=0.01)
     base = dict(con.execute("SELECT * FROM precos_base WHERE tipo_servico='Pacote de Aulas'").fetchone())
-    assert precos.calcular(base, p)["mao_obra"] == pytest.approx(9 * 250)
+    assert precos.calcular(base, p)["mao_obra"] == pytest.approx(9 * 46.39, abs=0.01)
+
+
+def test_agenda_mais_cheia_que_a_meta_divide_pelas_horas_de_hoje(con):
+    for n in range(12):   # 12 x 9 h = 108 h > 97 h
+        aluno(con, f"A{n}")
+    gasto_pf(con, 5400, -1)
+    sh = precos.carregar_parametros(con)["salario_hora"]
+    assert sh["horas_base"] == 108 and sh["valor_hora"] == pytest.approx(50)
+
+
+def test_grupo_nao_soma_mao_de_obra_extra_com_salario_automatico(con):
+    aluno(con, "Ana")
+    gasto_pf(con, 4500, -1)
+    p = precos.carregar_parametros(con)
+    base = dict(con.execute("SELECT * FROM precos_base WHERE tipo_servico='Pacote de Aulas'").fetchone())
+    assert precos.calcular(base, p, pessoas=2)["mao_obra"] == pytest.approx(precos.calcular(base, p)["mao_obra"])
+
+
+def test_cobre_custos_usa_o_custo_pessoal_inteiro(con):
+    aluno(con, "Ana")   # paga 1000; custos do negócio do pacote: 900 - 415,50 = 484,50
+    gasto_pf(con, 4500, -1)
+    p = precos.carregar_parametros(con)
+    c = main.cobre_custos(con, p)
+    assert c["receita"] == 1000 and c["negocio"] == pytest.approx(484.5) and c["pessoal"] == 4500
+    assert c["sobra"] == pytest.approx(1000 - c["impostos"] - 484.5 - 4500) and not c["cobre"]
+
+
+def test_tela_calculos_mostra_a_conta_e_salva_voltando_para_ela(con):
+    aluno(con, "Ana")
+    gasto_pf(con, 4500, -1)
+    http = TestClient(main.app, base_url="http://localhost")
+    t = http.get("/calculos").text
+    assert "O mês cobre os seus custos?" in t and "Falta no mês" in t and "Minutos de cada aula" in t
+    pid = con.execute("SELECT id FROM parametros WHERE grupo='metas' AND chave='horas_vendaveis'").fetchone()[0]
+    r = http.post("/configuracoes", data={"voltar": "/calculos", f"p_{pid}": "120", f"f_{pid}": "num"}, follow_redirects=False)
+    assert r.headers["location"].startswith("/calculos?msg=")
+    assert precos.carregar_parametros(con)["salario_hora"]["horas_base"] == 120
+    r = http.post("/configuracoes", data={"voltar": "https://fora.com"}, follow_redirects=False)
+    assert r.headers["location"].startswith("/configuracoes")
 
 
 def test_sem_gasto_na_pf_ou_desligado_usa_o_fixo(con):
@@ -83,6 +123,7 @@ def test_painel_e_configuracoes_mostram_de_onde_vem_o_valor(con):
     gasto_pf(con, 4500, -1)
     http = TestClient(main.app, base_url="http://localhost")
     painel = http.get("/").text
-    assert "Seu salário por hora" in painel and "R$ 500,00" in painel and "9 h de trabalho" in painel
+    assert "Seu salário por hora" in painel and "R$ 46,39" in painel and "97 h da agenda cheia" in painel
+    assert "O mês cobre seus custos?" in painel and 'href="/calculos"' in painel
     cfg = http.get("/configuracoes").text
-    assert "Salário por hora em uso" in cfg and "R$ 500,00" in cfg
+    assert "Salário por hora em uso" in cfg and "R$ 46,39" in cfg

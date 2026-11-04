@@ -50,8 +50,15 @@
   <div class="kpi {{ '' if sh.usado else 'amarelo' }}">
     <div class="rotulo">Seu salário por hora</div>
     <div class="valor">{{ sh.valor_hora|moeda }}</div>
-    <div class="meta">{% if sh.usado %}custos pessoais {{ sh.custo_pessoal|moeda }}/mês ÷ {{ sh.horas|num(0) }} h de trabalho{% else %}valor fixo: lance os gastos da PF para calcular{% endif %}
-      · <a href="/configuracoes#cfg-mao_obra">ajustar</a></div>
+    <div class="meta">{% if sh.usado %}custos pessoais {{ sh.custo_pessoal|moeda }}/mês ÷ {{ sh.horas_base|num(0) }} h da agenda cheia{% else %}valor fixo: lance os gastos da PF para calcular{% endif %}
+      · <a href="/calculos">ajustar</a></div>
+  </div>
+  {% endif %}
+  {% if m.cobre %}{% set cb = m.cobre %}
+  <div class="kpi {{ 'verde' if cb.cobre else 'vermelho' }}">
+    <div class="rotulo">O mês cobre seus custos?</div>
+    <div class="valor">{{ 'Sim' if cb.cobre else 'Não' }}</div>
+    <div class="meta">{{ 'sobram' if cb.cobre else 'faltam' }} {{ (cb.sobra if cb.cobre else -cb.sobra)|moeda }}/mês · <a href="/calculos">ver a conta</a></div>
   </div>
   {% endif %}
   <div class="kpi">
