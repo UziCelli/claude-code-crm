@@ -46,6 +46,45 @@ def por_grupo(tabela: dict, pessoas: int, padrao: float) -> float:
     return tabela[max(menores)] if menores else padrao
 
 
+_CAMPOS_PACOTE = ("preco_base", "custo_operacional", "mao_obra")
+
+
+def base_pacote(rows: list, n: int, avulsa: dict | None = None) -> dict:
+    """Base sintética de um Pacote de N aulas (1 a 20, ímpar também) a partir dos pacotes cadastrados.
+    Entre dois pacotes: interpola em linha reta (7 aulas = meio caminho entre 6 e 8).
+    Abaixo do menor: a "Aula avulsa" vale como pacote de 1 (se existir); senão, proporcional por aula.
+    Acima do maior: proporcional por aula do maior."""
+    n = int(n)
+    if n < 1:
+        raise ValueError("O pacote precisa ter pelo menos 1 aula")
+    pontos = {int(r["qtd_aulas"]): dict(r) for r in rows if r.get("qtd_aulas")}
+    if avulsa and 1 not in pontos:
+        # a linha "Aula avulsa" pode guardar N sessões: normaliza para 1 aula
+        div = float(avulsa.get("sessoes_mes") or 1) or 1.0
+        um = dict(avulsa)
+        um.update({k: float(avulsa.get(k) or 0) / div for k in _CAMPOS_PACOTE})
+        pontos[1] = um
+    if not pontos:
+        raise ValueError("Não há pacote cadastrado para calcular o personalizado")
+    qtds = sorted(pontos)
+    if n in pontos:
+        modelo, valores = pontos[n], {k: float(pontos[n].get(k) or 0) for k in _CAMPOS_PACOTE}
+    elif n < qtds[0] or n > qtds[-1]:
+        ref = qtds[0] if n < qtds[0] else qtds[-1]
+        modelo = pontos[ref]
+        valores = {k: float(modelo.get(k) or 0) / ref * n for k in _CAMPOS_PACOTE}
+    else:
+        a = max(q for q in qtds if q < n)
+        b = min(q for q in qtds if q > n)
+        t = (n - a) / (b - a)
+        modelo = pontos[b]
+        valores = {k: float(pontos[a].get(k) or 0) * (1 - t) + float(pontos[b].get(k) or 0) * t
+                   for k in _CAMPOS_PACOTE}
+    base = dict(modelo)
+    base.update(valores, tipo_servico="Pacote de Aulas", qtd_aulas=n, sessoes_mes=n)
+    return base
+
+
 def _componentes(base: dict, p: dict, pessoas: int, mult_horario: float, local: str | None) -> tuple[float, float, float]:
     """(preço cheio, custo, horas por aula) de um horário: o que muda de um horário/local para outro."""
     local = local or base.get("local")
@@ -80,12 +119,14 @@ def calcular(base: dict, p: dict, pessoas: int = 1, mult_horario: float = 1.0,
 
 
 def calcular_misto(horarios: list, p: dict, pessoas: int = 1, desconto: float = 0.0,
-                   forma_pagamento: str = "PIX", preco_final: float | None = None) -> dict:
+                   forma_pagamento: str = "PIX", preco_final: float | None = None,
+                   extra: tuple | None = None) -> dict:
     """
     Proposta com vários horários (ex.: Seg 7h na CIA, Qua 19h na SmartFit), todos do mesmo plano.
     horarios: lista de (base, multiplicador do horário, local). Preço cheio e custo = média dos horários
     (preços iguais ficam iguais; diferentes viram a média). Cada aula da semana pesa igual.
     preco_final: o preço que você quer cobrar (total); vira o desconto (negativo = acréscimo).
+    extra: (preço, custo) somados ao pacote, ex.: a consultoria do acompanhamento completo.
     """
     if not horarios:
         raise ValueError("Escolha pelo menos um horário")
@@ -97,6 +138,9 @@ def calcular_misto(horarios: list, p: dict, pessoas: int = 1, desconto: float = 
     preco_cheio = sum(c[0] for c in comps) / len(comps)
     custo = sum(c[1] for c in comps) / len(comps)
     horas_aula = sum(c[2] for c in comps) / len(comps)   # 1h de aula + o deslocamento do local
+    if extra:
+        preco_cheio += float(extra[0] or 0)
+        custo += float(extra[1] or 0)
 
     if preco_final is not None and preco_final > 0 and preco_cheio:
         desconto = 1 - preco_final / preco_cheio

@@ -273,6 +273,14 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Outros alertas (renovação com 3–7 dias, faltas etc.) continuam como antes.
 - Testes: `tests/test_alertas.py`.
 
+## Pacote personalizado de 1 a 20 aulas, com ou sem consultoria (PR `claude/pacotes-1-a-20`, 04/11/2026)
+- Propostas → plano "Pacote personalizado": você digita o nº de aulas (1 a 20, ímpar também) e, se quiser, as aulas por semana.
+- Tamanho que não está cadastrado: o preço é interpolado entre os pacotes vizinhos (7 = meio caminho entre 6 e 8). A "Aula avulsa" vale como pacote de 1. Fora da faixa cadastrada: proporcional por aula (`precos.base_pacote`).
+- Campo "Consultoria": "Sem consultoria (pacote avulso)" ou "+ Consultoria Online/Híbrida (acompanhamento completo)". Soma preço e custo da consultoria × meses do pacote × pessoas. Os meses vêm de aulas ÷ aulas por semana (2 se ficar em branco).
+- Desconto da consultoria no combo: Configurações → "Pacote personalizado" (15% de início).
+- A proposta salva guarda a consultoria (coluna `propostas.consultoria`) e o PDF mostra "+ Consultoria … (acompanhamento completo)".
+- Testes: `tests/test_precos.py`, `tests/test_propostas.py`.
+
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.
 - Nomes de serviço no CRM: Pacote de Aulas, Mensalidade, Consultoria Online, Consultoria Híbrida, Avaliação Física.

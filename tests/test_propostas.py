@@ -110,3 +110,61 @@ def test_salvar_com_numero_invalido_volta_com_a_frase(http):
     r = c.post("/propostas", data={"plano": PLANO, "forma": "PIX", "h": ["1-7-CIA"], "desconto": "10%",
                                    "cliente_id": str(cid)})
     assert r.status_code == 200 and "não é um número" in r.text and "Proposta #" not in r.text
+
+
+# ---- Pacote personalizado (1 a 20 aulas), com ou sem consultoria ----
+def _com_consultoria():
+    con = db.conectar()
+    with con:
+        con.execute("""INSERT INTO precos_base (tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal, preco_base,
+                       custo_operacional, mao_obra, sessoes_mes) VALUES ('Consultoria Online', 'Online', 'PIX', 1, 0, 300, 40, 60, 1)""")
+    return con
+
+
+def test_pacote_personalizado_de_7_aulas(http):
+    c, _ = http
+    r = main.simular(db.conectar(), main._plano_efetivo("personalizado", "7", ""), [{"dia": 1, "hora": 10, "local": "CIA"}], "PIX", 1)
+    # só tem o pacote de 8 cadastrado: 7 aulas = 7/8 do de 8
+    assert r["qtd"] == 7 and r["preco_cheio"] == pytest.approx(1100 / 8 * 7, abs=0.01)
+    tela = c.get("/propostas", params={"plano": "personalizado", "aulas": 7, "h": ["1-10-CIA"]})
+    assert tela.status_code == 200 and "R$ 962,50" in tela.text
+
+
+def test_personalizado_com_consultoria_soma_os_meses(http):
+    c, _ = http
+    con = _com_consultoria()
+    h = [{"dia": 1, "hora": 10, "local": "CIA"}]
+    sem = main.simular(con, "Pacote de Aulas|8|2", h, "PIX", 1)
+    com = main.simular(con, "Pacote de Aulas|8|2", h, "PIX", 1, consultoria="Consultoria Online")
+    # 8 aulas 2x/semana = 4 semanas = 1 mês; consultoria 300 com 15% de desconto no combo
+    assert com["meses_consultoria"] == 1
+    assert com["preco_cheio"] == pytest.approx(sem["preco_cheio"] + 255, abs=0.01)
+    assert com["custo_total"] == pytest.approx(sem["custo_total"] + 100, abs=0.01)
+    longo = main.simular(con, main._plano_efetivo("personalizado", "20", "1"), h, "PIX", 1, consultoria="Consultoria Online")
+    assert longo["meses_consultoria"] == 5   # 20 semanas ≈ 4,6 meses -> 5
+    tela = c.get("/propostas", params={"plano": "personalizado", "aulas": 7, "consultoria": "Consultoria Online", "h": ["1-10-CIA"]})
+    assert "+ Consultoria Online" in tela.text and "acompanhamento" in tela.text
+
+
+def test_salvar_personalizado_guarda_a_consultoria(http):
+    c, cid = http
+    _com_consultoria()
+    r = c.post("/propostas", data={"plano": "personalizado", "aulas": "7", "consultoria": "Consultoria Online", "forma": "PIX",
+                                   "h": "1-10-CIA", "cliente_id": str(cid), "confirmar": 1}, follow_redirects=False)
+    assert r.headers["location"].startswith("/propostas/")
+    p = db.conectar().execute("SELECT * FROM propostas ORDER BY id DESC LIMIT 1").fetchone()
+    assert (p["tipo_servico"], p["qtd_aulas"], p["consultoria"]) == ("Pacote de Aulas", 7, "Consultoria Online")
+    assert "Consultoria Online (acompanhamento completo)" in c.get(r.headers["location"].split("?")[0]).text
+
+
+@pytest.mark.parametrize("aulas", ["0", "21", "abc"])
+def test_personalizado_fora_de_1_a_20_avisa(http, aulas):
+    c, _ = http
+    tela = c.get("/propostas", params={"plano": "personalizado", "aulas": aulas, "h": ["1-10-CIA"]})
+    assert tela.status_code == 200 and "1 a 20" in tela.text
+
+
+def test_consultoria_sem_preco_cadastrado_avisa(http):
+    c, _ = http
+    tela = c.get("/propostas", params={"plano": PLANO, "consultoria": "Consultoria Online", "h": ["1-10-CIA"]})
+    assert "Não há preço de Consultoria Online" in tela.text

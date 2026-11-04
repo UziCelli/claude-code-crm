@@ -2126,6 +2126,8 @@ def _aulas_semana(tipo, qtd, freq) -> int:
     """Quantos horários por semana o plano pede (0 = não dá para saber)."""
     if tipo == "Mensalidade":
         return freq
+    if tipo == "Pacote de Aulas" and freq:   # pacote personalizado: você diz quantas por semana
+        return freq
     if tipo == "Pacote de Aulas" and qtd and qtd % 4 == 0:
         return qtd // 4
     return 0
@@ -2158,9 +2160,82 @@ def horarios_das_propostas(con, props) -> dict:
     return out
 
 
-def simular(con, plano, horarios, forma, pessoas, desconto=0.0, preco_final=None, local="CIA"):
+PACOTE_MIN, PACOTE_MAX = 1, 20
+CONSULTORIAS = ("Consultoria Online", "Consultoria Híbrida")
+
+
+def _plano_efetivo(plano: str, aulas, por_semana) -> str:
+    """'personalizado' + nº de aulas (1 a 20) + aulas por semana -> 'Pacote de Aulas|N|F'. Outros planos passam direto."""
+    if plano != "personalizado":
+        return plano
+    try:
+        n = int(str(aulas).strip() or 0)
+        f = int(str(por_semana).strip() or 0)
+    except ValueError:
+        raise ValueError("Número de aulas inválido: use um número inteiro de 1 a 20")
+    if not PACOTE_MIN <= n <= PACOTE_MAX:
+        raise ValueError(f"O pacote personalizado vai de {PACOTE_MIN} a {PACOTE_MAX} aulas")
+    if not 0 <= f <= 7:
+        raise ValueError("Aulas por semana: de 1 a 7 (ou deixe em branco)")
+    return f"Pacote de Aulas|{n}|{f}"
+
+
+def _base_plano(con, tipo, qtd, freq, loc, forma):
+    """Linha de preço do plano no local. Pacote com nº de aulas que não está cadastrado (ex.: 7)
+    é calculado a partir dos pacotes que existem (precos.base_pacote). None = não dá para calcular."""
+    row = con.execute("""SELECT * FROM precos_base WHERE tipo_servico=? AND qtd_aulas=? AND freq_semanal=? AND local=?
+                         ORDER BY (forma_pagamento=?) DESC LIMIT 1""", (tipo, qtd, freq, loc, forma)).fetchone()
+    if row:
+        return dict(row)
+    if tipo != "Pacote de Aulas" or qtd < 1:
+        return None
+    row = con.execute("""SELECT * FROM precos_base WHERE tipo_servico=? AND qtd_aulas=? AND local=?
+                         ORDER BY (forma_pagamento=?) DESC, freq_semanal LIMIT 1""", (tipo, qtd, loc, forma)).fetchone()
+    if row:
+        base = dict(row)
+        base["freq_semanal"] = freq
+        return base
+    rows, vistos = [], set()
+    for r in con.execute("""SELECT * FROM precos_base WHERE tipo_servico='Pacote de Aulas' AND local=? AND qtd_aulas>0
+                            ORDER BY qtd_aulas, (forma_pagamento=?) DESC, freq_semanal""", (loc, forma)):
+        if r["qtd_aulas"] not in vistos:
+            vistos.add(r["qtd_aulas"])
+            rows.append(dict(r))
+    av = con.execute("""SELECT * FROM precos_base WHERE tipo_servico='Aula avulsa' AND local=?
+                        ORDER BY (forma_pagamento=?) DESC LIMIT 1""", (loc, forma)).fetchone()
+    if not rows and not av:
+        return None
+    base = precos.base_pacote(rows, qtd, dict(av) if av else None)
+    base["freq_semanal"] = freq
+    return base
+
+
+def _extra_consultoria(con, consultoria, tipo, qtd, freq, loc, forma, pessoas):
+    """(preço, custo, meses) da consultoria somada ao pacote (acompanhamento completo).
+    Meses = quanto tempo o pacote dura (aulas ÷ aulas por semana; sem frequência, 2x por semana)."""
+    if consultoria not in CONSULTORIAS:
+        raise ValueError(f"Consultoria desconhecida: {consultoria}")
+    if tipo.startswith("Consultoria"):
+        raise ValueError("O plano já é uma consultoria: escolha 'Sem consultoria'")
+    row = con.execute("""SELECT * FROM precos_base WHERE tipo_servico=?
+                         ORDER BY (local=?) DESC, (forma_pagamento=?) DESC LIMIT 1""", (consultoria, loc, forma)).fetchone()
+    if not row:
+        raise ValueError(f"Não há preço de {consultoria}. Importe a planilha ou cadastre em Configurações.")
+    if tipo == "Pacote de Aulas":
+        semanas = math.ceil(qtd / (freq or 2))
+        meses = max(1, math.ceil(semanas / 4.345 - 1e-9))
+    else:
+        meses = 1
+    combo = db.parametros(con, "pacote_personalizado").get("desconto_consultoria", 0.15)
+    preco = meses * float(row["preco_base"] or 0) * (1 - combo) * pessoas
+    custo = meses * (float(row["custo_operacional"] or 0) + float(row["mao_obra"] or 0)) * pessoas
+    return preco, custo, meses
+
+
+def simular(con, plano, horarios, forma, pessoas, desconto=0.0, preco_final=None, local="CIA", consultoria=""):
     """Proposta de um plano em um ou vários horários (cada um com o seu local e o multiplicador da grade).
-    Sem horário: calcula no local escolhido, sem multiplicador. desconto em %; preco_final (R$) manda no desconto."""
+    Sem horário: calcula no local escolhido, sem multiplicador. desconto em %; preco_final (R$) manda no desconto.
+    consultoria: '' (pacote avulso) ou 'Consultoria Online'/'Consultoria Híbrida' somada ao pacote."""
     tipo, qtd, freq = plano.split("|")
     qtd, freq = int(qtd), int(freq)
     tc = "Mensalidades" if tipo == "Mensalidade" else "Pacotes"
@@ -2169,8 +2244,7 @@ def simular(con, plano, horarios, forma, pessoas, desconto=0.0, preco_final=None
     for hh in horarios or [{"dia": 0, "hora": 0, "local": local}]:
         loc = hh["local"]
         if loc not in bases:
-            bases[loc] = con.execute("""SELECT * FROM precos_base WHERE tipo_servico=? AND qtd_aulas=? AND freq_semanal=? AND local=?
-                                        ORDER BY (forma_pagamento=?) DESC LIMIT 1""", (tipo, qtd, freq, loc, forma)).fetchone()
+            bases[loc] = _base_plano(con, tipo, qtd, freq, loc, forma)
             if not bases[loc]:
                 raise ValueError(f"Não há preço de {_rotulo_plano(tipo, qtd, freq)} em {loc}. Importe a planilha ou cadastre em Configurações.")
         base = dict(bases[loc])
@@ -2185,7 +2259,12 @@ def simular(con, plano, horarios, forma, pessoas, desconto=0.0, preco_final=None
         um = precos.calcular(base, p, pessoas=pessoas, mult_horario=mult, forma_pagamento=forma, local=loc)
         itens.append((base, mult, loc))
         detalhes.append({**hh, "mult": mult, "preco_cheio": um["preco_cheio"], "status": status})
-    r = precos.calcular_misto(itens, p, pessoas=pessoas, desconto=desconto / 100, forma_pagamento=forma, preco_final=preco_final)
+    extra, meses = None, 0
+    if consultoria:
+        *extra, meses = _extra_consultoria(con, consultoria, tipo, qtd, freq, itens[0][2], forma, max(1, int(pessoas)))
+    r = precos.calcular_misto(itens, p, pessoas=pessoas, desconto=desconto / 100, forma_pagamento=forma, preco_final=preco_final,
+                              extra=tuple(extra) if extra else None)
+    r.update(consultoria=consultoria or "", meses_consultoria=meses)
     esperado = _aulas_semana(tipo, qtd, freq)
     if horarios and esperado and len(horarios) != esperado:
         avisos.append(f"O plano é {esperado}x por semana e a proposta tem {len(horarios)} horário{'s' if len(horarios) != 1 else ''}.")
@@ -2200,7 +2279,8 @@ def _texto_preco(v: float | None) -> str:
 
 
 def _url_propostas(f: dict, horarios: list[dict]) -> str:
-    q = {k: f[k] for k in ("plano", "local", "forma", "pessoas", "desconto", "preco_final", "lead_id", "cliente_id", "obs") if f.get(k)}
+    q = {k: f[k] for k in ("plano", "aulas", "por_semana", "consultoria", "local", "forma", "pessoas", "desconto", "preco_final",
+                           "lead_id", "cliente_id", "obs") if f.get(k)}
     q["h"] = [f"{x['dia']}-{x['hora']}-{x['local']}" for x in horarios]
     return "/propostas?" + urlencode(q, doseq=True)
 
@@ -2215,7 +2295,8 @@ def simulador_antigo(request: Request):
 @app.get("/propostas", response_class=HTMLResponse)
 def propostas_tela(request: Request, plano: str = "", local: str = "CIA", forma: str = "PIX", pessoas: int = 1, dia: int = 0, hora: int = 0,
                    desconto: str = "", preco_final: str = "", ajuste: str = "", lead_id: int = 0, cliente_id: int = 0, obs: str = "",
-                   h: list[str] = Query([]), nd: list[int] = Query([]), nh: int = 0, nl: str = "", tira: int = -1, con=Depends(get_db)):
+                   h: list[str] = Query([]), nd: list[int] = Query([]), nh: int = 0, nl: str = "", tira: int = -1,
+                   aulas: str = "", por_semana: str = "", consultoria: str = "", con=Depends(get_db)):
     horarios = _ler_horarios(h)
     if not h and dia:   # link antigo (Explorador, favoritos): um horário só
         horarios = [{"dia": dia, "hora": hora, "local": local}]
@@ -2238,7 +2319,7 @@ def propostas_tela(request: Request, plano: str = "", local: str = "CIA", forma:
         desc, pf, erro = 0.0, None, str(e)
     if plano and not erro:
         try:
-            resultado = simular(con, plano, horarios, forma, pessoas, desc, pf, local)
+            resultado = simular(con, _plano_efetivo(plano, aulas, por_semana), horarios, forma, pessoas, desc, pf, local, consultoria)
         except ValueError as e:
             erro = str(e)
     if pf:   # preço final manda; o desconto/acréscimo aparece no resultado
@@ -2251,8 +2332,10 @@ def propostas_tela(request: Request, plano: str = "", local: str = "CIA", forma:
     locais = db.lista(con, "lista_locais")
     locais += [x["local"] for x in horarios if x["local"] not in locais]
     f = dict(plano=plano, local=local, forma=forma, pessoas=pessoas, desconto=_texto_preco(desc) if desc else "",
-             preco_final=_texto_preco(pf), lead_id=lead_id, cliente_id=cliente_id, obs=obs[:2000])
+             preco_final=_texto_preco(pf), lead_id=lead_id, cliente_id=cliente_id, obs=obs[:2000],
+             aulas=aulas.strip(), por_semana=por_semana.strip(), consultoria=consultoria)
     return render(request, "propostas.html", con, planos=opcoes_plano(con), f=f, r=resultado, erro_sim=erro,
+                  consultorias=CONSULTORIAS, pacote_min=PACOTE_MIN, pacote_max=PACOTE_MAX,
                   horarios=[{**x, "codigo": f"{x['dia']}-{x['hora']}-{x['local']}", "texto": _texto_horario(x["dia"], x["hora"])}
                             for x in horarios],
                   detalhes={(d["dia"], d["hora"], d["local"]): d for d in (resultado or {}).get("horarios", [])},
@@ -2277,17 +2360,19 @@ def proposta_ver(request: Request, pid: int, con=Depends(get_db)):
 @app.post("/propostas")
 def proposta_salvar(plano: str = Form(...), local: str = Form("CIA"), forma: str = Form(...), pessoas: int = Form(1),
                     desconto: str = Form(""), preco_final: str = Form(""), h: list[str] = Form([]), lead_id: str = Form(""),
-                    cliente_id: str = Form(""), observacoes: str = Form(""), confirmar: int = Form(0), con=Depends(get_db)):
+                    cliente_id: str = Form(""), observacoes: str = Form(""), confirmar: int = Form(0),
+                    aulas: str = Form(""), por_semana: str = Form(""), consultoria: str = Form(""), con=Depends(get_db)):
     horarios = _ler_horarios(h)
     f = dict(plano=plano, local=local, forma=forma, pessoas=pessoas, desconto=desconto, preco_final=preco_final,
-             lead_id=lead_id, cliente_id=cliente_id, obs=observacoes[:2000])   # obs: o texto não some quando volta com erro
+             lead_id=lead_id, cliente_id=cliente_id, obs=observacoes[:2000],   # obs: o texto não some quando volta com erro
+             aulas=aulas.strip(), por_semana=por_semana.strip(), consultoria=consultoria)
     url = _url_propostas(f, horarios)
     try:
         desc, pf = _num_campo(desconto, "Desconto") or 0.0, _num_campo(preco_final, "Preço final")
     except ValueError as e:   # volta sem o valor ruim, para a tela abrir normal
         return voltar(_url_propostas({**f, "desconto": "", "preco_final": ""}, horarios), erro=str(e))
     try:
-        r = simular(con, plano, horarios, forma, pessoas, desc, pf, local)
+        r = simular(con, _plano_efetivo(plano, aulas, por_semana), horarios, forma, pessoas, desc, pf, local, consultoria)
     except ValueError as e:
         return voltar(url, erro=str(e))
     if r["abaixo_margem"] and not confirmar:
@@ -2301,11 +2386,13 @@ def proposta_salvar(plano: str = Form(...), local: str = Form("CIA"), forma: str
     with con:
         cur = con.execute("""INSERT INTO propostas (lead_id, cliente_id, tipo_servico, qtd_aulas, freq_semanal, local, forma_pagamento, pessoas,
                              dia, hora, desconto, preco_total, preco_pessoa, custo_total, lucro, margem, lucro_hora, preco_minimo,
-                             desconto_maximo, abaixo_margem, observacoes, preco_cheio, data) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                             desconto_maximo, abaixo_margem, observacoes, preco_cheio, consultoria, data)
+                             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                           (int(lead_id) if lead_id else None, int(cliente_id) if cliente_id else None, r["tipo"], r["qtd"], r["freq"],
                            " + ".join(locais), forma, pessoas, um.get("dia") or None, um.get("hora") or None, r["desconto"], r["preco_total"],
                            r["preco_pessoa"], r["custo_total"], r["lucro"], r["margem"], r["lucro_hora"], r["preco_minimo"],
-                           r["desconto_maximo"], int(r["abaixo_margem"]), observacoes or None, r["preco_cheio"], dt.date.today().isoformat()))
+                           r["desconto_maximo"], int(r["abaixo_margem"]), observacoes or None, r["preco_cheio"],
+                           r["consultoria"] or None, dt.date.today().isoformat()))
         con.executemany("INSERT INTO proposta_horarios (proposta_id, dia, hora, local, multiplicador) VALUES (?,?,?,?,?)",
                         [(cur.lastrowid, d["dia"] or None, d["hora"] or None, d["local"], d["mult"]) for d in r["horarios"]])
     return voltar(f"/propostas/{cur.lastrowid}", msg=f"Proposta #{cur.lastrowid} salva." + aviso_deslocamento(con, [(x["dia"], x["hora"], x["local"]) for x in horarios], int(cliente_id or 0)))
@@ -3190,7 +3277,8 @@ GRUPOS_CONFIG = [("taxa_pagamento", "Taxas por forma de pagamento", "pct"),
                  ("cobranca", "Cobrança de aluno atrasado: multa (uma vez) e juros ao mês, proporcional aos dias. "
                               "Só cobre se estiver no contrato; pelo Código do Consumidor a multa vai até 2%", "pct"),
                  ("familia", "Família: quantas pessoas vivem da renda da PF (Saúde financeira)", "num"),
-                 ("saude", "Saúde financeira: reserva mensal desejada em R$ (entra no ponto de equilíbrio econômico)", "num")]
+                 ("saude", "Saúde financeira: reserva mensal desejada em R$ (entra no ponto de equilíbrio econômico)", "num"),
+                ("pacote_personalizado", "Pacote personalizado (1 a 20 aulas): desconto da consultoria no combo", "pct")]
 
 
 @app.get("/configuracoes", response_class=HTMLResponse)

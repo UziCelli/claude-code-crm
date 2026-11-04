@@ -120,3 +120,47 @@ def test_preco_sugerido_e_o_minimo_arredondado_para_cima():
     assert r["preco_sugerido"] == float(math.ceil(r["preco_minimo"]))
     ajustado = calcular(SMARTFIT_8, P, forma_pagamento="Cartão 3x", preco_final=r["preco_sugerido"])
     assert not ajustado["abaixo_margem"]
+
+
+# ---- Pacote personalizado (1 a 20 aulas) ----
+from app.precos import base_pacote, calcular_misto  # noqa: E402
+
+PACOTES = [dict(tipo_servico="Pacote de Aulas", local="CIA", qtd_aulas=q, preco_base=pb, custo_operacional=co,
+                mao_obra=mo, sessoes_mes=q) for q, pb, co, mo in ((6, 600, 420, 300), (8, 760, 540, 400))]
+
+
+def test_pacote_impar_interpola_entre_os_vizinhos():
+    b = base_pacote(PACOTES, 7)
+    assert (b["qtd_aulas"], b["sessoes_mes"], b["tipo_servico"]) == (7, 7, "Pacote de Aulas")
+    assert b["preco_base"] == pytest.approx(680) and b["custo_operacional"] == pytest.approx(480)
+    assert b["mao_obra"] == pytest.approx(350)
+
+
+def test_pacote_cadastrado_usa_a_linha_exata():
+    assert base_pacote(PACOTES, 8)["preco_base"] == 760
+
+
+def test_pacote_fora_da_faixa_e_proporcional_por_aula():
+    assert base_pacote(PACOTES, 3)["preco_base"] == pytest.approx(300)    # 600/6 x 3
+    assert base_pacote(PACOTES, 20)["preco_base"] == pytest.approx(1900)  # 760/8 x 20
+
+
+def test_aula_avulsa_vira_o_pacote_de_1_normalizada():
+    avulsa = dict(tipo_servico="Aula avulsa", preco_base=320, custo_operacional=200, mao_obra=100, sessoes_mes=2)
+    assert base_pacote(PACOTES, 1, avulsa)["preco_base"] == pytest.approx(160)
+    # entre a avulsa (1) e o de 6: 160 + (600-160) x 2/5
+    assert base_pacote(PACOTES, 3, avulsa)["preco_base"] == pytest.approx(336)
+
+
+def test_pacote_sem_aulas_ou_sem_cadastro_da_erro():
+    with pytest.raises(ValueError):
+        base_pacote(PACOTES, 0)
+    with pytest.raises(ValueError):
+        base_pacote([], 5)
+
+
+def test_extra_soma_preco_e_custo_da_consultoria():
+    sem = calcular(SMARTFIT_8, P)
+    com = calcular_misto([(SMARTFIT_8, 1.0, None)], P, extra=(200, 50))
+    assert com["preco_cheio"] == pytest.approx(sem["preco_cheio"] + 200)
+    assert com["custo_total"] == pytest.approx(sem["custo_total"] + 50)
