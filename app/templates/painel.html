@@ -46,6 +46,14 @@
   {{ kpi('Clientes perdidos no mês', m.clientes_perdidos, '≤ ' ~ metas.perdidos_max|int, '≤ ' ~ metas.perdidos_max|int,
          'verde' if m.clientes_perdidos <= metas.perdidos_max else 'vermelho', atual=m.clientes_perdidos, ant=ant.clientes_perdidos, menor_melhor=true) }}
   {{ kpi('Vendas com margem < 10%', m.vendas_abaixo_10, 0, 0, 'verde' if m.vendas_abaixo_10 == 0 else 'vermelho', atual=m.vendas_abaixo_10, ant=ant.vendas_abaixo_10, menor_melhor=true) }}
+  {% if m.salario_hora %}{% set sh = m.salario_hora %}
+  <div class="kpi {{ '' if sh.usado else 'amarelo' }}">
+    <div class="rotulo">Seu salário por hora</div>
+    <div class="valor">{{ sh.valor_hora|moeda }}</div>
+    <div class="meta">{% if sh.usado %}custos pessoais {{ sh.custo_pessoal|moeda }}/mês ÷ {{ sh.horas|num(0) }} h de trabalho{% else %}valor fixo: lance os gastos da PF para calcular{% endif %}
+      · <a href="/configuracoes#cfg-mao_obra">ajustar</a></div>
+  </div>
+  {% endif %}
   <div class="kpi">
     <div class="rotulo">Nível atual</div>
     <div class="nivel mt" style="margin-top:8px">

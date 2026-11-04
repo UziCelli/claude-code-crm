@@ -90,7 +90,8 @@ PARAMETROS_INICIAIS = [
     ("grupo_mao_obra_extra", "4", 0.55, None, 4),
     # mão de obra = pró-labore (seu salário), pela regra do tempo: horas de trabalho x valor da hora (precos.minutos_trabalho)
     # 46,17/h x (aulas + 1 h de planejamento) é a conta da planilha (pacote de 8 = 415,51; de 4 = 230,84). 0 = regra desligada
-    ("mao_obra", "valor_hora", 46.17, None, 1),
+    ("mao_obra", "valor_hora", 46.17, None, 1),        # usado quando o automático não dá para calcular
+    ("mao_obra", "valor_hora_auto", 1, None, 0),       # 1 = salário por hora = custos pessoais (PF) ÷ horas de trabalho; 0 = o fixo acima
     ("mao_obra", "min_aula", 60, None, 2),
     ("mao_obra", "min_planejamento_pacote", 60, None, 3),
     ("mao_obra", "min_planejamento_mes", 60, None, 4),

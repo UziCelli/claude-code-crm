@@ -14,7 +14,7 @@ def carregar_parametros(con) -> dict:
     from . import db, financeiro
     g = lambda grupo: db.parametros(con, grupo)  # noqa: E731
     taxa_cia, cia_max = taxas_cia(con)
-    return {
+    p = {
         "das": financeiro.pct_das(con),   # alíquota efetiva de hoje pela tabela do Simples
         "taxas": g("taxa_pagamento"),
         "margens": g("margem_minima"),
@@ -25,6 +25,28 @@ def carregar_parametros(con) -> dict:
         "locais": custos_locais(con),
         "mo": g("mao_obra"),
     }
+    auto = valor_hora_automatico(con, p)
+    p["salario_hora"] = auto
+    if auto["usado"]:
+        p["mo"] = {**p["mo"], "valor_hora": auto["valor_hora"]}
+    return p
+
+
+def valor_hora_automatico(con, p: dict) -> dict:
+    """Salário por hora = seus custos pessoais do mês ÷ suas horas de trabalho no mês.
+      Custos pessoais: média das saídas pagas da PF nos 3 meses fechados (financeiro.custo_pessoal_medio).
+      Horas: as da agenda dos alunos ativos + planejamento + consultoria, pela regra do tempo (main.horas_trabalho_mes).
+    usado=False (automático desligado, sem gasto na PF ou sem aluno): vale o valor_hora digitado em Configurações."""
+    from . import financeiro
+    from .main import horas_trabalho_mes, mes_atual
+    mo = p.get("mo") or {}
+    fixo = float(mo.get("valor_hora") or 0)
+    ligado = bool(float(mo.get("valor_hora_auto") or 0)) and fixo > 0   # valor_hora 0 desliga a regra toda
+    custo, meses = financeiro.custo_pessoal_medio(con, mes_atual()) if ligado else (0.0, 0)
+    horas = horas_trabalho_mes(con, p) if ligado else 0.0
+    usado = custo > 0 and horas > 0
+    return {"ligado": ligado, "usado": usado, "custo_pessoal": round(custo, 2), "meses": meses, "horas": round(horas, 1),
+            "valor_hora": round(custo / horas, 2) if usado else fixo, "fixo": fixo}
 
 
 # Serviços e o tempo de trabalho que a regra conta (minutos de Configurações > Mão de obra)

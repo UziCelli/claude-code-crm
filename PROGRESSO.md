@@ -96,7 +96,8 @@ A auditoria financeira de 16/10 tinha 5 PRs: os 5 estão na `main` (#26 a #30). 
 **Decisão aberta**
 - [x] Custo do plano: resolvido pela regra do tempo da mão de obra (seção "Mão de obra = pró-labore", 04/11/2026).
 - [x] Minutos medidos: consultoria 150 min/mês por aluno, avaliação 17,5 min (padrão e migração única do 0, `db.iniciar_banco`).
-- [ ] Configurações → "Mão de obra" → `valor_hora`: definir o salário por hora (hoje 46,17, o da planilha). Conta: salário mensal desejado ÷ horas de trabalho no mês.
+- [x] Salário por hora automático (`valor_hora_auto` = 1): custos pessoais ÷ horas de trabalho. O `valor_hora` 46,17 só vale quando não dá para calcular.
+- [ ] Conferir no Painel o card "Seu salário por hora". Se a PF tiver saídas que não são custo de vida (investimento, pagar a PJ), o valor sai alto.
 
 **Código: o que a auditoria achou e nenhum dos 5 PRs corrigiu (baixa gravidade, ordem sugerida)**
 - [ ] Pacote e avaliação entram em "Mensalidades a receber" todo mês (D2): só deveriam entrar no mês em que foram vendidos.
@@ -298,6 +299,16 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - O deslocamento de um local agora custa pró-labore (antes só baixava o lucro/hora).
 - `mao_obra_aula` (Tabela24) saiu de Configurações: nenhum cálculo usava.
 - Testes: `tests/test_precos.py`, `tests/test_propostas.py`, `tests/test_locais.py`.
+
+## Salário por hora automático (PR `claude/salario-hora-automatico`, 04/11/2026)
+- Pedido do Victor: o salário são os custos pessoais (como a planilha fazia) e as horas vêm da agenda. Tudo ligado.
+- **Valor da hora = custos pessoais do mês ÷ horas de trabalho do mês** (`precos.valor_hora_automatico`, chamado em `carregar_parametros`).
+  - Custos pessoais: média das saídas pagas da PF nos 3 meses fechados (`financeiro.custo_pessoal_medio`).
+  - Horas: alunos ativos, aulas do plano (as da "Agenda ocupada") + deslocamento + planejamento + consultoria, pela regra do tempo (`main.horas_trabalho_mes`). Aluno sem preço base conta só as aulas.
+- Sem gasto na PF, sem aluno ou `valor_hora_auto` = 0: vale o `valor_hora` fixo (46,17).
+- Painel: card "Seu salário por hora" com a conta. Configurações → Mão de obra: linha "Salário por hora em uso".
+- Efeito: o valor entra no pró-labore de todos os preços (Propostas, ficha, Painel, Explorador).
+- Testes: `tests/test_salario_hora.py`.
 
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.

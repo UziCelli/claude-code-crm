@@ -417,6 +417,18 @@ def alertas(con):
 # =====================================================================
 # 6. PAINEL (tela inicial)
 # =====================================================================
+def horas_trabalho_mes(con, p, bases=None) -> float:
+    """Suas horas de trabalho no mês: para cada aluno ativo, as aulas do plano (as da "Agenda ocupada") + deslocamento +
+    planejamento + consultoria, pela regra do tempo (precos.minutos_trabalho). Aluno sem preço base conta só as aulas."""
+    bases = bases if bases is not None else carregar_bases(con)
+    horas = 0.0
+    for c in con.execute("SELECT * FROM clientes WHERE excluido_em IS NULL AND status='ativo'"):
+        base = base_do_cliente(con, c, bases)
+        minutos = precos.minutos_trabalho(dict(base), p, c["local"]) if base else None
+        horas += minutos / 60 if minutos is not None else aulas_mes(c)
+    return horas
+
+
 def calcular_metricas(con, mes=None):
     mes = mes or mes_atual()
     p = precos.carregar_parametros(con)
@@ -450,7 +462,8 @@ def calcular_metricas(con, mes=None):
         nivel = 4
     return dict(mes=mes, clientes_ativos=len(clientes), horas_ocupadas=round(horas, 1), lucro_hora=round(lucro_hora, 2),
                 pct_receita_grupos=(receita_grupos / receita) if receita else 0, faturamento_recorrente=round(receita, 2),
-                clientes_perdidos=perdidos, vendas_abaixo_10=abaixo10, nivel=nivel, espera_pico=espera_pico)
+                clientes_perdidos=perdidos, vendas_abaixo_10=abaixo10, nivel=nivel, espera_pico=espera_pico,
+                salario_hora=p["salario_hora"])
 
 
 def metricas_por_canal(con, mes):
@@ -3301,6 +3314,7 @@ def configuracoes(request: Request, con=Depends(get_db)):
     dados = con.execute("SELECT id, chave, valor_texto FROM parametros WHERE grupo='msg_dados' ORDER BY ordem").fetchall()
     return render(request, "configuracoes.html", con, grupos=grupos, msgs=msgs, msgs_dados=dados, listas_cfg=listas_, precos=precos_, ultima=ultima,
                   planilha=str(db.PLANILHA), planilha_existe=db.PLANILHA.exists(), assistente=assistente.info(),
+                  salario_hora=precos.carregar_parametros(con)["salario_hora"],
                   das=financeiro.das_competencia(con, mes_atual()), das_txt=financeiro.texto_pct(financeiro.pct_das(con, dt.date.today().isoformat())))
 
 
