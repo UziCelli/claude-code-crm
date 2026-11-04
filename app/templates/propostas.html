@@ -9,7 +9,11 @@
     <form method="get" action="/propostas" id="f-prop" class="form-grid">
       {# Enter num campo = Calcular (o 1º botão do formulário), e não o "x" do 1º horário #}
       <button tabindex="-1" aria-hidden="true" style="position:absolute;left:-9999px">Calcular</button>
-      <div class="largo"><label>Plano</label><select name="plano" required><option value="">Escolha</option>{% for p in planos %}<option value="{{ p.valor }}" {{ 'selected' if p.valor == f.plano }}>{{ p.rotulo }}</option>{% endfor %}</select></div>
+      <div class="largo"><label>Plano</label><select name="plano" required><option value="">Escolha</option>{% for p in planos %}<option value="{{ p.valor }}" {{ 'selected' if p.valor == f.plano }}>{{ p.rotulo }}</option>{% endfor %}<option value="personalizado" {{ 'selected' if f.plano == 'personalizado' }}>Pacote personalizado ({{ pacote_min }} a {{ pacote_max }} aulas)</option></select></div>
+      {# pacote personalizado: qualquer nº de aulas (ímpar também); o preço vem dos pacotes cadastrados #}
+      <div><label>Nº de aulas (pacote personalizado)</label><input name="aulas" type="number" min="{{ pacote_min }}" max="{{ pacote_max }}" step="1" value="{{ f.aulas }}" placeholder="ex.: 7"></div>
+      <div><label>Aulas por semana (opcional)</label><input name="por_semana" type="number" min="0" max="7" step="1" value="{{ f.por_semana }}" placeholder="—"></div>
+      <div class="largo"><label>Consultoria</label><select name="consultoria"><option value="">Sem consultoria (pacote avulso)</option>{% for c in consultorias %}<option value="{{ c }}" {{ 'selected' if c == f.consultoria }}>+ {{ c }} (acompanhamento completo)</option>{% endfor %}</select></div>
       <div><label>Forma de pagamento</label><select name="forma">{% for fp in listas.lista_formas_pagamento %}<option {{ 'selected' if fp == f.forma }}>{{ fp }}</option>{% endfor %}</select></div>
       <div><label>Nº de pessoas (CIA: máx. 3)</label><select name="pessoas">{% for n in [1,2,3,4] %}<option {{ 'selected' if n == f.pessoas }}>{{ n }}</option>{% endfor %}</select></div>
 
@@ -46,6 +50,7 @@
   <div class="card borda-{{ r.margem|cor }}">
     <h2>Resultado {% if r.abaixo_margem %}<span class="tag vermelho">abaixo da margem mínima ({{ r.margem_minima|pct }})</span>{% else %}<span class="tag verde">dentro da margem</span>{% endif %}</h2>
     {% for a in r.avisos %}<div class="aviso">{{ a }}</div>{% endfor %}
+    {% if r.consultoria %}<p><span class="tag verde">+ {{ r.consultoria }}</span> {{ r.meses_consultoria }} {{ 'mês' if r.meses_consultoria == 1 else 'meses' }} de acompanhamento, já somado ao preço e ao custo.</p>{% endif %}
     {% if r.media %}<p class="muted">Horários com preços diferentes: o preço é a média deles.</p>{% endif %}
 
     {# ajuste de preço: sobe até a margem mínima ou dá o desconto que cabe #}
@@ -69,7 +74,7 @@
       <div class="kpi"><div class="rotulo">Desconto máximo</div><div class="valor">{{ r.desconto_maximo|pct(1) }}</div><div class="meta">custo {{ r.custo_total|moeda }} · taxas {{ r.impostos_taxas|moeda }}</div></div>
     </div>
     <form method="post" action="/propostas" class="form-grid mt">
-      {% for k in ['plano','local','forma','pessoas','desconto','preco_final'] %}<input type="hidden" name="{{ k }}" value="{{ f[k] }}">{% endfor %}
+      {% for k in ['plano','aulas','por_semana','consultoria','local','forma','pessoas','desconto','preco_final'] %}<input type="hidden" name="{{ k }}" value="{{ f[k] }}">{% endfor %}
       {% for x in horarios %}<input type="hidden" name="h" value="{{ x.codigo }}">{% endfor %}
       <div><label>Lead</label><select name="lead_id"><option value="">—</option>{% for l in leads %}<option value="{{ l.id }}" {{ 'selected' if l.id == f.lead_id }}>{{ l.nome }}</option>{% endfor %}</select></div>
       <div><label>Cliente</label><select name="cliente_id"><option value="">—</option>{% for cl in clientes %}<option value="{{ cl.id }}" {{ 'selected' if cl.id == f.cliente_id }}>{{ cl.nome }}</option>{% endfor %}</select></div>
@@ -86,7 +91,7 @@
   <tr><th>#</th><th class="sec">Data</th><th>Para</th><th>Plano</th><th class="sec">Horários</th><th class="num sec">Pessoas</th><th class="num dest">Preço</th><th class="num">Margem</th><th class="num sec">Lucro/h</th><th>Status</th><th></th></tr>
   {% for p in propostas %}
   <tr class="{{ p.margem|cor }}"><td>{{ p.id }}</td><td>{{ p.data|data }}</td><td>{% if p.cliente_id %}<a href="/clientes/{{ p.cliente_id }}">{{ p.cliente_nome }}</a>{% else %}{{ p.lead_nome or '—' }}{% endif %}</td>
-    <td>{{ p.tipo_servico }} {{ p.qtd_aulas or '' }}{% if p.freq_semanal %}{{ p.freq_semanal }}x/sem{% endif %}{% if p.desconto and p.desconto > 0 %} · -{{ p.desconto|pct }}{% endif %}</td><td>{{ horarios_props[p.id] }}</td>
+    <td>{{ p.tipo_servico }} {{ p.qtd_aulas or '' }}{% if p.freq_semanal %}{{ p.freq_semanal }}x/sem{% endif %}{% if p.consultoria %} + {{ p.consultoria }}{% endif %}{% if p.desconto and p.desconto > 0 %} · -{{ p.desconto|pct }}{% endif %}</td><td>{{ horarios_props[p.id] }}</td>
     <td class="num">{{ p.pessoas }}</td><td class="num">{{ p.preco_total|moeda }}</td><td class="num">{{ p.margem|pct(1) }}</td><td class="num">{{ p.lucro_hora|moeda }}</td>
     <td><form method="post" action="/propostas/{{ p.id }}/status" class="inline"><select name="status" onchange="this.form.submit()" style="width:auto;padding:3px">{% for s in ['rascunho','enviada','aceita','recusada'] %}<option {{ 'selected' if s == p.status }}>{{ s }}</option>{% endfor %}</select></form></td>
     <td><a href="/propostas/{{ p.id }}">Abrir</a> <form method="post" action="/propostas/{{ p.id }}/excluir" class="inline" data-confirmar="Enviar a proposta #{{ p.id }} para a lixeira?"><button class="claro pequeno">x</button></form></td></tr>

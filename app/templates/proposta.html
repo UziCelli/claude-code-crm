@@ -5,7 +5,7 @@
   <div class="proposta-logo">{% include "_logo.html" %}</div>
   <h1>Proposta para {{ prop.para or '—' }}</h1>
   <p class="muted">{{ prop.data|data }} · Válida por 7 dias</p>
-  <p><b>Serviço:</b> {{ prop.tipo_servico }}{% if prop.qtd_aulas %} · {{ prop.qtd_aulas }} aulas{% endif %}{% if prop.freq_semanal %} · {{ prop.freq_semanal }}x/sem{% endif %}</p>
+  <p><b>Serviço:</b> {{ prop.tipo_servico }}{% if prop.qtd_aulas %} · {{ prop.qtd_aulas }} aulas{% endif %}{% if prop.freq_semanal %} · {{ prop.freq_semanal }}x/sem{% endif %}{% if prop.consultoria %} + {{ prop.consultoria }} (acompanhamento completo){% endif %}</p>
   <p><b>Local e horários:</b> {{ horarios_txt }}</p>
   <p><b>Pagamento:</b> {{ prop.forma_pagamento or '—' }} · <b>Pessoas:</b> {{ prop.pessoas }}</p>
   {% if preco_de %}

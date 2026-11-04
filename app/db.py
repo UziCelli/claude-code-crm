@@ -123,6 +123,7 @@ PARAMETROS_INICIAIS = [
     ("colchao", "meses", 0, None, 1),              # meta da Reserva em meses de custo fixo; 0 = sem meta ainda
     ("familia", "pessoas", 2, None, 1),            # quantas pessoas vivem da renda da PF (renda e custo de vida por pessoa na Saúde financeira)
     ("saude", "reserva_mensal_desejada", 0, None, 1),   # R$ por mês que o negócio deveria render para a reserva (ponto de equilíbrio econômico)
+    ("pacote_personalizado", "desconto_consultoria", 0.15, None, 1),  # desconto da consultoria quando vendida junto com o pacote (combo)
     # frente de cada conta no Saldo livre: PF, PJ, Reserva (dinheiro guardado, fica fora do livre) ou Fora (cartões)
     ("conta_escopo", "Contabilizei Bank", None, "PJ", 1),
     ("conta_escopo", "Inter", None, "PF", 2),
@@ -234,6 +235,7 @@ def iniciar_banco(caminho: Path = None) -> None:
         _garantir_coluna(con, "cliente_eventos", "indicado_id", "INTEGER")
         _garantir_coluna(con, "lancamentos", "auto", "TEXT")                   # banco de antes das contas automáticas (DAS e CIA)
         _garantir_coluna(con, "propostas", "preco_cheio", "REAL")              # banco de antes do "de R$ X por R$ Y" na proposta
+        _garantir_coluna(con, "propostas", "consultoria", "TEXT")              # pacote + consultoria (acompanhamento completo)
         # um lançamento automático por conta e competência ('das:2026-10'); NULL (lançado à mão) pode repetir.
         # PC e Render rodam ao mesmo tempo no Turso: o INSERT OR IGNORE em cima deste índice evita o duplicado.
         con.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_lancamentos_auto ON lancamentos (auto)")
