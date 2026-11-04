@@ -350,9 +350,19 @@ document.addEventListener("keydown", function (e) {
     setTimeout(function () { URL.revokeObjectURL(u); }, 10000);
   }
   var prontos = {};
-  forms.forEach(function (f) {   // prepara antes do clique: o compartilhar precisa sair no mesmo toque
+  function preparar(f) {   // prepara antes do clique: o compartilhar precisa sair no mesmo toque
     gerar(f.dataset.cartao).then(function (b) { prontos[f.dataset.cartao] = b; }).catch(function () {});
-  });
+  }
+  function enviado(f) {
+    var b = f.querySelector("button");
+    if (b) b.textContent = "Enviado ✓";
+  }
+  if ("IntersectionObserver" in window) {   // só gera quando aparece (os alertas também ficam no <details> do topo)
+    var obs = new IntersectionObserver(function (vistos) {
+      vistos.forEach(function (v) { if (v.isIntersecting) { obs.unobserve(v.target); preparar(v.target); } });
+    });
+    forms.forEach(function (f) { obs.observe(f); });
+  } else forms.forEach(preparar);
   document.addEventListener("submit", function (e) {
     var f = e.target;
     if (!f.dataset || !f.dataset.cartao || e.defaultPrevented) return;
@@ -364,12 +374,14 @@ document.addEventListener("keydown", function (e) {
         .then(function () {
           return fetch(f.action, { method: "POST", body: new FormData(f), redirect: "manual", credentials: "same-origin" });
         })
+        .then(function () { enviado(f); })
         .catch(function () { /* cancelou o compartilhar: nada registrado */ });
       return;
     }
     // PC (ou sem compartilhar arquivo): baixa a imagem e deixa o formulário abrir o wa.me com o código
     if (blob) baixar(blob);
     else gerar(f.dataset.cartao).then(baixar).catch(function () {});
+    setTimeout(function () { enviado(f); }, 0);
   }, true);
 })();
 

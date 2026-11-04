@@ -321,12 +321,12 @@ def alertas(con):
     lim7 = (hoje + dt.timedelta(days=7)).isoformat()
     out = []
 
-    def add(cor, texto, url, tel=None, modelo=None, nome=None, data=None, extra=None, botao=None, acoes=None):
+    def add(cor, texto, url, tel=None, modelo=None, nome=None, data=None, extra=None, botao=None, acoes=None, cartao=None):
         acoes = list(acoes or [])
         if modelo and not any(x.get("wa") for x in acoes):
             acoes.insert(0, {"wa": True})   # o WhatsApp do modelo vem primeiro, a menos que o alerta o ponha em outra posição
         out.append(dict(grav=GRAV[cor], cor=cor, texto=texto, url=url, tel=tel, modelo=modelo, nome=nome, data=data,
-                        extra=extra, botao=botao, acoes=acoes))
+                        extra=extra, botao=botao, acoes=acoes, cartao=cartao))
 
     def s(n):
         return "s" if n > 1 else ""
@@ -334,14 +334,23 @@ def alertas(con):
     # alunos: UM algoritmo (alu.estado) diz a situação de cada um e traz os botões; aqui só vira alerta
     estados = alu.estado(con, hoje)
     incompletos = []
+    # renovação vencida ou a até 2 dias: o botão do WhatsApp é o mesmo da ficha (cartão-imagem + Pix, registra o evento)
+    cobraveis = [e["id"] for e in estados.values() if e["modelo"] in ("cobranca", "renovacao") and e["renovacao"]]
+    clientes = {r["id"]: r for r in con.execute(
+        f"SELECT id, nome, status, valor FROM clientes WHERE id IN ({','.join('?' * len(cobraveis))})", cobraveis)} if cobraveis else {}
     for e in sorted(estados.values(), key=lambda e: (alu.ORDEM.index(e["situacao"]), e["ordem"])):
         if e["situacao"] == "em_dia":
             continue
         if e["situacao"] == "cadastro_incompleto":
             incompletos.append(e["id"])   # um alerta só para todos, no fim da lista
             continue
+        botao, cartao = e["botao"], None
+        if e["id"] in clientes and e["tel"]:
+            ca = cobranca_atual(con, clientes[e["id"]], {"efetiva": e["renovacao"]["efetiva"], "cob": e["cobranca"], "credito": e["credito"]})
+            if ca:
+                botao, cartao = rotulo_cobranca(ca)[0], {"cid": e["id"], "codigo": ca["codigo"]}
         add(e["cor"], alu.frase(e), f"/clientes/{e['id']}", e["tel"], e["modelo"], e["nome"], e["data_modelo"], extra=e["extra"],
-            botao=e["botao"], acoes=e["acoes"])
+            botao=botao, acoes=e["acoes"], cartao=cartao)
     if estados and not dados_mensagem(con)["pix"]:   # há aluno ativo e a mensagem de renovação não tem para onde mandar o dinheiro
         add("azul", "Cadastre a chave PIX para a mensagem de renovação", "/configuracoes#cfg-msg_dados",
             acoes=[{"rotulo": "Cadastrar PIX", "href": "/configuracoes#cfg-msg_dados"}])

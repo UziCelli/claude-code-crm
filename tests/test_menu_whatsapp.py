@@ -254,7 +254,7 @@ def test_rota_do_cartao(http, con_temp):
     assert f'data-cartao="/clientes/{cid}/cobranca/cartao.svg"' in html and "Copiar código Pix" in html
     sem = cliente(con_temp, "Ana", dia(5))
     assert http.get(f"/clientes/{sem}/cobranca/cartao.svg").status_code == 404
-    assert "cartao.svg" not in http.get(f"/clientes/{sem}").text
+    assert f"/clientes/{sem}/cobranca/cartao.svg" not in http.get(f"/clientes/{sem}").text   # o da Dora aparece nos alertas do topo
 
 
 # ---------- depoimento ----------

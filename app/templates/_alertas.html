@@ -5,7 +5,8 @@
   <li class="{{ a.cor }}"><a href="{{ a.url }}">{{ a.texto }}</a>
     {% if a.acoes %}<div class="acoes-alerta">
       {% for x in a.acoes %}
-      {% if x.wa %}<a class="btn claro pequeno" href="{{ wa(a.tel, modelos[a.modelo]|preencher(a.nome, a.data, a.extra)) }}" target="_blank" rel="noopener">{{ a.botao or 'WhatsApp' }}</a>
+      {% if x.wa and a.cartao %}<form method="post" action="/clientes/{{ a.cartao.cid }}/wa/cobranca" target="_blank" class="inline" data-cartao="/clientes/{{ a.cartao.cid }}/cobranca/cartao.svg" data-codigo="{{ a.cartao.codigo }}"><button type="submit" class="claro pequeno">{{ a.botao }}</button></form>
+      {% elif x.wa %}<a class="btn claro pequeno" href="{{ wa(a.tel, modelos[a.modelo]|preencher(a.nome, a.data, a.extra)) }}" target="_blank" rel="noopener">{{ a.botao or 'WhatsApp' }}</a>
       {% elif x.dialogo %}<button type="button" class="{{ x.classe or 'claro' }} pequeno" data-abrir="{{ x.dialogo }}" data-voltar="{{ request.url.path }}"{% for k, v in x.dados.items() %} data-{{ k }}="{{ v }}"{% endfor %}>{{ x.rotulo }}</button>
       {% else %}<a class="btn claro pequeno" href="{{ x.href }}"{% if x.externo %} target="_blank" rel="noopener"{% endif %}>{{ x.rotulo }}</a>{% endif %}
       {% endfor %}
