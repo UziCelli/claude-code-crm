@@ -128,9 +128,9 @@ def msg(r):
     return unquote(r.headers["location"].split("msg=", 1)[1].split("&")[0]) if "msg=" in r.headers["location"] else None
 
 
-def marcar(http, cid, data, hora=7, estado="feita", avulsa=0, local="CIA"):
+def marcar(http, cid, data, hora=7, estado="feita", avulsa=0, local="CIA", **extra):
     return http.post("/agenda/marcar", data={"cliente_id": cid, "data": data, "hora": hora, "local": local, "estado": estado,
-                                             "avulsa": avulsa, "semana": data}, follow_redirects=False)
+                                             "avulsa": avulsa, "semana": data, **extra}, follow_redirects=False)
 
 
 def ativos(cid, data):
@@ -1128,12 +1128,66 @@ def test_saldo_reposicao_com_falta_tambem_desconta(http):
     assert saldo(ana)["saldo"] == 0   # faltar na reposição perde a reposição
 
 
-def test_saldo_reposicao_desmarcada_vira_2(http):
+def test_desmarcar_a_reposicao_so_cancela_e_nao_da_outra(http):
     ana = aluno("Ana Silva")
     desmarcou(http, ana)
     repor(ana, QUI, 8)
+    r = marcar(http, ana, QUI, 8, "desmarcou", avulsa=1, reposicao=1)
+    assert saldo(ana) == {"devidas": 1, "usadas": 0, "saldo": 1, "agendadas": 0}   # continua devendo só a aula de terça
+    assert consulta("SELECT tipo FROM cliente_eventos WHERE cliente_id=? AND data=? AND excluido_em IS NULL", ana, QUI) == [("cancelada",)]
+    assert "reposição cancelada" in msg(r)
+
+
+def test_cancelar_a_reposicao_volta_o_saldo_de_antes_de_agendar(http):
+    ana = aluno("Ana Silva")
+    desmarcou(http, ana)
+    repor(ana, QUI, 8)
+    marcar(http, ana, QUI, 8, "cancelada", avulsa=1, reposicao=1)
+    assert saldo(ana) == {"devidas": 1, "usadas": 0, "saldo": 1, "agendadas": 0}
+
+
+def test_aula_normal_desmarcada_continua_dando_reposicao(http):
+    ana = aluno("Ana Silva")
+    repor(ana, QUI, 8, reposicao=0)   # avulsa comum (não é reposição): desmarcou repõe
     marcar(http, ana, QUI, 8, "desmarcou", avulsa=1)
+    desmarcou(http, ana)
     assert saldo(ana) == {"devidas": 2, "usadas": 0, "saldo": 2, "agendadas": 0}
+
+
+def test_reposicao_desmarcada_antes_da_correcao_nao_conta_e_aparece_cancelada(http):
+    ana = aluno("Ana Silva")
+    desmarcou(http, ana)
+    repor(ana, QUI, 8)
+    grava("INSERT INTO cliente_eventos (cliente_id, tipo, data, hora) VALUES (?,?,?,?)", ana, "desmarcou", QUI, 8)   # dado antigo
+    assert saldo(ana)["saldo"] == 1
+    con = db.conectar()
+    try:
+        semana = main.aulas_da_semana(con, dt.date.fromisoformat(SEMANA), dt.date(2026, 10, 15))
+        ctl = main.controle_aluno(con, ana, "2026-10", dt.date(2026, 10, 15))
+    finally:
+        con.close()
+    assert [a["estado"] for a in semana if a["data"] == QUI] == ["cancelada"]
+    assert [l["estado"] for l in ctl["linhas"] if l["data"] == QUI] == ["cancelada"]
+    assert ctl["desmarcou"] == 1 and ctl["canceladas"] == 1
+
+
+def test_marcar_varias_desmarcou_na_reposicao_vira_cancelada(http):
+    ana = aluno("Ana Silva")
+    desmarcou(http, ana)
+    repor(ana, QUI, 8)
+    r = lote(http, [item(ana, QUI, 8, "desmarcou", avulsa=1, reposicao=1)])
+    assert "1 cancelada" in msg(r)
+    assert saldo(ana)["saldo"] == 1
+
+
+def test_reposicao_no_proprio_horario_fixo_e_recusada(http):
+    ana = aluno("Ana Silva")
+    fixo(ana, 2, 7)
+    desmarcou(http, ana)
+    r = http.post("/agenda/incluir", data={"cliente_id": ana, "local": "CIA", "repetir": 0, "data": TER, "hora": 7, "reposicao": 1,
+                                          "semana": SEMANA}, follow_redirects=False)
+    assert "outro dia ou hora" in erro(r)
+    assert consulta("SELECT COUNT(*) FROM agenda_avulsas") == [(0,)]
 
 
 def test_saldo_reposicao_excluida_volta_o_saldo(http):
