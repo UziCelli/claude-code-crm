@@ -630,3 +630,6 @@ ol.passos li { margin: 4px 0; }
 .oferta-item:first-of-type { margin-top: 6px; }
 .oferta-resultado { font-weight: 600; color: var(--marinho); margin-top: 2px; }
 .previa-wa { background: #e8f5e9; border: 1px solid #c8e6c9; border-radius: 10px; padding: 10px 12px; font-size: 14px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* cartão de cobrança (prévia na ficha) */
+.cartao-cobranca { display: grid; gap: 8px; justify-items: start; margin: 8px 0; }
+.cartao-cobranca img { width: 100%; max-width: 220px; border-radius: 10px; border: 1px solid var(--borda); }

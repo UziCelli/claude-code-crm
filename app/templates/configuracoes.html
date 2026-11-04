@@ -66,7 +66,12 @@
     <h2>Dados das mensagens</h2>
     <div class="muted">Entram no texto das mensagens. Vazio = some da mensagem.</div>
     {% set rotulos = {'pix': ['Chave PIX', 'CPF, e-mail, telefone ou chave aleatória'], 'link_avaliacao': ['Link para avaliação (Google, opcional)', 'https://...'],
-                      'vantagem': ['Vantagem da indicação', 'uma avaliação física grátis']} %}
+                      'vantagem': ['Vantagem da indicação', 'uma avaliação física grátis'],
+                      'pix_nome': ['Favorecido do PIX (nome da conta)', 'Victor Celli'], 'pix_cidade': ['Cidade do PIX', 'São Paulo'],
+                      'pix_banco': ['Banco do PIX', 'Nubank']} %}
+    {% if not (dados_msg.pix and dados_msg.pix_nome and dados_msg.pix_cidade) %}
+    <div class="aviso mt">Preencha a chave, o favorecido e a cidade do PIX para o cartão de cobrança sair com o QR Code (com o valor).</div>
+    {% endif %}
     {% for m in msgs_dados %}
     <div class="campo"><label for="t_{{ m.id }}">{{ rotulos[m.chave][0] if m.chave in rotulos else m.chave }}</label>
       <input id="t_{{ m.id }}" name="t_{{ m.id }}" value="{{ m.valor_texto or '' }}" placeholder="{{ rotulos[m.chave][1] if m.chave in rotulos else '' }}"></div>
@@ -75,10 +80,10 @@
   <div class="card mt" id="cfg-msg_whatsapp">
     <h2>Mensagens de WhatsApp</h2>
     <div class="muted">Variáveis: <code>{nome}</code> <code>{data}</code> <code>{valor}</code> <code>{pix}</code> <code>{link_avaliacao}</code> <code>{vantagem}</code>.
-      Na cobrança também <code>{dias}</code> <code>{multa}</code> <code>{juros}</code> <code>{total}</code>.
+      Na cobrança (texto do cartão com o QR Pix) também <code>{faltam}</code> <code>{dias}</code> <code>{total}</code>.
       Na renovação, <code>{valor}</code> já traz o desconto do crédito, se houver.</div>
     {% for m in msgs %}
-    <div class="campo"><label>{{ m.chave }}</label><textarea name="t_{{ m.id }}" rows="3">{{ m.valor_texto }}</textarea></div>
+    <div class="campo"><label>{{ wa_rotulo(m.chave) }}</label><textarea name="t_{{ m.id }}" rows="3">{{ m.valor_texto }}</textarea></div>
     {% endfor %}
   </div>
   <div class="mt"><button type="submit">Salvar parâmetros</button></div>

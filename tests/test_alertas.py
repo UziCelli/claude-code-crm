@@ -128,11 +128,12 @@ def test_whatsapp(con_temp):
     assert main.wa("", "oi") == "https://wa.me/?text=oi"
     assert main.wa(None, "Olá & tchau").endswith("?text=Ol%C3%A1%20%26%20tchau")
     modelos = db.parametros(con_temp, "msg_whatsapp")
-    assert set(modelos) == {"renovacao", "falta", "boas_vindas", "reativacao", "cobranca", "indicacao", "dupla", "depoimento", "upsell"}
+    assert set(modelos) == {"renovacao", "falta", "boas_vindas", "reativacao", "cobranca", "indicacao", "dupla", "depoimento", "upsell",
+                           "cobranca_lembrete", "cobranca_hoje", "cobranca_moderada", "cobranca_critica"}
     assert main.preencher(modelos["falta"], "Ana", "01/01/2026").startswith("Oi, Ana!")
     txt = main.preencher(modelos["cobranca"], "Dora", "11/10/2026", {"dias": 20, "valor": "R$ 400,00", "multa": "R$ 8,00",
                                                                      "juros": "R$ 2,67", "total": "R$ 410,67"})
-    assert "{" not in txt and "20 dias" in txt and "R$ 410,67" in txt
+    assert "{" not in txt and "R$ 400,00" in txt and "11/10/2026" in txt
 
 
 def test_alerta_contas_vencidas(con_temp):
@@ -175,7 +176,7 @@ def test_alerta_de_renovacao_some_com_pagamento_e_vira_cobranca_sem_ele(con_temp
     [th] = do_aluno(con_temp, "Dora")
     assert (th["cor"], th["modelo"], th["botao"]) == ("vermelho", "cobranca", "Cobrar R$ 410,67")
     texto = main.preencher(db.parametros(con_temp, "msg_whatsapp")["cobranca"], th["nome"], th["data"], th["extra"])
-    assert "20 dias" in texto and "R$ 8,00" in texto and "R$ 2,67" in texto and "R$ 410,67" in texto
+    assert "R$ 400,00" in texto and "15/10/2026" in texto and "multa" not in texto   # o total atualizado vai no cartão
     sem_valor = cliente(con_temp, "Sem valor", dia(-5), valor=0)
     [sv] = do_aluno(con_temp, "Sem valor")
     assert (sv["modelo"], sv["botao"]) == ("renovacao", None)   # sem valor mensal não dá para calcular: WhatsApp normal

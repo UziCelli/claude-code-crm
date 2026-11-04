@@ -23,15 +23,20 @@ INDICACAO_ANTIGA = ("Oi, {nome}! Tá curtindo os treinos? Se você conhece algu�
 INDICACAO_NOVA = ("Oi, {nome}! Tá curtindo os treinos? Se você conhece alguém que quer começar, me indica! "
                   "Quando a pessoa fechar, você ganha {vantagem} 🎁 Victor | VFITCOACH")
 
+COBRANCA_ANTIGA = ("Oi, {nome}! Tudo bem? Passando para lembrar do pagamento em aberto desde {data} ({dias} dias de atraso): "
+                   "{valor} + multa de {multa} + juros de {juros} = {total}. Pode me mandar o comprovante quando pagar? "
+                   "Obrigado! Victor | VFITCOACH")
+# cobrança por estágio: o texto vai no cartão-imagem (com QR Pix e a assinatura no rodapé); o campo do WhatsApp leva só o código Pix
+COBRANCA_NOVA = ("Oi, {nome}, tudo bem? Sua mensalidade de {valor}, vencida em {data}, ainda não constou aqui. "
+                 "Deve ter sido esquecimento, né? Segue o Pix atualizado.")
+
 # (grupo, chave, valor, valor_texto, ordem) — semeado só se ainda não existir (INSERT OR IGNORE)
 PARAMETROS_INICIAIS = [
     ("msg_whatsapp", "renovacao", None, RENOVACAO_NOVA, 1),
     ("msg_whatsapp", "falta", None, "Oi, {nome}! Senti sua falta nos treinos (última aula em {data}). Está tudo bem? Vamos remarcar? Victor | VFITCOACH", 2),
     ("msg_whatsapp", "boas_vindas", None, "Oi, {nome}! Seja bem-vindo(a) à VFITCOACH! Fico feliz em começar essa jornada com você. Victor | VFITCOACH", 3),
     ("msg_whatsapp", "reativacao", None, "Oi, {nome}! Faz tempo que não nos falamos. Que tal retomarmos os treinos? Tenho novidades para você. Victor | VFITCOACH", 4),
-    ("msg_whatsapp", "cobranca", None, "Oi, {nome}! Tudo bem? Passando para lembrar do pagamento em aberto desde {data} ({dias} dias de atraso): "
-                                       "{valor} + multa de {multa} + juros de {juros} = {total}. Pode me mandar o comprovante quando pagar? "
-                                       "Obrigado! Victor | VFITCOACH", 5),
+    ("msg_whatsapp", "cobranca", None, COBRANCA_NOVA, 5),
     # campanhas que o CRM sugere (Saúde financeira): agregam valor ao trabalho, nunca dão desconto
     ("msg_whatsapp", "indicacao", None, INDICACAO_NOVA, 6),
     ("msg_whatsapp", "dupla", None, "Oi, {nome}! Que tal treinar com um amigo ou amiga? Em dupla o treino rende mais, é mais animado e "
@@ -42,9 +47,22 @@ PARAMETROS_INICIAIS = [
     ("msg_dados", "pix", None, "", 1),
     ("msg_dados", "link_avaliacao", None, "", 2),
     ("msg_dados", "vantagem", None, "uma avaliação física grátis", 3),
+    # favorecido, cidade e banco do Pix: o QR com valor (cartão de cobrança) precisa de nome e cidade
+    ("msg_dados", "pix_nome", None, "", 4),
+    ("msg_dados", "pix_cidade", None, "", 5),
+    ("msg_dados", "pix_banco", None, "", 6),
     # oferta de upsell (Campanhas): {duracao}, {depois} e {ate} já vêm escritos ou vazios; nada fica pendurado
     ("msg_whatsapp", "upsell", None, "Oi, {nome}! Tenho uma proposta: {titulo}. Inclui: {inclui}. De {valor_normal} por {valor_oferta}/mês{duracao}{depois}.{ate} "
                                      "Quer aproveitar? Victor | VFITCOACH", 9),
+    # os outros estágios da cobrança (o de 1 a 9 dias de atraso é o "cobranca" acima)
+    ("msg_whatsapp", "cobranca_lembrete", None, "Oi, {nome}! Tudo bem? Passando só pra lembrar que faltam {faltam} dias para o vencimento "
+                                                "da sua mensalidade de {valor}, no dia {data}. O Pix está logo abaixo pra facilitar.", 10),
+    ("msg_whatsapp", "cobranca_hoje", None, "Bom dia, {nome}! Hoje vence a sua mensalidade de {valor}. Consegue dar uma olhadinha? "
+                                            "O Pix está logo abaixo.", 11),
+    ("msg_whatsapp", "cobranca_moderada", None, "Oi, {nome}. Como estão as coisas? Sua mensalidade está vencida desde {data} ({dias} dias). "
+                                                "Se aconteceu algum imprevisto, me avisa aqui pra gente dar um jeito.", 12),
+    ("msg_whatsapp", "cobranca_critica", None, "{nome}, sua mensalidade está vencida há mais de um mês (desde {data}). "
+                                               "Me chama aqui pra fecharmos um acordo e evitar o bloqueio do serviço.", 13),
     # cobrança de mensalidade atrasada (botão "Cobrar" no alerta): multa uma vez + juros ao mês proporcional aos dias
     ("cobranca", "multa", 0.02, None, 1),
     ("cobranca", "juros_ao_mes", 0.01, None, 2),
@@ -186,7 +204,8 @@ def iniciar_banco(caminho: Path = None) -> None:
             "INSERT OR IGNORE INTO parametros (grupo, chave, valor, valor_texto, ordem) VALUES (?,?,?,?,?)",
             PARAMETROS_INICIAIS,
         )
-        for chave, antigo, novo in (("renovacao", RENOVACAO_ANTIGA, RENOVACAO_NOVA), ("indicacao", INDICACAO_ANTIGA, INDICACAO_NOVA)):
+        for chave, antigo, novo in (("renovacao", RENOVACAO_ANTIGA, RENOVACAO_NOVA), ("indicacao", INDICACAO_ANTIGA, INDICACAO_NOVA),
+                                    ("cobranca", COBRANCA_ANTIGA, COBRANCA_NOVA)):
             con.execute("UPDATE parametros SET valor_texto=? WHERE grupo='msg_whatsapp' AND chave=? AND valor_texto=?", (novo, chave, antigo))
         for grupo, itens in LISTAS_INICIAIS.items():
             con.executemany(

@@ -18,10 +18,11 @@ from urllib.parse import quote, urlencode
 from jinja2 import pass_context
 from fastapi import Depends, FastAPI, Form, Query, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from . import cartao, pix   # código Pix copia-e-cola, QR e o cartão-imagem da cobrança
 from . import acesso, assistente, atualizar, contas_auto, db, exportar, financeiro, importar, precos, sugestoes, vigia
 from . import locais as loc   # "+ Novo local": custos do local, preços e grade ('locais' é nome de variável nas telas)
 from . import indicacoes   # quem indicou quem e o presente da indicação (brinde, nunca desconto)
@@ -161,9 +162,9 @@ def texto_cobranca(cob) -> dict:
 
 
 def dados_mensagem(con) -> dict:
-    """{pix, link_avaliacao, vantagem} de Configurações > Dados das mensagens (vazio se não cadastrado)."""
+    """{pix, pix_nome, pix_cidade, pix_banco, link_avaliacao, vantagem} de Configurações > Dados das mensagens (vazio se não cadastrado)."""
     d = db.parametros(con, "msg_dados")
-    return {k: str(d.get(k) or "").strip() for k in ("pix", "link_avaliacao", "vantagem")}
+    return {k: str(d.get(k) or "").strip() for k in ("pix", "pix_nome", "pix_cidade", "pix_banco", "link_avaliacao", "vantagem")}
 
 
 templates.env.filters["preencher"] = preencher_filtro
@@ -670,7 +671,9 @@ def renovacao_e_cobranca(con, c):
 
 # ---------- menu WhatsApp da ficha: os itens e o texto enviado saem do mesmo cálculo ----------
 WA_ROTULOS = {"cobranca": "Cobrar", "renovacao": "Renovação", "falta": "Falta", "boas_vindas": "Boas-vindas", "reativacao": "Reativação",
-              "indicacao": "Indicação", "dupla": "Treino em dupla", "depoimento": "Pedir depoimento"}
+              "indicacao": "Indicação", "dupla": "Treino em dupla", "depoimento": "Pedir depoimento",
+              "cobranca_lembrete": "Cobrança: lembrete", "cobranca_hoje": "Cobrança: vence hoje",
+              "cobranca_moderada": "Cobrança: moderada", "cobranca_critica": "Cobrança: crítica"}
 WA_ORDEM = ("renovacao", "falta", "boas_vindas", "reativacao", "indicacao", "dupla", "depoimento")   # a cobrança, quando há, vem antes de todos
 DEPOIMENTO_DIAS = 90   # depois de pedir, o item fica marcado por tantos dias
 
@@ -679,13 +682,73 @@ def wa_rotulo(modelo) -> str:
     return WA_ROTULOS.get(modelo) or modelo.replace("_", " ").capitalize()
 
 
+templates.env.globals["wa_rotulo"] = wa_rotulo   # Configurações mostra o nome bonito de cada modelo
+
+
+# ---------- cobrança por estágio: d = dias até a renovação efetiva (negativo = atraso) ----------
+ESTAGIOS = {"lembrete": ("Lembrete", "cobranca_lembrete"), "hoje": ("Vence hoje", "cobranca_hoje"),
+            "esquecimento": ("Esquecimento", "cobranca"), "moderada": ("Moderada", "cobranca_moderada"),
+            "critica": ("Crítica", "cobranca_critica")}
+
+
+def estagio_cobranca(d: int) -> str | None:
+    """O estágio da cobrança pelo número de dias até o vencimento; None quando ainda falta mais de 2 dias."""
+    if d > 2:
+        return None
+    if d >= 1:
+        return "lembrete"
+    if d == 0:
+        return "hoje"
+    return "esquecimento" if d > -10 else "moderada" if d > -30 else "critica"
+
+
+def cobranca_atual(con, c, ctx) -> dict | None:
+    """A cobrança do dia (estágio, modelo, valor, texto do cartão e código Pix) ou None se não há o que cobrar.
+    ctx = wa_contexto. Lembrete e vence hoje cobram a mensalidade (menos o crédito); depois do vencimento, o total atualizado."""
+    efetiva = ctx.get("efetiva")
+    if c["status"] != "ativo" or not data_iso(efetiva):
+        return None
+    d = (dt.date.fromisoformat(efetiva) - dt.date.today()).days
+    estagio = estagio_cobranca(d)
+    if not estagio:
+        return None
+    cob = ctx.get("cob")
+    if d < 0 and not cob:
+        return None
+    valor = cob["total"] if d < 0 else max(float(c["valor"] or 0) - ctx["credito"], 0)
+    if valor <= 0:
+        return None
+    nome, modelo = ESTAGIOS[estagio]
+    modelos = db.parametros(con, "msg_whatsapp")
+    dados = dados_mensagem(con)
+    extra = {**dados, **(texto_cobranca(cob) if cob else {}), "valor": moeda(valor), "total": moeda(valor),
+             "faltam": max(d, 0), "dias": max(-d, 0)}
+    texto = preencher(modelos.get(modelo) or modelos.get("cobranca") or "", c["nome"], data_br(efetiva), extra)
+    return {"estagio": estagio, "nome": nome, "modelo": modelo, "faltam": max(d, 0), "dias": max(-d, 0), "vencimento": efetiva,
+            "valor": valor, "rotulo_valor": "Total atualizado" if d < 0 else "Valor", "cob": cob, "texto": texto,
+            "codigo": pix.br_code(dados["pix"], dados["pix_nome"], dados["pix_cidade"], valor), "dados": dados}
+
+
+def rotulo_cobranca(ca) -> tuple[str, str]:
+    """(rótulo, sub) do item de cobrança no menu WhatsApp."""
+    v = moeda(ca["valor"])
+    if ca["estagio"] == "lembrete":
+        return f"Lembrete: vence em {ca['faltam']} dia{'s' if ca['faltam'] > 1 else ''}", v
+    if ca["estagio"] == "hoje":
+        return f"Vence hoje · {v}", ""
+    if ca["estagio"] == "critica":
+        return f"Cobrança crítica · {v}", f"{ca['dias']} dias"
+    return f"Cobrar {v} · {ca['dias']} dia{'s' if ca['dias'] > 1 else ''}", ""
+
+
 def wa_contexto(con, c, renovacao=None, cob=None) -> dict:
     """O que as mensagens de um aluno precisam: renova (data), cob, a data da última aula, o crédito e a frase do {valor} da renovação."""
     if renovacao is None:
         renovacao, cob = renovacao_e_cobranca(con, c)
     ult = con.execute("SELECT MAX(data) FROM cliente_eventos WHERE cliente_id=? AND tipo='aula' AND excluido_em IS NULL", (c["id"],)).fetchone()[0]
     livres = financeiro.creditos(con, c["id"]).get(c["id"], [])
-    return {"renova": (renovacao["efetiva"] if renovacao else c["data_renovacao"]) or "", "cob": cob, "ultima_aula": ult,
+    return {"renova": (renovacao["efetiva"] if renovacao else c["data_renovacao"]) or "", "efetiva": renovacao["efetiva"] if renovacao else "",
+            "cob": cob, "ultima_aula": ult,
             "credito": financeiro.credito_aplicavel(livres, c["valor"])[0], "valor": alu.frase_valor(c["valor"], livres)}
 
 
@@ -703,12 +766,13 @@ def wa_texto(con, c, modelo) -> tuple[str | None, str | None]:
     d = wa_data_modelo(modelo, ctx)
     if "{data}" in modelos[modelo] and not data_iso(d):
         return None, "Falta a data para essa mensagem: complete o cadastro."
-    extra = dados_mensagem(con)
-    if modelo == "cobranca":
-        if not ctx["cob"]:
+    if modelo == "cobranca":   # o estágio sai do vencimento; o WhatsApp leva só o código Pix (o texto vai no cartão)
+        ca = cobranca_atual(con, c, ctx)
+        if not ca:
             return None, "Esse aluno não tem cobrança em aberto."
-        extra.update(texto_cobranca(ctx["cob"]))
-    elif modelo == "renovacao":
+        return ca["codigo"] or ca["texto"], None
+    extra = dados_mensagem(con)
+    if modelo == "renovacao":
         extra["valor"] = ctx["valor"]
     return preencher(modelos[modelo], c["nome"], data_br(d) if d else "", extra), None
 
@@ -722,16 +786,17 @@ def wa_menu(con, c, renovacao, cob, eventos) -> dict:
                    and e["data"] >= limite), None)   # eventos vêm do mais novo para o mais antigo
     recebido = bool(pedido) and any(e["tipo"] == "depoimento" and e["data"] >= pedido for e in eventos)
     itens = []
-    for k in (["cobranca"] if cob else []) + [k for k in WA_ORDEM if k in modelos]:
+    ca = cobranca_atual(con, c, ctx)
+    for k in (["cobranca"] if ca else []) + [k for k in WA_ORDEM if k in modelos]:
         if k != "cobranca" and "{data}" in modelos[k] and not data_iso(wa_data_modelo(k, ctx)):
             continue   # precisa de data e o aluno não tem
         rotulo, sub = wa_rotulo(k), ""
         if k == "cobranca":
-            rotulo += " " + moeda(cob["total"])
+            rotulo, sub = rotulo_cobranca(ca)
         elif k == "renovacao" and ctx["valor"]:
             sub = moeda(max(float(c["valor"] or 0) - ctx["credito"], 0))
         itens.append({"modelo": k, "rotulo": rotulo, "sub": sub, "destaque": k == "cobranca", "pedido_em": pedido if k == "depoimento" else None})
-    return {"itens": itens, "depoimento_aberto": bool(pedido) and not recebido}
+    return {"itens": itens, "depoimento_aberto": bool(pedido) and not recebido, "cobranca": ca}
 
 
 @app.get("/clientes/{cid}", response_class=HTMLResponse)
@@ -849,10 +914,23 @@ def cliente_wa(cid: int, modelo: str, con=Depends(get_db)):
     texto, erro = wa_texto(con, c, modelo)
     if erro:
         return voltar(f"/clientes/{cid}", erro=erro)
+    rotulo = wa_rotulo(modelo)
+    if modelo == "cobranca":
+        rotulo += f" ({cobranca_atual(con, c, wa_contexto(con, c))['nome']})"
     with con:
         con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, descricao) VALUES (?, 'mensagem', ?, ?)",
-                    (cid, dt.date.today().isoformat(), "WhatsApp: " + wa_rotulo(modelo)))
+                    (cid, dt.date.today().isoformat(), "WhatsApp: " + rotulo))
     return RedirectResponse(wa(c["telefone"], texto), status_code=303)   # sempre https://wa.me/...: o destino não vem do navegador
+
+
+@app.get("/clientes/{cid}/cobranca/cartao.svg")
+def cliente_cartao(cid: int, con=Depends(get_db)):
+    """O cartão de cobrança do dia (SVG): o texto do estágio, o QR Pix, os dados de pagamento e a logo."""
+    c = con.execute("SELECT * FROM clientes WHERE id=? AND excluido_em IS NULL", (cid,)).fetchone()
+    ca = cobranca_atual(con, c, wa_contexto(con, c)) if c else None
+    if not ca:
+        return PlainTextResponse("Sem cobrança em aberto.", status_code=404)
+    return Response(cartao.svg(ca, moeda, data_br), media_type="image/svg+xml", headers={"Cache-Control": "no-store"})
 
 
 @app.post("/clientes/{cid}/depoimento")

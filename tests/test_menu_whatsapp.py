@@ -142,7 +142,8 @@ def test_migracao_nao_sobrescreve_renovacao_editada(tmp_path, monkeypatch):
 
 def test_modelo_depoimento_e_dados_semeados(con_temp):
     assert "{link_avaliacao}" in db.parametros(con_temp, "msg_whatsapp")["depoimento"]
-    assert db.parametros(con_temp, "msg_dados") == {"pix": "", "link_avaliacao": "", "vantagem": "uma avaliação física grátis"}
+    assert db.parametros(con_temp, "msg_dados") == {"pix": "", "link_avaliacao": "", "vantagem": "uma avaliação física grátis",
+                                                    "pix_nome": "", "pix_cidade": "", "pix_banco": ""}
 
 
 # ---------- a rota que registra e abre o WhatsApp ----------
@@ -185,13 +186,75 @@ def test_wa_que_precisa_de_data_sem_data_volta_com_erro(http, con_temp):
     assert r.headers["location"].startswith(f"/clientes/{cid}?erro=")
 
 
-def test_wa_cobrar_usa_o_texto_da_cobranca(http, con_temp):
+def test_wa_cobrar_sem_favorecido_leva_o_texto_do_estagio(http, con_temp):
     cid = cliente(con_temp, "Dora", dia(-20))
     host, texto = enviado(http.post(f"/clientes/{cid}/wa/cobranca", follow_redirects=False))
-    assert "20 dias de atraso" in texto and "R$ 410,67" in texto
-    assert con_temp.execute("SELECT descricao FROM cliente_eventos WHERE tipo='mensagem'").fetchone()[0] == "WhatsApp: Cobrar"
+    assert "vencida desde" in texto and "(20 dias)" in texto and "multa de" not in texto
+    assert con_temp.execute("SELECT descricao FROM cliente_eventos WHERE tipo='mensagem'").fetchone()[0] == "WhatsApp: Cobrar (Moderada)"
     sem_atraso = cliente(con_temp, "Ana", dia(5))
     assert http.post(f"/clientes/{sem_atraso}/wa/cobranca", follow_redirects=False).headers["location"].startswith(f"/clientes/{sem_atraso}?erro=")
+
+
+def pix_completo(con):
+    definir(con, "pix", PIX)
+    definir(con, "pix_nome", "Victor Célli")
+    definir(con, "pix_cidade", "São Paulo")
+    definir(con, "pix_banco", "Nubank")
+
+
+def test_wa_cobrar_com_pix_leva_so_o_codigo(http, con_temp):
+    pix_completo(con_temp)
+    cid = cliente(con_temp, "Dora", dia(-5))
+    host, texto = enviado(http.post(f"/clientes/{cid}/wa/cobranca", follow_redirects=False))
+    assert texto.startswith("000201") and PIX in texto and "VICTOR CELLI" in texto and "Dora" not in texto
+    assert con_temp.execute("SELECT descricao FROM cliente_eventos WHERE tipo='mensagem'").fetchone()[0] == "WhatsApp: Cobrar (Esquecimento)"
+
+
+def test_cobrar_conta_como_pedido_em(http, con_temp):
+    cid = cliente(con_temp, "Dora", dia(-5))
+    http.post(f"/clientes/{cid}/wa/cobranca", follow_redirects=False)
+    assert "WhatsApp: Cobrar (Esquecimento)" in http.get(f"/clientes/{cid}").text
+
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize("d, estagio, rotulo, trecho", [
+    (2, "lembrete", "Lembrete: vence em 2 dias", "faltam 2 dias"),
+    (1, "lembrete", "Lembrete: vence em 1 dia", "faltam 1 dias"),
+    (0, "hoje", "Vence hoje", "Hoje vence"),
+    (-5, "esquecimento", "Cobrar R$", "esquecimento"),
+    (-15, "moderada", "· 15 dias", "(15 dias)"),
+    (-40, "critica", "Cobrança crítica", "mais de um mês"),
+])
+def test_estagios_da_cobranca(http, con_temp, d, estagio, rotulo, trecho):
+    cid = cliente(con_temp, "Dora", dia(d))
+    m = menu(http.get(f"/clientes/{cid}").text)
+    assert m.index("/wa/cobranca") < m.index("/wa/renovacao") and rotulo in m
+    c = con_temp.execute("SELECT * FROM clientes WHERE id=?", (cid,)).fetchone()
+    ca = main.cobranca_atual(con_temp, c, main.wa_contexto(con_temp, c))
+    assert ca["estagio"] == estagio and trecho in ca["texto"] and "multa de" not in ca["texto"]
+    assert ca["rotulo_valor"] == ("Total atualizado" if d < 0 else "Valor")
+
+
+def test_sem_cobranca_com_mais_de_2_dias(http, con_temp):
+    cid = cliente(con_temp, "Ana", dia(3))
+    assert "/wa/cobranca" not in menu(http.get(f"/clientes/{cid}").text)
+    assert main.estagio_cobranca(3) is None and main.estagio_cobranca(-9) == "esquecimento" and main.estagio_cobranca(-10) == "moderada"
+    assert main.estagio_cobranca(-29) == "moderada" and main.estagio_cobranca(-30) == "critica"
+
+
+def test_rota_do_cartao(http, con_temp):
+    pix_completo(con_temp)
+    cid = cliente(con_temp, "Dora", dia(-5))
+    r = http.get(f"/clientes/{cid}/cobranca/cartao.svg")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("image/svg+xml")
+    assert "<svg" in r.text and "Nubank" in r.text and "Victor | VFITCOACH" in r.text and "000201" in r.text
+    html = http.get(f"/clientes/{cid}").text
+    assert f'data-cartao="/clientes/{cid}/cobranca/cartao.svg"' in html and "Copiar código Pix" in html
+    sem = cliente(con_temp, "Ana", dia(5))
+    assert http.get(f"/clientes/{sem}/cobranca/cartao.svg").status_code == 404
+    assert "cartao.svg" not in http.get(f"/clientes/{sem}").text
 
 
 # ---------- depoimento ----------
@@ -258,7 +321,8 @@ def test_configuracoes_salva_os_dados_das_mensagens(http, con_temp):
     r = http.post("/configuracoes", data={f"t_{ids['pix']}": f" {PIX} ", f"t_{ids['link_avaliacao']}": "https://g.page/r/abc",
                                           f"t_{ids['vantagem']}": "uma aula grátis"}, follow_redirects=False)
     assert r.status_code == 303
-    assert main.dados_mensagem(con_temp) == {"pix": PIX, "link_avaliacao": "https://g.page/r/abc", "vantagem": "uma aula grátis"}
+    assert main.dados_mensagem(con_temp) == {"pix": PIX, "link_avaliacao": "https://g.page/r/abc", "vantagem": "uma aula grátis",
+                                             "pix_nome": "", "pix_cidade": "", "pix_banco": ""}
 
 
 def test_configuracoes_nao_grava_texto_em_outro_grupo(http, con_temp):

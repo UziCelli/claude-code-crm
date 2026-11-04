@@ -9,3 +9,4 @@ pyjwt[crypto]>=2.8   # portaria do CRM publicado (Cloudflare Access)
 anthropic>=2.3      # tela Assistente (chat com o Claude)
 pytest>=8
 httpx>=0.27
+segno>=1.6         # QR Code do Pix (Python puro)
