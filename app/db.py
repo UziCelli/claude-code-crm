@@ -94,8 +94,8 @@ PARAMETROS_INICIAIS = [
     ("mao_obra", "min_aula", 60, None, 2),
     ("mao_obra", "min_planejamento_pacote", 60, None, 3),
     ("mao_obra", "min_planejamento_mes", 60, None, 4),
-    ("mao_obra", "min_consultoria_mes", 0, None, 5),   # 0 = usa a mão de obra da planilha
-    ("mao_obra", "min_avaliacao", 0, None, 6),         # 0 = usa a mão de obra da planilha
+    ("mao_obra", "min_consultoria_mes", 150, None, 5),   # por aluno; 0 = usa a mão de obra da planilha
+    ("mao_obra", "min_avaliacao", 17.5, None, 6),        # 0 = usa a mão de obra da planilha
     ("metas", "clientes_dez26", 14, None, 1),
     ("metas", "clientes_mar27", 18, None, 2),
     ("metas", "horas_vendaveis", 97, None, 3),
@@ -213,6 +213,11 @@ def iniciar_banco(caminho: Path = None) -> None:
             "INSERT OR IGNORE INTO parametros (grupo, chave, valor, valor_texto, ordem) VALUES (?,?,?,?,?)",
             PARAMETROS_INICIAIS,
         )
+        # minutos medidos pelo Victor (04/11/2026): o banco criado com o 0 inicial recebe o valor; 0 digitado depois volta a valer
+        for chave, novo in (("min_consultoria_mes", 150), ("min_avaliacao", 17.5)):
+            con.execute("""UPDATE parametros SET valor=? WHERE grupo='mao_obra' AND chave=? AND valor=0
+                           AND NOT EXISTS (SELECT 1 FROM parametros WHERE grupo='migracao' AND chave='mao_obra_minutos')""", (novo, chave))
+        con.execute("INSERT OR IGNORE INTO parametros (grupo, chave, valor, ordem) VALUES ('migracao', 'mao_obra_minutos', 1, 1)")
         for chave, antigo, novo in (("renovacao", RENOVACAO_ANTIGA, RENOVACAO_NOVA), ("indicacao", INDICACAO_ANTIGA, INDICACAO_NOVA),
                                     ("cobranca", COBRANCA_ANTIGA, COBRANCA_NOVA)):
             con.execute("UPDATE parametros SET valor_texto=? WHERE grupo='msg_whatsapp' AND chave=? AND valor_texto=?", (novo, chave, antigo))
