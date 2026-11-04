@@ -59,7 +59,7 @@
         <span class="muted" style="width:18px">{{ '%' if g.fmt == 'pct' }}</span>
       </div>
       {% endfor %}
-      {% if g.grupo == 'mao_obra' %}{% include "_salario_hora.html" %}{% endif %}
+      {% if g.grupo == 'mao_obra' %}{% include "_salario_hora.html" %}<p><a href="/calculos">Ver a conta do lucro e todas as variáveis num lugar só</a></p>{% endif %}
     </div>
     {% endfor %}
   </div>

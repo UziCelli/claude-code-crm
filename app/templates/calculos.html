@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1>Cálculos do lucro</h1>
+<p class="muted">Tudo que entra no lucro e na margem, num lugar só. Mude um valor e salve: painel, preços e propostas usam na hora.</p>
+
+{% set c = cobre %}
+<div class="card mt" id="cobre">
+  <h2>O mês cobre os seus custos?</h2>
+  <table>
+    <tr><td>Mensalidades dos alunos ativos</td><td class="num">{{ c.receita|moeda }}</td></tr>
+    <tr><td>− Impostos ({{ das_txt }}% de DAS) e taxas de pagamento</td><td class="num">{{ c.impostos|moeda }}</td></tr>
+    <tr><td>− Custos do negócio (local, CIA, deslocamento)</td><td class="num">{{ c.negocio|moeda }}</td></tr>
+    <tr><td>− Seus custos pessoais {% if c.pessoal_pf %}(média dos gastos da PF){% else %}(mão de obra dos alunos){% endif %}</td><td class="num">{{ c.pessoal|moeda }}</td></tr>
+    <tr><th>{{ 'Sobra no mês' if c.cobre else 'Falta no mês' }}</th>
+        <th class="num" style="color:var(--{{ 'verde' if c.cobre else 'vermelho' }})">{{ (c.sobra if c.cobre else -c.sobra)|moeda }}</th></tr>
+  </table>
+  <p class="mt"><strong>{% if c.cobre %}Sim: cobre tudo e ainda sobra.{% else %}Ainda não: faltam {{ (-c.sobra)|moeda }} por mês para cobrir tudo.{% endif %}</strong></p>
+  {% if c.sem_base %}<p class="muted">{{ c.sem_base }} aluno(s) sem preço base: a mensalidade entra, mas os custos deles não (confira em Preços base).</p>{% endif %}
+</div>
+
+{% set sh = salario_hora %}
+<div class="card mt">
+  <h2>Seu salário por hora</h2>
+  {% if sh.usado %}
+  <p><strong>{{ sh.valor_hora|moeda }}</strong> = custos pessoais {{ sh.custo_pessoal|moeda }}/mês ÷ {{ sh.horas_base|num(0) }} h.</p>
+  <p class="muted">Divide pelas horas da agenda cheia ({{ sh.horas_cheia|num(0) }} h), não só pelas de hoje ({{ sh.horas|num(0) }} h).
+    Assim cada aluno paga a parte dele do seu salário, e não o salário inteiro dividido pelos poucos alunos de agora.
+    Se o mês cobre tudo está no quadro acima.</p>
+  {% else %}{% include "_salario_hora.html" %}{% endif %}
+</div>
+
+<form method="post" action="/configuracoes" class="mt">
+  <input type="hidden" name="voltar" value="/calculos">
+  <div class="grid c2">
+    {% for g in grupos %}
+    <div class="card">
+      <h2>{{ g.titulo }}</h2>
+      {% for it in g.itens %}
+      <div class="campo linha">
+        <label style="flex:1;margin:0" for="p_{{ it.id }}">{{ rotulos.get(it.chave, it.chave) }}</label>
+        <input type="hidden" name="f_{{ it.id }}" value="{{ g.fmt }}">
+        <input id="p_{{ it.id }}" name="p_{{ it.id }}" style="width:120px" value="{{ (((it.valor * 100)|round(2)) if g.fmt == 'pct' else (it.valor|round(4)))|string|replace('.', ',') }}">
+        <span class="muted" style="width:18px">{{ '%' if g.fmt == 'pct' }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+  <p class="muted mt">Tempo e custo de deslocamento de cada local: na <a href="/grade">Grade</a> (editar o local). Custos de cada plano: em <a href="/configuracoes">Preços base</a>.</p>
+  <button class="btn mt">Salvar</button>
+</form>
+{% endblock %}
