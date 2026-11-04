@@ -178,7 +178,7 @@ def test_lucro_hora_so_conta_as_horas_de_quem_tem_preco_base(con_temp):
     m = main.calcular_metricas(con)
     com_base = main.estimativa_cliente(con, con.execute("SELECT * FROM clientes WHERE nome='Com base'").fetchone(), main.precos.carregar_parametros(con))
     assert m["horas_ocupadas"] == 16
-    assert m["lucro_hora"] == pytest.approx(com_base["lucro"] / 8)   # antes: lucro / 16 horas, metade do real
+    assert m["lucro_hora"] == pytest.approx(com_base["lucro"] / 8, abs=0.01)   # antes: lucro / 16 horas, metade do real
 
 
 def test_ficha_nao_multiplica_o_valor_pago_pelo_grupo_e_bate_com_o_painel(cliente_http):

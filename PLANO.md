@@ -95,7 +95,7 @@ Convenções: `id INTEGER PRIMARY KEY`, datas ISO no banco (exibidas dd/mm/aaaa)
 ## Motor de preços (`precos.py`, função pura)
 Entrada: tipo, qtd_aulas/freq, local, forma_pagamento, pessoas, dia, hora, desconto.
 1. `preco = preco_base × multiplicador_horario × multiplicador_grupo × (1 − desconto)`
-2. `custo = custo_operacional + mao_obra × extra_grupo + (taxa_cia[pessoas] − taxa_cia[1]) × sessoes` (só na CIA; erro se pessoas > 3)
+2. `custo = (custo_operacional − mao_obra da planilha) + mão de obra da regra × (1 + extra_grupo) + (taxa_cia[pessoas] − taxa_cia[1]) × sessoes` (só na CIA; erro se pessoas > 3). Mão de obra da regra = horas de trabalho × valor da hora (`precos.custo_servico`)
 3. `liquido = preco × (1 − DAS − taxa_cartao)`; `lucro = liquido − custo`; `margem = lucro / preco`; `lucro_hora = lucro / sessoes`
 4. `preco_minimo` = menor preço com margem = margem_minima; `desconto_maximo = 1 − preco_minimo / preco_sem_desconto`
 Saída: preco_total, preco_pessoa, lucro, margem, lucro_hora, preco_minimo, desconto_maximo, abaixo_margem.

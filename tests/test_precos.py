@@ -164,3 +164,64 @@ def test_extra_soma_preco_e_custo_da_consultoria():
     com = calcular_misto([(SMARTFIT_8, 1.0, None)], P, extra=(200, 50))
     assert com["preco_cheio"] == pytest.approx(sem["preco_cheio"] + 200)
     assert com["custo_total"] == pytest.approx(sem["custo_total"] + 50)
+
+
+# ---- Mão de obra = pró-labore pela regra do tempo ----
+from app.precos import custo_servico, minutos_trabalho  # noqa: E402
+
+MO = {"valor_hora": 46.1676, "min_aula": 60, "min_planejamento_pacote": 60, "min_planejamento_mes": 60,
+      "min_consultoria_mes": 0, "min_avaliacao": 0}
+PR = {**P, "mo": MO}
+
+
+def test_regra_reproduz_a_mao_de_obra_da_planilha():
+    """A planilha já fazia (aulas + 1 h de planejamento) x 46,17/h: 8 aulas = 415,51 e 4 aulas = 230,84."""
+    assert custo_servico(SMARTFIT_8, PR)[1] == pytest.approx(415.5081, abs=0.01)
+    assert custo_servico(CIA_4, PR)[1] == pytest.approx(230.8378, abs=0.01)
+    r = calcular(SMARTFIT_8, PR)
+    assert r["lucro"] == pytest.approx(139.84, abs=0.02)   # mesmo lucro da planilha
+    assert r["mao_obra"] == pytest.approx(415.51, abs=0.01) and r["horas"] == 9
+
+
+def test_mao_de_obra_sai_do_custo_operacional_e_entra_a_da_regra():
+    """Custo operacional da planilha = resto + mão de obra: a hora mais cara sobe o custo só pela diferença."""
+    caro = {**PR, "mo": {**MO, "valor_hora": 60}}
+    resto, mo, horas = custo_servico(SMARTFIT_8, caro)
+    assert resto == pytest.approx(736.2353 - 415.5081) and mo == pytest.approx(540) and horas == 9
+    assert calcular(SMARTFIT_8, caro)["custo_total"] == pytest.approx(resto + 540, abs=0.01)
+
+
+def test_pacote_personalizado_conta_o_tempo_pelo_numero_de_aulas():
+    b = base_pacote(PACOTES, 5)
+    assert minutos_trabalho(b, PR) == 5 * 60 + 60
+
+
+def test_mensalidade_usa_o_planejamento_do_mes():
+    mens = dict(tipo_servico="Mensalidade", preco_base=900, custo_operacional=500, mao_obra=300, sessoes_mes=8.66)
+    assert minutos_trabalho(mens, {**PR, "mo": {**MO, "min_planejamento_mes": 30}}) == pytest.approx(8.66 * 60 + 30)
+
+
+def test_deslocamento_do_local_e_tempo_de_trabalho():
+    p = {**PR, "locais": {"Longe": {"tempo_deslocamento": 30}}}
+    assert minutos_trabalho({**SMARTFIT_8, "local": "Longe"}, p) == 8 * 90 + 60
+
+
+def test_grupo_soma_o_esforco_extra_sobre_a_mao_de_obra():
+    solo, dupla = calcular(SMARTFIT_8, PR), calcular(SMARTFIT_8, PR, pessoas=2)
+    assert dupla["mao_obra"] == pytest.approx(solo["mao_obra"] * 1.2, abs=0.01)
+    assert dupla["custo_total"] - solo["custo_total"] == pytest.approx(solo["mao_obra"] * 0.2, abs=0.01)
+
+
+def test_consultoria_e_avaliacao_sem_minutos_usam_a_planilha():
+    cons = dict(tipo_servico="Consultoria Online", preco_base=300, custo_operacional=100, mao_obra=60, sessoes_mes=0)
+    assert minutos_trabalho(cons, PR) is None
+    assert custo_servico(cons, PR) == (40, 60, 1.0)
+    com_min = {**PR, "mo": {**MO, "min_consultoria_mes": 90}}
+    assert custo_servico(cons, com_min)[1:] == pytest.approx((1.5 * 46.1676, 1.5))
+    aval = dict(tipo_servico="Avaliação Física", preco_base=150, custo_operacional=50, mao_obra=40, sessoes_mes=1)
+    assert minutos_trabalho(aval, {**PR, "mo": {**MO, "min_avaliacao": 75}}) == 75
+
+
+def test_valor_hora_zero_desliga_a_regra():
+    assert minutos_trabalho(SMARTFIT_8, {**PR, "mo": {**MO, "valor_hora": 0}}) is None
+    assert calcular(SMARTFIT_8, {**PR, "mo": {**MO, "valor_hora": 0}}) == calcular(SMARTFIT_8, P)
