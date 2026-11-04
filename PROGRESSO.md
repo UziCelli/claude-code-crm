@@ -94,7 +94,8 @@ A auditoria financeira de 16/10 tinha 5 PRs: os 5 estão na `main` (#26 a #30). 
 - [ ] **Bancos no CRM (Open Finance), adiado:** a conta no Pluggy já foi criada; falta conectar os bancos. O banco PJ é a **Dock**: ela tem área de Open Finance no app, mas não aparece nas sugestões de conexão do Pluggy. Ao retomar: (1) procurar "Dock" pelo CNPJ ou nome, no sandbox e em produção; (2) se não aparecer, perguntar ao suporte do Pluggy se a Dock é suportada; (3) sem suporte, usar o extrato OFX/CSV da Dock com o importador do CRM. O código (saldos em `saldos`, transações em `lancamentos` com `origem` única) só começa depois disso. Chaves do Pluggy só no `.env`, nunca no repo.
 
 **Decisão aberta**
-- [ ] Custo do plano no painel, na ficha e no simulador: hoje todos usam o custo operacional + extras de grupo (o do PLANO). Se preferir o "custo total" da planilha (inclui mão de obra), é uma troca pequena em `estimativa_cliente` (`app/main.py`).
+- [x] Custo do plano: resolvido pela regra do tempo da mão de obra (seção "Mão de obra = pró-labore", 04/11/2026).
+- [ ] Configurações → "Mão de obra": preencher os minutos da consultoria por mês e da avaliação (0 = ainda usa a planilha).
 
 **Código: o que a auditoria achou e nenhum dos 5 PRs corrigiu (baixa gravidade, ordem sugerida)**
 - [ ] Pacote e avaliação entram em "Mensalidades a receber" todo mês (D2): só deveriam entrar no mês em que foram vendidos.
@@ -280,6 +281,22 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Desconto da consultoria no combo: Configurações → "Pacote personalizado" (15% de início).
 - A proposta salva guarda a consultoria (coluna `propostas.consultoria`) e o PDF mostra "+ Consultoria … (acompanhamento completo)".
 - Testes: `tests/test_precos.py`, `tests/test_propostas.py`.
+
+## Mão de obra = pró-labore, pela regra do tempo (PR `claude/mao-de-obra-regra-tempo`, 04/11/2026)
+- Decisão do Victor: **mão de obra = pró-labore (salário)**, sempre custo; **lucro = o que sobra para investir na empresa**.
+- Regra (`precos.minutos_trabalho` e `precos.custo_servico`): **mão de obra = horas de trabalho × valor da hora** (Configurações → "Mão de obra").
+  - Pacote / Aula avulsa: aulas × (aula + deslocamento do local) + planejamento do pacote.
+  - Mensalidade: aulas do mês × (aula + deslocamento) + planejamento do mês.
+  - Consultoria: minutos por mês (+ as aulas da Híbrida). Avaliação: minutos + deslocamento. **0 = usa o valor da planilha.**
+  - Grupo: o esforço extra (`grupo_mao_obra_extra`, +20%/+35%/+55%) incide sobre essa mão de obra.
+  - Valor da hora 0 = regra desligada (tudo como a planilha).
+- Valores iniciais = a conta da planilha: 46,17/h × (aulas + 1 h de planejamento). Pacote de 8 = 415,51; de 4 = 230,84. Os preços de hoje não mudam.
+- O "Custo Operacional" da planilha já traz a mão de obra dentro: o motor tira a da planilha e põe a da regra.
+- Corrigido: o acompanhamento completo somava a mão de obra da consultoria **duas vezes** (custo operacional + mão de obra).
+- Lucro/hora divide pelas **horas de trabalho** (aulas + deslocamento + planejamento + consultoria). Propostas mostram o pró-labore e as horas.
+- O deslocamento de um local agora custa pró-labore (antes só baixava o lucro/hora).
+- `mao_obra_aula` (Tabela24) saiu de Configurações: nenhum cálculo usava.
+- Testes: `tests/test_precos.py`, `tests/test_propostas.py`, `tests/test_locais.py`.
 
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.

@@ -69,9 +69,9 @@
       <div class="kpi"><div class="rotulo">Preço total</div><div class="valor">{{ r.preco_total|moeda }}</div><div class="meta">cheio {{ r.preco_cheio|moeda }}{% if r.desconto > 0 %} · desconto {{ r.desconto|pct(1) }}{% elif r.desconto < 0 %} · acréscimo {{ (-r.desconto)|pct(1) }}{% endif %}{% if r.mult != 1 %} · horário x{{ r.mult|num(2) }}{% endif %}</div></div>
       <div class="kpi"><div class="rotulo">Por pessoa</div><div class="valor">{{ r.preco_pessoa|moeda }}</div><div class="meta">{{ f.pessoas }} pessoa(s)</div></div>
       <div class="kpi {{ r.margem|cor }}"><div class="rotulo">Margem</div><div class="valor">{{ r.margem|pct(1) }}</div><div class="meta">lucro {{ r.lucro|moeda }}</div></div>
-      <div class="kpi"><div class="rotulo">Lucro por hora</div><div class="valor">{{ r.lucro_hora|moeda }}</div><div class="meta">{{ r.sessoes|num(0) }} sessões</div></div>
+      <div class="kpi"><div class="rotulo">Lucro por hora</div><div class="valor">{{ r.lucro_hora|moeda }}</div><div class="meta">{{ r.sessoes|num(0) }} sessões · {{ r.horas|num(1) }} h de trabalho</div></div>
       <div class="kpi"><div class="rotulo">Preço mínimo</div><div class="valor">{{ r.preco_minimo|moeda }}</div><div class="meta">para margem {{ r.margem_minima|pct }}</div></div>
-      <div class="kpi"><div class="rotulo">Desconto máximo</div><div class="valor">{{ r.desconto_maximo|pct(1) }}</div><div class="meta">custo {{ r.custo_total|moeda }} · taxas {{ r.impostos_taxas|moeda }}</div></div>
+      <div class="kpi"><div class="rotulo">Desconto máximo</div><div class="valor">{{ r.desconto_maximo|pct(1) }}</div><div class="meta">custo {{ r.custo_total|moeda }} (pró-labore {{ r.mao_obra|moeda }}) · taxas {{ r.impostos_taxas|moeda }}</div></div>
     </div>
     <form method="post" action="/propostas" class="form-grid mt">
       {% for k in ['plano','aulas','por_semana','consultoria','local','forma','pessoas','desconto','preco_final'] %}<input type="hidden" name="{{ k }}" value="{{ f[k] }}">{% endfor %}

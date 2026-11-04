@@ -2210,9 +2210,10 @@ def _base_plano(con, tipo, qtd, freq, loc, forma):
     return base
 
 
-def _extra_consultoria(con, consultoria, tipo, qtd, freq, loc, forma, pessoas):
-    """(preço, custo, meses) da consultoria somada ao pacote (acompanhamento completo).
-    Meses = quanto tempo o pacote dura (aulas ÷ aulas por semana; sem frequência, 2x por semana)."""
+def _extra_consultoria(con, consultoria, tipo, qtd, freq, loc, forma, pessoas, p):
+    """(preço, custo, mão de obra, horas, meses) da consultoria somada ao pacote (acompanhamento completo).
+    Meses = quanto tempo o pacote dura (aulas ÷ aulas por semana; sem frequência, 2x por semana).
+    Custo pelo motor (precos.custo_servico): o custo operacional da planilha já traz a mão de obra, então ela não soma de novo."""
     if consultoria not in CONSULTORIAS:
         raise ValueError(f"Consultoria desconhecida: {consultoria}")
     if tipo.startswith("Consultoria"):
@@ -2228,8 +2229,9 @@ def _extra_consultoria(con, consultoria, tipo, qtd, freq, loc, forma, pessoas):
         meses = 1
     combo = db.parametros(con, "pacote_personalizado").get("desconto_consultoria", 0.15)
     preco = meses * float(row["preco_base"] or 0) * (1 - combo) * pessoas
-    custo = meses * (float(row["custo_operacional"] or 0) + float(row["mao_obra"] or 0)) * pessoas
-    return preco, custo, meses
+    resto, mo, horas = precos.custo_servico(dict(row), p, row["local"])
+    n = meses * pessoas
+    return preco, (resto + mo) * n, mo * n, horas * n, meses
 
 
 def simular(con, plano, horarios, forma, pessoas, desconto=0.0, preco_final=None, local="CIA", consultoria=""):
@@ -2261,7 +2263,7 @@ def simular(con, plano, horarios, forma, pessoas, desconto=0.0, preco_final=None
         detalhes.append({**hh, "mult": mult, "preco_cheio": um["preco_cheio"], "status": status})
     extra, meses = None, 0
     if consultoria:
-        *extra, meses = _extra_consultoria(con, consultoria, tipo, qtd, freq, itens[0][2], forma, max(1, int(pessoas)))
+        *extra, meses = _extra_consultoria(con, consultoria, tipo, qtd, freq, itens[0][2], forma, max(1, int(pessoas)), p)
     r = precos.calcular_misto(itens, p, pessoas=pessoas, desconto=desconto / 100, forma_pagamento=forma, preco_final=preco_final,
                               extra=tuple(extra) if extra else None)
     r.update(consultoria=consultoria or "", meses_consultoria=meses)
@@ -3265,7 +3267,10 @@ GRUPOS_CONFIG = [("taxa_pagamento", "Taxas por forma de pagamento", "pct"),
                  ("margem_minima", "Margem mínima por serviço", "pct"), ("taxa_cia", "Taxa da CIA por pessoa (R$) e máximo de pessoas", "num"),
                  ("grupo_multiplicador", "Multiplicador de preço por nº de pessoas", "num"),
                  ("grupo_mao_obra_extra", "Mão de obra extra por nº de pessoas", "pct"), ("metas", "Metas do painel", "num"),
-                 ("mao_obra_aula", "Mão de obra por aula (tipo|qtd)", "num"), ("lead_parado_dias", "Limite de dias parado por etapa", "num"),
+                 ("mao_obra", "Mão de obra = pró-labore (seu salário): valor da hora (R$; 0 = usa a planilha) e minutos de "
+                              "trabalho (aula, planejamento por pacote e por mês de mensalidade, consultoria por mês, avaliação; "
+                              "0 = usa a planilha). O deslocamento vem de cada local. O lucro é o que sobra depois disso", "num"),
+                 ("lead_parado_dias", "Limite de dias parado por etapa", "num"),
                  ("funil_chance", "Chance de fechar por etapa do funil", "pct"),
                  ("fiscal", "Fiscal: salário mínimo (R$), pró-labore e INSS (frações, ex.: 0,28 = 28%)", "num"),
                  ("salario", "Salário fixo da PJ para a PF: valor (R$ por mês; 0 = desligado) e dia do pagamento", "num"),

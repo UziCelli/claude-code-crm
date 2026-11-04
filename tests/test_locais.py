@@ -88,13 +88,17 @@ def test_maximo_de_pessoas_e_pessoa_extra(con):
         precos.calcular(b, p, pessoas=3)
 
 
-def test_tempo_de_deslocamento_baixa_o_lucro_por_hora(con):
+def test_tempo_de_deslocamento_e_trabalho_pago(con):
+    """30 min de deslocamento por aula = 4 h a mais no pacote de 8: entram no pró-labore (custo) e nas horas do lucro/hora."""
     locais.criar_local(con, "A", "CIA", "preco", taxa_aula=40)
     locais.criar_local(con, "B", "CIA", "preco", taxa_aula=40, tempo_deslocamento=30)
     p = precos.carregar_parametros(con)
     a, b = precos.calcular(_base(con, "A"), p), precos.calcular(_base(con, "B"), p)
-    assert a["lucro"] == b["lucro"]
-    assert b["lucro_hora"] == pytest.approx(a["lucro_hora"] / 1.5, abs=0.01)
+    valor_hora = p["mo"]["valor_hora"]
+    assert b["horas"] == pytest.approx(a["horas"] + 4)
+    assert b["mao_obra"] - a["mao_obra"] == pytest.approx(4 * valor_hora, abs=0.01)
+    assert a["lucro"] - b["lucro"] == pytest.approx(4 * valor_hora, abs=0.01)
+    assert b["lucro_hora"] == pytest.approx(b["lucro"] / b["horas"], abs=0.01)
 
 
 @pytest.fixture

@@ -117,7 +117,7 @@ def _com_consultoria():
     con = db.conectar()
     with con:
         con.execute("""INSERT INTO precos_base (tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal, preco_base,
-                       custo_operacional, mao_obra, sessoes_mes) VALUES ('Consultoria Online', 'Online', 'PIX', 1, 0, 300, 40, 60, 1)""")
+                       custo_operacional, mao_obra, sessoes_mes) VALUES ('Consultoria Online', 'Online', 'PIX', 1, 0, 300, 100, 60, 1)""")
     return con
 
 
@@ -139,7 +139,10 @@ def test_personalizado_com_consultoria_soma_os_meses(http):
     # 8 aulas 2x/semana = 4 semanas = 1 mês; consultoria 300 com 15% de desconto no combo
     assert com["meses_consultoria"] == 1
     assert com["preco_cheio"] == pytest.approx(sem["preco_cheio"] + 255, abs=0.01)
+    # custo operacional 100 da planilha já traz os 60 de mão de obra: não soma de novo (antes: 160)
     assert com["custo_total"] == pytest.approx(sem["custo_total"] + 100, abs=0.01)
+    assert com["mao_obra"] == pytest.approx(sem["mao_obra"] + 60, abs=0.01)
+    assert com["horas"] > sem["horas"]   # o tempo da consultoria entra no lucro/hora
     longo = main.simular(con, main._plano_efetivo("personalizado", "20", "1"), h, "PIX", 1, consultoria="Consultoria Online")
     assert longo["meses_consultoria"] == 5   # 20 semanas ≈ 4,6 meses -> 5
     tela = c.get("/propostas", params={"plano": "personalizado", "aulas": 7, "consultoria": "Consultoria Online", "h": ["1-10-CIA"]})
