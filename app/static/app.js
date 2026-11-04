@@ -314,3 +314,78 @@ document.addEventListener("click", function (e) {
 document.addEventListener("keydown", function (e) {
   if (e.key === "Escape") document.querySelectorAll("details.menu-wa[open]").forEach(function (m) { m.open = false; });
 });
+
+// Cobrança no WhatsApp: o cartão (SVG do servidor) vira PNG. No celular vai pelo compartilhar (imagem + código Pix de legenda);
+// no PC baixa o PNG e o formulário abre o wa.me só com o código (é só anexar a imagem baixada). O POST registra o evento.
+(function () {
+  var forms = document.querySelectorAll("form[data-cartao]");
+  if (!forms.length) return;
+  var celular = window.matchMedia && matchMedia("(pointer: coarse)").matches;
+  var pngs = {};
+  function gerar(url) {
+    if (!pngs[url]) pngs[url] = fetch(url, { credentials: "same-origin" })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.blob(); })
+      .then(function (svg) {
+        return new Promise(function (ok, falha) {
+          var img = new Image(), u = URL.createObjectURL(svg);
+          img.onload = function () {
+            setTimeout(function () {   // a fonte embutida termina de carregar
+              var cv = document.createElement("canvas");
+              cv.width = img.naturalWidth || 1080; cv.height = img.naturalHeight || 1600;
+              cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+              URL.revokeObjectURL(u);
+              cv.toBlob(function (b) { b ? ok(b) : falha(new Error("png")); }, "image/png");
+            }, 150);
+          };
+          img.onerror = function () { URL.revokeObjectURL(u); falha(new Error("svg")); };
+          img.src = u;
+        });
+      });
+    return pngs[url];
+  }
+  function baixar(blob) {
+    var a = document.createElement("a"), u = URL.createObjectURL(blob);
+    a.href = u; a.download = "cobranca.png";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(u); }, 10000);
+  }
+  var prontos = {};
+  forms.forEach(function (f) {   // prepara antes do clique: o compartilhar precisa sair no mesmo toque
+    gerar(f.dataset.cartao).then(function (b) { prontos[f.dataset.cartao] = b; }).catch(function () {});
+  });
+  document.addEventListener("submit", function (e) {
+    var f = e.target;
+    if (!f.dataset || !f.dataset.cartao || e.defaultPrevented) return;
+    var blob = prontos[f.dataset.cartao];
+    var arq = blob && typeof File === "function" ? new File([blob], "cobranca.png", { type: "image/png" }) : null;
+    if (celular && arq && navigator.canShare && navigator.canShare({ files: [arq] })) {
+      e.preventDefault();
+      navigator.share({ files: [arq], text: f.dataset.codigo || "" })
+        .then(function () {
+          return fetch(f.action, { method: "POST", body: new FormData(f), redirect: "manual", credentials: "same-origin" });
+        })
+        .catch(function () { /* cancelou o compartilhar: nada registrado */ });
+      return;
+    }
+    // PC (ou sem compartilhar arquivo): baixa a imagem e deixa o formulário abrir o wa.me com o código
+    if (blob) baixar(blob);
+    else gerar(f.dataset.cartao).then(baixar).catch(function () {});
+  }, true);
+})();
+
+// Copiar texto (ex.: código Pix copia-e-cola)
+document.addEventListener("click", function (e) {
+  var b = e.target.closest("[data-copiar]");
+  if (!b) return;
+  var texto = b.dataset.copiar, rotulo = b.textContent;
+  function feito() { b.textContent = "Copiado!"; setTimeout(function () { b.textContent = rotulo; }, 1800); }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(texto).then(feito, function () { alert(texto); });
+  } else {
+    var t = document.createElement("textarea");
+    t.value = texto; t.setAttribute("readonly", ""); t.style.position = "fixed"; t.style.opacity = "0";
+    document.body.appendChild(t); t.select();
+    try { document.execCommand("copy"); feito(); } catch (err) { alert(texto); }
+    t.remove();
+  }
+});

@@ -20,7 +20,7 @@
         <a class="menu-wa-item" href="#telefone">Cadastre o telefone</a>
         {% else %}
         {% for it in menu_wa.itens %}
-        <form method="post" action="/clientes/{{ c.id }}/wa/{{ it.modelo }}" target="_blank" class="inline">
+        <form method="post" action="/clientes/{{ c.id }}/wa/{{ it.modelo }}" target="_blank" class="inline"{% if it.modelo == 'cobranca' and menu_wa.cobranca %} data-cartao="/clientes/{{ c.id }}/cobranca/cartao.svg" data-codigo="{{ menu_wa.cobranca.codigo }}"{% endif %}>
           <button type="submit" class="menu-wa-item{{ ' destaque' if it.destaque }}{{ ' feito' if it.pedido_em }}">
             <span>{{ it.rotulo }}{% if it.sub %} <small>{{ it.sub }}</small>{% endif %}</span>
             {% if it.pedido_em %}<small>pedido em {{ it.pedido_em[8:10] }}/{{ it.pedido_em[5:7] }}</small>{% endif %}
@@ -103,7 +103,13 @@
     {% if renovacao and renovacao.ciclos %}<p class="muted">Andou com {{ {'pagamento': 'o pagamento', 'renovacao': 'a renovação marcada', 'pausa': 'o mês pulado'}[renovacao.motivo] }} de {{ renovacao.motivo_data|data }} (no cadastro: {{ renovacao.gravada|data }}).</p>{% endif %}
     {% if renovacao and renovacao.pendente %}<p class="muted">Renovação marcada, pagamento ainda não lançado: falta {{ renovacao.falta|moeda }}.</p>{% endif %}
     <div class="linha" style="margin:8px 0"><button class="verde pequeno" data-abrir="dlg-pgto" data-titulo="Registrar pagamento de {{ c.nome }}" data-cliente_id="{{ c.id }}" data-valor="{{ ('%.2f'|format(a_pagar))|replace('.', ',') if a_pagar else '' }}"{% if cred %} data-nota="Crédito de {{ cred|moeda }} descontado"{% endif %} data-descricao="Mensalidade {{ data_iso(renova)[5:7] if data_iso(renova) else hoje()[5:7] }}/{{ data_iso(renova)[:4] if data_iso(renova) else hoje()[:4] }}" data-voltar="/clientes/{{ c.id }}">Registrar pagamento</button><span class="muted">a renovação anda sozinha</span></div>
-    {% if cobranca %}<p class="muted">Com multa e juros: {{ cobranca.total|moeda }} ({{ cobranca.valor|moeda }} + multa {{ cobranca.multa|moeda }} + juros {{ cobranca.juros|moeda }}).</p>{% endif %}
+    {% if cobranca %}<p class="muted" title="{{ cobranca.valor|moeda }} + multa {{ cobranca.multa|moeda }} + juros {{ cobranca.juros|moeda }}">Total atualizado: {{ cobranca.total|moeda }}</p>{% endif %}
+    {% if menu_wa and menu_wa.cobranca %}
+    <div class="cartao-cobranca">
+      <img src="/clientes/{{ c.id }}/cobranca/cartao.svg" alt="Cartão de cobrança ({{ menu_wa.cobranca.nome }})" loading="lazy">
+      {% if menu_wa.cobranca.codigo %}<button type="button" class="claro pequeno" data-copiar="{{ menu_wa.cobranca.codigo }}">Copiar código Pix</button>{% endif %}
+    </div>
+    {% endif %}
     <form method="post" action="/clientes/{{ c.id }}/evento" class="linha" data-confirmar="Pular a renovação de {{ renova|data }} sem cobrança?">
       <input type="hidden" name="tipo" value="pausa"><input type="hidden" name="data" value="{{ hoje() }}">
       <label for="volta" style="margin:0">Pulou o mês? Volta em</label>

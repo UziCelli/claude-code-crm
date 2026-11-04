@@ -258,6 +258,14 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Consulta SQL do assistente roda com `PRAGMA query_only=ON` (2ª trava contra gravação).
 - Testes: `tests/test_seguranca.py`.
 
+## Cobrança no WhatsApp por estágio + cartão com QR Pix (PR `claude/cobranca-whatsapp`, 04/11/2026)
+- 5 estágios pelo dia do vencimento (só aluno ativo): Lembrete (faltam 1–2 dias), Vence hoje, Esquecimento (1–9 dias de atraso), Moderada (10–29), Crítica (30+). O menu mostra só o do dia, em destaque.
+- Textos editáveis em Configurações (`cobranca_lembrete`, `cobranca_hoje`, `cobranca`, `cobranca_moderada`, `cobranca_critica`), sem multa e juros no texto. Migração troca o texto antigo de `cobranca` só se ainda for o original.
+- Cartão-imagem (`app/cartao.py`, rota `/clientes/{cid}/cobranca/cartao.svg`): texto do estágio, QR Pix com valor, valor/vencimento/favorecido/banco/chave, código copia-e-cola, logo e "Victor | VFITCOACH".
+- Pix copia-e-cola e QR sem serviço externo (`app/pix.py`, lib `segno`). Precisa de favorecido e cidade em Configurações; sem eles o cartão sai sem QR, só com a chave.
+- O botão gera o PNG: no celular abre o compartilhar (imagem + código); no PC baixa o PNG e abre o wa.me com só o código (anexar a imagem à mão). O evento registra o estágio.
+- Testes: `tests/test_pix.py`, `tests/test_menu_whatsapp.py`, `tests/test_alertas.py`.
+
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.
 - Nomes de serviço no CRM: Pacote de Aulas, Mensalidade, Consultoria Online, Consultoria Híbrida, Avaliação Física.
