@@ -231,6 +231,12 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Propostas: as observações voltam preenchidas quando o salvar dá erro.
 - Contas automáticas: conta em aberto (do app, sem edição) cujo mês zerou é apagada; volta sozinha se o valor voltar. Paga ou editada fica.
 
+## Editar e excluir local (PR `claude/locais-editar`, 04/11/2026)
+- Grade de um local criado pelo "+ Novo local": botões **Editar local** (mesmo pop-up, nome travado) e **Excluir local**.
+- Editar troca os custos e refaz os preços de Pacote e Mensalidade pela diferença do custo por aula (manter margem ou manter preço). A grade fica.
+- O nome não muda: está gravado em alunos, agenda, grade e contas automáticas.
+- Excluir é recusado enquanto houver aluno não inativo, horário fixo ou célula ocupada no local; senão apaga custos, preços, grade e o nome da lista. Aulas e contas antigas ficam.
+
 ## Decisões tomadas
 - Canais antigos da planilha: CLT→Outro, Totem-CIA→Parceria (síndico/academia), Conecta→Conecta Fitness, Instagram→Instagram orgânico, PersonalGo→canal próprio.
 - Nomes de serviço no CRM: Pacote de Aulas, Mensalidade, Consultoria Online, Consultoria Híbrida, Avaliação Física.

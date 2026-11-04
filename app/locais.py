@@ -65,10 +65,7 @@ def criar_local(con, nome: str, referencia: str = "CIA", modo: str = "margem", *
         raise ValueError(f"'{outro}' já existe. Use esse nome")
     if referencia not in referencias(con):
         raise ValueError("Escolha a CIA ou um local criado aqui para copiar os preços")
-    c = {k: max(0.0, float(custos.get(k) or 0)) for k in CAMPOS}
-    c["max_pessoas"] = int(c["max_pessoas"])
-    if c["taxa_mensal"] and not c["aulas_mes"]:
-        raise ValueError("Com taxa mensal, diga quantas aulas por mês você dá nesse local (para dividir a taxa)")
+    c = _custos(custos)
     ref_aula = custo_aula_local(con, referencia)
     novo_aula = precos.custo_por_aula(c)
     linhas = con.execute(f"SELECT * FROM precos_base WHERE local=? AND tipo_servico IN ({','.join('?' * len(TIPOS_COM_AULA))})",
@@ -77,6 +74,74 @@ def criar_local(con, nome: str, referencia: str = "CIA", modo: str = "margem", *
         return _gravar(con, nome, referencia, modo, c, novo_aula - ref_aula, linhas)
     except sqlite3.IntegrityError:   # outro aparelho criou o mesmo local ao mesmo tempo
         raise ValueError(f"'{nome}' já existe. Recarregue a tela") from None
+
+
+def _custos(custos: dict) -> dict:
+    c = {k: max(0.0, float(custos.get(k) or 0)) for k in CAMPOS}
+    c["max_pessoas"] = int(c["max_pessoas"])
+    if c["taxa_mensal"] and not c["aulas_mes"]:
+        raise ValueError("Com taxa mensal, diga quantas aulas por mês você dá nesse local (para dividir a taxa)")
+    return c
+
+
+def _preco_novo(preco: float, custo_ref: float, custo: float, modo: str) -> tuple[float, bool]:
+    """(preço, manteve?) — modo margem: mesma razão custo/preço = mesma margem; custo zero não dá razão, então o preço fica."""
+    if modo != "margem" or custo == custo_ref:
+        return preco, False
+    if custo_ref > 0 and custo > 0:
+        return preco * custo / custo_ref, False
+    return preco, True
+
+
+def _criado_aqui(con, nome: str):
+    row = con.execute("SELECT * FROM locais_custos WHERE local=?", ((nome or "").strip(),)).fetchone()
+    if not row or nome.strip() == "CIA":
+        raise ValueError("Só dá para mudar locais criados pelo '+ Novo local'")
+    return row
+
+
+def editar_local(con, nome: str, modo: str = "margem", **custos) -> dict:
+    """Troca os custos de um local criado aqui e refaz os preços dele (Pacote e Mensalidade) pela diferença do custo por aula.
+    O nome não muda: ele está gravado nos alunos, na agenda, na grade e nas contas. A grade fica como está."""
+    if modo not in MODOS:
+        raise ValueError("Escolha manter a margem ou manter o preço")
+    antes = dict(_criado_aqui(con, nome))
+    nome = antes["local"]
+    c = _custos(custos)
+    dif_aula = precos.custo_por_aula(c) - precos.custo_por_aula(antes)
+    linhas = con.execute(f"SELECT * FROM precos_base WHERE local=? AND tipo_servico IN ({','.join('?' * len(TIPOS_COM_AULA))})",
+                         (nome, *TIPOS_COM_AULA)).fetchall()
+    mantidos = 0
+    with con:
+        con.execute(f"UPDATE locais_custos SET {', '.join(k + '=?' for k in CAMPOS)}, modo=? WHERE local=?",
+                    (*(c[k] for k in CAMPOS), modo, nome))
+        for b in linhas:
+            s = float(b["sessoes_mes"] or 0)
+            custo_ref = float(b["custo_operacional"] or 0)
+            custo = max(0.0, custo_ref + dif_aula * s)
+            preco, manteve = _preco_novo(float(b["preco_base"]), custo_ref, custo, modo)
+            mantidos += manteve
+            con.execute("UPDATE precos_base SET preco_base=?, custo_operacional=?, custo_total=? WHERE id=?",
+                        (round(preco, 2), round(custo, 2), round(float(b["custo_total"] or 0) - custo_ref + custo, 2), b["id"]))
+    return {"precos": len(linhas), "mantidos": mantidos}
+
+
+def excluir_local(con, nome: str) -> None:
+    """Apaga um local criado aqui (custos, preços, grade e o nome da lista) se ninguém mais usa.
+    Aulas e contas antigas ficam: guardam o nome como texto."""
+    nome = _criado_aqui(con, nome)["local"]
+    alunos = con.execute("SELECT COUNT(*) FROM clientes WHERE local=? AND excluido_em IS NULL AND status != 'inativo'", (nome,)).fetchone()[0]
+    fixos = con.execute("""SELECT COUNT(*) FROM agenda_fixos f JOIN clientes c ON c.id=f.cliente_id
+                           WHERE f.local=? AND f.excluido_em IS NULL AND c.excluido_em IS NULL AND c.status != 'inativo'""", (nome,)).fetchone()[0]
+    grade = con.execute("SELECT COUNT(*) FROM grade_slots WHERE local=? AND status='ocupado'", (nome,)).fetchone()[0]
+    if alunos or fixos or grade:
+        raise ValueError(f"'{nome}' ainda está em uso ({alunos} aluno(s), {fixos} horário(s) fixo(s), {grade} na Grade). "
+                         "Mude esses alunos de local antes de excluir")
+    with con:
+        con.execute("DELETE FROM grade_slots WHERE local=?", (nome,))
+        con.execute("DELETE FROM precos_base WHERE local=?", (nome,))
+        con.execute("DELETE FROM locais_custos WHERE local=?", (nome,))
+        con.execute("DELETE FROM parametros WHERE grupo='lista_locais' AND chave=?", (nome,))
 
 
 def _gravar(con, nome, referencia, modo, c, dif_aula, linhas) -> dict:
@@ -94,12 +159,8 @@ def _gravar(con, nome, referencia, modo, c, dif_aula, linhas) -> dict:
             s = float(b["sessoes_mes"] or 0)
             custo_ref = float(b["custo_operacional"] or 0)
             custo = max(0.0, custo_ref + dif_aula * s)
-            preco = float(b["preco_base"])
-            if modo == "margem" and custo != custo_ref:
-                if custo_ref > 0 and custo > 0:   # margem = 1 - taxas - custo/preço: mesma razão custo/preço = mesma margem
-                    preco = preco * custo / custo_ref
-                else:   # custo zerou (ou a referência não tinha custo): a razão daria R$ 0, então o preço fica o da referência
-                    mantidos += 1
+            preco, manteve = _preco_novo(float(b["preco_base"]), custo_ref, custo, modo)
+            mantidos += manteve
             total = float(b["custo_total"] or 0) - custo_ref + custo
             con.execute("""INSERT INTO precos_base (tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal, sessoes_mes, preco_base,
                            custo_operacional, mao_obra, custo_total, origem) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
