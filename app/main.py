@@ -1095,7 +1095,8 @@ def grade(request: Request, tipo: str = "Pacotes", local: str = "CIA", vale: int
               "ocupados": sum(1 for c in celulas.values() if c["status"] == "ocupado"),
               "vale": sum(1 for c in celulas.values() if c["status"] == "livre" and (c["multiplicador"] or 1) < 1)}
     return render(request, "grade.html", con, celulas=celulas, minima=minima, tipo=tipo, local=local, vale=vale, locais=locais,
-                  horas=range(5, 24), clientes=clientes_, base=base, resumo=resumo, refs=refs, ref_atual=base[col] if base else None)
+                  horas=range(5, 24), clientes=clientes_, base=base, resumo=resumo, refs=refs, ref_atual=base[col] if base else None,
+                  custos_local=None if local == "CIA" else precos.custos_locais(con).get(local))
 
 
 def salvar_slots(con, slots, bloco=100):
@@ -3115,6 +3116,32 @@ def locais_novo(nome: str = Form(...), referencia: str = Form("CIA"), modo: str 
     if r.get("mantidos"):
         aviso += f". Mantive o preço de {referencia} em {r['mantidos']} plano(s): com custo zero (na referência ou no local novo) a margem não dá para manter; ajuste esses preços à mão"
     return voltar(url, msg=f"Local {nome} criado: {r['precos']} preços e {r['horarios']} horários na grade{aviso}.")
+
+
+@app.post("/locais/editar")
+def locais_editar(nome: str = Form(...), modo: str = Form("margem"), taxa_aula: str = Form("0"),
+                  taxa_pessoa_extra: str = Form("0"), max_pessoas: str = Form("0"), deslocamento: str = Form("0"),
+                  tempo_deslocamento: str = Form("0"), taxa_mensal: str = Form("0"), aulas_mes: str = Form("0"), con=Depends(get_db)):
+    """Botão "Editar local" da Grade: mesmo pop-up do "+ Novo local", com o nome travado. Refaz os preços do local."""
+    url = "/grade?local=" + quote(nome.strip())
+    nums = dict(taxa_aula=taxa_aula, taxa_pessoa_extra=taxa_pessoa_extra, max_pessoas=max_pessoas, deslocamento=deslocamento,
+                tempo_deslocamento=tempo_deslocamento, taxa_mensal=taxa_mensal, aulas_mes=aulas_mes)
+    try:
+        r = loc.editar_local(con, nome, modo, **{k: _num_br(v) for k, v in nums.items()})
+    except ValueError as e:
+        msg = str(e) if "could not convert" not in str(e) else "Confira os números (use só algarismos e vírgula)"
+        return voltar(url, erro=msg)
+    aviso = f". Mantive o preço em {r['mantidos']} plano(s) com custo zero; ajuste à mão" if r["mantidos"] else ""
+    return voltar(url, msg=f"Local {nome.strip()} atualizado: {r['precos']} preço(s) refeitos{aviso}.")
+
+
+@app.post("/locais/excluir")
+def locais_excluir(nome: str = Form(...), con=Depends(get_db)):
+    try:
+        loc.excluir_local(con, nome)
+    except ValueError as e:
+        return voltar("/grade?local=" + quote(nome.strip()), erro=str(e))
+    return voltar("/grade", msg=f"Local {nome.strip()} excluído.")
 
 
 @app.post("/configuracoes/lista/{pid}/remover")

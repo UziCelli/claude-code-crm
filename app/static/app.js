@@ -5,7 +5,8 @@ document.addEventListener("click", function (e) {
   var d = document.getElementById(b.dataset.abrir);
   if (!d) return;
   var frm = d.querySelector("form"); if (frm) frm.reset();
-  if (frm && b.dataset.acao) frm.action = b.dataset.acao;   // diálogo que serve a vários registros (ex.: Dar baixa)
+  if (frm && !frm.dataset.padrao) frm.dataset.padrao = frm.getAttribute("action");
+  if (frm) frm.action = b.dataset.acao || frm.dataset.padrao;   // diálogo que serve a vários registros (ex.: Dar baixa); sem data-acao volta ao original
   // o reset volta ao atributo value: sem isto o id de uma edição anterior vazaria para o "Novo"
   d.querySelectorAll("input[type=hidden][name=id]").forEach(function (i) { i.value = ""; });
   Object.keys(b.dataset).forEach(function (k) {
@@ -17,6 +18,13 @@ document.addEventListener("click", function (e) {
   if (titulo && b.dataset.titulo) titulo.textContent = b.dataset.titulo;
   var nota = d.querySelector("[data-nota]");   // aviso opcional (ex.: "Crédito de R$ 100,00 descontado")
   if (nota) { nota.textContent = b.dataset.nota || ""; nota.hidden = !b.dataset.nota; }
+  if (d.id === "dlg-local") {   // o mesmo pop-up cria e edita: na edição o nome trava e a referência some
+    var editar = !!b.dataset.acao, nome = d.querySelector("[name=nome]"), bt = d.querySelector("[data-botao]");
+    nome.readOnly = editar;
+    if (!editar && titulo) titulo.textContent = "Novo local";
+    if (bt) bt.textContent = editar ? "Salvar e refazer preços" : "Criar local";
+    d.querySelectorAll("[data-so-novo]").forEach(function (x) { x.hidden = editar; });
+  }
   if (d.id === "dlg-pgto") d.dataset.mensal = b.dataset.valor || "";   // o valor do botão é a mensalidade: base do "cobre quantos meses?"
   d.showModal();
 });

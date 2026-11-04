@@ -10,6 +10,14 @@
   </form>
   <button type="button" class="claro" id="modo-sel" aria-pressed="false">Selecionar vários</button>
   <button type="button" class="claro" data-abrir="dlg-local" data-voltar="/grade">+ Novo local</button>
+  {% if custos_local %}{% set c = custos_local %}
+  <button type="button" class="claro" data-abrir="dlg-local" data-acao="/locais/editar" data-titulo="Editar {{ local }}" data-nome="{{ local }}"
+    data-taxa_aula="{{ ('%.2f'|format(c.taxa_aula or 0))|replace('.', ',') }}" data-taxa_pessoa_extra="{{ ('%.2f'|format(c.taxa_pessoa_extra or 0))|replace('.', ',') }}" data-max_pessoas="{{ c.max_pessoas or 0 }}"
+    data-deslocamento="{{ ('%.2f'|format(c.deslocamento or 0))|replace('.', ',') }}" data-tempo_deslocamento="{{ (c.tempo_deslocamento or 0)|int }}" data-taxa_mensal="{{ ('%.2f'|format(c.taxa_mensal or 0))|replace('.', ',') }}"
+    data-aulas_mes="{{ (c.aulas_mes or 0)|int }}">Editar local</button>
+  <form method="post" action="/locais/excluir" style="margin:0" onsubmit="return confirm('Excluir o local {{ local }}? Preços e grade dele somem.')">
+    <input type="hidden" name="nome" value="{{ local }}"><button class="claro">Excluir local</button></form>
+  {% endif %}
 </div>
 <div class="linha" style="justify-content:space-between">
   <div class="legenda">
