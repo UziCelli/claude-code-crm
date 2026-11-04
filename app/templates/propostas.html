@@ -68,10 +68,38 @@
     <div class="grid c3">
       <div class="kpi"><div class="rotulo">Preço total</div><div class="valor">{{ r.preco_total|moeda }}</div><div class="meta">cheio {{ r.preco_cheio|moeda }}{% if r.desconto > 0 %} · desconto {{ r.desconto|pct(1) }}{% elif r.desconto < 0 %} · acréscimo {{ (-r.desconto)|pct(1) }}{% endif %}{% if r.mult != 1 %} · horário x{{ r.mult|num(2) }}{% endif %}</div></div>
       <div class="kpi"><div class="rotulo">Por pessoa</div><div class="valor">{{ r.preco_pessoa|moeda }}</div><div class="meta">{{ f.pessoas }} pessoa(s)</div></div>
-      <div class="kpi {{ r.margem|cor }}"><div class="rotulo">Margem</div><div class="valor">{{ r.margem|pct(1) }}</div><div class="meta">lucro {{ r.lucro|moeda }}</div></div>
+      <div class="kpi {{ r.margem|cor }}"><div class="rotulo">Margem</div><div class="valor">{{ r.margem|pct(1) }}</div><div class="meta">lucro {{ r.lucro|moeda }} depois do seu salário</div></div>
       <div class="kpi"><div class="rotulo">Lucro por hora</div><div class="valor">{{ r.lucro_hora|moeda }}</div><div class="meta">{{ r.sessoes|num(0) }} sessões · {{ r.horas|num(1) }} h de trabalho</div></div>
       <div class="kpi"><div class="rotulo">Preço mínimo</div><div class="valor">{{ r.preco_minimo|moeda }}</div><div class="meta">para margem {{ r.margem_minima|pct }}</div></div>
       <div class="kpi"><div class="rotulo">Desconto máximo</div><div class="valor">{{ r.desconto_maximo|pct(1) }}</div><div class="meta">custo {{ r.custo_total|moeda }} (pró-labore {{ r.mao_obra|moeda }}) · taxas {{ r.impostos_taxas|moeda }}</div></div>
+    </div>
+
+    {# Esse preço vale a pena? Os 3 pisos e o que fazer. Lucro no CRM = depois do seu salário. #}
+    {% set v = r.veredito %}
+    {% set cor_v = {'fechar': 'verde', 'so_salario': 'azul', 'parcial': 'amarelo', 'recusar': 'vermelho'}[v] %}
+    <div class="mt" id="vale-a-pena">
+      <h2>Esse preço vale a pena? <span class="tag {{ cor_v }}">{{ {'fechar': 'Feche', 'so_salario': 'Paga seu salário', 'parcial': 'Só em horário vago', 'recusar': 'Recuse'}[v] }}</span></h2>
+      <p><strong>
+      {% if v == 'fechar' %}Feche: paga seu salário e ainda sobra a margem para a empresa.
+      {% elif v == 'so_salario' %}Paga o seu salário inteiro, mas não sobra para reinvestir na empresa. Feche se for um aluno bom, que vai ficar.
+      {% elif v == 'parcial' %}Paga as contas, mas só {{ r.ganho_hora|moeda }} por hora do seu salário de {{ r.valor_hora|moeda }}/h. Só aceite num horário que ficaria vazio (fora do pico) e com data para reajustar.
+      {% else %}Recuse: com esse preço você paga para trabalhar (não cobre nem impostos, taxas e custos do local).{% endif %}
+      </strong></p>
+      <table class="mt">
+        <tr class="{{ 'vermelho' if r.preco_total < r.piso_negocio - 0.005 }}"><td>Piso do negócio <span class="muted">(impostos, taxas e custos do local)</span></td><td class="num">{{ r.piso_negocio|moeda }}</td></tr>
+        <tr><td>Piso do salário <span class="muted">(+ seu salário/hora inteiro)</span></td><td class="num">{{ r.piso_salario|moeda }}</td></tr>
+        <tr><td>Preço mínimo <span class="muted">(+ margem de {{ r.margem_minima|pct }} para a empresa)</span></td><td class="num">{{ r.preco_minimo|moeda }}</td></tr>
+        <tr><th>Este preço · você leva {{ r.ganho_hora|moeda }}/h</th><th class="num">{{ r.preco_total|moeda }}</th></tr>
+      </table>
+      {% set c = r.contra %}
+      {% if c %}
+      <h3 class="mt">O que oferecer no lugar</h3>
+      <ul>
+        {% if c.aulas %}<li>Pelo mesmo {{ c.aulas.preco|moeda }}: pacote de <strong>{{ c.aulas.qtd }} aulas</strong> (fica na margem mínima).</li>{% endif %}
+        {% if c.dupla %}<li>Em dupla: <strong>{{ c.dupla.pessoa|moeda }} por pessoa</strong> ({{ c.dupla.total|moeda }} no total, na margem mínima).</li>{% endif %}
+        {% if c.pix %}<li>No PIX, este mesmo preço: <strong>{{ {'fechar': 'feche', 'so_salario': 'paga seu salário', 'parcial': 'só em horário vago', 'recusar': 'recuse'}[c.pix] }}</strong>.</li>{% endif %}
+      </ul>
+      {% endif %}
     </div>
     <form method="post" action="/propostas" class="form-grid mt">
       {% for k in ['plano','aulas','por_semana','consultoria','local','forma','pessoas','desconto','preco_final'] %}<input type="hidden" name="{{ k }}" value="{{ f[k] }}">{% endfor %}

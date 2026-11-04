@@ -172,3 +172,36 @@ def test_consultoria_sem_preco_cadastrado_avisa(http):
     c, _ = http
     tela = c.get("/propostas", params={"plano": PLANO, "consultoria": "Consultoria Online", "h": ["1-10-CIA"]})
     assert "Não há preço de Consultoria Online" in tela.text
+
+
+def test_vale_a_pena_mostra_os_3_pisos_e_o_que_oferecer(http):
+    """R$ 600 no pacote de 8 da CIA: paga as contas, não o salário inteiro. Pisos em ordem e contrapropostas que fecham."""
+    c, _ = http
+    con = db.conectar()
+    try:
+        r = main.simular(con, PLANO, [], "PIX", 1, preco_final=600, local="CIA")
+        assert r["piso_negocio"] < r["piso_salario"] < r["preco_minimo"]
+        assert r["piso_negocio"] <= 600 < r["piso_salario"] and r["veredito"] == "parcial"
+        assert 0 < r["ganho_hora"] < r["valor_hora"]
+        aulas = r["contra"]["aulas"]
+        assert 1 <= aulas["qtd"] < 8
+        menor = main.simular(con, f"Pacote de Aulas|{aulas['qtd']}|0", [], "PIX", 1, preco_final=600, local="CIA")
+        assert menor["veredito"] == "fechar"
+        assert r["contra"]["dupla"]["total"] == main.simular(con, PLANO, [], "PIX", 2, local="CIA")["preco_sugerido"]
+        assert main.simular(con, PLANO, [], "PIX", 1, local="CIA", preco_final=2000)["contra"] == {}
+    finally:
+        con.close()
+    t = c.get("/propostas", params={"plano": PLANO, "local": "CIA", "preco_final": "600"}).text
+    assert "Esse preço vale a pena?" in t and "Só em horário vago" in t and "Piso do negócio" in t
+    assert "depois do seu salário" in t
+
+
+def test_cartao_mostra_o_veredito_no_pix(http):
+    c, _ = http
+    con = db.conectar()
+    try:
+        y = main.simular(con, PLANO, [], "PIX", 1, local="CIA")["preco_sugerido"]
+        r = main.simular(con, PLANO, [], "Cartão 12x", 1, local="CIA", preco_final=y)
+        assert r["veredito"] != "fechar" and r["contra"]["pix"] == "fechar"
+    finally:
+        con.close()

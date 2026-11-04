@@ -238,6 +238,16 @@ def calcular_misto(horarios: list, p: dict, pessoas: int = 1, desconto: float = 
         raise ValueError("Imposto + taxa + margem mínima passam de 100%: ajuste em Configurações")
     preco_minimo = custo / (1 - taxa - margem_min)
     desconto_maximo = max(0.0, 1 - preco_minimo / preco_cheio) if preco_cheio else 0.0
+    # Os 3 pisos da negociação (lucro aqui é DEPOIS do seu salário):
+    #   piso do negócio: paga só impostos, taxas e custos do local; abaixo dele você paga para trabalhar
+    #   piso do salário: paga também o seu salário/hora inteiro (lucro 0)
+    #   preço mínimo:    salário + a margem mínima, que é o que sobra para reinvestir na empresa
+    custo_negocio = custo - mao_obra
+    piso_negocio = custo_negocio / (1 - taxa)
+    piso_salario = custo / (1 - taxa)
+    ganho_hora = (preco * (1 - taxa) - custo_negocio) / horas if horas else 0.0
+    veredito = ("fechar" if preco >= preco_minimo - 0.005 else "so_salario" if preco >= piso_salario - 0.005
+                else "parcial" if preco >= piso_negocio - 0.005 else "recusar")
 
     return {
         "desconto": round(desconto, 4),
@@ -258,6 +268,12 @@ def calcular_misto(horarios: list, p: dict, pessoas: int = 1, desconto: float = 
         "margem_minima": margem_min,
         "abaixo_margem": margem < margem_min - 1e-9,
         "sessoes": sessoes,
+        "custo_negocio": round(custo_negocio, 2),
+        "piso_negocio": round(piso_negocio, 2),
+        "piso_salario": round(piso_salario, 2),
+        "ganho_hora": round(ganho_hora, 2),   # o que você leva por hora (salário + lucro) com esse preço
+        "valor_hora": round(float((p.get("mo") or {}).get("valor_hora") or 0), 2),   # o seu salário/hora em uso
+        "veredito": veredito,
     }
 
 
