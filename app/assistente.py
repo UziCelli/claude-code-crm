@@ -1,6 +1,6 @@
 """Assistente do CRM: chat com o Claude (API da Anthropic) que lê e edita o financeiro, as contas e as tarefas.
 
-Liga quando o .env (ou o Render) tem ANTHROPIC_API_KEY, ou com a chave colada em Configurações (tabela segredos). A API cobra por uso, à parte da assinatura do Claude.
+Liga quando o .env (ou a nuvem) tem ANTHROPIC_API_KEY, ou com a chave colada em Configurações (tabela segredos). A API cobra por uso, à parte da assinatura do Claude.
 Com ANTHROPIC_BASE_URL (ex.: OmniRoute no PC) o pedido vai para esse endereço só com o básico, que proxy entende.
 O modelo lê os dados pelas ferramentas abaixo (nunca adivinha) e grava pelas mesmas regras das telas.
 
@@ -86,7 +86,7 @@ def remover_chave(con) -> None:
 
 
 def origem_chave() -> str:
-    """De onde vem a chave: 'env' (.env/Render, vence), 'config' (salva em Configurações) ou ''."""
+    """De onde vem a chave: 'env' (.env/nuvem, vence), 'config' (salva em Configurações) ou ''."""
     return "env" if _chave_env() else "config" if _chave_salva["valor"] else ""
 
 
@@ -1398,7 +1398,7 @@ def explicar_erro(e) -> str:
         anthropic = None
     if anthropic is not None:
         if isinstance(e, anthropic.AuthenticationError):
-            return "A chave da API não foi aceita. Confira a chave em Configurações › Assistente (ou ANTHROPIC_API_KEY no .env/Render, que vence a salva)."
+            return "A chave da API não foi aceita. Confira a chave em Configurações › Assistente (ou ANTHROPIC_API_KEY no .env/nuvem, que vence a salva)."
         if isinstance(e, anthropic.PermissionDeniedError):
             return "A chave da API não tem permissão para usar este modelo. Confira a conta em console.anthropic.com."
         if isinstance(e, anthropic.NotFoundError):
@@ -1422,7 +1422,7 @@ def explicar_erro(e) -> str:
 
 
 DESLIGADO = ("O assistente ainda não está ligado: falta a chave da API: cole em Configurações › Assistente, ou ponha "
-             "ANTHROPIC_API_KEY no .env do PC (ou no Render). Veja o passo a passo nesta tela.")
+             "ANTHROPIC_API_KEY no .env do PC (ou na nuvem). Veja o passo a passo nesta tela.")
 
 
 def responder(texto, cid=None, conectar=None, cliente=None):

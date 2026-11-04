@@ -81,7 +81,7 @@ app = FastAPI(title="VFITCOACH CRM", lifespan=lifespan)
 
 @app.middleware("http")
 async def portaria(request: Request, call_next):
-    """Na internet (Render ou túnel até o PC), só passa quem entrou pelo Cloudflare Access. No próprio PC (localhost) não faz nada."""
+    """Na internet (nuvem ou túnel até o PC), só passa quem entrou pelo Cloudflare Access. No próprio PC (localhost) não faz nada."""
     atualizar.registrar_uso()   # alguém usando: a atualização automática não reinicia agora
     motivo = await run_in_threadpool(acesso.motivo_bloqueio, request.method, request.url.path, request.headers, request.cookies)
     if motivo:
@@ -95,7 +95,7 @@ async def portaria(request: Request, call_next):
 @app.api_route("/health", methods=["GET", "HEAD"], response_class=PlainTextResponse)
 @app.api_route("/healthz", methods=["GET", "HEAD"], response_class=PlainTextResponse)
 def saude():
-    return "ok"   # checagem do Render; não abre o banco nem mostra dados
+    return "ok"   # checagem de saúde da nuvem; não abre o banco nem mostra dados
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 templates = Jinja2Templates(directory=ROOT / "templates")
 
@@ -3582,7 +3582,7 @@ LIXEIRA_FILTRO = {"agenda_fixos": " AND NOT EXISTS (SELECT 1 FROM agenda_fixos g
 
 @app.post("/encerrar", response_class=HTMLResponse)
 def encerrar(request: Request):
-    # no Render, desligar só faria o CRM sumir para todos; pelo túnel, o celular derrubaria o PC sem ninguém lá para religar
+    # na nuvem, desligar só faria o CRM sumir para todos; pelo túnel, o celular derrubaria o PC sem ninguém lá para religar
     if not acesso.pode_encerrar(request):
         return HTMLResponse("Indisponível pela internet: o CRM só pode ser encerrado no próprio PC.", status_code=404)
     try:

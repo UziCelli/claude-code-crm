@@ -1,4 +1,4 @@
-"""Fuso do Brasil para o app inteiro: no servidor (Render) o relógio vem em UTC e "hoje" virava amanhã depois das 21h."""
+"""Fuso do Brasil para o app inteiro: no servidor da nuvem o relógio vem em UTC e "hoje" virava amanhã depois das 21h."""
 import os
 import time
 

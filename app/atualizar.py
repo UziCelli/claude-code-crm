@@ -4,7 +4,7 @@ A cada 15 minutos confere a `main` no GitHub. Se houver versão nova, espera o C
 baixa (git) e reinicia pelo iniciar-crm.bat (que instala bibliotecas novas, se houver). Se a versão nova não abrir,
 volta para a anterior e não tenta mais aquela versão (data/atualizacao-recusada.txt).
 
-Só liga no Windows, fora do Render, com a pasta clonada pelo git. Para desligar: CRM_AUTOATUALIZAR=0 no .env.
+Só liga no Windows, fora da nuvem, com a pasta clonada pelo git. Para desligar: CRM_AUTOATUALIZAR=0 no .env.
 Só biblioteca padrão: o ajudante (`python -m app.atualizar reiniciar <commit>`) roda com o CRM fechado."""
 import datetime as dt
 import os
@@ -76,7 +76,7 @@ def git(*args, pasta=None):
 
 def motivo_desligado():
     if os.environ.get("CRM_NUVEM") == "1":
-        return "no Render quem atualiza é o próprio Render"
+        return "na nuvem quem atualiza é o próprio Cloud Run"
     if not WINDOWS:
         return "só no PC com Windows"
     if os.environ.get("CRM_AUTOATUALIZAR", "").strip() == "0":

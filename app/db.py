@@ -251,7 +251,7 @@ def iniciar_banco(caminho: Path = None) -> None:
         _garantir_coluna(con, "propostas", "preco_cheio", "REAL")              # banco de antes do "de R$ X por R$ Y" na proposta
         _garantir_coluna(con, "propostas", "consultoria", "TEXT")              # pacote + consultoria (acompanhamento completo)
         # um lançamento automático por conta e competência ('das:2026-10'); NULL (lançado à mão) pode repetir.
-        # PC e Render rodam ao mesmo tempo no Turso: o INSERT OR IGNORE em cima deste índice evita o duplicado.
+        # PC e nuvem rodam ao mesmo tempo no Turso: o INSERT OR IGNORE em cima deste índice evita o duplicado.
         con.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_lancamentos_auto ON lancamentos (auto)")
         if con.execute("SELECT COUNT(*) FROM campanha_checkpoints").fetchone()[0] == 0:
             con.executemany(
@@ -259,7 +259,7 @@ def iniciar_banco(caminho: Path = None) -> None:
             )
         # excluídos continuam na tabela (lixeira): a contagem só é 0 na primeira vez
         if con.execute("SELECT COUNT(*) FROM rotina_tarefas").fetchone()[0] == 0:
-            con.executemany(   # OR IGNORE: PC e Render podem criar ao mesmo tempo no Turso
+            con.executemany(   # OR IGNORE: PC e nuvem podem criar ao mesmo tempo no Turso
                 "INSERT OR IGNORE INTO rotina_tarefas (chave, texto, dia, ordem) VALUES (?,?,?,?)",
                 [(c, txt, d, k) for k, (c, txt, d) in enumerate(ROTINA_INICIAL, 1)],
             )
@@ -280,7 +280,7 @@ def _garantir_coluna(con, tabela: str, coluna: str, tipo: str) -> None:
     try:
         con.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {tipo}")
     except sqlite3.OperationalError as e:
-        if "duplicate column" not in str(e).lower():   # PC e Render acrescentando ao mesmo tempo no Turso
+        if "duplicate column" not in str(e).lower():   # PC e nuvem acrescentando ao mesmo tempo no Turso
             raise
 
 

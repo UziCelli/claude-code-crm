@@ -325,3 +325,9 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Academia sem taxa copiada da CIA no "Manter a margem" nascia barata: tirar a taxa derrubava o preço na mesma proporção do custo, e o pró-labore novo (regra do tempo + deslocamento) comia tudo. Ex. do teste: CIA 8 aulas R$ 1100 → local sem taxa R$ 408; com 30 min de deslocamento o lucro dava −R$ 217 e, no pico (x1,6), só +R$ 14.
 - Novo modo **"Montar pelo custo"** no "+ Novo local" e no "Editar local" (`locais._preco_pelo_custo`): o preço base = preço sugerido do motor (margem mínima do plano, 1 pessoa, sem multiplicador). No mesmo exemplo: R$ 760, margem 15% no horário normal.
 - Para a ALLP Fit: Grade › ALLP Fit › Editar local › "Montar pelo custo" › Salvar.
+
+## Reserva no Google Cloud Run (04/11/2026)
+- O Render grátis dormia e levava ~1 min para acordar. O Victor desligou o serviço. A reserva (`crm-reserva`) passa para o Google Cloud Run, que acorda em poucos segundos.
+- `Dockerfile` (fixa `TZ`, `CRM_NUVEM=1` e `CRM_ENDERECOS`), `.dockerignore` e `cloudflare/worker-reserva.js` (Worker que repassa `crm-reserva` para o `*.run.app`). O `render.yaml` saiu.
+- `acesso._origem_estranha`: atrás do Worker o Host chega como `*.run.app`. O Origin/Referer de um POST também vale se estiver em `CRM_ENDERECOS`; sem isso, todo formulário seria recusado.
+- Passo a passo no README (passo 4 da seção "CRM no celular"). Pendente: acrescentar `crm-reserva` ao `saude.yml` quando o endereço estiver no ar.

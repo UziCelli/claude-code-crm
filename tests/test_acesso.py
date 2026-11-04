@@ -1,11 +1,12 @@
 """Portaria do CRM: só passa quem entrou pelo Cloudflare Access (token assinado, AUD e emissor certos).
-No Render vale para tudo; no PC, só para o que chega pelo túnel (quem está no próprio PC entra direto)."""
+Na nuvem vale para tudo; no PC, só para o que chega pelo túnel (quem está no próprio PC entra direto)."""
 import datetime as dt
 
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
+from starlette.datastructures import Headers
 
 from app import acesso, db, main, vigia
 
@@ -104,7 +105,7 @@ def test_post_de_outro_site_e_recusado(na_internet):
 def test_encerrar_indisponivel_na_internet(na_internet, desligar):
     h = {"Cf-Access-Jwt-Assertion": token(), "host": "testserver", "origin": "http://testserver"}
     assert na_internet.post("/encerrar", headers=h).status_code == 404
-    # nem fingindo estar no PC: no Render o servidor não é do dono
+    # nem fingindo estar no PC: na nuvem o servidor não é do dono
     h = {"Cf-Access-Jwt-Assertion": token(), "origin": "http://localhost"}
     assert TestClient(main.app, base_url="http://localhost").post("/encerrar", headers=h).status_code == 404
     assert not desligar
@@ -208,3 +209,32 @@ def test_no_pc_post_da_propria_tela_ou_de_script_passa(no_pc, host):
     r = no_pc.post("/backup", headers={"host": host, "referer": f"http://{host}/financeiro"}, follow_redirects=False)
     assert r.status_code == 303
     assert no_pc.post("/backup", follow_redirects=False).status_code == 303   # script do próprio PC: sem Origin
+
+
+# ---------- nuvem atrás do Worker do Cloudflare: o Host chega como *.run.app ----------
+WORKER = {"host": "vfitcoach-crm-abc123.us-east1.run.app", "cf-ray": "8f1e2d3c4b5a6978-GRU"}
+
+
+def test_post_pelo_worker_passa_com_o_endereco_publico(na_internet, monkeypatch):
+    monkeypatch.setattr(acesso, "ENDERECOS", {"crm-reserva.vfitcoachapp.com"})
+    cab = Headers({**WORKER, "Cf-Access-Jwt-Assertion": token(), "origin": "https://crm-reserva.vfitcoachapp.com"})
+    assert acesso.motivo_bloqueio("POST", "/backup", cab, {}) is None
+
+
+def test_post_pelo_worker_sem_o_endereco_configurado_e_recusado(na_internet, monkeypatch):
+    monkeypatch.setattr(acesso, "ENDERECOS", set())
+    cab = Headers({**WORKER, "Cf-Access-Jwt-Assertion": token(), "origin": "https://crm-reserva.vfitcoachapp.com"})
+    assert acesso.motivo_bloqueio("POST", "/backup", cab, {}) == "origem"
+
+
+def test_post_de_outro_site_continua_recusado_na_nuvem(na_internet, monkeypatch):
+    monkeypatch.setattr(acesso, "ENDERECOS", {"crm-reserva.vfitcoachapp.com"})
+    for origem in ("https://site-malicioso.com", "https://crm-reserva.vfitcoachapp.com.malicioso.com", "null"):
+        cab = Headers({**WORKER, "Cf-Access-Jwt-Assertion": token(), "origin": origem})
+        assert acesso.motivo_bloqueio("POST", "/backup", cab, {}) == "origem", origem
+
+
+def test_dockerfile_libera_o_endereco_da_reserva():
+    import pathlib
+    texto = (pathlib.Path(__file__).parent.parent / "Dockerfile").read_text(encoding="utf-8")
+    assert "CRM_ENDERECOS=crm-reserva.vfitcoachapp.com" in texto

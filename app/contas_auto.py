@@ -3,7 +3,7 @@
 Todas são retroativas. Em novembro o app lança o DAS de outubro (sobre o que entrou em outubro), a CIA de outubro
 (as aulas Feitas em outubro) e a de cada local (as aulas Feitas lá, pelos custos do local). O lançamento é uma saída PJ
 em aberto, na data do vencimento, com `auto` = 'das:2026-10', 'cia:2026-10' ou 'local:<nome>:2026-10'.
-Idempotente e barato: roda em INSERT OR IGNORE (PC e Render escrevem no mesmo Turso)."""
+Idempotente e barato: roda em INSERT OR IGNORE (PC e nuvem escrevem no mesmo Turso)."""
 import datetime as dt
 import re
 import sqlite3

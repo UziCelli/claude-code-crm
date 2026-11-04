@@ -142,7 +142,7 @@ def test_versao_nova_que_abre_fica(repos, monkeypatch):
 
 @pytest.mark.parametrize("windows, env, ligado", [
     (False, {}, False),                            # aqui (Linux) e nos testes
-    (True, {"CRM_NUVEM": "1"}, False),             # Render
+    (True, {"CRM_NUVEM": "1"}, False),             # nuvem (Cloud Run)
     (True, {"CRM_AUTOATUALIZAR": "0"}, False),     # desligado no .env
     (True, {}, True),
 ])
@@ -161,7 +161,7 @@ def test_dados_mostra_a_situacao(tmp_path, monkeypatch):
     db.iniciar_banco()
     http = TestClient(main.app, base_url="http://localhost")
     monkeypatch.setattr(atualizar, "status", {**atualizar.status, "mostrar": False})
-    assert "Atualização automática" not in http.get("/dados").text   # Render e fora do Windows: nada
+    assert "Atualização automática" not in http.get("/dados").text   # nuvem e fora do Windows: nada
     monkeypatch.setattr(atualizar, "status", {**atualizar.status, "mostrar": True, "ligado": True, "erro": None, "pendente": False})
     assert "Atualização automática ligada" in http.get("/dados").text
     monkeypatch.setattr(atualizar, "status", {**atualizar.status, "mostrar": True, "ligado": True, "erro": "sem internet"})
