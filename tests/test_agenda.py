@@ -370,13 +370,14 @@ def test_quem_fica_assume_a_celula_que_o_outro_deixou(http):
     assert grade(1, 7) == da_grade(bruno, "Bruno Costa")
 
 
-def test_segundo_aluno_em_outro_local_ocupa_a_propria_celula(http):
+def test_segundo_aluno_em_outro_local_nao_toma_o_horario_da_grade(http):
     ana, bruno = aluno("Ana Silva"), aluno("Bruno Costa")
     horario(http, 1, 7, ana, local="CIA")
     r = http.post("/agenda/incluir", data={"cliente_id": bruno, "local": "SmartFit", "dia": 1, "hora": 7, "repetir": 1}, follow_redirects=False)
     assert erro(r) is None
     assert fixos_ativos() == [("Ana Silva", 1, 7, "CIA"), ("Bruno Costa", 1, 7, "SmartFit")]   # a Ana mantém o local dela
-    assert grade(1, 7, "CIA") == da_grade(ana, "Ana Silva") and grade(1, 7, "SmartFit") == da_grade(bruno, "Bruno Costa")
+    # na Grade o horário vale para todos os locais: já é da Ana (CIA), então a SmartFit não ganha o Bruno
+    assert grade(1, 7, "CIA") == da_grade(ana, "Ana Silva") and grade(1, 7, "SmartFit") == []
     (info, botao), = cards(semana(http), 1, 7)
     assert [a["local"] for a in info["alunos"]] == ["CIA", "SmartFit"] and "CIA / SmartFit" in botao   # a semana tem mais de um local: o card mostra os dois
     assert info["local"] == "CIA"

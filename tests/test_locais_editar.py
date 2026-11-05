@@ -47,7 +47,9 @@ def test_grade_mostra_editar_so_em_local_criado_aqui(http, con):  # noqa: F811
     locais.criar_local(con, "Prédio", "CIA", taxa_aula=30.5)
     r = http.get("/grade", params={"local": "Prédio"})
     assert 'data-acao="/locais/editar"' in r.text and 'data-taxa_aula="30,50"' in r.text and "Excluir local" in r.text
-    assert "Editar local" not in http.get("/grade", params={"local": "CIA"}).text
+    cia = http.get("/grade", params={"local": "CIA"}).text
+    assert 'data-acao="/locais/editar"' not in cia and "Excluir local" not in cia
+    assert 'href="/configuracoes#cfg-cia_deslocamento">Editar CIA' in cia   # a CIA se edita em Configurações
 
 
 def test_rotas_editar_e_excluir(http, con):  # noqa: F811
