@@ -420,20 +420,41 @@ def horas_trabalho_mes(con, p, bases=None) -> float:
     return horas
 
 
-def cobre_custos(con, p, bases=None) -> dict:
-    """O mês fecha? Mensalidades dos alunos ativos - impostos e taxas - custos do negócio (local, CIA, deslocamento)
+def entra_no_mes(con, mes=None) -> tuple[dict, float]:
+    """({cliente_id: dinheiro que o aluno põe no caixa do mês}, valor mensal de quem já pagou adiantado num mês anterior).
+    Mesma regra da tela Mensalidades (financeiro.mensalidades, campo entra)."""
+    itens = financeiro.mensalidades(con, mes or mes_atual())
+    return ({i["id"]: i["entra"] for i in itens},
+            round(sum(i["previsto"] for i in itens if i["situacao"] == "pago adiantado"), 2))
+
+
+def lucro_pelo_caixa(est: dict, valor: float, entra: float) -> float:
+    """Lucro do aluno no mês trocando a mensalidade pelo que entrou de verdade: a diferença paga impostos e taxas na mesma proporção.
+    Custos e mão de obra não mudam (existem todo mês). Pagou 6 meses no mês = lucro alto; meses seguintes (0 entrou) = negativo."""
+    taxa = est["impostos_taxas"] / valor if valor else 0.0
+    return est["lucro"] + (entra - valor) * (1 - taxa)
+
+
+def cobre_custos(con, p, bases=None, mes=None, caixa=None) -> dict:
+    """O mês fecha? Mensalidades que entram no mês - impostos e taxas - custos do negócio (local, CIA, deslocamento)
     - seus custos pessoais (o salário que a PF precisa). sobra < 0 = falta isso por mês para cobrir tudo.
+    Receita pelo caixa (entra_no_mes): quem pagou adiantado num mês anterior entra 0; o pagamento de vários meses entra inteiro
+    no mês em que caiu. Impostos e taxas acompanham o que entrou; custos do negócio e pessoais são os do mês, sempre.
     Custos pessoais: os da PF (salário automático); sem eles, a soma da mão de obra dos alunos."""
     bases = bases if bases is not None else carregar_bases(con)
-    receita = impostos = negocio = mo = 0.0
+    entra, adiantado = caixa if caixa is not None else entra_no_mes(con, mes)   # caixa: o retorno de entra_no_mes, se já calculado
+    receita = carteira = impostos = negocio = mo = 0.0
     sem_base = 0
     for c in con.execute("SELECT * FROM clientes WHERE excluido_em IS NULL AND status='ativo'"):
-        receita += c["valor"] or 0
+        valor = c["valor"] or 0
+        e = entra.get(c["id"], 0.0)
+        carteira += valor
+        receita += e
         est = estimativa_cliente(con, c, p, bases)
         if not est:
             sem_base += 1
             continue
-        impostos += est["impostos_taxas"]
+        impostos += est["impostos_taxas"] * e / valor if valor else 0.0
         negocio += est["custo_total"] - est["mao_obra"]
         mo += est["mao_obra"]
     sh = p["salario_hora"]
@@ -442,7 +463,8 @@ def cobre_custos(con, p, bases=None) -> dict:
     # Com o valor da hora fixo, "pessoal" é só a mão de obra (hora x horas): o resto do que a PF gasta sai do lucro.
     gasto_pf = sh["custo_pessoal"] if sh["usado"] else financeiro.custo_pessoal_medio(con, mes_atual())[0]
     falta_pf = max(gasto_pf - pessoal, 0.0)
-    return {"receita": round(receita, 2), "impostos": round(impostos, 2), "negocio": round(negocio, 2),
+    return {"receita": round(receita, 2), "carteira": round(carteira, 2), "adiantado": adiantado,
+            "impostos": round(impostos, 2), "negocio": round(negocio, 2),
             "pessoal": round(pessoal, 2), "pessoal_pf": sh["usado"], "sobra": round(sobra, 2), "sem_base": sem_base,
             "cobre": sobra >= 0, "gasto_pf": round(gasto_pf, 2), "falta_pf": round(falta_pf, 2),
             "sobra_pf": round(sobra - falta_pf, 2), "cobre_tudo": sobra - falta_pf >= 0}
@@ -454,6 +476,8 @@ def calcular_metricas(con, mes=None):
     metas = db.parametros(con, "metas")
     clientes = con.execute("SELECT * FROM clientes WHERE excluido_em IS NULL AND status='ativo'").fetchall()
     bases = carregar_bases(con)   # uma consulta só, não uma por aluno
+    caixa = entra_no_mes(con, mes)   # o dinheiro que cada aluno põe no caixa do mês (pago adiantado antes = 0)
+    entra = caixa[0]
     horas = horas_com_preco = lucro_total = 0.0
     receita = receita_grupos = 0.0
     for c in clientes:
@@ -465,7 +489,7 @@ def calcular_metricas(con, mes=None):
         est = estimativa_cliente(con, c, p, bases)
         if est:   # lucro/h só sobre as horas de quem tem plano no motor: sem ele o aluno não tem lucro calculado
             horas_com_preco += h
-            lucro_total += est["lucro"]
+            lucro_total += lucro_pelo_caixa(est, c["valor"], entra.get(c["id"], 0.0))   # pelo dinheiro que entrou no mês
     perdidos = con.execute("""SELECT COUNT(*) FROM cliente_eventos WHERE tipo='status' AND descricao LIKE '%inativo%'
                               AND substr(data,1,7)=?""", (mes,)).fetchone()[0]
     abaixo10 = con.execute("""SELECT COUNT(*) FROM propostas WHERE excluido_em IS NULL AND status='aceita'
@@ -481,8 +505,9 @@ def calcular_metricas(con, mes=None):
         nivel = 4
     return dict(mes=mes, clientes_ativos=len(clientes), horas_ocupadas=round(horas, 1), lucro_hora=round(lucro_hora, 2),
                 pct_receita_grupos=(receita_grupos / receita) if receita else 0, faturamento_recorrente=round(receita, 2),
+                entra_mes=round(sum(entra.values()), 2),
                 clientes_perdidos=perdidos, vendas_abaixo_10=abaixo10, nivel=nivel, espera_pico=espera_pico,
-                salario_hora=p["salario_hora"], cobre=cobre_custos(con, p, bases))
+                salario_hora=p["salario_hora"], cobre=cobre_custos(con, p, bases, mes, caixa))
 
 
 def metricas_por_canal(con, mes):
@@ -3229,7 +3254,9 @@ def financeiro_mensalidades(request: Request, mes: str = "", con=Depends(get_db)
     mes = _fin_mes(mes)
     itens = financeiro.mensalidades(con, mes)
     alunos_estado = alu.estado(con)   # a situação de cada aluno (hoje) vem do algoritmo central
-    previsto, recebido = (round(sum(i[k] for i in itens), 2) for k in ("previsto", "recebido"))
+    # previsto: o dinheiro que cai neste mês (recebido + falta). Quem pagou adiantado num mês anterior fica de fora, em "adiantado".
+    previsto, recebido = (round(sum(i[k] for i in itens), 2) for k in ("entra", "recebido"))
+    adiantado = round(sum(i["previsto"] for i in itens if i["situacao"] == "pago adiantado"), 2)
     # falta: só quem ainda não pagou nada no mês (qualquer pagamento quita o mês)
     falta = round(sum(i["previsto"] for i in itens if not i["quitado"]), 2)
     alunos = con.execute("SELECT id, nome FROM clientes WHERE excluido_em IS NULL ORDER BY status != 'ativo', nome").fetchall()
@@ -3237,6 +3264,7 @@ def financeiro_mensalidades(request: Request, mes: str = "", con=Depends(get_db)
                       parece_emprestimo=financeiro.parece_emprestimo(f"{e['descricao'] or ''} {e['contraparte'] or ''}"))
                  for e in financeiro.entradas_sem_aluno(con, mes)]
     return render(request, "financeiro_mensalidades.html", con, mes=mes, itens=itens, previsto=previsto, recebido=recebido, falta=falta,
+                  adiantado=adiantado,
                   sem_aluno=sem_aluno, alunos=alunos, volta=f"/financeiro/mensalidades?mes={mes}",
                   estados=alunos_estado)
 
