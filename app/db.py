@@ -89,14 +89,14 @@ PARAMETROS_INICIAIS = [
     ("grupo_mao_obra_extra", "3", 0.35, None, 3),
     ("grupo_mao_obra_extra", "4", 0.55, None, 4),
     # mão de obra = pró-labore (seu salário), pela regra do tempo: horas de trabalho x valor da hora (precos.minutos_trabalho)
-    # 46,17/h x (aulas + 1 h de planejamento) é a conta da planilha (pacote de 8 = 415,51; de 4 = 230,84). 0 = regra desligada
+    # pacote de 8 = (8 aulas + 1 h de planejamento) x valor da hora
     ("mao_obra", "valor_hora", 46.17, None, 1),        # usado quando o automático não dá para calcular
     ("mao_obra", "valor_hora_auto", 1, None, 0),       # 1 = salário por hora = custos pessoais (PF) ÷ horas de trabalho; 0 = o fixo acima
     ("mao_obra", "min_aula", 60, None, 2),
     ("mao_obra", "min_planejamento_pacote", 60, None, 3),
     ("mao_obra", "min_planejamento_mes", 60, None, 4),
-    ("mao_obra", "min_consultoria_mes", 150, None, 5),   # por aluno; 0 = usa a mão de obra da planilha
-    ("mao_obra", "min_avaliacao", 17.5, None, 6),        # 0 = usa a mão de obra da planilha
+    ("mao_obra", "min_consultoria_mes", 150, None, 5),   # por aluno
+    ("mao_obra", "min_avaliacao", 17.5, None, 6),
     ("metas", "clientes_dez26", 14, None, 1),
     ("metas", "clientes_mar27", 18, None, 2),
     ("metas", "horas_vendaveis", 97, None, 3),
@@ -219,6 +219,9 @@ def iniciar_banco(caminho: Path = None) -> None:
             con.execute("""UPDATE parametros SET valor=? WHERE grupo='mao_obra' AND chave=? AND valor=0
                            AND NOT EXISTS (SELECT 1 FROM parametros WHERE grupo='migracao' AND chave='mao_obra_minutos')""", (novo, chave))
         con.execute("INSERT OR IGNORE INTO parametros (grupo, chave, valor, ordem) VALUES ('migracao', 'mao_obra_minutos', 1, 1)")
+        # margem do preço de tabela (antes do desconto): a mínima + 10 pontos, por serviço. Não mexe no que já foi editado.
+        con.execute("""INSERT OR IGNORE INTO parametros (grupo, chave, valor, ordem)
+                       SELECT 'margem_alvo', chave, MIN(valor + 0.10, 0.60), ordem FROM parametros WHERE grupo='margem_minima'""")
         for chave, antigo, novo in (("renovacao", RENOVACAO_ANTIGA, RENOVACAO_NOVA), ("indicacao", INDICACAO_ANTIGA, INDICACAO_NOVA),
                                     ("cobranca", COBRANCA_ANTIGA, COBRANCA_NOVA)):
             con.execute("UPDATE parametros SET valor_texto=? WHERE grupo='msg_whatsapp' AND chave=? AND valor_texto=?", (novo, chave, antigo))

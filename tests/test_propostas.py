@@ -2,7 +2,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app import db, main
+from app import db, locais, main, precos
 
 
 @pytest.fixture
@@ -12,11 +12,11 @@ def http(tmp_path, monkeypatch):
     db.iniciar_banco()
     con = db.conectar()
     with con:
-        for local, preco, custo in (("CIA", 1100, 900), ("SmartFit", 932, 736.2353)):
-            con.execute("""INSERT INTO precos_base (tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal, preco_base,
-                           custo_operacional, mao_obra, sessoes_mes) VALUES ('Pacote de Aulas', ?, 'PIX', 8, 0, ?, ?, 415.5, 8)""",
-                        (local, preco, custo))
-        con.execute("""INSERT INTO grade_slots (tipo_calculo, dia, local, hora, status, multiplicador)
+        con.execute("UPDATE parametros SET valor=0 WHERE grupo='mao_obra' AND chave='valor_hora_auto'")
+        con.execute("UPDATE parametros SET valor=53 WHERE grupo='mao_obra' AND chave='valor_hora'")
+    locais.criar_local(con, "SmartFit", taxa_aula=20, tempo_deslocamento=30)
+    with con:
+        con.execute("""INSERT OR REPLACE INTO grade_slots (tipo_calculo, dia, local, hora, status, multiplicador)
                        VALUES ('Pacotes', 1, 'SmartFit', 7, 'livre', 0.86), ('Pacotes', 3, 'SmartFit', 19, 'ocupado', 1.0)""")
         cid = con.execute("INSERT INTO clientes (nome) VALUES ('Ana')").lastrowid
     con.close()
@@ -24,6 +24,17 @@ def http(tmp_path, monkeypatch):
 
 
 PLANO = "Pacote de Aulas|8|0"
+
+
+def _cheio(horarios, qtd=8, tipo="Pacote de Aulas", forma="PIX", pessoas=1):
+    """Preço de tabela pelo motor: [(local, multiplicador), ...]."""
+    con = db.conectar()
+    try:
+        p = precos.carregar_parametros(con)
+        itens = [(precos.base_motor(tipo, qtd, local=loc), m, loc) for loc, m in horarios]
+        return precos.calcular_misto(itens, p, pessoas, forma_pagamento=forma)["preco_cheio"]
+    finally:
+        con.close()
 
 
 def test_simulador_antigo_vai_para_propostas(http):
@@ -38,7 +49,7 @@ def test_adiciona_varios_dias_de_uma_vez_e_tira_a_media(http):
     assert r.status_code == 200
     assert r.text.count('name="h" value="1-7-SmartFit"') == 2 and 'value="3-7-SmartFit"' in r.text   # GET + salvar
     # Seg 7h é vale (x0,86), Qua 7h não tem slot (x1): média 0,93
-    assert "R$ 866,76" in r.text and "média" in r.text
+    assert main.moeda(_cheio([("SmartFit", 0.86), ("SmartFit", 1.0)])) in r.text and "média" in r.text
 
 
 def test_pacote_misto_de_locais_avisa_ocupado_e_frequencia(http):
@@ -57,7 +68,7 @@ def test_tirar_um_horario(http):
 def test_link_antigo_com_dia_e_hora_vira_um_horario(http):
     c, _ = http
     r = c.get("/propostas", params={"plano": PLANO, "local": "SmartFit", "dia": 1, "hora": 7})
-    assert 'value="1-7-SmartFit"' in r.text and "R$ 801,52" in r.text
+    assert 'value="1-7-SmartFit"' in r.text and main.moeda(_cheio([("SmartFit", 0.86)])) in r.text
 
 
 def test_ajuste_sobe_ate_a_margem_minima(http):
@@ -79,9 +90,10 @@ def test_salva_com_desconto_e_pdf_mostra_de_por(http):
     hs = con.execute("SELECT dia, hora, local FROM proposta_horarios WHERE proposta_id=? ORDER BY id", (p["id"],)).fetchall()
     con.close()
     assert [tuple(h) for h in hs] == [(2, 7, "CIA"), (4, 7, "SmartFit")]
-    assert p["local"] == "CIA + SmartFit" and p["preco_cheio"] == pytest.approx(1016) and p["desconto"] == pytest.approx(0.02)
+    cheio = _cheio([("CIA", 1.0), ("SmartFit", 1.0)])
+    assert p["local"] == "CIA + SmartFit" and p["preco_cheio"] == pytest.approx(cheio) and p["desconto"] == pytest.approx(0.02)
     pdf = c.get(f"/propostas/{p['id']}").text
-    assert "<s>R$ 1.016,00</s>" in pdf and "R$ 995,68" in pdf and "−2,0% de desconto" in pdf
+    assert f"<s>{main.moeda(cheio)}</s>" in pdf and main.moeda(cheio * 0.98) in pdf and "−2,0% de desconto" in pdf
     assert "CIA: Ter 07h · SmartFit: Qui 07h" in pdf
     lista = c.get("/propostas").text
     assert "CIA: Ter 07h · SmartFit: Qui 07h" in lista
@@ -89,12 +101,12 @@ def test_salva_com_desconto_e_pdf_mostra_de_por(http):
 
 def test_pdf_sem_desconto_nao_mostra_de_por(http):
     c, cid = http
-    c.post("/propostas", data={"plano": PLANO, "forma": "PIX", "preco_final": "1200", "cliente_id": cid, "h": ["2-7-CIA"]})
+    c.post("/propostas", data={"plano": PLANO, "forma": "PIX", "preco_final": "2000", "cliente_id": cid, "h": ["2-7-CIA"]})
     con = db.conectar()
     pid = con.execute("SELECT id FROM propostas").fetchone()[0]
     con.close()
     pdf = c.get(f"/propostas/{pid}").text
-    assert "<s>" not in pdf and "R$ 1.200,00" in pdf
+    assert "<s>" not in pdf and "R$ 2.000,00" in pdf
 
 
 @pytest.mark.parametrize("campo,valor", [("desconto", "10%"), ("preco_final", "1000 reais"), ("ajuste", "abc")])
@@ -114,20 +126,17 @@ def test_salvar_com_numero_invalido_volta_com_a_frase(http):
 
 # ---- Pacote personalizado (1 a 20 aulas), com ou sem consultoria ----
 def _com_consultoria():
-    con = db.conectar()
-    with con:
-        con.execute("""INSERT INTO precos_base (tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal, preco_base,
-                       custo_operacional, mao_obra, sessoes_mes) VALUES ('Consultoria Online', 'Online', 'PIX', 1, 0, 300, 100, 60, 0)""")
-    return con
+    return db.conectar()
 
 
 def test_pacote_personalizado_de_7_aulas(http):
     c, _ = http
     r = main.simular(db.conectar(), main._plano_efetivo("personalizado", "7", ""), [{"dia": 1, "hora": 10, "local": "CIA"}], "PIX", 1)
-    # só tem o pacote de 8 cadastrado: 7 aulas = 7/8 do de 8
-    assert r["qtd"] == 7 and r["preco_cheio"] == pytest.approx(1100 / 8 * 7, abs=0.01)
+    # o motor monta qualquer nº de aulas: 7 aulas + 1 h de planejamento = 8 h
+    assert r["qtd"] == 7 and r["horas"] == 8 and r["preco_cheio"] == pytest.approx(_cheio([("CIA", 1.0)], qtd=7), abs=0.01)
+    assert r["preco_cheio"] < _cheio([("CIA", 1.0)], qtd=8)
     tela = c.get("/propostas", params={"plano": "personalizado", "aulas": 7, "h": ["1-10-CIA"]})
-    assert tela.status_code == 200 and "R$ 962,50" in tela.text
+    assert tela.status_code == 200 and main.moeda(r["preco_cheio"]) in tela.text
 
 
 def test_personalizado_com_consultoria_soma_os_meses(http):
@@ -136,12 +145,14 @@ def test_personalizado_com_consultoria_soma_os_meses(http):
     h = [{"dia": 1, "hora": 10, "local": "CIA"}]
     sem = main.simular(con, "Pacote de Aulas|8|2", h, "PIX", 1)
     com = main.simular(con, "Pacote de Aulas|8|2", h, "PIX", 1, consultoria="Consultoria Online")
-    # 8 aulas 2x/semana = 4 semanas = 1 mês; consultoria 300 com 15% de desconto no combo
+    # 8 aulas 2x/semana = 4 semanas = 1 mês; consultoria no preço de tabela do motor com 15% de desconto no combo
     assert com["meses_consultoria"] == 1
-    assert com["preco_cheio"] == pytest.approx(sem["preco_cheio"] + 255, abs=0.01)
-    # custo operacional 100 da planilha já traz 60 de mão de obra: sai a da planilha e entra a da regra (150 min no mês)
-    mo = 2.5 * main.precos.carregar_parametros(con)["mo"]["valor_hora"]
-    assert com["custo_total"] == pytest.approx(sem["custo_total"] + 40 + mo, abs=0.01)
+    p = precos.carregar_parametros(con)
+    cons = precos.calcular(precos.base_motor("Consultoria Online"), p)["preco_cheio"]
+    assert com["preco_cheio"] == pytest.approx(sem["preco_cheio"] + cons * 0.85, abs=0.01)
+    # 150 min de consultoria no mês: pró-labore + a parte dos custos fixos dessas horas
+    mo = 2.5 * p["mo"]["valor_hora"]
+    assert com["custo_total"] == pytest.approx(sem["custo_total"] + mo + 2.5 * p["rateio_hora"], abs=0.01)
     assert com["mao_obra"] == pytest.approx(sem["mao_obra"] + mo, abs=0.01)
     assert com["horas"] == pytest.approx(sem["horas"] + 2.5)   # o tempo da consultoria entra no lucro/hora
     longo = main.simular(con, main._plano_efetivo("personalizado", "20", "1"), h, "PIX", 1, consultoria="Consultoria Online")
@@ -168,30 +179,30 @@ def test_personalizado_fora_de_1_a_20_avisa(http, aulas):
     assert tela.status_code == 200 and "1 a 20" in tela.text
 
 
-def test_consultoria_sem_preco_cadastrado_avisa(http):
+def test_consultoria_sem_planilha_tem_preco(http):
     c, _ = http
     tela = c.get("/propostas", params={"plano": PLANO, "consultoria": "Consultoria Online", "h": ["1-10-CIA"]})
-    assert "Não há preço de Consultoria Online" in tela.text
+    assert tela.status_code == 200 and "+ Consultoria Online" in tela.text and "Não há preço" not in tela.text
 
 
 def test_vale_a_pena_mostra_os_3_pisos_e_o_que_oferecer(http):
-    """R$ 600 no pacote de 8 da CIA: paga as contas, não o salário inteiro. Pisos em ordem e contrapropostas que fecham."""
+    """R$ 800 no pacote de 8 da CIA: paga as contas, não o salário inteiro. Pisos em ordem e contrapropostas que fecham."""
     c, _ = http
     con = db.conectar()
     try:
-        r = main.simular(con, PLANO, [], "PIX", 1, preco_final=600, local="CIA")
+        r = main.simular(con, PLANO, [], "PIX", 1, preco_final=800, local="CIA")
         assert r["piso_negocio"] < r["piso_salario"] < r["preco_minimo"]
-        assert r["piso_negocio"] <= 600 < r["piso_salario"] and r["veredito"] == "parcial"
+        assert r["piso_negocio"] <= 800 < r["piso_salario"] and r["veredito"] == "parcial"
         assert 0 < r["ganho_hora"] < r["valor_hora"]
         aulas = r["contra"]["aulas"]
         assert 1 <= aulas["qtd"] < 8
-        menor = main.simular(con, f"Pacote de Aulas|{aulas['qtd']}|0", [], "PIX", 1, preco_final=600, local="CIA")
+        menor = main.simular(con, f"Pacote de Aulas|{aulas['qtd']}|0", [], "PIX", 1, preco_final=800, local="CIA")
         assert menor["veredito"] == "fechar"
         assert r["contra"]["dupla"]["total"] == main.simular(con, PLANO, [], "PIX", 2, local="CIA")["preco_sugerido"]
         assert main.simular(con, PLANO, [], "PIX", 1, local="CIA", preco_final=2000)["contra"] == {}
     finally:
         con.close()
-    t = c.get("/propostas", params={"plano": PLANO, "local": "CIA", "preco_final": "600"}).text
+    t = c.get("/propostas", params={"plano": PLANO, "local": "CIA", "preco_final": "800"}).text
     assert "Esse preço vale a pena?" in t and "Só em horário vago" in t and "Piso do negócio" in t
     assert "depois do seu salário" in t
 

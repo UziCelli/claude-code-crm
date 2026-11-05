@@ -1,4 +1,5 @@
-"""Motor de preços — função pura, sem banco. Todos os parâmetros vêm de fora (tela Configurações)."""
+"""Motor de preços. Custo e preço saem só dos parâmetros (Configurações, locais, Financeiro): nada da planilha.
+O cálculo (calcular/calcular_misto) é função pura; carregar_parametros lê o banco uma vez."""
 import math
 
 
@@ -18,9 +19,9 @@ def carregar_parametros(con) -> dict:
         "das": financeiro.pct_das(con),   # alíquota efetiva de hoje pela tabela do Simples
         "taxas": g("taxa_pagamento"),
         "margens": g("margem_minima"),
+        "margens_alvo": g("margem_alvo"),   # a do preço de tabela (antes do desconto)
         "taxa_cia": taxa_cia,
         "cia_max": cia_max,
-        "grupo_mult": {int(k): v for k, v in g("grupo_multiplicador").items()},
         "grupo_mo": {int(k): v for k, v in g("grupo_mao_obra_extra").items()},
         "locais": custos_locais(con),
         "mo": g("mao_obra"),
@@ -29,7 +30,50 @@ def carregar_parametros(con) -> dict:
     p["salario_hora"] = auto
     if auto["usado"]:
         p["mo"] = {**p["mo"], "valor_hora": auto["valor_hora"]}
+    p["rateio"] = rateio_fixos(con, p)
+    p["rateio_hora"] = p["rateio"]["por_hora"]
     return p
+
+
+def rateio_fixos(con, p: dict) -> dict:
+    """Custos fixos do negócio (MFIT, softwares, assinaturas: as contas fixas da PJ, financeiro.custos_fixos_rateio)
+    divididos pelas horas da agenda cheia (metas > horas_vendaveis): cada hora de trabalho paga a sua parte."""
+    from . import db, financeiro
+    from .main import mes_atual
+    fixos = financeiro.custos_fixos_rateio(con, mes_atual(), list(p.get("locais") or {}))
+    horas = float(db.parametros(con, "metas").get("horas_vendaveis") or 0)
+    return {**fixos, "horas": round(horas, 1), "por_hora": round(fixos["total"] / horas, 4) if horas > 0 else 0.0}
+
+
+# ---------- Planos montados pelo motor (sem a tabela de preços base da planilha) ----------
+SEMANAS_MES = 4.33
+PLANOS = (("Pacote de Aulas", 4, 0), ("Pacote de Aulas", 8, 0), ("Pacote de Aulas", 12, 0), ("Pacote de Aulas", 16, 0),
+          ("Mensalidade", 0, 1), ("Mensalidade", 0, 2), ("Mensalidade", 0, 3), ("Mensalidade", 0, 4), ("Mensalidade", 0, 5),
+          ("Aula avulsa", 0, 0), ("Consultoria Online", 0, 0), ("Consultoria Híbrida", 0, 0), ("Avaliação Física", 0, 0))
+
+
+def base_motor(tipo: str, qtd: int = 0, freq: int = 0, local: str | None = None) -> dict:
+    """O plano que o motor precifica: só tipo, aulas e local. Custo e preço saem de custo_servico (tempo, local, rateio).
+    Aulas no mês: Pacote = nº de aulas; Mensalidade = vezes por semana x 4,33; avulsa e Híbrida = 1; Online e Avaliação = 0."""
+    qtd, freq = int(qtd or 0), int(freq or 0)
+    if tipo == "Pacote de Aulas":
+        sessoes = float(qtd)
+    elif tipo == "Mensalidade":
+        sessoes = freq * SEMANAS_MES
+    elif tipo in ("Aula avulsa", "Consultoria Híbrida"):
+        sessoes = 1.0
+    else:
+        sessoes = 0.0
+    return {"tipo_servico": tipo, "local": local, "qtd_aulas": qtd if tipo == "Pacote de Aulas" else 0,
+            "freq_semanal": freq if tipo == "Mensalidade" else 0, "sessoes_mes": sessoes}
+
+
+def custo_aula_local(p: dict, local: str | None) -> float:
+    """R$ por aula (1 pessoa) que o local cobra: CIA = taxa da CIA de 1 pessoa; local criado aqui = custo_por_aula; outro = 0."""
+    if local == "CIA":
+        return float(p.get("taxa_cia", {}).get(1, 0.0))
+    c = (p.get("locais") or {}).get(local)
+    return custo_por_aula(c) if c else 0.0
 
 
 def valor_hora_automatico(con, p: dict) -> dict:
@@ -61,44 +105,37 @@ _CONSULTORIAS = ("Consultoria Online", "Consultoria Híbrida")
 _AVALIACOES = ("Avaliação Física", "Avaliação")
 
 
-def minutos_trabalho(base: dict, p: dict, local: str | None = None) -> float | None:
-    """Minutos do seu trabalho (1 pessoa) num plano, pela regra do tempo. None = sem regra: vale a mão de obra da planilha.
+def minutos_trabalho(base: dict, p: dict, local: str | None = None) -> float:
+    """Minutos do seu trabalho (1 pessoa) num plano, pela regra do tempo (Configurações > Mão de obra):
       Pacote / avulsa: aulas x (aula + deslocamento do local) + planejamento do pacote
       Mensalidade:     aulas do mês x (aula + deslocamento) + planejamento do mês
       Consultoria:     tempo da consultoria no mês (+ as aulas presenciais da Híbrida)
-      Avaliação:       tempo da avaliação + deslocamento
-    Valor da hora 0 desliga a regra (tudo volta para a planilha)."""
+      Avaliação:       tempo da avaliação + deslocamento"""
     r = p.get("mo") or {}
-    if not float(r.get("valor_hora") or 0):
-        return None
     tipo = base.get("tipo_servico")
     sessoes = float(base.get("sessoes_mes") or 0)
-    desloc = float((p.get("locais", {}).get(local or base.get("local")) or {}).get("tempo_deslocamento") or 0)
+    desloc = float(((p.get("locais") or {}).get(local or base.get("local")) or {}).get("tempo_deslocamento") or 0)
     aula = float(r.get("min_aula", 60) or 0) + desloc
     if tipo in _COM_AULA:
         plan = r.get("min_planejamento_mes" if tipo == "Mensalidade" else "min_planejamento_pacote")
         return sessoes * aula + float(plan or 0)
     if tipo in _CONSULTORIAS:
-        fixo = float(r.get("min_consultoria_mes") or 0)
-        return fixo + sessoes * aula if fixo else None
+        return float(r.get("min_consultoria_mes") or 0) + sessoes * aula
     if tipo in _AVALIACOES:
-        fixo = float(r.get("min_avaliacao") or 0)
-        return fixo + desloc if fixo else None
-    return None
+        return float(r.get("min_avaliacao") or 0) + desloc
+    return sessoes * aula
 
 
 def custo_servico(base: dict, p: dict, local: str | None = None) -> tuple[float, float, float]:
-    """(custo sem a mão de obra, mão de obra = pró-labore, horas de trabalho) de 1 pessoa.
-    O "Custo Operacional" da planilha já traz a mão de obra dentro: ela sai e entra a da regra do tempo."""
-    custo_op = float(base.get("custo_operacional") or 0)
-    mo_planilha = float(base.get("mao_obra") or 0)
-    minutos = minutos_trabalho(base, p, local)
-    if minutos is None:
-        sessoes = float(base.get("sessoes_mes") or 0)
-        desloc = float((p.get("locais", {}).get(local or base.get("local")) or {}).get("tempo_deslocamento") or 0)
-        return custo_op - mo_planilha, mo_planilha, (sessoes or 1.0) * (1 + desloc / 60)
-    horas = minutos / 60
-    return max(0.0, custo_op - mo_planilha), horas * float(p["mo"]["valor_hora"]), horas
+    """(custo do negócio, mão de obra = pró-labore, horas de trabalho) de 1 pessoa, tudo pelo motor (nada da planilha):
+      horas        = minutos_trabalho / 60
+      mão de obra  = horas x valor da hora
+      custo do negócio = o que o local cobra por aula x aulas + rateio dos custos fixos (R$ por hora x horas)"""
+    local = local or base.get("local")
+    sessoes = float(base.get("sessoes_mes") or 0)
+    horas = minutos_trabalho(base, p, local) / 60
+    mo = horas * float((p.get("mo") or {}).get("valor_hora") or 0)
+    return custo_aula_local(p, local) * sessoes + float(p.get("rateio_hora") or 0) * horas, mo, horas
 
 
 def custos_locais(con) -> dict:
@@ -113,7 +150,7 @@ def custo_por_aula(c: dict) -> float:
 
 
 def por_grupo(tabela: dict, pessoas: int, padrao: float) -> float:
-    """Valor da tabela por nº de pessoas (multiplicador, mão de obra extra, taxa da CIA).
+    """Valor da tabela por nº de pessoas (mão de obra extra, taxa da CIA).
     Grupo maior que a tabela usa o maior configurado: 5 pessoas não podem custar o preço de 1."""
     if pessoas in tabela:
         return tabela[pessoas]
@@ -121,56 +158,17 @@ def por_grupo(tabela: dict, pessoas: int, padrao: float) -> float:
     return tabela[max(menores)] if menores else padrao
 
 
-_CAMPOS_PACOTE = ("preco_base", "custo_operacional", "mao_obra")
-
-
-def base_pacote(rows: list, n: int, avulsa: dict | None = None) -> dict:
-    """Base sintética de um Pacote de N aulas (1 a 20, ímpar também) a partir dos pacotes cadastrados.
-    Entre dois pacotes: interpola em linha reta (7 aulas = meio caminho entre 6 e 8).
-    Abaixo do menor: a "Aula avulsa" vale como pacote de 1 (se existir); senão, proporcional por aula.
-    Acima do maior: proporcional por aula do maior."""
-    n = int(n)
-    if n < 1:
-        raise ValueError("O pacote precisa ter pelo menos 1 aula")
-    pontos = {int(r["qtd_aulas"]): dict(r) for r in rows if r.get("qtd_aulas")}
-    if avulsa and 1 not in pontos:
-        # a linha "Aula avulsa" pode guardar N sessões: normaliza para 1 aula
-        div = float(avulsa.get("sessoes_mes") or 1) or 1.0
-        um = dict(avulsa)
-        um.update({k: float(avulsa.get(k) or 0) / div for k in _CAMPOS_PACOTE})
-        pontos[1] = um
-    if not pontos:
-        raise ValueError("Não há pacote cadastrado para calcular o personalizado")
-    qtds = sorted(pontos)
-    if n in pontos:
-        modelo, valores = pontos[n], {k: float(pontos[n].get(k) or 0) for k in _CAMPOS_PACOTE}
-    elif n < qtds[0] or n > qtds[-1]:
-        ref = qtds[0] if n < qtds[0] else qtds[-1]
-        modelo = pontos[ref]
-        valores = {k: float(modelo.get(k) or 0) / ref * n for k in _CAMPOS_PACOTE}
-    else:
-        a = max(q for q in qtds if q < n)
-        b = min(q for q in qtds if q > n)
-        t = (n - a) / (b - a)
-        modelo = pontos[b]
-        valores = {k: float(pontos[a].get(k) or 0) * (1 - t) + float(pontos[b].get(k) or 0) * t
-                   for k in _CAMPOS_PACOTE}
-    base = dict(modelo)
-    base.update(valores, tipo_servico="Pacote de Aulas", qtd_aulas=n, sessoes_mes=n)
-    return base
-
-
-def _componentes(base: dict, p: dict, pessoas: int, mult_horario: float, local: str | None) -> tuple[float, float, float, float]:
-    """(preço cheio, custo, mão de obra, horas de trabalho) de um horário: o que muda de um horário/local para outro.
-    A mão de obra (pró-labore) está dentro do custo; grupo soma o esforço extra (grupo_mao_obra_extra) sobre ela."""
+def _componentes(base: dict, p: dict, pessoas: int, local: str | None) -> tuple[float, float, float]:
+    """(custo, mão de obra, horas de trabalho) de um horário para o grupo todo: o que muda de um local para outro.
+    A mão de obra (pró-labore) está dentro do custo; o grupo soma o esforço extra (grupo_mao_obra_extra) sobre ela
+    e o que o local cobra a mais por pessoa."""
     local = local or base.get("local")
-    outro = p.get("locais", {}).get(local)
+    outro = (p.get("locais") or {}).get(local)
     if local == "CIA" and pessoas > p["cia_max"]:
         raise ValueError(f"Na CIA o máximo é {p['cia_max']} pessoas")
     if outro and outro.get("max_pessoas") and pessoas > outro["max_pessoas"]:
         raise ValueError(f"Em {local} o máximo é {outro['max_pessoas']} pessoas")
     sessoes = float(base.get("sessoes_mes") or 0)
-    preco_cheio = float(base["preco_base"]) * mult_horario * por_grupo(p["grupo_mult"], pessoas, 1.0)
     resto, mo, horas = custo_servico(base, p, local)
     # Com o salário automático, a hora já é o seu custo de vida: o grupo não aumenta esse custo (contaria 2 vezes).
     if not (p.get("salario_hora") or {}).get("usado"):
@@ -181,14 +179,20 @@ def _componentes(base: dict, p: dict, pessoas: int, mult_horario: float, local: 
         custo += (por_grupo(p["taxa_cia"], pessoas, um) - um) * sessoes
     if outro:
         custo += (outro.get("taxa_pessoa_extra") or 0) * (pessoas - 1) * sessoes
-    return preco_cheio, custo, mo, horas
+    return custo, mo, horas
+
+
+def margem_alvo(p: dict, tipo: str) -> float:
+    """Margem do preço de tabela do plano: a de Configurações > Margem alvo; sem ela, a mínima + 10 pontos."""
+    minima = p["margens"].get(tipo, 0.15)
+    return max(float((p.get("margens_alvo") or {}).get(tipo, minima + 0.10)), minima)
 
 
 def calcular(base: dict, p: dict, pessoas: int = 1, mult_horario: float = 1.0,
              desconto: float = 0.0, forma_pagamento: str = "PIX", local: str | None = None,
              preco_final: float | None = None) -> dict:
     """
-    base: linha de precos_base (tipo_servico, preco_base, custo_operacional, mao_obra, sessoes_mes).
+    base: plano do motor (base_motor: tipo_servico, qtd_aulas, freq_semanal, sessoes_mes, local).
     p: saída de carregar_parametros().
     Devolve preço total, por pessoa, lucro, margem, lucro/hora, preço mínimo e desconto máximo.
     """
@@ -200,8 +204,9 @@ def calcular_misto(horarios: list, p: dict, pessoas: int = 1, desconto: float = 
                    extra: tuple | None = None) -> dict:
     """
     Proposta com vários horários (ex.: Seg 7h na CIA, Qua 19h na SmartFit), todos do mesmo plano.
-    horarios: lista de (base, multiplicador do horário, local). Preço cheio e custo = média dos horários
-    (preços iguais ficam iguais; diferentes viram a média). Cada aula da semana pesa igual.
+    horarios: lista de (base, multiplicador do horário, local). Custo = média dos horários; cada aula da semana pesa igual.
+    Preço de tabela (cheio) = custo ÷ (1 - impostos - taxa - margem alvo) x multiplicador do horário.
+    Preço mínimo = custo ÷ (1 - impostos - taxa - margem mínima).
     preco_final: o preço que você quer cobrar (total); vira o desconto (negativo = acréscimo).
     extra: (preço, custo[, mão de obra, horas]) somados ao pacote, ex.: a consultoria do acompanhamento completo.
     Lucro = o que sobra depois do pró-labore (a mão de obra é custo); lucro/hora divide pelas horas de trabalho.
@@ -212,8 +217,15 @@ def calcular_misto(horarios: list, p: dict, pessoas: int = 1, desconto: float = 
     if forma_pagamento not in p["taxas"]:
         raise ValueError(f"Forma de pagamento desconhecida: {forma_pagamento}")
     base = horarios[0][0]
-    comps = [_componentes(b, p, pessoas, m, loc) for b, m, loc in horarios]
-    preco_cheio, custo, mao_obra, horas = (sum(c[i] for c in comps) / len(comps) for i in range(4))
+    taxa = p["das"] + p["taxas"][forma_pagamento]
+    margem_min = p["margens"].get(base["tipo_servico"], 0.15)
+    alvo = margem_alvo(p, base["tipo_servico"])
+    if 1 - taxa - alvo <= 1e-9:   # sem isso: divisão por zero (ou preço negativo) e a tela caía
+        raise ValueError("Imposto + taxa + margem passam de 100%: ajuste em Configurações")
+    comps = [_componentes(b, p, pessoas, loc) for b, _, loc in horarios]
+    custo, mao_obra, horas = (sum(c[i] for c in comps) / len(comps) for i in range(3))
+    mult = sum(float(m or 1) for _, m, _ in horarios) / len(horarios)
+    preco_cheio = custo * mult / (1 - taxa - alvo)
     if extra:
         extra = tuple(extra) + (0.0,) * (4 - len(extra))
         preco_cheio += float(extra[0] or 0)
@@ -227,15 +239,10 @@ def calcular_misto(horarios: list, p: dict, pessoas: int = 1, desconto: float = 
         raise ValueError("Desconto deve ficar abaixo de 100% (e o acréscimo, no máximo 900%)")
 
     sessoes = float(base.get("sessoes_mes") or 0)
-    taxa = p["das"] + p["taxas"][forma_pagamento]
-    margem_min = p["margens"].get(base["tipo_servico"], 0.15)
-
     preco = preco_final if preco_final is not None and preco_final > 0 else preco_cheio * (1 - desconto)
 
     lucro = preco * (1 - taxa) - custo
     margem = lucro / preco if preco else 0.0
-    if 1 - taxa - margem_min <= 1e-9:   # sem isso: divisão por zero (ou preço mínimo negativo) e a tela caía
-        raise ValueError("Imposto + taxa + margem mínima passam de 100%: ajuste em Configurações")
     preco_minimo = custo / (1 - taxa - margem_min)
     desconto_maximo = max(0.0, 1 - preco_minimo / preco_cheio) if preco_cheio else 0.0
     # Os 3 pisos da negociação (lucro aqui é DEPOIS do seu salário):
@@ -266,6 +273,7 @@ def calcular_misto(horarios: list, p: dict, pessoas: int = 1, desconto: float = 
         "preco_minimo": round(preco_minimo, 2),
         "desconto_maximo": round(desconto_maximo, 4),
         "margem_minima": margem_min,
+        "margem_alvo": alvo,
         "abaixo_margem": margem < margem_min - 1e-9,
         "sessoes": sessoes,
         "custo_negocio": round(custo_negocio, 2),

@@ -35,7 +35,7 @@ DIAS = {1: "Segunda", 2: "Terça", 3: "Quarta", 4: "Quinta", 5: "Sexta", 6: "Sá
 DIAS_CURTO = {1: "Seg", 2: "Ter", 3: "Qua", 4: "Qui", 5: "Sex", 6: "Sáb", 7: "Dom"}
 ETAPAS = [("lead", "Lead"), ("conversa", "Conversa"), ("avaliacao", "Avaliação marcada"), ("cliente", "Cliente"), ("perdido", "Perdido")]
 HORAS_PICO = [7, 9, 18, 19]
-SEMANAS_MES = 4.33
+SEMANAS_MES = precos.SEMANAS_MES
 
 
 @asynccontextmanager
@@ -237,42 +237,33 @@ def tem_aulas(c, com_horario) -> bool:
 
 
 def carregar_bases(con) -> dict:
-    """Todos os preços base de uma vez: {(tipo_servico, local, qtd_aulas, freq_semanal): [linhas por forma de pagamento]}.
-    Evita uma consulta por aluno em base_do_cliente(bases=...)."""
-    bases = {}
-    for b in con.execute("SELECT * FROM precos_base ORDER BY forma_pagamento"):
-        bases.setdefault((b["tipo_servico"], b["local"], b["qtd_aulas"], b["freq_semanal"]), []).append(b)
-    return bases
+    """Compatibilidade: os planos saem do motor (precos.base_motor), não há mais tabela para carregar."""
+    return {}
 
 
 def base_do_cliente(con, c, bases=None):
-    """Linha de precos_base mais parecida com o plano do cliente (para estimar custo e lucro).
-    bases = carregar_bases(con): usa o que já foi carregado, na mesma ordem da consulta (a forma de pagamento do aluno primeiro)."""
-    qtd = int(aulas_mes(c)) if c["tipo_servico"] == "Pacote de Aulas" else 0
+    """Plano do aluno no motor de preços (tipo, aulas e local da ficha). None se o tipo de serviço não é precificável."""
+    tipo = (c["tipo_servico"] or "").strip()
+    if tipo not in {t for t, _, _ in precos.PLANOS}:
+        return None
+    qtd = int(aulas_mes(c)) if tipo == "Pacote de Aulas" else 0
     m = re.search(r"Mensalidade (\d+)x", c["plano"] or "")
     freq = int(m.group(1)) if m else 0
-    forma = c["forma_pagamento"] if c["forma_pagamento"] in db.LISTAS_INICIAIS["lista_formas_pagamento"] else "PIX"
-    if bases is not None:
-        linhas = bases.get((c["tipo_servico"], c["local"], qtd, freq), [])
-        return next((b for b in linhas if b["forma_pagamento"] == forma), linhas[0] if linhas else None)
-    return con.execute(
-        """SELECT * FROM precos_base WHERE tipo_servico=? AND local=? AND qtd_aulas=? AND freq_semanal=?
-           ORDER BY (forma_pagamento=?) DESC, forma_pagamento LIMIT 1""",
-        (c["tipo_servico"], c["local"], qtd, freq, forma)).fetchone()
+    if (tipo == "Pacote de Aulas" and qtd < 1) or (tipo == "Mensalidade" and freq < 1):
+        return None
+    return precos.base_motor(tipo, qtd, freq, c["local"])
 
 
 def estimativa_cliente(con, c, p, bases=None):
-    """Preço, custo e lucro do aluno pelo motor de preços (o mesmo da ficha, do simulador e da grade). None sem preço base ou sem valor.
-    O valor da ficha é o que o aluno paga de verdade: o multiplicador de grupo do motor não se aplica por cima dele.
-    bases = carregar_bases(con) evita uma consulta por aluno."""
+    """Preço, custo e lucro do aluno pelo motor de preços (o mesmo da ficha, das propostas e da grade). None sem plano ou sem valor.
+    O valor da ficha é o que o aluno paga de verdade: entra como o preço final."""
     base = base_do_cliente(con, c, bases)
     if not (base and c["valor"]):
         return None
     pessoas = c["pessoas"] or 1
     forma = c["forma_pagamento"] if c["forma_pagamento"] in p["taxas"] else "PIX"
     try:
-        return precos.calcular({**dict(base), "preco_base": c["valor"] / (precos.por_grupo(p["grupo_mult"], pessoas, 1.0) or 1.0)}, p,
-                               pessoas=pessoas, forma_pagamento=forma)
+        return precos.calcular(base, p, pessoas=pessoas, forma_pagamento=forma, preco_final=c["valor"])
     except ValueError:
         return None
 
@@ -419,7 +410,7 @@ def alertas(con):
 # =====================================================================
 def horas_trabalho_mes(con, p, bases=None) -> float:
     """Suas horas de trabalho no mês: para cada aluno ativo, as aulas do plano (as da "Agenda ocupada") + deslocamento +
-    planejamento + consultoria, pela regra do tempo (precos.minutos_trabalho). Aluno sem preço base conta só as aulas."""
+    planejamento + consultoria, pela regra do tempo (precos.minutos_trabalho). Aluno sem plano do motor conta só as aulas."""
     bases = bases if bases is not None else carregar_bases(con)
     horas = 0.0
     for c in con.execute("SELECT * FROM clientes WHERE excluido_em IS NULL AND status='ativo'"):
@@ -472,7 +463,7 @@ def calcular_metricas(con, mes=None):
         if (c["pessoas"] or 1) > 1:
             receita_grupos += c["valor"] or 0
         est = estimativa_cliente(con, c, p, bases)
-        if est:   # lucro/h só sobre as horas de quem tem preço base: sem ele o aluno não tem lucro calculado
+        if est:   # lucro/h só sobre as horas de quem tem plano no motor: sem ele o aluno não tem lucro calculado
             horas_com_preco += h
             lucro_total += est["lucro"]
     perdidos = con.execute("""SELECT COUNT(*) FROM cliente_eventos WHERE tipo='status' AND descricao LIKE '%inativo%'
@@ -1194,10 +1185,10 @@ def lead_excluir(lid: int, con=Depends(get_db)):
 # 3. GRADE DE HORÁRIOS
 # =====================================================================
 def plano_referencia(con, tipo_calculo, local, ref=0):
-    # ref = vezes por semana (Mensalidades) ou nº de aulas (Pacotes); 0 = padrão 2x/sem ou 8 aulas
+    """Plano do motor que a Grade precifica. ref = vezes por semana (Mensalidades) ou nº de aulas (Pacotes); 0 = 2x/sem ou 8 aulas."""
     if tipo_calculo == "Mensalidades":
-        return con.execute("SELECT * FROM precos_base WHERE tipo_servico='Mensalidade' AND local=? AND forma_pagamento='PIX' ORDER BY abs(freq_semanal-?) LIMIT 1", (local, ref or 2)).fetchone()
-    return con.execute("SELECT * FROM precos_base WHERE tipo_servico='Pacote de Aulas' AND local=? AND forma_pagamento='PIX' ORDER BY abs(qtd_aulas-?) LIMIT 1", (local, ref or 8)).fetchone()
+        return precos.base_motor("Mensalidade", freq=ref or 2, local=local)
+    return precos.base_motor("Pacote de Aulas", qtd=ref or 8, local=local)
 
 
 @app.get("/grade", response_class=HTMLResponse)
@@ -1206,7 +1197,7 @@ def grade(request: Request, tipo: str = "Pacotes", local: str = "CIA", vale: int
     p = precos.carregar_parametros(con)
     base = plano_referencia(con, tipo, local, ref)
     col, servico = ("freq_semanal", "Mensalidade") if tipo == "Mensalidades" else ("qtd_aulas", "Pacote de Aulas")
-    refs = [r[0] for r in con.execute(f"SELECT DISTINCT {col} FROM precos_base WHERE tipo_servico=? AND local=? AND forma_pagamento='PIX' AND {col} IS NOT NULL ORDER BY 1", (servico, local))]
+    refs = sorted({(q if servico == "Pacote de Aulas" else fr) for t, q, fr in precos.PLANOS if t == servico} | ({ref} if ref else set()))
     celulas = {}
     minima = p["margens"].get(base["tipo_servico"], 0.15) if base else 0.15   # as cores seguem a margem mínima do plano
     for s in slots:
@@ -2141,10 +2132,9 @@ def _rotulo_plano(tipo, qtd, freq) -> str:
     return tipo
 
 
-def opcoes_plano(con):
-    rows = con.execute("SELECT DISTINCT tipo_servico, qtd_aulas, freq_semanal FROM precos_base ORDER BY tipo_servico, qtd_aulas, freq_semanal").fetchall()
-    return [{"valor": f"{r['tipo_servico']}|{r['qtd_aulas']}|{r['freq_semanal']}",
-             "rotulo": _rotulo_plano(r["tipo_servico"], r["qtd_aulas"], r["freq_semanal"])} for r in rows]
+def opcoes_plano(con=None):
+    """Planos da lista de Propostas: os do motor (precos.PLANOS); o pacote de 1 a 20 aulas vem do campo personalizado."""
+    return [{"valor": f"{t}|{q}|{f}", "rotulo": _rotulo_plano(t, q, f)} for t, q, f in precos.PLANOS]
 
 
 def _ler_horarios(h: list[str]) -> list[dict]:
@@ -2222,55 +2212,30 @@ def _plano_efetivo(plano: str, aulas, por_semana) -> str:
 
 
 def _base_plano(con, tipo, qtd, freq, loc, forma):
-    """Linha de preço do plano no local. Pacote com nº de aulas que não está cadastrado (ex.: 7)
-    é calculado a partir dos pacotes que existem (precos.base_pacote). None = não dá para calcular."""
-    row = con.execute("""SELECT * FROM precos_base WHERE tipo_servico=? AND qtd_aulas=? AND freq_semanal=? AND local=?
-                         ORDER BY (forma_pagamento=?) DESC LIMIT 1""", (tipo, qtd, freq, loc, forma)).fetchone()
-    if row:
-        return dict(row)
-    if tipo != "Pacote de Aulas" or qtd < 1:
+    """Plano no local pelo motor de preços (qualquer nº de aulas de 1 a 20). None = tipo de serviço que não tem preço."""
+    if tipo not in {t for t, _, _ in precos.PLANOS} or (tipo == "Pacote de Aulas" and qtd < 1) or (tipo == "Mensalidade" and freq < 1):
         return None
-    row = con.execute("""SELECT * FROM precos_base WHERE tipo_servico=? AND qtd_aulas=? AND local=?
-                         ORDER BY (forma_pagamento=?) DESC, freq_semanal LIMIT 1""", (tipo, qtd, loc, forma)).fetchone()
-    if row:
-        base = dict(row)
-        base["freq_semanal"] = freq
-        return base
-    rows, vistos = [], set()
-    for r in con.execute("""SELECT * FROM precos_base WHERE tipo_servico='Pacote de Aulas' AND local=? AND qtd_aulas>0
-                            ORDER BY qtd_aulas, (forma_pagamento=?) DESC, freq_semanal""", (loc, forma)):
-        if r["qtd_aulas"] not in vistos:
-            vistos.add(r["qtd_aulas"])
-            rows.append(dict(r))
-    av = con.execute("""SELECT * FROM precos_base WHERE tipo_servico='Aula avulsa' AND local=?
-                        ORDER BY (forma_pagamento=?) DESC LIMIT 1""", (loc, forma)).fetchone()
-    if not rows and not av:
-        return None
-    base = precos.base_pacote(rows, qtd, dict(av) if av else None)
-    base["freq_semanal"] = freq
-    return base
+    return precos.base_motor(tipo, qtd, freq, loc)
 
 
 def _extra_consultoria(con, consultoria, tipo, qtd, freq, loc, forma, pessoas, p):
     """(preço, custo, mão de obra, horas, meses) da consultoria somada ao pacote (acompanhamento completo).
     Meses = quanto tempo o pacote dura (aulas ÷ aulas por semana; sem frequência, 2x por semana).
-    Custo pelo motor (precos.custo_servico): o custo operacional da planilha já traz a mão de obra, então ela não soma de novo."""
+    Preço = o de tabela da consultoria no motor x meses x pessoas, com o desconto do combo."""
     if consultoria not in CONSULTORIAS:
         raise ValueError(f"Consultoria desconhecida: {consultoria}")
     if tipo.startswith("Consultoria"):
         raise ValueError("O plano já é uma consultoria: escolha 'Sem consultoria'")
-    row = con.execute("""SELECT * FROM precos_base WHERE tipo_servico=?
-                         ORDER BY (local=?) DESC, (forma_pagamento=?) DESC LIMIT 1""", (consultoria, loc, forma)).fetchone()
-    if not row:
-        raise ValueError(f"Não há preço de {consultoria}. Importe a planilha ou cadastre em Configurações.")
     if tipo == "Pacote de Aulas":
         semanas = math.ceil(qtd / (freq or 2))
         meses = max(1, math.ceil(semanas / 4.345 - 1e-9))
     else:
         meses = 1
     combo = db.parametros(con, "pacote_personalizado").get("desconto_consultoria", 0.15)
-    preco = meses * float(row["preco_base"] or 0) * (1 - combo) * pessoas
-    resto, mo, horas = precos.custo_servico(dict(row), p, row["local"])
+    base = precos.base_motor(consultoria, local=loc)
+    um = precos.calcular(base, p, forma_pagamento=forma, local=loc)
+    preco = meses * um["preco_cheio"] * (1 - combo) * pessoas
+    resto, mo, horas = precos.custo_servico(base, p, loc)
     n = meses * pessoas
     return preco, (resto + mo) * n, mo * n, horas * n, meses
 
@@ -2289,7 +2254,7 @@ def simular(con, plano, horarios, forma, pessoas, desconto=0.0, preco_final=None
         if loc not in bases:
             bases[loc] = _base_plano(con, tipo, qtd, freq, loc, forma)
             if not bases[loc]:
-                raise ValueError(f"Não há preço de {_rotulo_plano(tipo, qtd, freq)} em {loc}. Importe a planilha ou cadastre em Configurações.")
+                raise ValueError(f"{_rotulo_plano(tipo, qtd, freq)} não tem preço: escolha um plano da lista")
         base = dict(bases[loc])
         mult, status = 1.0, None
         if hh["dia"] and hh["hora"]:
@@ -2328,20 +2293,9 @@ def contrapropostas(con, r, itens, p, pessoas, forma, consultoria, extra=None) -
         return out
     preco = r["preco_total"]
     if r["tipo"] == "Pacote de Aulas" and not consultoria and r["qtd"] > 1:
-        pacotes = {}
-        for loc in {i[2] for i in itens}:
-            rows, vistos = [], set()
-            for x in con.execute("""SELECT * FROM precos_base WHERE tipo_servico='Pacote de Aulas' AND local=? AND qtd_aulas>0
-                                    ORDER BY qtd_aulas, (forma_pagamento=?) DESC, freq_semanal""", (loc, forma)):
-                if x["qtd_aulas"] not in vistos:
-                    vistos.add(x["qtd_aulas"])
-                    rows.append(dict(x))
-            av = con.execute("SELECT * FROM precos_base WHERE tipo_servico='Aula avulsa' AND local=? ORDER BY (forma_pagamento=?) DESC LIMIT 1",
-                             (loc, forma)).fetchone()
-            pacotes[loc] = (rows, dict(av) if av else None)
         for n in range(r["qtd"] - 1, 0, -1):
             try:
-                hs = [(precos.base_pacote(pacotes[loc][0], n, pacotes[loc][1]) | {"local": loc}, m, loc) for _, m, loc in itens]
+                hs = [(precos.base_motor("Pacote de Aulas", n, r["freq"], loc), m, loc) for _, m, loc in itens]
                 x = precos.calcular_misto(hs, p, pessoas=pessoas, forma_pagamento=forma, preco_final=preco)
             except ValueError:
                 break
@@ -2507,12 +2461,9 @@ def proposta_excluir(pid: int, con=Depends(get_db)):
 def explorador(request: Request, local: str = "CIA", tipo_servico: str = "", forma: str = "PIX", pessoas: int = 1, dia: int = 0,
                ordem: str = "lucro_hora", so_vale: int = 0, con=Depends(get_db)):
     p = precos.carregar_parametros(con)
-    sql = "SELECT * FROM precos_base WHERE local=? AND forma_pagamento=?"
-    args = [local, forma]
-    if tipo_servico:
-        sql += " AND tipo_servico=?"
-        args.append(tipo_servico)
-    bases = con.execute(sql, args).fetchall()
+    if forma not in p["taxas"]:
+        forma = "PIX"
+    bases = [precos.base_motor(t, q, fr, local) for t, q, fr in precos.PLANOS if not tipo_servico or t == tipo_servico]
     slots = con.execute("SELECT * FROM grade_slots WHERE local=? AND status='livre' AND dia BETWEEN 1 AND 6" + (" AND dia=?" if dia else ""),
                         (local, dia) if dia else (local,)).fetchall()
     linhas = []
@@ -2531,7 +2482,7 @@ def explorador(request: Request, local: str = "CIA", tipo_servico: str = "", for
             linhas.append({**r, "tipo_servico": b["tipo_servico"], "qtd_aulas": b["qtd_aulas"], "freq_semanal": b["freq_semanal"],
                            "dia": s["dia"] if s else None, "hora": s["hora"] if s else None, "mult": mult})
     linhas.sort(key=lambda x: x.get(ordem) or 0, reverse=ordem != "preco_total")
-    tipos = [r[0] for r in con.execute("SELECT DISTINCT tipo_servico FROM precos_base ORDER BY 1")]
+    tipos = sorted({t for t, _, _ in precos.PLANOS})
     return render(request, "explorador.html", con, linhas=linhas[:400], total=len(linhas), tipos=tipos,
                   f=dict(local=local, tipo_servico=tipo_servico, forma=forma, pessoas=pessoas, dia=dia, ordem=ordem, so_vale=so_vale))
 
@@ -3354,7 +3305,8 @@ def assistente_excluir(cid: int, con=Depends(get_db)):
 # =====================================================================
 GRUPOS_CONFIG = [("taxa_pagamento", "Taxas por forma de pagamento", "pct"),
                  ("margem_minima", "Margem mínima por serviço", "pct"), ("taxa_cia", "Taxa da CIA por pessoa (R$) e máximo de pessoas", "num"),
-                 ("grupo_multiplicador", "Multiplicador de preço por nº de pessoas", "num"),
+                 ("margem_alvo", "Margem alvo por serviço: a do preço de tabela, antes do desconto (fica acima da mínima)", "pct"),
+                 ("grupo_multiplicador", "Multiplicador por nº de pessoas: só a estimativa das Sugestões (o preço do grupo sai do custo)", "num"),
                  ("grupo_mao_obra_extra", "Mão de obra extra por nº de pessoas", "pct"), ("metas", "Metas do painel", "num"),
                  ("mao_obra", "Mão de obra = pró-labore (seu salário): valor da hora (R$; 0 = usa a planilha) e minutos de "
                               "trabalho (aula, planejamento por pacote e por mês de mensalidade, consultoria por mês, avaliação; "
@@ -3384,17 +3336,16 @@ def configuracoes(request: Request, con=Depends(get_db)):
             grupos.append({"grupo": g, "titulo": titulo, "fmt": fmt, "itens": rows})
     listas_ = [(k, k.replace("lista_", "").replace("_", " ").capitalize(), con.execute("SELECT * FROM parametros WHERE grupo=? ORDER BY ordem", (k,)).fetchall())
                for k in db.LISTAS_INICIAIS]
-    precos_ = con.execute("SELECT * FROM precos_base ORDER BY tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal").fetchall()
     ultima = con.execute("SELECT * FROM importacoes ORDER BY id DESC LIMIT 1").fetchone()
     msgs = con.execute("SELECT id, chave, valor_texto FROM parametros WHERE grupo='msg_whatsapp' ORDER BY ordem").fetchall()
     dados = con.execute("SELECT id, chave, valor_texto FROM parametros WHERE grupo='msg_dados' ORDER BY ordem").fetchall()
-    return render(request, "configuracoes.html", con, grupos=grupos, msgs=msgs, msgs_dados=dados, listas_cfg=listas_, precos=precos_, ultima=ultima,
+    return render(request, "configuracoes.html", con, grupos=grupos, msgs=msgs, msgs_dados=dados, listas_cfg=listas_, ultima=ultima,
                   planilha=str(db.PLANILHA), planilha_existe=db.PLANILHA.exists(), assistente=assistente.info(),
                   salario_hora=precos.carregar_parametros(con)["salario_hora"],
                   das=financeiro.das_competencia(con, mes_atual()), das_txt=financeiro.texto_pct(financeiro.pct_das(con, dt.date.today().isoformat())))
 
 
-CALCULOS_GRUPOS = ["mao_obra", "metas", "margem_minima", "taxa_pagamento", "grupo_multiplicador", "grupo_mao_obra_extra"]
+CALCULOS_GRUPOS = ["mao_obra", "metas", "margem_minima", "margem_alvo", "taxa_pagamento", "grupo_mao_obra_extra"]
 CALCULOS_METAS = {"horas_vendaveis"}   # das metas, só as que entram no cálculo
 ROTULOS = {
     "valor_hora": "Valor da hora fixo (R$), usado sem gastos da PF; 0 desliga a regra do tempo",
@@ -3419,7 +3370,7 @@ def calculos(request: Request, con=Depends(get_db)):
             t, f = titulos[g]
             grupos.append({"grupo": g, "titulo": "Agenda cheia" if g == "metas" else t.split(":")[0], "fmt": f, "itens": rows})
     p = precos.carregar_parametros(con)
-    return render(request, "calculos.html", con, grupos=grupos, rotulos=ROTULOS, salario_hora=p["salario_hora"],
+    return render(request, "calculos.html", con, grupos=grupos, rotulos=ROTULOS, salario_hora=p["salario_hora"], rateio=p["rateio"],
                   cobre=cobre_custos(con, p), das_txt=financeiro.texto_pct(p["das"]))
 
 
@@ -3429,7 +3380,6 @@ async def configuracoes_salvar(request: Request, con=Depends(get_db)):
     destino = "/calculos" if form.get("voltar") == "/calculos" else "/configuracoes"   # lista fechada: nada de redirecionar para fora
     try:
         with con:
-            cia_antes = precos.taxas_cia(con)[0].get(1, 0.0)
             for k, v in form.items():
                 if k.startswith("p_") and v != "":
                     pid = int(k[2:])
@@ -3439,7 +3389,6 @@ async def configuracoes_salvar(request: Request, con=Depends(get_db)):
                 elif k.startswith("t_"):
                     con.execute("UPDATE parametros SET valor_texto=? WHERE id=? AND grupo IN ('msg_whatsapp','msg_dados')", (v.strip(), int(k[2:])))
             _checar_margens(con)
-            loc.ajustar_custos_cia(con, cia_antes, precos.taxas_cia(con)[0].get(1, 0.0))
     except ValueError as e:   # nada é salvo (o with desfaz)
         return voltar(destino, erro=str(e))
     return voltar(destino, msg="Parâmetros salvos.")
@@ -3452,6 +3401,10 @@ def _checar_margens(con) -> None:
     for servico, m in p["margens"].items():
         if m >= 1 or taxa + m >= 1:
             raise ValueError(f"Margem mínima de {servico} ({pct(m)}) + imposto e taxas passam de 100%. Use uma margem menor.")
+    for servico in set(p["margens"]) | set(p["margens_alvo"]):
+        m = precos.margem_alvo(p, servico)
+        if taxa + m >= 1:
+            raise ValueError(f"Margem alvo de {servico} ({pct(m)}) + imposto e taxas passam de 100%. Use uma margem menor.")
 
 
 @app.post("/configuracoes/assistente")
@@ -3478,11 +3431,11 @@ def configuracoes_lista(grupo: str = Form(...), nome: str = Form(...), con=Depen
 
 
 @app.post("/locais/novo")
-def locais_novo(nome: str = Form(...), referencia: str = Form("CIA"), modo: str = Form("margem"), taxa_aula: str = Form("0"),
+def locais_novo(nome: str = Form(...), referencia: str = Form("CIA"), taxa_aula: str = Form("0"),
                 taxa_pessoa_extra: str = Form("0"), max_pessoas: str = Form("0"), deslocamento: str = Form("0"),
                 tempo_deslocamento: str = Form("0"), taxa_mensal: str = Form("0"), aulas_mes: str = Form("0"),
                 voltar_para: str = Form("/grade", alias="voltar"), con=Depends(get_db)):
-    """Pop-up "+ Novo local" (Grade, Agenda, Propostas): grava os custos e cria os preços e a grade copiando a referência."""
+    """Pop-up "+ Novo local" (Grade, Agenda, Propostas): grava os custos e copia a grade da referência. Os preços saem do motor."""
     url = _caminho_seguro(voltar_para) or "/grade"   # "/\mal.com" o navegador lê como outro site
     caminho, _, q = url.partition("?")   # volta para a mesma tela (semana, proposta), sem o aviso velho
     q = "&".join(x for x in q.split("&") if x and not x.startswith(("msg=", "erro=")))
@@ -3491,34 +3444,30 @@ def locais_novo(nome: str = Form(...), referencia: str = Form("CIA"), modo: str 
                 tempo_deslocamento=tempo_deslocamento, taxa_mensal=taxa_mensal, aulas_mes=aulas_mes)
     try:
         custos = {k: _num_br(v) for k, v in nums.items()}
-        r = loc.criar_local(con, nome, referencia, modo, **custos)
+        r = loc.criar_local(con, nome, referencia, **custos)
     except ValueError as e:
         msg = str(e) if "could not convert" not in str(e) else "Confira os números (use só algarismos e vírgula)"
         return voltar(url, erro=msg)
     nome = nome.strip()
     if url.startswith("/grade"):
         url = "/grade?local=" + quote(nome)
-    aviso = "" if r["precos"] else f" (sem preços: '{referencia}' não tem Pacote nem Mensalidade)"
-    if r.get("mantidos"):
-        aviso += f". Mantive o preço de {referencia} em {r['mantidos']} plano(s): com custo zero (na referência ou no local novo) a margem não dá para manter; ajuste esses preços à mão"
-    return voltar(url, msg=f"Local {nome} criado: {r['precos']} preços e {r['horarios']} horários na grade{aviso}.")
+    return voltar(url, msg=f"Local {nome} criado: {r['horarios']} horários na grade. Os preços saem dos custos dele.")
 
 
 @app.post("/locais/editar")
-def locais_editar(nome: str = Form(...), modo: str = Form("margem"), taxa_aula: str = Form("0"),
+def locais_editar(nome: str = Form(...), taxa_aula: str = Form("0"),
                   taxa_pessoa_extra: str = Form("0"), max_pessoas: str = Form("0"), deslocamento: str = Form("0"),
                   tempo_deslocamento: str = Form("0"), taxa_mensal: str = Form("0"), aulas_mes: str = Form("0"), con=Depends(get_db)):
-    """Botão "Editar local" da Grade: mesmo pop-up do "+ Novo local", com o nome travado. Refaz os preços do local."""
+    """Botão "Editar local" da Grade: mesmo pop-up do "+ Novo local", com o nome travado. Os preços acompanham os custos."""
     url = "/grade?local=" + quote(nome.strip())
     nums = dict(taxa_aula=taxa_aula, taxa_pessoa_extra=taxa_pessoa_extra, max_pessoas=max_pessoas, deslocamento=deslocamento,
                 tempo_deslocamento=tempo_deslocamento, taxa_mensal=taxa_mensal, aulas_mes=aulas_mes)
     try:
-        r = loc.editar_local(con, nome, modo, **{k: _num_br(v) for k, v in nums.items()})
+        loc.editar_local(con, nome, **{k: _num_br(v) for k, v in nums.items()})
     except ValueError as e:
         msg = str(e) if "could not convert" not in str(e) else "Confira os números (use só algarismos e vírgula)"
         return voltar(url, erro=msg)
-    aviso = f". Mantive o preço em {r['mantidos']} plano(s) com custo zero; ajuste à mão" if r["mantidos"] else ""
-    return voltar(url, msg=f"Local {nome.strip()} atualizado: {r['precos']} preço(s) refeitos{aviso}.")
+    return voltar(url, msg=f"Local {nome.strip()} atualizado: os preços já usam os custos novos.")
 
 
 @app.post("/locais/excluir")
@@ -3535,21 +3484,6 @@ def configuracoes_lista_remover(pid: int, con=Depends(get_db)):
     with con:
         con.execute("DELETE FROM parametros WHERE id=? AND grupo LIKE 'lista_%'", (pid,))
     return voltar("/configuracoes", msg="Item removido da lista.")
-
-
-@app.post("/configuracoes/preco")
-def configuracoes_preco(tipo_servico: str = Form(...), local: str = Form(...), forma_pagamento: str = Form(...), qtd_aulas: int = Form(0),
-                        freq_semanal: int = Form(0), sessoes_mes: float = Form(0), preco_base: float = Form(...),
-                        custo_operacional: float = Form(0), mao_obra: float = Form(0), con=Depends(get_db)):
-    with con:
-        con.execute("""INSERT INTO precos_base (tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal, sessoes_mes, preco_base,
-                       custo_operacional, mao_obra, custo_total, origem) VALUES (?,?,?,?,?,?,?,?,?,?,'manual')
-                       ON CONFLICT(tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal) DO UPDATE SET sessoes_mes=excluded.sessoes_mes,
-                       preco_base=excluded.preco_base, custo_operacional=excluded.custo_operacional, mao_obra=excluded.mao_obra,
-                       custo_total=excluded.custo_total, origem='manual'""",
-                    (tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal, sessoes_mes, preco_base, custo_operacional, mao_obra,
-                     custo_operacional))
-    return voltar("/configuracoes", msg="Preço base salvo.")
 
 
 @app.post("/importar")

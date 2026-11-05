@@ -25,7 +25,7 @@
     <span><i style="background:var(--vermelho-f)"></i> &lt; {{ ((minima-0.05)*100)|round|int }}%</span><span><i style="background:#f5c9c5"></i> prejuízo</span>
     <span><i style="background:var(--aco)"></i> ocupado</span><span><i style="background:#dfe3ea"></i> indisponível</span>
   </div>
-  <div class="muted">{{ resumo.livres }} livres · {{ resumo.ocupados }} ocupados · {{ resumo.vale }} de vale{% if base %} · referência: {{ base.tipo_servico }} {{ base.qtd_aulas or base.freq_semanal ~ 'x/sem' }} {{ base.preco_base|moeda }}{% else %} · sem preço base para este local{% endif %}</div>
+  <div class="muted">{{ resumo.livres }} livres · {{ resumo.ocupados }} ocupados · {{ resumo.vale }} de vale{% if base %} · referência: {{ base.tipo_servico }} {{ base.qtd_aulas or base.freq_semanal ~ 'x/sem' }}{% endif %}</div>
 </div>
 <p class="muted" style="margin:6px 0 0"><b>Em cada horário livre:</b> número grande = preço por aula · Total = valor do {{ 'pacote' if tipo == 'Pacotes' else 'mês' }} de referência · Lucro = quanto sobra desse total (R$ e %) · x0,90 = multiplicador do horário (abaixo de 1 = vale)</p>
 <div class="rolagem mt">
