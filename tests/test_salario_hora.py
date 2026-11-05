@@ -127,3 +127,46 @@ def test_painel_e_configuracoes_mostram_de_onde_vem_o_valor(con):
     assert "O mês cobre seus custos?" in painel and 'href="/calculos"' in painel
     cfg = http.get("/configuracoes").text
     assert "Salário por hora em uso" in cfg and "R$ 46,39" in cfg
+
+
+def _fixo(con, valor_hora=53):
+    with con:
+        con.execute("UPDATE parametros SET valor=? WHERE grupo='mao_obra' AND chave='valor_hora'", (valor_hora,))
+        con.execute("UPDATE parametros SET valor=0 WHERE grupo='mao_obra' AND chave='valor_hora_auto'")
+
+
+def test_valor_fixo_vai_para_os_precos(con):
+    _fixo(con)
+    p = precos.carregar_parametros(con)
+    base = dict(con.execute("SELECT * FROM precos_base WHERE tipo_servico='Pacote de Aulas'").fetchone())
+    r = precos.calcular(base, p, 1)
+    assert r["valor_hora"] == 53 and r["horas"] == 9 and r["mao_obra"] == pytest.approx(477)
+
+
+def test_cobre_custos_no_fixo_mostra_o_que_o_lucro_paga_da_pf(con):
+    aluno(con, "Ana")
+    gasto_pf(con, 4500, -1)
+    _fixo(con)
+    c = main.cobre_custos(con, precos.carregar_parametros(con))
+    assert not c["pessoal_pf"] and c["pessoal"] == pytest.approx(477) and c["gasto_pf"] == 4500
+    assert c["falta_pf"] == pytest.approx(4500 - 477)
+    assert c["sobra_pf"] == pytest.approx(c["sobra"] - c["falta_pf"]) and not c["cobre_tudo"]
+
+
+def test_cobre_custos_automatico_nao_conta_a_pf_duas_vezes(con):
+    aluno(con, "Ana")
+    gasto_pf(con, 4500, -1)
+    c = main.cobre_custos(con, precos.carregar_parametros(con))
+    assert c["pessoal_pf"] and c["falta_pf"] == 0 and c["cobre_tudo"] == c["cobre"]
+
+
+def test_painel_e_calculos_no_fixo_escolhido(con):
+    aluno(con, "Ana")
+    gasto_pf(con, 4500, -1)
+    _fixo(con)
+    http = TestClient(main.app, base_url="http://localhost")
+    painel = http.get("/").text
+    assert "valor fixo escolhido por você" in painel and "lance os gastos da PF" not in painel
+    assert "com o resto da PF" in painel
+    t = http.get("/calculos").text
+    assert "O lucro precisa cobrir" in t and "R$ 4.023,00" in t

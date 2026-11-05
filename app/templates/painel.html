@@ -47,10 +47,10 @@
          'verde' if m.clientes_perdidos <= metas.perdidos_max else 'vermelho', atual=m.clientes_perdidos, ant=ant.clientes_perdidos, menor_melhor=true) }}
   {{ kpi('Vendas com margem < 10%', m.vendas_abaixo_10, 0, 0, 'verde' if m.vendas_abaixo_10 == 0 else 'vermelho', atual=m.vendas_abaixo_10, ant=ant.vendas_abaixo_10, menor_melhor=true) }}
   {% if m.salario_hora %}{% set sh = m.salario_hora %}
-  <div class="kpi {{ '' if sh.usado else 'amarelo' }}">
+  <div class="kpi {{ 'amarelo' if sh.ligado and not sh.usado else '' }}">
     <div class="rotulo">Seu salário por hora</div>
     <div class="valor">{{ sh.valor_hora|moeda }}</div>
-    <div class="meta">{% if sh.usado %}custos pessoais {{ sh.custo_pessoal|moeda }}/mês ÷ {{ sh.horas_base|num(0) }} h da agenda cheia{% else %}valor fixo: lance os gastos da PF para calcular{% endif %}
+    <div class="meta">{% if sh.usado %}custos pessoais {{ sh.custo_pessoal|moeda }}/mês ÷ {{ sh.horas_base|num(0) }} h da agenda cheia{% elif sh.ligado %}valor fixo: lance os gastos da PF para calcular{% else %}valor fixo escolhido por você{% endif %}
       · <a href="/calculos">ajustar</a></div>
   </div>
   {% endif %}
@@ -58,7 +58,9 @@
   <div class="kpi {{ 'verde' if cb.cobre else 'vermelho' }}">
     <div class="rotulo">O mês cobre seus custos?</div>
     <div class="valor">{{ 'Sim' if cb.cobre else 'Não' }}</div>
-    <div class="meta">{{ 'sobram' if cb.cobre else 'faltam' }} {{ (cb.sobra if cb.cobre else -cb.sobra)|moeda }}/mês · <a href="/calculos">ver a conta</a></div>
+    <div class="meta">{{ 'sobram' if cb.cobre else 'faltam' }} {{ (cb.sobra if cb.cobre else -cb.sobra)|moeda }}/mês{% if cb.falta_pf %}
+      · com o resto da PF ({{ cb.falta_pf|moeda }}), {{ 'sobram' if cb.cobre_tudo else 'faltam' }} {{ (cb.sobra_pf if cb.cobre_tudo else -cb.sobra_pf)|moeda }}{% endif %}
+      · <a href="/calculos">ver a conta</a></div>
   </div>
   {% endif %}
   <div class="kpi">

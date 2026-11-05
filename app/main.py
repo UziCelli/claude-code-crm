@@ -448,9 +448,13 @@ def cobre_custos(con, p, bases=None) -> dict:
     sh = p["salario_hora"]
     pessoal = sh["custo_pessoal"] if sh["usado"] else mo
     sobra = receita - impostos - negocio - pessoal
+    # Com o valor da hora fixo, "pessoal" é só a mão de obra (hora x horas): o resto do que a PF gasta sai do lucro.
+    gasto_pf = sh["custo_pessoal"] if sh["usado"] else financeiro.custo_pessoal_medio(con, mes_atual())[0]
+    falta_pf = max(gasto_pf - pessoal, 0.0)
     return {"receita": round(receita, 2), "impostos": round(impostos, 2), "negocio": round(negocio, 2),
             "pessoal": round(pessoal, 2), "pessoal_pf": sh["usado"], "sobra": round(sobra, 2), "sem_base": sem_base,
-            "cobre": sobra >= 0}
+            "cobre": sobra >= 0, "gasto_pf": round(gasto_pf, 2), "falta_pf": round(falta_pf, 2),
+            "sobra_pf": round(sobra - falta_pf, 2), "cobre_tudo": sobra - falta_pf >= 0}
 
 
 def calcular_metricas(con, mes=None):
@@ -3394,7 +3398,8 @@ CALCULOS_GRUPOS = ["mao_obra", "metas", "margem_minima", "taxa_pagamento", "grup
 CALCULOS_METAS = {"horas_vendaveis"}   # das metas, só as que entram no cálculo
 ROTULOS = {
     "valor_hora": "Valor da hora fixo (R$), usado sem gastos da PF; 0 desliga a regra do tempo",
-    "valor_hora_auto": "Salário automático pelos gastos da PF (1 = sim, 0 = usa o fixo)",
+    "valor_hora_auto": "Salário automático pelos gastos da PF (0 = usa o valor fixo acima; 1 = gastos da PF ÷ horas, "
+                       "costuma inflar os preços)",
     "min_aula": "Minutos de cada aula", "min_planejamento_pacote": "Minutos de planejamento por pacote",
     "min_planejamento_mes": "Minutos de planejamento por mês (mensalidade)",
     "min_consultoria_mes": "Minutos de consultoria por aluno no mês", "min_avaliacao": "Minutos da avaliação física",

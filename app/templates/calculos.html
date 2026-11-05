@@ -15,6 +15,16 @@
         <th class="num" style="color:var(--{{ 'verde' if c.cobre else 'vermelho' }})">{{ (c.sobra if c.cobre else -c.sobra)|moeda }}</th></tr>
   </table>
   <p class="mt"><strong>{% if c.cobre %}Sim: cobre tudo e ainda sobra.{% else %}Ainda não: faltam {{ (-c.sobra)|moeda }} por mês para cobrir tudo.{% endif %}</strong></p>
+  {% if c.falta_pf %}
+  <table class="mt">
+    <tr><td>Gastos da PF (média dos últimos meses)</td><td class="num">{{ c.gasto_pf|moeda }}</td></tr>
+    <tr><td>− Já pagos pela sua mão de obra</td><td class="num">{{ c.pessoal|moeda }}</td></tr>
+    <tr><td>O lucro precisa cobrir</td><td class="num">{{ c.falta_pf|moeda }}</td></tr>
+    <tr><th>{{ 'Sobra depois de tudo' if c.cobre_tudo else 'Falta para cobrir tudo' }}</th>
+        <th class="num" style="color:var(--{{ 'verde' if c.cobre_tudo else 'vermelho' }})">{{ (c.sobra_pf if c.cobre_tudo else -c.sobra_pf)|moeda }}</th></tr>
+  </table>
+  <p class="muted">Com o valor da hora fixo, o preço paga só a sua mão de obra. O resto dos gastos da PF sai do lucro.</p>
+  {% endif %}
   {% if c.sem_base %}<p class="muted">{{ c.sem_base }} aluno(s) sem preço base: a mensalidade entra, mas os custos deles não (confira em Preços base).</p>{% endif %}
 </div>
 
