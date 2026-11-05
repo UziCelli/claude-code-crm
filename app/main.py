@@ -2399,7 +2399,24 @@ def proposta_ver(request: Request, pid: int, con=Depends(get_db)):
     if not cheio and p["desconto"] and p["desconto"] > 0 and p["preco_total"]:   # proposta de antes do preco_cheio
         cheio = p["preco_total"] / (1 - p["desconto"])
     return render(request, "proposta.html", con, prop=p, horarios_txt=horarios_das_propostas(con, [p])[p["id"]],
-                  preco_de=cheio if p["desconto"] and p["desconto"] > 0 else None)
+                  preco_de=cheio if p["desconto"] and p["desconto"] > 0 else None, hoje_paga=_hoje_paga(con, p))
+
+
+def _hoje_paga(con, p) -> dict | None:
+    """Proposta para quem já é aluno: compara com o que ele paga HOJE (por pessoa), não com o preço cheio.
+    Ex.: aluno sozinho paga R$ 800 e a proposta de dupla sai R$ 1.360 (R$ 680 cada) -> economiza R$ 120, não o desconto de tabela.
+    None = proposta de lead, aluno sem valor na ficha ou de outro tipo de serviço (período diferente: não dá para comparar)."""
+    if not (p["cliente_id"] and p["preco_total"]):
+        return None
+    c = con.execute("SELECT valor, pessoas, tipo_servico FROM clientes WHERE id=?", (p["cliente_id"],)).fetchone()
+    if not (c and c["valor"] and c["valor"] > 0):
+        return None
+    if c["tipo_servico"] and c["tipo_servico"] != p["tipo_servico"]:
+        return None
+    atual = c["valor"] / (c["pessoas"] or 1)                       # o valor da ficha é o do grupo do aluno
+    novo = p["preco_total"] / (p["pessoas"] or 1)
+    return {"atual": atual, "novo": novo, "economia": atual - novo, "pct": (atual - novo) / atual,
+            "mensal": p["tipo_servico"] == "Mensalidade"}
 
 
 @app.post("/propostas")

@@ -109,6 +109,35 @@ def test_pdf_sem_desconto_nao_mostra_de_por(http):
     assert "<s>" not in pdf and "R$ 2.000,00" in pdf
 
 
+def _pdf_dupla(c, cid, valor_hoje, tipo="Pacote de Aulas", preco_final="1700"):
+    con = db.conectar()
+    with con:
+        con.execute("UPDATE clientes SET valor=?, pessoas=1, tipo_servico=? WHERE id=?", (valor_hoje, tipo, cid))
+    con.close()
+    c.post("/propostas", data={"plano": PLANO, "forma": "PIX", "pessoas": 2, "preco_final": preco_final, "cliente_id": cid,
+                               "confirmar": 1, "h": ["2-7-CIA"]})
+    con = db.conectar()
+    pid = con.execute("SELECT id FROM propostas ORDER BY id DESC").fetchone()[0]
+    con.close()
+    return c.get(f"/propostas/{pid}").text
+
+
+def test_aluno_que_vira_dupla_ve_a_economia_sobre_o_que_ja_paga(http):
+    """Aluno sozinho paga R$ 1.000; a dupla sai R$ 1.700 (R$ 850 cada): economiza R$ 150 (15%), não o desconto de tabela."""
+    c, cid = http
+    pdf = _pdf_dupla(c, cid, 1000)
+    assert "Hoje você paga <b>R$ 1.000,00</b>" in pdf and "<b>R$ 850,00</b> por pessoa" in pdf
+    assert "você economiza R$ 150,00" in pdf and "−15,0%" in pdf
+    assert "Você economiza" not in pdf          # a economia de tabela (preço cheio da dupla) sumiu
+
+
+def test_aluno_sem_economia_ou_de_outro_servico_nao_ve_conta_falsa(http):
+    c, cid = http
+    assert "economiza" not in _pdf_dupla(c, cid, 800)                    # dupla sai mais cara que o que paga hoje
+    pdf = _pdf_dupla(c, cid, 1000, tipo="Mensalidade")                   # outro período: não compara
+    assert "Hoje você paga" not in pdf
+
+
 @pytest.mark.parametrize("campo,valor", [("desconto", "10%"), ("preco_final", "1000 reais"), ("ajuste", "abc")])
 def test_numero_invalido_mostra_frase_sem_quebrar(http, campo, valor):
     c, _ = http
