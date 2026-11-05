@@ -1271,6 +1271,28 @@ def _fixos_mes(con: sqlite3.Connection, mes: str, escopo: str, so_fixos: bool) -
         if not eh_das(r["descricao"], r["categoria"]))
 
 
+def custos_fixos_rateio(con: sqlite3.Connection, mes: str, locais: list | None = None) -> dict:
+    """Custos fixos que o preço divide por hora (MFIT, softwares, assinaturas): as recorrências fixas da PJ ativas no mês,
+    sem a Retirada e o DAS e sem o que o motor já cobra por aula (a conta da CIA e a de cada local criado aqui,
+    reconhecida pelo nome do local na descrição). {"total": R$ por mês, "itens": [{descricao, valor}]}."""
+    from .contas_auto import eh_cia
+    nomes = [_sem_acento_low(n) for n in (locais or []) if _sem_acento_low(n)]
+    itens = []
+    for r in con.execute("""SELECT descricao, categoria, valor FROM recorrencias WHERE excluido_em IS NULL AND escopo='PJ' AND fixo=1
+                            AND categoria != ? AND inicio <= ? AND (fim IS NULL OR fim >= ?) ORDER BY valor DESC, descricao""",
+                         (RETIRADA, mes, mes)):
+        desc = _sem_acento_low(r["descricao"])
+        # palavra inteira: um local "Box" não pode tirar a conta do "Dropbox"
+        if eh_das(r["descricao"], r["categoria"]) or eh_cia(r["descricao"]) or any(re.search(rf"\b{re.escape(n)}\b", desc) for n in nomes):
+            continue
+        itens.append({"descricao": r["descricao"], "valor": round(r["valor"], 2)})
+    return {"total": round(sum(i["valor"] for i in itens), 2), "itens": itens}
+
+
+def _sem_acento_low(texto: str | None) -> str:
+    return unicodedata.normalize("NFKD", texto or "").encode("ascii", "ignore").decode().strip().lower()
+
+
 def fixos_previstos(con: sqlite3.Connection, mes: str, escopo: str = "PJ", so_fixos: bool = True) -> float:
     """Soma prevista das contas recorrentes do escopo no mês (fixas por padrão), sem a Retirada e sem o DAS: o custo fixo de 1 mês."""
     return round(_fixos_mes(con, mes, escopo, so_fixos), 2)

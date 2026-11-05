@@ -73,8 +73,8 @@
     <div class="meta mt" style="margin-top:8px">
       {% if m.nivel == 1 %}Passa para 2 com lucro/h ≥ {{ metas.lucro_hora_dez26|moeda }} e {{ metas.horas_dez26|int }} h ocupadas.
       {% elif m.nivel == 2 %}Passa para 3 com {{ metas.horas_mar27|int }} h ocupadas e lista de espera no pico ({{ m.espera_pico }} hoje).
-      {% elif m.nivel == 3 %}Passa para 4 ao reajustar o preço base (+5–10%) em Configurações › metas › preco_base_reajuste.
-      {% else %}Preço base reajustado. Mantenha as métricas.{% endif %}
+      {% elif m.nivel == 3 %}Passa para 4 ao reajustar os preços (+5–10%: suba a margem alvo) e marcar Configurações › metas › preco_base_reajuste.
+      {% else %}Preços reajustados. Mantenha as métricas.{% endif %}
     </div>
   </div>
 </div>

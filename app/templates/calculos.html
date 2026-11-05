@@ -25,7 +25,8 @@
   </table>
   <p class="muted">Com o valor da hora fixo, o preço paga só a sua mão de obra. O resto dos gastos da PF sai do lucro.</p>
   {% endif %}
-  {% if c.sem_base %}<p class="muted">{{ c.sem_base }} aluno(s) sem preço base: a mensalidade entra, mas os custos deles não (confira em Preços base).</p>{% endif %}
+  {% if c.sem_base %}<p class="muted">{{ c.sem_base }} aluno(s) sem plano que o motor entenda (tipo de serviço, nº de aulas ou "Mensalidade 2x" na ficha):
+    a mensalidade entra, mas os custos deles não.</p>{% endif %}
 </div>
 
 {% set sh = salario_hora %}
@@ -37,6 +38,28 @@
     Assim cada aluno paga a parte dele do seu salário, e não o salário inteiro dividido pelos poucos alunos de agora.
     Se o mês cobre tudo está no quadro acima.</p>
   {% else %}{% include "_salario_hora.html" %}{% endif %}
+</div>
+
+{% set ra = rateio %}
+<div class="card mt" id="rateio">
+  <h2>Custos fixos no preço</h2>
+  <p><strong>{{ (ra.por_hora or 0)|moeda }} por hora de trabalho</strong> = {{ ra.total|moeda }}/mês ÷ {{ ra.horas|num(0) }} h da agenda cheia.</p>
+  {% if ra.itens %}
+  <table>
+    {% for i in ra.itens %}<tr><td>{{ i.descricao }}</td><td class="num">{{ i.valor|moeda }}</td></tr>{% endfor %}
+  </table>
+  {% else %}<p class="muted">Nenhuma conta fixa da PJ cadastrada. Cadastre MFIT, softwares e assinaturas em Financeiro &gt; Contas recorrentes (fixas).</p>{% endif %}
+  <p class="muted">Vem das contas recorrentes fixas da PJ. Ficam de fora o DAS e a Retirada (o motor já põe o imposto) e a conta da CIA e dos
+    locais (o motor já cobra o local por aula).</p>
+</div>
+
+<div class="card mt">
+  <h2>Como o preço é montado</h2>
+  <p>custo = horas de trabalho × {{ (salario_hora.valor_hora if salario_hora.usado else salario_hora.fixo)|moeda }} (seu salário/hora)
+    + o que o local cobra por aula + horas × {{ (ra.por_hora or 0)|moeda }} (custos fixos)</p>
+  <p>preço de tabela = custo ÷ (1 − imposto {{ das_txt }}% − taxa da forma de pagamento − <b>margem alvo</b>) × multiplicador do horário</p>
+  <p>preço mínimo = custo ÷ (1 − imposto − taxa − <b>margem mínima</b>)</p>
+  <p class="muted">Horas de trabalho: aulas × (minutos da aula + deslocamento do local) + planejamento; consultoria e avaliação pelos minutos abaixo.</p>
 </div>
 
 <form method="post" action="/configuracoes" class="mt">
@@ -56,7 +79,7 @@
     </div>
     {% endfor %}
   </div>
-  <p class="muted mt">Tempo e custo de deslocamento de cada local: na <a href="/grade">Grade</a> (editar o local). Custos de cada plano: em <a href="/configuracoes">Preços base</a>.</p>
+  <p class="muted mt">Tempo e custo de deslocamento de cada local: na <a href="/grade">Grade</a> (editar o local). Contas fixas (MFIT, softwares): em Financeiro.</p>
   <button class="btn mt">Salvar</button>
 </form>
 {% endblock %}

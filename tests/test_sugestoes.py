@@ -449,10 +449,6 @@ def test_motivos_da_lista_de_clientes(cliente_http):
     inativo = aluno_hoje(con, "Ivo Inativo", status="inativo")
     solo = aluno_hoje(con, "Sara Solo")
     treinou(con, solo)
-    with con:
-        con.execute("""INSERT INTO precos_base (tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal, sessoes_mes, preco_base,
-                       custo_operacional, mao_obra, custo_total) VALUES ('Mensalidade','CIA','PIX',0,2,8.66,900,500,300,800)""")
-
     def lista(motivo, *ids):
         r = http.get(f"/clientes?ids={','.join(map(str, ids))}&motivo={motivo}")
         assert r.status_code == 200
@@ -483,12 +479,6 @@ def test_motivos_da_lista_de_clientes(cliente_http):
 
 # ---------- desempenho ----------
 def test_estimativa_com_bases_carregadas_e_igual_a_consulta_por_aluno(con_temp):
-    with con_temp:
-        for forma, preco in (("PIX", 900), ("Cartão 1x", 950), ("Cartão 3x", 1000)):
-            con_temp.execute("""INSERT INTO precos_base (tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal, sessoes_mes, preco_base,
-                                custo_operacional, mao_obra, custo_total) VALUES ('Mensalidade','CIA',?,0,2,8.66,?,500,300,800)""", (forma, preco))
-        con_temp.execute("""INSERT INTO precos_base (tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal, sessoes_mes, preco_base,
-                            custo_operacional, mao_obra, custo_total) VALUES ('Pacote de Aulas','CIA','Cartão 6x',8,0,8,700,400,200,600)""")
     from app import precos
     p, bases = precos.carregar_parametros(con_temp), main.carregar_bases(con_temp)
     casos = [("Mensalidade", "Mensalidade 2x", "CIA", "PIX"), ("Mensalidade", "Mensalidade 2x", "CIA", "Cartão 3x"),
