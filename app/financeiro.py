@@ -1001,7 +1001,7 @@ def meses_do_pagamento(v, valor, explicito=None) -> int:
 
 
 def renovacoes(con: sqlite3.Connection, cliente_id: int | None = None) -> dict[int, dict]:
-    """Renovação efetiva de cada aluno: {cliente_id: {gravada, efetiva, ciclos, falta, pendente, motivo, motivo_data}}. Não grava nada.
+    """Renovação efetiva de cada aluno: {cliente_id: {gravada, efetiva, vence, dia, ciclos, falta, pendente, motivo, motivo_data}}. Não grava nada.
     Parte da data de renovação do cadastro e anda um mês a cada:
       - pagamento do aluno (entrada PJ paga ligada a ele; o evento antigo 'pagamento' da ficha também vale, uma vez por mês);
       - Renovação marcada no histórico, se o próximo vencimento está a até 7 dias (ou já passou);
@@ -1012,7 +1012,9 @@ def renovacoes(con: sqlite3.Connection, cliente_id: int | None = None) -> dict[i
     Valor de 2 mensalidades de uma vez anda 2 meses; com `lancamentos.meses` (parcelou no cartão, pagou adiantado) anda exatamente esse tanto. Pagamento pequeno longe do vencimento (aula extra, taxa) não renova.
     Só conta o que é de até 7 dias antes da data gravada em diante e, se a data foi trocada à mão (renovacao_em),
     só o que foi lançado depois da troca. O crédito descontado no pagamento conta como pago (mensalidade − crédito renova).
-    tipos = o que abriu cada ciclo mensal desde a data gravada ('pagamento', 'renovacao' ou 'pausa')."""
+    tipos = o que abriu cada ciclo mensal desde a data gravada ('pagamento', 'renovacao' ou 'pausa').
+    vence = de quando o aluno deve: com Renovação marcada pendente, o vencimento do mês renovado (a cobrança conta dele, com multa e juros);
+    senão a efetiva. dia = o dia do vencimento no cadastro (os meses seguintes da cobrança caem nele)."""
     filtro, args = ("AND id=?", (cliente_id,)) if cliente_id else ("", ())
     alunos = con.execute(f"""SELECT id, valor, data_renovacao, renovacao_em FROM clientes WHERE excluido_em IS NULL
                              AND data_renovacao IS NOT NULL {filtro}""", args).fetchall()
@@ -1032,8 +1034,8 @@ def renovacoes(con: sqlite3.Connection, cliente_id: int | None = None) -> dict[i
 
 def _renovacao(c, pagos: list, eventos: list) -> dict:
     gravada = str(c["data_renovacao"] or "").strip()[:10]
-    out = {"gravada": c["data_renovacao"], "efetiva": c["data_renovacao"], "ciclos": 0, "falta": 0.0, "pendente": False,
-           "motivo": None, "motivo_data": None, "tipos": []}
+    out = {"gravada": c["data_renovacao"], "efetiva": c["data_renovacao"], "vence": c["data_renovacao"], "dia": None, "ciclos": 0,
+           "falta": 0.0, "pendente": False, "motivo": None, "motivo_data": None, "tipos": []}
     try:
         dt.date.fromisoformat(gravada)
     except ValueError:
@@ -1044,7 +1046,7 @@ def _renovacao(c, pagos: list, eventos: list) -> dict:
     itens = [("pagamento", p["data"], p["valor"], p["criado_em"], p["meses"]) for p in pagos]
     itens += [(e["tipo"], e["data"], e["valor"], e["criado_em"], None) for e in eventos
               if not (e["tipo"] == "pagamento" and str(e["data"])[:7] in meses_pagos)]   # já lançado no financeiro: conta uma vez
-    k, pendente, ultimo = 0, False, None
+    k, pendente, ultimo, venceu_pendente = 0, False, None, None
     for tipo, data, v, criado, explicito in sorted(itens, key=lambda i: (str(i[1]), str(i[3] or ""))):
         data = str(data or "").strip()[:10]
         if not ISO_DATA.fullmatch(data) or data < desde or (trocada and str(criado or "") <= trocada):
@@ -1069,21 +1071,29 @@ def _renovacao(c, pagos: list, eventos: list) -> dict:
             confirma = ultimo is not None and data < vence and (
                 dt.date.fromisoformat(data) - dt.date.fromisoformat(ultimo)).days <= CONFIRMA
             if perto and not confirma:   # renovou e ainda não pagou: o próximo pagamento é desta renovação
-                anda, pendente = 1, valor > 0
+                if valor > 0 and not pendente:
+                    venceu_pendente = vence   # a dívida conta do vencimento do mês renovado (o mais antigo sem pagamento)
+                anda, pendente = 1, pendente or valor > 0
         elif perto:   # mês pulado: não deve nada
             anda, pendente = 1, False
         if anda:
             k, ultimo = k + anda, data
             out["tipos"] += [tipo] * anda   # o que abriu cada ciclo mensal desde a data gravada: pagamento | renovacao | pausa
             out.update(motivo=tipo, motivo_data=data)
-    out.update(efetiva=proxima_renovacao(gravada, k) if k else gravada, ciclos=k, pendente=pendente,
-               falta=valor if pendente else 0.0)
+    efetiva = proxima_renovacao(gravada, k) if k else gravada
+    out.update(efetiva=efetiva, ciclos=k, pendente=pendente, falta=valor if pendente else 0.0,
+               vence=venceu_pendente if pendente and venceu_pendente else efetiva, dia=int(gravada[8:10]))
     return out
 
 
-def cobranca(valor, vencida: str, hoje: str, par: dict) -> dict | None:
+def cobranca(valor, vencida: str, hoje: str, par: dict, credito=0.0, dia: int | None = None) -> dict | None:
     """Cobrança de quem está com a renovação vencida: cada mês vencido até hoje com multa (uma vez) e juros ao mês
-    proporcional aos dias de atraso dele. par = parâmetros 'cobranca' (multa, juros_ao_mes). None sem valor mensal ou sem atraso."""
+    proporcional aos dias de atraso dele. par = parâmetros 'cobranca' (multa, juros_ao_mes).
+    credito = o crédito do aluno que cabe no próximo pagamento (credito_aplicavel): sai do mês mais antigo ANTES da multa e dos juros,
+    que incidem só sobre o saldo devedor (é o mesmo mês em que usar_credito o consome); os meses seguintes vão cheios.
+    dia = o dia do vencimento no cadastro: os meses seguintes caem nele (vencida em 28/02 com dia 31 -> 31/03, não 28/03).
+    Devolve {meses, dias, bruto (mensalidades cheias), credito (o descontado), valor (saldo devedor), multa, juros, total}.
+    None sem valor mensal, sem atraso ou quando o crédito paga tudo (não há o que cobrar)."""
     valor = float(valor or 0)
     try:
         dt.date.fromisoformat(str(vencida))
@@ -1093,16 +1103,44 @@ def cobranca(valor, vencida: str, hoje: str, par: dict) -> dict | None:
         return None
     multa_pct, juros_mes = float(par.get("multa") or 0), float(par.get("juros_ao_mes") or 0)
     h = dt.date.fromisoformat(hoje)
-    meses, multa, juros, data = 0, 0.0, 0.0, vencida
+    resto = min(max(float(credito or 0), 0.0), valor)   # o crédito nunca passa de uma mensalidade (credito_aplicavel)
+    descontado = resto
+    meses, principal, multa, juros, data = 0, 0.0, 0.0, 0.0, vencida
     while data < hoje and meses < 24:
         dias = (h - dt.date.fromisoformat(data)).days
-        multa += valor * multa_pct
-        juros += valor * juros_mes * dias / 30
+        saldo = valor - resto if meses == 0 else valor   # o saldo devedor deste mês
+        principal += saldo
+        multa += saldo * multa_pct
+        juros += saldo * juros_mes * dias / 30
         meses += 1
-        data = proxima_renovacao(vencida, meses)
-    principal = valor * meses
-    return {"meses": meses, "dias": (h - dt.date.fromisoformat(vencida)).days, "valor": round(principal, 2),
-            "multa": round(multa, 2), "juros": round(juros, 2), "total": round(principal + multa + juros, 2)}
+        data = vencimento(dia, somar_meses(vencida[:7], meses)) if dia else proxima_renovacao(vencida, meses)
+    if principal <= 0.005:
+        return None
+    principal, multa, juros = _centavos(principal), _centavos(multa), _centavos(juros)
+    return {"meses": meses, "dias": (h - dt.date.fromisoformat(vencida)).days, "bruto": round(valor * meses, 2),
+            "credito": round(descontado, 2), "valor": principal, "multa": multa, "juros": juros,
+            "total": round(principal + multa + juros, 2)}   # a soma das partes mostradas: saldo + multa + juros fecha com o total
+
+
+def _centavos(v: float) -> float:
+    """Arredonda para o centavo, meio para cima (28,595 -> 28,60; o round() do Python daria 28,59)."""
+    return math.floor(v * 100 + 0.5 + 1e-9) / 100
+
+
+def credito_do_aluno(con: sqlite3.Connection, cliente_id: int, valor_mensal) -> float:
+    """O crédito do aluno que vale no próximo pagamento (o que cabe numa mensalidade): o que a cobrança e o pagamento descontam."""
+    return credito_aplicavel(creditos(con, cliente_id).get(cliente_id, []), valor_mensal)[0]
+
+
+def cobranca_do_aluno(con: sqlite3.Connection, c, ren: dict | None, hoje: str, credito=None) -> dict | None:
+    """A cobrança de um aluno (c = linha de clientes com id, valor e status) a partir da renovação dele (renovacoes):
+    conta da data em que ficou devendo (ren['vence']: a renovação pendente ou a efetiva), com o crédito descontado.
+    Quem saiu não recebe cobrança. credito = já calculado (credito_do_aluno); None = busca aqui."""
+    if not ren or c["status"] != "ativo":
+        return None
+    if credito is None:
+        credito = credito_do_aluno(con, c["id"], c["valor"])
+    return cobranca(c["valor"], ren.get("vence") or ren["efetiva"], hoje, db.parametros(con, "cobranca"), credito, ren.get("dia"))
 
 
 # ---------- Crédito do aluno: mês pago e não usado, descontado no próximo pagamento ----------

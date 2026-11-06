@@ -64,7 +64,9 @@ def svg(ca: dict, moeda, data_br) -> str:
         y += 60
     # dados de pagamento
     d = ca["dados"]
-    linhas = [(ca["rotulo_valor"], moeda(ca["valor"])), ("Vencimento", data_br(ca["vencimento"]))]
+    # crédito do aluno (aula paga e não usada): o valor abaixo já vem sem ele; a linha mostra para o aluno o desconto
+    linhas = [("Crédito descontado", "− " + moeda(ca["credito"]))] if ca.get("credito") else []
+    linhas += [(ca["rotulo_valor"], moeda(ca["valor"])), ("Vencimento", data_br(ca["vencimento"]))]
     linhas += [(r, v) for r, v in (("Favorecido", d.get("pix_nome")), ("Banco", d.get("pix_banco")), ("Chave Pix", d.get("pix"))) if v]
     partes.append(f'<line x1="{MARGEM}" y1="{y - 20}" x2="{LARGURA - MARGEM}" y2="{y - 20}" stroke="#2C5C8F" stroke-width="2"/>')
     y += 30

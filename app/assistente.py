@@ -205,8 +205,9 @@ FERRAMENTAS = [
     _f("buscar_alunos", "Alunos (clientes) com telefone, plano, valor mensal, status e renovação (já andando com os pagamentos).",
        {"busca": {"type": "string", "description": "parte do nome"},
         "status": {"type": "string", "enum": ["ativo", "pausado", "inativo", "todos"]}}),
-    _f("ver_aluno", "Ficha de um aluno: cadastro, renovação, cobrança com multa e juros se estiver vencida, histórico recente e "
-                    "pagamentos.", {"cliente_id": {"type": "integer"}}, ["cliente_id"]),
+    _f("ver_aluno", "Ficha de um aluno: cadastro, renovação, cobrança se estiver vencida (crédito do aluno já descontado; multa e juros "
+                    "só sobre o saldo devedor; 'total' é o valor a cobrar), histórico recente e pagamentos.",
+       {"cliente_id": {"type": "integer"}}, ["cliente_id"]),
     _f("ver_tarefas", "Tarefas: checklist da rotina desta semana (com a chave de cada tarefa), leads com próxima ação, "
                       "checkpoints de campanha pendentes e itens da campanha atual."),
     _f("consultar_banco", "Consulta livre só de leitura (um SELECT ou WITH ... SELECT do SQLite, sem ponto e vírgula nem comentários; "
@@ -616,7 +617,8 @@ def _buscar_alunos(con, a):
         d = {"id": c["id"], "nome": c["nome"], "status": c["status"], "telefone": c["telefone"], "plano": c["plano"],
              "tipo_servico": c["tipo_servico"], "local": c["local"], "valor_mensal": c["valor"], "dias_horarios": c["dias_horarios"],
              "renovacao": renova}
-        if renova and c["status"] == "ativo" and str(renova)[:10] < hoje:
+        deve = (r.get("vence") or renova) if r else renova   # Renovação marcada sem pagamento: deve desde o vencimento renovado
+        if deve and c["status"] == "ativo" and str(deve)[:10] < hoje:
             d["renovacao_vencida"] = True
         if r and r["falta"] > 0:
             d["falta_pagar"] = r["falta"]
@@ -639,7 +641,7 @@ def _ver_aluno(con, a):
         raise ErroFerramenta(f"Aluno {cid} não encontrado (use buscar_alunos).")
     hoje = _hoje()
     ren = financeiro.renovacoes(con, cid).get(cid)
-    cob = financeiro.cobranca(c["valor"], ren["efetiva"], hoje, db.parametros(con, "cobranca")) if ren and c["status"] == "ativo" else None
+    cob = financeiro.cobranca_do_aluno(con, c, ren, hoje)   # crédito descontado antes da multa e dos juros
     cadastro = {k: c[k] for k in ("id", "nome", "telefone", "status", "plano", "tipo_servico", "local", "valor", "forma_pagamento",
                                   "dias_horarios", "data_inicio", "canal_origem", "observacoes") if c[k] not in (None, "")}
     return {"cadastro": cadastro,

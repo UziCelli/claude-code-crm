@@ -25,7 +25,8 @@ document.addEventListener("click", function (e) {
     if (bt) bt.textContent = editar ? "Salvar e refazer preços" : "Criar local";
     d.querySelectorAll("[data-so-novo]").forEach(function (x) { x.hidden = editar; });
   }
-  if (d.id === "dlg-pgto") d.dataset.mensal = b.dataset.valor || "";   // o valor do botão é a mensalidade: base do "cobre quantos meses?"
+  // base do "cobre quantos meses?": a mensalidade cheia (data-mensal); sem ela, o valor do botão
+  if (d.id === "dlg-pgto") d.dataset.mensal = b.dataset.mensal || b.dataset.valor || "";
   d.showModal();
 });
 // Pagamento de aluno: valor digitado a partir de 1,5× a mensalidade sugere "cobre N meses" (a pessoa pode trocar)

@@ -3,9 +3,13 @@
 {% block conteudo %}
 {# renovação efetiva: a data do cadastro andando com os pagamentos, as Renovações marcadas e os meses pulados #}
 {% set renova = ((renovacao.efetiva if renovacao else c.data_renovacao) or '') if c else '' %}
-{# crédito do aluno: o pagamento já vem com a mensalidade menos ele #}
-{% set cred = estado.credito if estado else 0 %}
-{% set a_pagar = [((c.valor or 0)|float) - cred, 0]|max if c else 0 %}
+{# vence = de quando deve: a Renovação marcada ainda sem pagamento (pendente) ou a efetiva #}
+{% set vence = (renovacao.vence if renovacao and renovacao.vence else renova) %}
+{# crédito do aluno: o pagamento já vem com a mensalidade menos ele; vencido, com o total da cobrança (saldo + multa + juros) #}
+{% set cred = (cobranca.credito if cobranca else (estado.credito if estado else 0)) %}
+{% set a_pagar = (cobranca.total if cobranca else [((c.valor or 0)|float) - cred, 0]|max) if c else 0 %}
+{% set nota_pgto = ('Crédito de ' ~ (cred|moeda) ~ ' descontado') if cred else '' %}
+{% if cobranca and (cobranca.multa or cobranca.juros) %}{% set nota_pgto = (nota_pgto ~ ' · ' if nota_pgto else '') ~ 'multa de ' ~ (cobranca.multa|moeda) ~ ' e juros de ' ~ (cobranca.juros|moeda) ~ ' incluídos' %}{% endif %}
 <div class="linha topo">
   <h1 style="margin:0">{{ c.nome if c else 'Novo cliente' }}</h1>
   {% if c %}
@@ -99,11 +103,12 @@
   {% if c and data_iso(renova) %}
   <div class="card{{ ' borda-vermelho' if cobranca }}" id="renovacao">
     <h2>Renovação</h2>
-    <div class="linha" style="justify-content:space-between"><strong>{{ renova|data }}</strong>{% if cobranca %}<span class="tag vermelho">{{ cobranca.dias }} dias de atraso</span>{% endif %}</div>
+    <div class="linha" style="justify-content:space-between"><strong>{{ renova|data }}</strong>{% if cobranca %}<span class="tag vermelho">{{ cobranca.dias }} dia{{ 's' if cobranca.dias != 1 }} de atraso</span>{% endif %}</div>
     {% if renovacao and renovacao.ciclos %}<p class="muted">Andou com {{ {'pagamento': 'o pagamento', 'renovacao': 'a renovação marcada', 'pausa': 'o mês pulado'}[renovacao.motivo] }} de {{ renovacao.motivo_data|data }} (no cadastro: {{ renovacao.gravada|data }}).</p>{% endif %}
-    {% if renovacao and renovacao.pendente %}<p class="muted">Renovação marcada, pagamento ainda não lançado: falta {{ renovacao.falta|moeda }}.</p>{% endif %}
-    <div class="linha" style="margin:8px 0"><button class="verde pequeno" data-abrir="dlg-pgto" data-titulo="Registrar pagamento de {{ c.nome }}" data-cliente_id="{{ c.id }}" data-valor="{{ ('%.2f'|format(a_pagar))|replace('.', ',') if a_pagar else '' }}"{% if cred %} data-nota="Crédito de {{ cred|moeda }} descontado"{% endif %} data-descricao="Mensalidade {{ data_iso(renova)[5:7] if data_iso(renova) else hoje()[5:7] }}/{{ data_iso(renova)[:4] if data_iso(renova) else hoje()[:4] }}" data-voltar="/clientes/{{ c.id }}">Registrar pagamento</button><span class="muted">a renovação anda sozinha</span></div>
-    {% if cobranca %}<p class="muted" title="{{ cobranca.valor|moeda }} + multa {{ cobranca.multa|moeda }} + juros {{ cobranca.juros|moeda }}">Total atualizado: {{ cobranca.total|moeda }}</p>{% endif %}
+    {% if renovacao and renovacao.pendente %}<p class="muted">Renovação marcada{% if data_iso(vence) %} (vencimento {{ vence|data }}){% endif %}, pagamento ainda não lançado: falta {{ [renovacao.falta - (estado.credito if estado else 0), 0]|max|moeda }}.</p>{% endif %}
+    <div class="linha" style="margin:8px 0"><button class="verde pequeno" data-abrir="dlg-pgto" data-titulo="Registrar pagamento de {{ c.nome }}" data-cliente_id="{{ c.id }}" data-valor="{{ ('%.2f'|format(a_pagar))|replace('.', ',') if a_pagar else '' }}" data-mensal="{{ ('%.2f'|format((c.valor or 0)|float))|replace('.', ',') }}"{% if nota_pgto %} data-nota="{{ nota_pgto }}"{% endif %} data-descricao="Mensalidade {{ data_iso(vence)[5:7] if data_iso(vence) else hoje()[5:7] }}/{{ data_iso(vence)[:4] if data_iso(vence) else hoje()[:4] }}" data-voltar="/clientes/{{ c.id }}">Registrar pagamento</button><span class="muted">a renovação anda sozinha</span></div>
+    {# a conta da cobrança: o crédito sai do saldo antes da multa e dos juros (cada valor numa linha só) #}
+    {% if cobranca %}<p class="muted conta-cobranca">Total atualizado: <strong><span>{{ cobranca.total|moeda }}</span></strong> = saldo <span>{{ cobranca.valor|moeda }}</span>{% if cobranca.credito %} (<span>{{ cobranca.bruto|moeda }}</span> − crédito <span>{{ cobranca.credito|moeda }}</span>){% endif %} + multa <span>{{ cobranca.multa|moeda }}</span> + juros <span>{{ cobranca.juros|moeda }}</span></p>{% endif %}
     {% if menu_wa and menu_wa.cobranca %}
     <div class="cartao-cobranca">
       <img src="/clientes/{{ c.id }}/cobranca/cartao.svg" alt="Cartão de cobrança ({{ menu_wa.cobranca.nome }})" loading="lazy">
@@ -180,7 +185,7 @@
 
     <div class="card mt" id="pagamentos">
       <div class="linha topo" style="margin-bottom:8px"><h2 style="margin:0">Pagamentos</h2>
-        <button class="verde pequeno" data-abrir="dlg-pgto" data-titulo="Registrar pagamento de {{ c.nome }}" data-cliente_id="{{ c.id }}" data-valor="{{ ('%.2f'|format(a_pagar))|replace('.', ',') if a_pagar else '' }}"{% if cred %} data-nota="Crédito de {{ cred|moeda }} descontado"{% endif %} data-descricao="Mensalidade {{ hoje()[5:7] }}/{{ hoje()[:4] }}" data-voltar="/clientes/{{ c.id }}">Registrar pagamento</button></div>
+        <button class="verde pequeno" data-abrir="dlg-pgto" data-titulo="Registrar pagamento de {{ c.nome }}" data-cliente_id="{{ c.id }}" data-valor="{{ ('%.2f'|format(a_pagar))|replace('.', ',') if a_pagar else '' }}" data-mensal="{{ ('%.2f'|format((c.valor or 0)|float))|replace('.', ',') }}"{% if nota_pgto %} data-nota="{{ nota_pgto }}"{% endif %} data-descricao="Mensalidade {{ hoje()[5:7] }}/{{ hoje()[:4] }}" data-voltar="/clientes/{{ c.id }}">Registrar pagamento</button></div>
       <p style="margin:0 0 8px">{% if pago_ate %}Pago até <strong>{{ pago_ate }}</strong>{% else %}<span class="muted">Sem pagamento registrado</span>{% endif %}{% if renovacao and data_iso(renovacao.efetiva) %} · próxima renovação <strong>{{ renovacao.efetiva|data }}</strong>{% endif %}</p>
       {% for p in pagamentos %}
       <div style="padding:4px 0">
