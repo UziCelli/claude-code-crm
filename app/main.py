@@ -409,16 +409,26 @@ def alertas(con):
 # =====================================================================
 # 6. PAINEL (tela inicial)
 # =====================================================================
-def horas_trabalho_mes(con, p, bases=None) -> float:
-    """Suas horas de trabalho no mês: para cada aluno ativo, as aulas do plano (as da "Agenda ocupada") + deslocamento +
-    planejamento + consultoria, pela regra do tempo (precos.minutos_trabalho). Aluno sem plano do motor conta só as aulas."""
+def horas_trabalho_detalhe(con, p, bases=None) -> dict:
+    """Suas horas de trabalho no mês, por parte (precos.PARTES_TRABALHO) e no total: para cada aluno ativo, as aulas do plano
+    (as da "Agenda ocupada") + deslocamento + planejamento + consultoria, pela regra do tempo (precos.partes_minutos).
+    Aluno sem plano do motor conta só as aulas."""
     bases = bases if bases is not None else carregar_bases(con)
-    horas = 0.0
+    out = dict.fromkeys(precos.PARTES_TRABALHO, 0.0)
     for c in con.execute("SELECT * FROM clientes WHERE excluido_em IS NULL AND status='ativo'"):
         base = base_do_cliente(con, c, bases)
-        minutos = precos.minutos_trabalho(dict(base), p, c["local"]) if base else None
-        horas += minutos / 60 if minutos is not None else aulas_mes(c)
-    return horas
+        if not base:
+            out["aulas"] += aulas_mes(c)
+            continue
+        for k, minutos in precos.partes_minutos(dict(base), p, c["local"]).items():
+            out[k] += minutos / 60
+    out["total"] = sum(out.values())
+    return out
+
+
+def horas_trabalho_mes(con, p, bases=None) -> float:
+    """Suas horas de trabalho no mês (o total de horas_trabalho_detalhe)."""
+    return horas_trabalho_detalhe(con, p, bases)["total"]
 
 
 def entra_no_mes(con, mes=None) -> tuple[dict, float]:
@@ -441,10 +451,12 @@ def cobre_custos(con, p, bases=None, mes=None, caixa=None) -> dict:
     - seus custos pessoais (o salário que a PF precisa). sobra < 0 = falta isso por mês para cobrir tudo.
     Receita pelo caixa (entra_no_mes): quem pagou adiantado num mês anterior entra 0; o pagamento de vários meses entra inteiro
     no mês em que caiu. Impostos e taxas acompanham o que entrou; custos do negócio e pessoais são os do mês, sempre.
-    Custos pessoais: os da PF (salário automático); sem eles, a soma da mão de obra dos alunos."""
+    Custos pessoais: os da PF (salário automático); sem eles, a soma da mão de obra dos alunos.
+    Contas fixas: cada aluno paga a parte das horas dele (precos.rateio_fixos); a parte que nenhum aluno paga (agenda abaixo
+    da agenda cheia, aluno sem plano) entra inteira aqui, como o custo pessoal: as contas chegam todo mês do mesmo jeito."""
     bases = bases if bases is not None else carregar_bases(con)
     entra, adiantado = caixa if caixa is not None else entra_no_mes(con, mes)   # caixa: o retorno de entra_no_mes, se já calculado
-    receita = carteira = impostos = negocio = mo = 0.0
+    receita = carteira = impostos = negocio = mo = horas_est = 0.0
     sem_base = 0
     for c in con.execute("SELECT * FROM clientes WHERE excluido_em IS NULL AND status='ativo'"):
         valor = c["valor"] or 0
@@ -458,6 +470,11 @@ def cobre_custos(con, p, bases=None, mes=None, caixa=None) -> dict:
         impostos += est["impostos_taxas"] * e / valor if valor else 0.0
         negocio += est["custo_total"] - est["mao_obra"]
         mo += est["mao_obra"]
+        horas_est += est["horas"]
+    fixos = p.get("rateio") or {}
+    ocioso = float(fixos.get("total") or 0) - float(p.get("rateio_hora") or 0) * horas_est
+    ocioso = ocioso if ocioso > 0.005 else 0.0
+    negocio += ocioso
     sh = p["salario_hora"]
     pessoal = sh["custo_pessoal"] if sh["usado"] else mo
     sobra = receita - impostos - negocio - pessoal
@@ -465,7 +482,7 @@ def cobre_custos(con, p, bases=None, mes=None, caixa=None) -> dict:
     gasto_pf = sh["custo_pessoal"] if sh["usado"] else financeiro.custo_pessoal_medio(con, mes_atual())[0]
     falta_pf = max(gasto_pf - pessoal, 0.0)
     return {"receita": round(receita, 2), "carteira": round(carteira, 2), "adiantado": adiantado,
-            "impostos": round(impostos, 2), "negocio": round(negocio, 2),
+            "impostos": round(impostos, 2), "negocio": round(negocio, 2), "fixos_ociosos": round(ocioso, 2),
             "pessoal": round(pessoal, 2), "pessoal_pf": sh["usado"], "sobra": round(sobra, 2), "sem_base": sem_base,
             "cobre": sobra >= 0, "gasto_pf": round(gasto_pf, 2), "falta_pf": round(falta_pf, 2),
             "sobra_pf": round(sobra - falta_pf, 2), "cobre_tudo": sobra - falta_pf >= 0}
@@ -488,8 +505,10 @@ def calcular_metricas(con, mes=None):
         if (c["pessoas"] or 1) > 1:
             receita_grupos += c["valor"] or 0
         est = estimativa_cliente(con, c, p, bases)
-        if est:   # lucro/h só sobre as horas de quem tem plano no motor: sem ele o aluno não tem lucro calculado
-            horas_com_preco += h
+        # Lucro/h sobre as horas de TRABALHO (aulas + deslocamento + planejamento + consultoria), as mesmas da ficha e das
+        # propostas; só de quem tem plano no motor: sem ele o aluno não tem lucro calculado
+        if est:
+            horas_com_preco += est["horas"]
             lucro_total += lucro_pelo_caixa(est, c["valor"], entra.get(c["id"], 0.0))   # pelo dinheiro que entrou no mês
     perdidos = con.execute("""SELECT COUNT(*) FROM cliente_eventos WHERE tipo='status' AND descricao LIKE '%inativo%'
                               AND substr(data,1,7)=?""", (mes,)).fetchone()[0]
@@ -507,7 +526,7 @@ def calcular_metricas(con, mes=None):
     return dict(mes=mes, clientes_ativos=len(clientes), horas_ocupadas=round(horas, 1), lucro_hora=round(lucro_hora, 2),
                 pct_receita_grupos=(receita_grupos / receita) if receita else 0, faturamento_recorrente=round(receita, 2),
                 entra_mes=round(sum(entra.values()), 2),
-                clientes_perdidos=perdidos, vendas_abaixo_10=abaixo10, nivel=nivel, espera_pico=espera_pico,
+                clientes_perdidos=perdidos, vendas_abaixo_10=abaixo10, nivel=nivel, espera_pico=espera_pico, lucro_hora_trabalho=1,
                 salario_hora=p["salario_hora"], cobre=cobre_custos(con, p, bases, mes, caixa))
 
 
@@ -547,13 +566,14 @@ def metricas_por_canal(con, mes):
 def gravar_mes(con, m):
     with con:
         con.execute("""INSERT INTO metricas_mensais (mes, clientes_ativos, horas_ocupadas, lucro_hora, pct_receita_grupos,
-                       faturamento_recorrente, clientes_perdidos, vendas_abaixo_10, nivel) VALUES
+                       faturamento_recorrente, clientes_perdidos, vendas_abaixo_10, nivel, lucro_hora_trabalho) VALUES
                        (:mes,:clientes_ativos,:horas_ocupadas,:lucro_hora,:pct_receita_grupos,:faturamento_recorrente,
-                       :clientes_perdidos,:vendas_abaixo_10,:nivel) ON CONFLICT(mes) DO UPDATE SET
+                       :clientes_perdidos,:vendas_abaixo_10,:nivel,1) ON CONFLICT(mes) DO UPDATE SET
                        clientes_ativos=excluded.clientes_ativos, horas_ocupadas=excluded.horas_ocupadas,
                        lucro_hora=excluded.lucro_hora, pct_receita_grupos=excluded.pct_receita_grupos,
                        faturamento_recorrente=excluded.faturamento_recorrente, clientes_perdidos=excluded.clientes_perdidos,
-                       vendas_abaixo_10=excluded.vendas_abaixo_10, nivel=excluded.nivel, fechado_em=datetime('now','localtime')""", m)
+                       vendas_abaixo_10=excluded.vendas_abaixo_10, nivel=excluded.nivel, fechado_em=datetime('now','localtime'),
+                       lucro_hora_trabalho=1""", m)   # lucro_hora_trabalho: o lucro/h gravado já é por hora de trabalho
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -3527,7 +3547,7 @@ ROTULOS = {
     "min_aula": "Minutos de cada aula", "min_planejamento_pacote": "Minutos de planejamento por pacote",
     "min_planejamento_mes": "Minutos de planejamento por mês (mensalidade)",
     "min_consultoria_mes": "Minutos de consultoria por aluno no mês", "min_avaliacao": "Minutos da avaliação física",
-    "horas_vendaveis": "Horas da agenda cheia no mês (divide o salário)",
+    "horas_vendaveis": "Horas da agenda cheia no mês (mínimo que divide o salário e os custos fixos)",
 }
 
 
@@ -3795,7 +3815,8 @@ def exportar_arquivo(nome: str, fmt: str, con=Depends(get_db)):
         atual = calcular_metricas(con)
         if not any(h["mes"] == atual["mes"] for h in historico):
             historico.append({k: atual.get(k) for k in ["mes", "clientes_ativos", "horas_ocupadas", "lucro_hora", "pct_receita_grupos",
-                                                          "faturamento_recorrente", "clientes_perdidos", "vendas_abaixo_10", "nivel"]})
+                                                          "faturamento_recorrente", "clientes_perdidos", "vendas_abaixo_10", "nivel",
+                                                          "lucro_hora_trabalho"]})
         cab, linhas = exportar.de_dicts(historico)
     else:
         try:

@@ -52,7 +52,9 @@ def test_lucro_hora_cai_no_mes_coberto_e_sobe_no_mes_do_pagamento(con_temp):
     est = main.estimativa_cliente(con_temp, c, main.precos.carregar_parametros(con_temp))
     # novembro: Ana e Bia dão o lucro normal; Rita (0 entrou) tira a mensalidade inteira menos os impostos dela
     rita_nov = main.lucro_pelo_caixa(est, 900, 0)
-    assert nov["lucro_hora"] == pytest.approx((2 * est["lucro"] + rita_nov) / 24, abs=0.01)
+    # divide pelas horas de TRABALHO dos 3 (as mesmas da ficha: aulas + deslocamento + planejamento), não só pelas 24 h de aula
+    assert est["horas"] > 8
+    assert nov["lucro_hora"] == pytest.approx((2 * est["lucro"] + rita_nov) / (3 * est["horas"]), abs=0.01)
 
 
 def test_tela_mensalidades_previsto_e_recebido_mais_falta(cliente_http):

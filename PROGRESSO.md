@@ -331,6 +331,17 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Proposta ligada a um cliente com valor na ficha (e mesmo tipo de serviço) agora mostra: "Hoje você paga R$ X. Com esta proposta, passa a pagar R$ Y por pessoa: você economiza R$ Z (−N%)" (`main._hoje_paga`). O "de/por −15%" continua.
 - Se a proposta sai mais cara que o que ele paga, ou o tipo de serviço é outro (período diferente), não mostra economia nenhuma. Lead continua como antes.
 
+## Salário/hora, custos fixos e lucro/hora na mesma base de horas (PR `claude/salario-hora-base`, 06/11/2026)
+- Confusão: o quadro "Seu salário por hora" mostrava "R$ 82,68 = R$ 7.935,09 ÷ 96 h", mas o texto dizia "divide pelas horas da agenda cheia (60 h)". As 96 h são as **horas de trabalho** (aulas + deslocamento + planejamento + consultoria); as 60 h, a meta "agenda cheia" digitada em Configurações. O código já dividia por max(trabalho, meta); só o texto estava errado.
+- Bug: "Custos fixos no preço" dividia só pela meta (R$ 714,90 ÷ 60 h = R$ 11,91/h). Com 96 h de trabalho, os alunos absorviam ~R$ 1.144/mês de contas que custam R$ 714,90, o que inflava os custos dos preços e o "faltam" do "O mês cobre?" (~R$ 429 a mais).
+- Regra (custeio por absorção, capacidade normal): salário **e** custos fixos dividem por `precos.horas_base` = max(horas de trabalho, agenda cheia). A meta é só piso. `carregar_parametros` calcula as horas uma vez (`main.horas_trabalho_detalhe`, por parte) e passa para `valor_hora_automatico` e `rateio_fixos`.
+- "O mês cobre?": a parte das contas fixas que nenhum aluno paga (agenda abaixo da meta, aluno sem plano) entra inteira (`fixos_ociosos`), como o custo pessoal.
+- Telas: /calculos mostra "÷ 96 h de trabalho no mês" e a conta "96 h = X h de aula + Y h de deslocamento + …" (`precos.partes_minutos`); o texto do piso só aparece quando ele vale. Painel e `_salario_hora.html`, idem.
+- Lucro por hora do Painel: agora sobre as horas de **trabalho** (`est["horas"]`, as mesmas da ficha e das propostas), não só as de aula. KPI "Lucro médio por hora de trabalho". Cada mês do histórico guarda a regra com que foi gravado (`metricas_mensais.lucro_hora_trabalho`: 0 = antigo, por hora de aula, marcado com *); a seta "vs mês anterior" não compara regras diferentes.
+- Revisão por 3 agentes independentes (conta, regressões/desempenho, telas): nenhum erro de conta; o * por data foi trocado pela coluna e o texto do KPI ganhou "avaliação".
+- Celular: valores de tabela não quebram mais no meio ("R$ 9.600,0 / 0").
+- Testes: `tests/test_horas_base.py`.
+
 ## Cobrança com crédito: multa e juros só sobre o saldo (PR `claude/cobranca-credito`, 06/11/2026)
 - Bug: Alexei (mensalidade R$ 2.042,50, crédito R$ 612,75, 1 dia de atraso) aparecia "Cobrar R$ 2.084,03": multa e juros sobre o cheio e o crédito ignorado. Agora: saldo 1.429,75 + multa 28,60 + juros 0,48 = **R$ 1.458,83**.
 - Um motor só (`financeiro.cobranca(..., credito, dia)` e `financeiro.cobranca_do_aluno`): o crédito sai do mês vencido mais antigo **antes** da multa e dos juros (o mesmo mês em que `usar_credito` o consome); os meses seguintes vão cheios. Alerta, Registrar pagamento, ficha, cartão, Pix, Assistente e "a cobrar" da Saúde financeira usam ele.

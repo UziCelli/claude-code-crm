@@ -38,9 +38,10 @@
          'verde' if m.clientes_ativos >= metas.clientes_dez26 else ('amarelo' if m.clientes_ativos >= metas.clientes_dez26 * 0.7 else 'vermelho'), atual=m.clientes_ativos, ant=ant.clientes_ativos) }}
   {{ kpi('Horas ocupadas / mês', m.horas_ocupadas|num(0), metas.horas_dez26|int, metas.horas_mar27|int,
          'verde' if m.horas_ocupadas >= metas.horas_dez26 else ('amarelo' if m.horas_ocupadas >= metas.horas_dez26 * 0.7 else 'vermelho'), ' de ' ~ metas.horas_vendaveis|int, atual=m.horas_ocupadas, ant=ant.horas_ocupadas) }}
-  {{ kpi('Lucro médio por hora de aula', m.lucro_hora|moeda, metas.lucro_hora_dez26|moeda, metas.lucro_hora_mar27|moeda,
-         'verde' if m.lucro_hora >= metas.lucro_hora_dez26 else ('amarelo' if m.lucro_hora >= metas.lucro_hora_dez26 * 0.7 else 'vermelho'), atual=m.lucro_hora, ant=ant.lucro_hora,
-         extra='pelo dinheiro que entra no mês') }}
+  {{ kpi('Lucro médio por hora de trabalho', m.lucro_hora|moeda, metas.lucro_hora_dez26|moeda, metas.lucro_hora_mar27|moeda,
+         'verde' if m.lucro_hora >= metas.lucro_hora_dez26 else ('amarelo' if m.lucro_hora >= metas.lucro_hora_dez26 * 0.7 else 'vermelho'), atual=m.lucro_hora,
+         ant=(ant.lucro_hora if ant and ant.lucro_hora_trabalho else none),
+         extra='aulas + deslocamento + planejamento + consultoria + avaliação, pelo dinheiro que entra no mês') }}
   {{ kpi('Receita vinda de grupos', m.pct_receita_grupos|pct, metas.pct_grupos_dez26|pct, metas.pct_grupos_mar27|pct,
          'verde' if m.pct_receita_grupos >= metas.pct_grupos_dez26 else ('amarelo' if m.pct_receita_grupos > 0 else 'vermelho'), atual=m.pct_receita_grupos, ant=ant.pct_receita_grupos) }}
   {{ kpi('Carteira mensal', m.faturamento_recorrente|moeda, metas.recorrente_dez26|moeda, metas.recorrente_mar27|moeda,
@@ -53,7 +54,7 @@
   <div class="kpi {{ 'amarelo' if sh.ligado and not sh.usado else '' }}">
     <div class="rotulo">Seu salário por hora</div>
     <div class="valor">{{ sh.valor_hora|moeda }}</div>
-    <div class="meta">{% if sh.usado %}custos pessoais {{ sh.custo_pessoal|moeda }}/mês ÷ {{ sh.horas_base|num(0) }} h da agenda cheia{% elif sh.ligado %}valor fixo: lance os gastos da PF para calcular{% else %}valor fixo escolhido por você{% endif %}
+    <div class="meta">{% if sh.usado %}custos pessoais {{ sh.custo_pessoal|moeda }}/mês ÷ {{ sh.horas_base|num(0) }} h {{ 'da agenda cheia' if sh.piso else 'de trabalho' }}{% elif sh.ligado %}valor fixo: lance os gastos da PF para calcular{% else %}valor fixo escolhido por você{% endif %}
       · <a href="/calculos">ajustar</a></div>
   </div>
   {% endif %}
@@ -74,7 +75,7 @@
       {% endfor %}
     </div>
     <div class="meta mt" style="margin-top:8px">
-      {% if m.nivel == 1 %}Passa para 2 com lucro/h ≥ {{ metas.lucro_hora_dez26|moeda }} e {{ metas.horas_dez26|int }} h ocupadas.
+      {% if m.nivel == 1 %}Passa para 2 com lucro por hora de trabalho ≥ {{ metas.lucro_hora_dez26|moeda }} e {{ metas.horas_dez26|int }} h ocupadas.
       {% elif m.nivel == 2 %}Passa para 3 com {{ metas.horas_mar27|int }} h ocupadas e lista de espera no pico ({{ m.espera_pico }} hoje).
       {% elif m.nivel == 3 %}Passa para 4 ao reajustar os preços (+5–10%: suba a margem alvo) e marcar Configurações › metas › preco_base_reajuste.
       {% else %}Preços reajustados. Mantenha as métricas.{% endif %}
@@ -96,10 +97,11 @@
     </div>
     <table class="mt"><tr><th>Mês</th><th class="num">Clientes</th><th class="num sec">Horas</th><th class="num">Lucro/h</th><th class="num sec">Grupos</th><th class="num dest">Carteira</th><th class="num sec">Perdidos</th><th class="num">Nível</th></tr>
       {% for h in historico|reverse %}
-      <tr><td>{{ h.mes[5:] }}/{{ h.mes[:4] }}</td><td class="num">{{ h.clientes_ativos }}</td><td class="num">{{ h.horas_ocupadas|num(0) }}</td><td class="num">{{ h.lucro_hora|moeda }}</td>
+      <tr><td>{{ h.mes[5:] }}/{{ h.mes[:4] }}</td><td class="num">{{ h.clientes_ativos }}</td><td class="num">{{ h.horas_ocupadas|num(0) }}</td><td class="num">{{ h.lucro_hora|moeda }}{{ '*' if not h.lucro_hora_trabalho }}</td>
         <td class="num">{{ h.pct_receita_grupos|pct }}</td><td class="num">{{ h.faturamento_recorrente|moeda }}</td><td class="num">{{ h.clientes_perdidos }}</td><td class="num">{{ h.nivel }}</td></tr>
       {% endfor %}
     </table>
+    {% if historico|rejectattr('lucro_hora_trabalho')|list %}<p class="muted">* Lucro/h gravado por hora de aula, pela regra antiga. Agora é por hora de trabalho: aulas + deslocamento + planejamento + consultoria + avaliação.</p>{% endif %}
   </div>
   <div class="card">
     <h2>Por canal — {{ m.mes[5:] }}/{{ m.mes[:4] }}</h2>
