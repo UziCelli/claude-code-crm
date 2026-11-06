@@ -336,3 +336,10 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - `Dockerfile` (fixa `TZ`, `CRM_NUVEM=1` e `CRM_ENDERECOS`), `.dockerignore` e `cloudflare/worker-reserva.js` (Worker que repassa `crm-reserva` para o `*.run.app`). O `render.yaml` saiu.
 - `acesso._origem_estranha`: atrás do Worker o Host chega como `*.run.app`. O Origin/Referer de um POST também vale se estiver em `CRM_ENDERECOS`; sem isso, todo formulário seria recusado.
 - Passo a passo no README (passo 4 da seção "CRM no celular"). Pendente: acrescentar `crm-reserva` ao `saude.yml` quando o endereço estiver no ar.
+
+## A fazer: preço próprio para cada local novo (pedido do Victor, 04/11/2026)
+- Hoje o "+ Novo local" copia a grade e os preços da CIA (ou de outro local) e só ajusta a diferença de custo por aula (`app/locais.py`: `criar_local`, `_gravar`). Os locais novos ficam presos aos preços da CIA.
+- Exemplo: Allp Fit (sem taxa; 33 min de deslocamento ida e volta; R$ 10,60 de passagem) ficou com margens ruins.
+- Quero: tirar a opção de copiar grade e preços. Cada local calcula os próprios preços pelos custos dele (as perguntas do cadastro do local: taxa por aula, taxa mensal, pessoa extra, máximo de pessoas, deslocamento em R$ e em minutos) + mão de obra (salário/hora) + impostos/taxas + margem mínima.
+- Conferir antes: se o "custo operacional" da CIA na planilha já traz passagem embutida, os locais copiados contam a passagem 2 vezes.
+- Situação (06/11/2026): em parte feito. Já existe o modo "Montar pelo custo" no "+ Novo local" e no "Editar local" (seção "Preço pelo custo no local" acima). Falta tirar a opção de copiar a grade e os preços de outro local.
