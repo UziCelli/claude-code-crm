@@ -1,0 +1,18 @@
+# Fora da imagem do Cloud Run: chaves, dados, ambiente local e o que não roda no servidor.
+.env
+data/
+*.db
+.venv/
+.git/
+.github/
+.claude/
+graphify-out/
+tests/
+.pytest_cache/
+**/__pycache__/
+Claude outputs/
+docs/
+cloudflare/
+*.bat
+*.ps1
+*.md

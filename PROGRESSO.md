@@ -331,6 +331,12 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Proposta ligada a um cliente com valor na ficha (e mesmo tipo de serviço) agora mostra: "Hoje você paga R$ X. Com esta proposta, passa a pagar R$ Y por pessoa: você economiza R$ Z (−N%)" (`main._hoje_paga`). O "de/por −15%" continua.
 - Se a proposta sai mais cara que o que ele paga, ou o tipo de serviço é outro (período diferente), não mostra economia nenhuma. Lead continua como antes.
 
+## Reserva no Google Cloud Run (04/11/2026)
+- O Render grátis dormia e levava ~1 min para acordar. O Victor desligou o serviço. A reserva (`crm-reserva`) passa para o Google Cloud Run, que acorda em poucos segundos.
+- `Dockerfile` (fixa `TZ`, `CRM_NUVEM=1` e `CRM_ENDERECOS`), `.dockerignore` e `cloudflare/worker-reserva.js` (Worker que repassa `crm-reserva` para o `*.run.app`). O `render.yaml` saiu.
+- `acesso._origem_estranha`: atrás do Worker o Host chega como `*.run.app`. O Origin/Referer de um POST também vale se estiver em `CRM_ENDERECOS`; sem isso, todo formulário seria recusado.
+- Passo a passo no README (passo 4 da seção "CRM no celular"). Pendente: acrescentar `crm-reserva` ao `saude.yml` quando o endereço estiver no ar.
+
 ## A fazer: preço próprio para cada local novo (pedido do Victor, 04/11/2026)
 - Hoje o "+ Novo local" copia a grade e os preços da CIA (ou de outro local) e só ajusta a diferença de custo por aula (`app/locais.py`: `criar_local`, `_gravar`). Os locais novos ficam presos aos preços da CIA.
 - Exemplo: Allp Fit (sem taxa; 33 min de deslocamento ida e volta; R$ 10,60 de passagem) ficou com margens ruins.

@@ -1,13 +1,14 @@
 """Portaria do CRM: quem chega pela internet só passa se entrou pelo Cloudflare Access.
 
 Dois jeitos de chegar pela internet, os dois atrás do Cloudflare Access (crm.vfitcoachapp.com):
-- Render (CRM_NUVEM=1, definido no render.yaml): toda requisição passa pela portaria.
+- Nuvem (Google Cloud Run, CRM_NUVEM=1, definido no Dockerfile): toda requisição passa pela portaria.
+  Lá o CRM fica atrás de um Worker do Cloudflare (cloudflare/worker-reserva.js), então o Host que chega é o *.run.app.
 - PC + Cloudflare Tunnel (cloudflared -> localhost:8765): só a requisição *remota* passa pela portaria;
   quem abre o CRM no próprio PC (http://localhost:8765) entra direto, como sempre.
 O Cloudflare Access pede o e-mail e manda um código; depois disso ele envia em cada requisição um token
 assinado (cabeçalho Cf-Access-Jwt-Assertion). Aqui conferimos a assinatura, o emissor, o "AUD" do app e a validade,
 então quem tentar entrar direto pelo endereço *.onrender.com (sem passar pelo Cloudflare) é barrado.
-Sem CF_ACCESS_TEAM_DOMAIN / CF_ACCESS_AUD configurados (no Render ou no .env do PC), tudo o que é remoto
+Sem CF_ACCESS_TEAM_DOMAIN / CF_ACCESS_AUD configurados (na nuvem ou no .env do PC), tudo o que é remoto
 fica bloqueado (falha fechada).
 """
 import os
@@ -22,15 +23,18 @@ nuvem.carregar_env()   # no PC as variáveis CF_ACCESS_* ficam no .env: carregar
 LIGADO = os.environ.get("CRM_NUVEM") == "1"
 EQUIPE = os.environ.get("CF_ACCESS_TEAM_DOMAIN", "").strip().removeprefix("https://").strip("/")
 AUD = os.environ.get("CF_ACCESS_AUD", "").strip()
-LIVRES = {"/saude", "/health", "/healthz"}   # checagem de saúde do Render (qualquer nome): não mostra dado nenhum
+LIVRES = {"/saude", "/health", "/healthz"}   # checagem de saúde da nuvem (qualquer nome): não mostra dado nenhum
 LOCAIS = {"localhost", "127.0.0.1", "::1"}   # nomes do próprio PC (o uvicorn só escuta em 127.0.0.1)
 # o Cloudflare (e o túnel) sempre acrescenta cf-ray e cf-connecting-ip; os outros denunciam qualquer proxy no caminho
+# endereços públicos que valem como "o próprio CRM" no Origin/Referer de um POST, além do Host que chegou.
+# Na nuvem o Worker repassa para o *.run.app, então o Host não bate com o endereço do navegador (crm-reserva...).
+ENDERECOS = {e.strip().lower() for e in os.environ.get("CRM_ENDERECOS", "").split(",") if e.strip()}
 CABECALHOS_PROXY = ("cf-ray", "cf-connecting-ip", "cf-visitor", "cdn-loop", "x-forwarded-for", "forwarded")
 _jwks = None
 
 MENSAGENS = {
     "config": "A portaria do Cloudflare Access ainda não foi configurada (CF_ACCESS_TEAM_DOMAIN e CF_ACCESS_AUD, "
-              "no .env do PC ou nas configurações do Render). Por segurança, nada é mostrado pela internet.",
+              "no .env do PC ou nas variáveis do Cloud Run). Por segurança, nada é mostrado pela internet.",
     "sem": "Entre pelo endereço do CRM (crm.vfitcoachapp.com) para fazer o login com o seu e-mail.",
     "invalido": "Login expirado ou inválido. Abra crm.vfitcoachapp.com de novo para entrar.",
     "origem": "Pedido recusado: ele não veio de uma tela do próprio CRM.",
@@ -70,19 +74,22 @@ def local(alvo) -> bool:
 
 
 def pode_encerrar(alvo) -> bool:
-    """Botão/rota Encerrar: só no PC e por quem está nele (nunca no Render, nunca pelo túnel)."""
+    """Botão/rota Encerrar: só no PC e por quem está nele (nunca na nuvem, nunca pelo túnel)."""
     return not LIGADO and local(alvo)
 
 
 def _origem_estranha(cabecalhos) -> bool:
     """POST que diz vir de outro site (Origin ou Referer com outro endereço): CSRF. Sem nenhum dos dois não há como saber."""
     origem = cabecalhos.get("origin") or cabecalhos.get("referer")
-    return origem is not None and urlparse(origem).netloc != cabecalhos.get("host")
+    if origem is None:
+        return False
+    de_onde = urlparse(origem).netloc.lower()
+    return de_onde != (cabecalhos.get("host") or "").lower() and de_onde not in ENDERECOS
 
 
 def motivo_bloqueio(metodo: str, caminho: str, cabecalhos, cookies) -> str | None:
     """None = pode passar; senão, a chave de MENSAGENS que explica o bloqueio.
-    No Render tudo passa pela portaria; no PC, só o que chega de fora (túnel).
+    Na nuvem tudo passa pela portaria; no PC, só o que chega de fora (túnel).
     Em qualquer lugar, um POST vindo de outro site é recusado (uma página aberta no navegador não pode apagar
     ou mudar dados do CRM em localhost:8765)."""
     if caminho in LIVRES:
