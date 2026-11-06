@@ -644,3 +644,7 @@ ol.passos li { margin: 4px 0; }
 /* cartão de cobrança (prévia na ficha) */
 .cartao-cobranca { display: grid; gap: 8px; justify-items: start; margin: 8px 0; }
 .cartao-cobranca img { width: 100%; max-width: 220px; border-radius: 10px; border: 1px solid var(--borda); }
+
+/* Contas a pagar: botões de ordem e de tipo de custo */
+.filtros-contas { display: grid; gap: 6px; margin: 8px 0 10px; }
+.filtros-contas .linha { gap: 6px; align-items: center; }
