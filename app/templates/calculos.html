@@ -7,13 +7,15 @@
 <div class="card mt" id="cobre">
   <h2>O mês cobre os seus custos?</h2>
   <table>
-    <tr><td>Mensalidades dos alunos ativos</td><td class="num">{{ c.receita|moeda }}</td></tr>
+    <tr><td>Mensalidades que entram no mês</td><td class="num">{{ c.receita|moeda }}</td></tr>
     <tr><td>− Impostos ({{ das_txt }}% de DAS) e taxas de pagamento</td><td class="num">{{ c.impostos|moeda }}</td></tr>
     <tr><td>− Custos do negócio (local, CIA, deslocamento)</td><td class="num">{{ c.negocio|moeda }}</td></tr>
     <tr><td>− Seus custos pessoais {% if c.pessoal_pf %}(média dos gastos da PF){% else %}(mão de obra dos alunos){% endif %}</td><td class="num">{{ c.pessoal|moeda }}</td></tr>
     <tr><th>{{ 'Sobra no mês' if c.cobre else 'Falta no mês' }}</th>
         <th class="num" style="color:var(--{{ 'verde' if c.cobre else 'vermelho' }})">{{ (c.sobra if c.cobre else -c.sobra)|moeda }}</th></tr>
   </table>
+  {% if c.adiantado %}<p class="muted">{{ c.adiantado|moeda }} de quem pagou adiantado no cartão não entram este mês: o dinheiro caiu no mês em que pagaram
+    (carteira mensal: {{ c.carteira|moeda }}).</p>{% endif %}
   <p class="mt"><strong>{% if c.cobre %}Sim: cobre tudo e ainda sobra.{% else %}Ainda não: faltam {{ (-c.sobra)|moeda }} por mês para cobrir tudo.{% endif %}</strong></p>
   {% if c.falta_pf %}
   <table class="mt">

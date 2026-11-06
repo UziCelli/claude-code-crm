@@ -905,7 +905,9 @@ def mensalidades(con: sqlite3.Connection, mes: str) -> list[dict]:
     Crédito do aluno (mês pago e não usado) desconta do previsto: o ainda disponível e o já descontado em pagamento deste mês.
     Pagou adiantado (parcelou no cartão, vários meses de uma vez): um pagamento de N meses (lancamentos.meses, ou as mensalidades inteiras do valor
     quando são 2 ou mais) feito no mês M cobre M .. M+N−1 (ou M+1 .. M+N, se foi feito até 7 dias antes do vencimento de M+1). Mês coberto sem pagamento próprio é 'pago adiantado': quitado, falta 0, e traz
-    coberto_ate (último mês coberto) e pago_em_mes (mês do pagamento)."""
+    coberto_ate (último mês coberto) e pago_em_mes (mês do pagamento).
+    entra = o dinheiro que o aluno põe no caixa do mês: o recebido (o pagamento de vários meses conta inteiro no mês em que caiu),
+    0 se está 'pago adiantado' (o dinheiro caiu num mês anterior), senão o previsto. Previsto da tela = soma de entra = recebido + falta."""
     abertos = {}
     for r in con.execute("""SELECT id, cliente_id, data, valor, descricao, categoria, conta FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
                             AND excluido_em IS NULL AND pago_em IS NULL AND cliente_id IS NOT NULL AND substr(data,1,7)=? ORDER BY data, id""", (mes,)):
@@ -948,7 +950,8 @@ def mensalidades(con: sqlite3.Connection, mes: str) -> list[dict]:
         itens.append({"id": c["id"], "nome": c["nome"], "previsto": previsto, "recebido": recebido, "situacao": sit, "credito": credito,
                       "abertos": meus, "aberto": aberto, "quitado": quitado,
                       "coberto_ate": adiantado["ate"] if adiantado else None, "pago_em_mes": adiantado["de"] if adiantado else None,
-                      "falta": 0.0 if quitado else round(max(previsto - recebido - aberto, 0), 2)})
+                      "falta": 0.0 if quitado else round(max(previsto - recebido - aberto, 0), 2),
+                      "entra": recebido if recebido > 0 else (0.0 if adiantado else previsto)})
     return itens
 
 
