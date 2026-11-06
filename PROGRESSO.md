@@ -326,6 +326,11 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Novo modo **"Montar pelo custo"** no "+ Novo local" e no "Editar local" (`locais._preco_pelo_custo`): o preço base = preço sugerido do motor (margem mínima do plano, 1 pessoa, sem multiplicador). No mesmo exemplo: R$ 760, margem 15% no horário normal.
 - Para a ALLP Fit: Grade › ALLP Fit › Editar local › "Montar pelo custo" › Salvar.
 
+## Proposta para quem já é aluno: economia sobre o que ele paga (05/11/2026)
+- O "Você economiza" da proposta era preço cheio − preço com desconto (desconto de tabela). Para um aluno que vira dupla, isso mentia: ele não paga o preço cheio hoje.
+- Proposta ligada a um cliente com valor na ficha (e mesmo tipo de serviço) agora mostra: "Hoje você paga R$ X. Com esta proposta, passa a pagar R$ Y por pessoa: você economiza R$ Z (−N%)" (`main._hoje_paga`). O "de/por −15%" continua.
+- Se a proposta sai mais cara que o que ele paga, ou o tipo de serviço é outro (período diferente), não mostra economia nenhuma. Lead continua como antes.
+
 ## Reserva no Google Cloud Run (04/11/2026)
 - O Render grátis dormia e levava ~1 min para acordar. O Victor desligou o serviço. A reserva (`crm-reserva`) passa para o Google Cloud Run, que acorda em poucos segundos.
 - `Dockerfile` (fixa `TZ`, `CRM_NUVEM=1` e `CRM_ENDERECOS`), `.dockerignore` e `cloudflare/worker-reserva.js` (Worker que repassa `crm-reserva` para o `*.run.app`). O `render.yaml` saiu.

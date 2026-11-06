@@ -13,11 +13,6 @@ def con(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "BACKUP_DIR", tmp_path / "backups")
     db.iniciar_banco()
     c = db.conectar()
-    with c:
-        c.execute("""INSERT INTO precos_base (tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal, preco_base,
-                     custo_operacional, mao_obra, custo_total, sessoes_mes) VALUES ('Pacote de Aulas', 'CIA', 'PIX', 8, 0, 1100, 900, 415.5, 900, 8)""")
-        c.execute("""INSERT INTO precos_base (tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal, preco_base,
-                     custo_operacional, mao_obra, custo_total, sessoes_mes) VALUES ('Consultoria Online', 'Online', 'PIX', 0, 0, 300, 100, 60, 100, 0)""")
     yield c
     c.close()
 
@@ -49,10 +44,11 @@ def test_custo_pessoal_e_a_media_dos_meses_com_gasto(con):
 def test_horas_de_trabalho_somam_aulas_planejamento_e_consultoria(con):
     aluno(con, "Ana")                                                          # 8 aulas + 1 h = 9 h
     aluno(con, "Bia", tipo="Consultoria Online", plano="Consultoria Online", local="Online")   # 150 min = 2,5 h
-    aluno(con, "Caio", local="SmartFit")                                       # sem preço base: só as 8 aulas
+    aluno(con, "Caio", local="SmartFit")                                       # qualquer local: 9 h
+    aluno(con, "Edu", tipo="Outro", plano="Pacote 8 aulas")                    # plano que o motor não conhece: só as 8 aulas
     aluno(con, "Duda", status="inativo")
     p = precos.carregar_parametros(con)
-    assert main.horas_trabalho_mes(con, p) == pytest.approx(9 + 2.5 + 8)
+    assert main.horas_trabalho_mes(con, p) == pytest.approx(9 + 2.5 + 9 + 8)
 
 
 def test_valor_da_hora_sai_dos_custos_pessoais_e_vai_para_os_precos(con):
@@ -64,7 +60,7 @@ def test_valor_da_hora_sai_dos_custos_pessoais_e_vai_para_os_precos(con):
     # 18 h de hoje, mas divide pela agenda cheia (97 h): o salário não cai inteiro nos 2 alunos atuais
     assert sh["usado"] and sh["horas"] == 18 and sh["horas_base"] == 97 and sh["custo_pessoal"] == 4500
     assert p["mo"]["valor_hora"] == pytest.approx(4500 / 97, abs=0.01)
-    base = dict(con.execute("SELECT * FROM precos_base WHERE tipo_servico='Pacote de Aulas'").fetchone())
+    base = precos.base_motor("Pacote de Aulas", 8, local="CIA")
     assert precos.calcular(base, p)["mao_obra"] == pytest.approx(9 * 46.39, abs=0.01)
 
 
@@ -80,17 +76,18 @@ def test_grupo_nao_soma_mao_de_obra_extra_com_salario_automatico(con):
     aluno(con, "Ana")
     gasto_pf(con, 4500, -1)
     p = precos.carregar_parametros(con)
-    base = dict(con.execute("SELECT * FROM precos_base WHERE tipo_servico='Pacote de Aulas'").fetchone())
+    base = precos.base_motor("Pacote de Aulas", 8, local="CIA")
     assert precos.calcular(base, p, pessoas=2)["mao_obra"] == pytest.approx(precos.calcular(base, p)["mao_obra"])
 
 
 def test_cobre_custos_usa_o_custo_pessoal_inteiro(con):
-    aluno(con, "Ana")   # paga 1000; custos do negócio do pacote: 900 - 415,50 = 484,50
+    aluno(con, "Ana")   # paga 1000; custos do negócio do pacote: 8 aulas x taxa da CIA (sem contas fixas cadastradas)
     gasto_pf(con, 4500, -1)
     p = precos.carregar_parametros(con)
     c = main.cobre_custos(con, p)
-    assert c["receita"] == 1000 and c["negocio"] == pytest.approx(484.5) and c["pessoal"] == 4500
-    assert c["sobra"] == pytest.approx(1000 - c["impostos"] - 484.5 - 4500) and not c["cobre"]
+    negocio = 8 * p["taxa_cia"][1]
+    assert c["receita"] == 1000 and c["negocio"] == pytest.approx(negocio) and c["pessoal"] == 4500
+    assert c["sobra"] == pytest.approx(1000 - c["impostos"] - negocio - 4500) and not c["cobre"]
 
 
 def test_tela_calculos_mostra_a_conta_e_salva_voltando_para_ela(con):
@@ -127,3 +124,46 @@ def test_painel_e_configuracoes_mostram_de_onde_vem_o_valor(con):
     assert "O mês cobre seus custos?" in painel and 'href="/calculos"' in painel
     cfg = http.get("/configuracoes").text
     assert "Salário por hora em uso" in cfg and "R$ 46,39" in cfg
+
+
+def _fixo(con, valor_hora=53):
+    with con:
+        con.execute("UPDATE parametros SET valor=? WHERE grupo='mao_obra' AND chave='valor_hora'", (valor_hora,))
+        con.execute("UPDATE parametros SET valor=0 WHERE grupo='mao_obra' AND chave='valor_hora_auto'")
+
+
+def test_valor_fixo_vai_para_os_precos(con):
+    _fixo(con)
+    p = precos.carregar_parametros(con)
+    base = precos.base_motor("Pacote de Aulas", 8, local="CIA")
+    r = precos.calcular(base, p, 1)
+    assert r["valor_hora"] == 53 and r["horas"] == 9 and r["mao_obra"] == pytest.approx(477)
+
+
+def test_cobre_custos_no_fixo_mostra_o_que_o_lucro_paga_da_pf(con):
+    aluno(con, "Ana")
+    gasto_pf(con, 4500, -1)
+    _fixo(con)
+    c = main.cobre_custos(con, precos.carregar_parametros(con))
+    assert not c["pessoal_pf"] and c["pessoal"] == pytest.approx(477) and c["gasto_pf"] == 4500
+    assert c["falta_pf"] == pytest.approx(4500 - 477)
+    assert c["sobra_pf"] == pytest.approx(c["sobra"] - c["falta_pf"]) and not c["cobre_tudo"]
+
+
+def test_cobre_custos_automatico_nao_conta_a_pf_duas_vezes(con):
+    aluno(con, "Ana")
+    gasto_pf(con, 4500, -1)
+    c = main.cobre_custos(con, precos.carregar_parametros(con))
+    assert c["pessoal_pf"] and c["falta_pf"] == 0 and c["cobre_tudo"] == c["cobre"]
+
+
+def test_painel_e_calculos_no_fixo_escolhido(con):
+    aluno(con, "Ana")
+    gasto_pf(con, 4500, -1)
+    _fixo(con)
+    http = TestClient(main.app, base_url="http://localhost")
+    painel = http.get("/").text
+    assert "valor fixo escolhido por você" in painel and "lance os gastos da PF" not in painel
+    assert "com o resto da PF" in painel
+    t = http.get("/calculos").text
+    assert "O lucro precisa cobrir" in t and "R$ 4.023,00" in t

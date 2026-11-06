@@ -328,13 +328,10 @@ class Contador:
 
 def alunos_demais(con, n):
     with con:
-        base = con.execute("""INSERT INTO precos_base (tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal, sessoes_mes, preco_base,
-                              custo_operacional, mao_obra, custo_total) VALUES ('Mensalidade','CIA','PIX',0,2,8.66,900,500,300,800)""")
         for i in range(n):
             con.execute("""INSERT INTO clientes (nome, telefone, status, tipo_servico, plano, local, valor, data_renovacao, data_inicio)
                            VALUES (?, '11999990000', 'ativo', 'Mensalidade', 'Mensalidade 2x', 'CIA', 300, ?, '2026-01-10')""",
                         (f"Aluno {i}", f"2026-12-{(i % 28) + 1:02d}"))
-    return base
 
 
 def consultas(con_temp, n):

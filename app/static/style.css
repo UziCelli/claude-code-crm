@@ -251,6 +251,17 @@ dialog[open]::backdrop { opacity: 1; transition-duration: var(--dur-normal); }
 
 /* grade: selecao de varios horarios */
 .cel.sel { box-shadow: 0 0 0 2px var(--aco); }
+/* Grade: janela dos multiplicadores (2 por linha no celular), aviso de horário em outro local e o "Por que esse preço?" */
+.mults { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px 12px; }
+.mults label { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; font-weight: 600; }
+.mults input { width: 5.5em; text-align: right; }
+.nota-grade { background: var(--amarelo-f); border-radius: 8px; padding: 8px 10px; margin: 0 0 10px; font-size: 13px; }
+.comparar { border-collapse: collapse; min-width: 100%; font-size: 13px; }
+.comparar th, .comparar td { padding: 6px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid #e6e9ef; }
+.comparar th:first-child, .comparar td:first-child { text-align: left; white-space: normal; min-width: 130px; }
+.comparar .atual { background: var(--neutro-f); }
+.comparar tr.total td { font-weight: 700; }
+table.cartoes.comparar tr:not(.cab) td.atual { background: var(--neutro-f); border-radius: 6px; padding-left: 6px; padding-right: 6px; font-weight: 700; }
 button.claro.ativo { background: var(--aco); color: #fff; }
 .barra-sel { position: sticky; bottom: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; padding: 10px 14px; background: var(--branco); border: 1px solid var(--borda); border-radius: 10px; opacity: 0; visibility: hidden; transform: translateY(8px); transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out), visibility var(--dur-fast); }
 .barra-sel.on { opacity: 1; visibility: visible; transform: none; }
@@ -633,3 +644,7 @@ ol.passos li { margin: 4px 0; }
 /* cartão de cobrança (prévia na ficha) */
 .cartao-cobranca { display: grid; gap: 8px; justify-items: start; margin: 8px 0; }
 .cartao-cobranca img { width: 100%; max-width: 220px; border-radius: 10px; border: 1px solid var(--borda); }
+
+/* Contas a pagar: botões de ordem e de tipo de custo */
+.filtros-contas { display: grid; gap: 6px; margin: 8px 0 10px; }
+.filtros-contas .linha { gap: 6px; align-items: center; }

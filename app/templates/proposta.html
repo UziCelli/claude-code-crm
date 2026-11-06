@@ -10,11 +10,15 @@
   <p><b>Pagamento:</b> {{ prop.forma_pagamento or '—' }} · <b>Pessoas:</b> {{ prop.pessoas }}</p>
   {% if preco_de %}
   <p class="proposta-preco"><b>Valor total:</b> de <s>{{ preco_de|moeda }}</s> por <b>{{ prop.preco_total|moeda }}</b> <span class="tag verde">−{{ prop.desconto|pct(1) }} de desconto</span></p>
-  <p class="muted">Você economiza {{ (preco_de - prop.preco_total)|moeda }}.</p>
+  {% if not hoje_paga %}<p class="muted">Você economiza {{ (preco_de - prop.preco_total)|moeda }}.</p>{% endif %}
   {% else %}
   <p><b>Valor total:</b> {{ prop.preco_total|moeda }}</p>
   {% endif %}
   {% if prop.pessoas and prop.pessoas > 1 %}<p><b>Valor por pessoa:</b> {{ prop.preco_pessoa|moeda }}</p>{% endif %}
+  {% if hoje_paga and hoje_paga.economia >= 0.01 %}
+  <p class="proposta-economia">Hoje você paga <b>{{ hoje_paga.atual|moeda }}</b>{% if hoje_paga.mensal %} por mês{% endif %}. Com esta proposta, passa a pagar <b>{{ hoje_paga.novo|moeda }}</b>{% if prop.pessoas and prop.pessoas > 1 %} por pessoa{% endif %}:
+    <b>você economiza {{ hoje_paga.economia|moeda }}{% if hoje_paga.mensal %} por mês{% endif %}</b> <span class="tag verde">−{{ hoje_paga.pct|pct(1) }}</span></p>
+  {% endif %}
   {% if prop.observacoes %}<p><b>Observações:</b> {{ prop.observacoes }}</p>{% endif %}
   <p class="nao-imprimir"><button onclick="window.print()">Imprimir / salvar PDF</button> <a href="/propostas">Voltar</a></p>
 </div>
