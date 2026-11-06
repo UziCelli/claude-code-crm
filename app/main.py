@@ -337,7 +337,8 @@ def alertas(con):
             continue
         botao, cartao = e["botao"], None
         if e["id"] in clientes and e["tel"]:
-            ca = cobranca_atual(con, clientes[e["id"]], {"efetiva": e["renovacao"]["efetiva"], "cob": e["cobranca"], "credito": e["credito"]})
+            ca = cobranca_atual(con, clientes[e["id"]], {"efetiva": e["renovacao"]["efetiva"], "vence": e["renovacao"]["vence"],
+                                                         "cob": e["cobranca"], "credito": e["credito"]})
             if ca:
                 botao, cartao = rotulo_cobranca(ca)[0], {"cid": e["id"], "codigo": ca["codigo"]}
         add(e["cor"], alu.frase(e), f"/clientes/{e['id']}", e["tel"], e["modelo"], e["nome"], e["data_modelo"], extra=e["extra"],
@@ -728,11 +729,9 @@ async def cliente_criar(request: Request, con=Depends(get_db)):
 
 
 def renovacao_e_cobranca(con, c):
-    """(renovação efetiva, cobrança) do aluno; quem saiu não recebe cobrança de renovação."""
+    """(renovação efetiva, cobrança) do aluno, com o crédito descontado antes da multa e dos juros; quem saiu não recebe cobrança."""
     renovacao = financeiro.renovacoes(con, c["id"]).get(c["id"])
-    cob = (financeiro.cobranca(c["valor"], renovacao["efetiva"], dt.date.today().isoformat(), db.parametros(con, "cobranca"))
-           if renovacao and c["status"] == "ativo" else None)
-    return renovacao, cob
+    return renovacao, financeiro.cobranca_do_aluno(con, c, renovacao, dt.date.today().isoformat())
 
 
 # ---------- menu WhatsApp da ficha: os itens e o texto enviado saem do mesmo cálculo ----------
@@ -770,8 +769,10 @@ def estagio_cobranca(d: int) -> str | None:
 
 def cobranca_atual(con, c, ctx) -> dict | None:
     """A cobrança do dia (estágio, modelo, valor, texto do cartão e código Pix) ou None se não há o que cobrar.
-    ctx = wa_contexto. Lembrete e vence hoje cobram a mensalidade (menos o crédito); depois do vencimento, o total atualizado."""
-    efetiva = ctx.get("efetiva")
+    ctx = wa_contexto. Lembrete e vence hoje cobram a mensalidade (menos o crédito); depois do vencimento, o total atualizado
+    (financeiro.cobranca: crédito já descontado, multa e juros só sobre o saldo). A data é a de quando deve (ctx['vence']:
+    a renovação pendente ou a efetiva)."""
+    efetiva = ctx.get("vence") or ctx.get("efetiva")
     if c["status"] != "ativo" or not data_iso(efetiva):
         return None
     d = (dt.date.fromisoformat(efetiva) - dt.date.today()).days
@@ -790,8 +791,9 @@ def cobranca_atual(con, c, ctx) -> dict | None:
     extra = {**dados, **(texto_cobranca(cob) if cob else {}), "valor": moeda(valor), "total": moeda(valor),
              "faltam": max(d, 0), "dias": max(-d, 0)}
     texto = preencher(modelos.get(modelo) or modelos.get("cobranca") or "", c["nome"], data_br(efetiva), extra)
+    credito = cob["credito"] if d < 0 else min(float(ctx.get("credito") or 0), float(c["valor"] or 0))
     return {"estagio": estagio, "nome": nome, "modelo": modelo, "faltam": max(d, 0), "dias": max(-d, 0), "vencimento": efetiva,
-            "valor": valor, "rotulo_valor": "Total atualizado" if d < 0 else "Valor", "cob": cob, "texto": texto,
+            "valor": valor, "rotulo_valor": "Total atualizado" if d < 0 else "Valor", "cob": cob, "texto": texto, "credito": credito,
             "codigo": pix.br_code(dados["pix"], dados["pix_nome"], dados["pix_cidade"], valor), "dados": dados}
 
 
@@ -814,7 +816,7 @@ def wa_contexto(con, c, renovacao=None, cob=None) -> dict:
     ult = con.execute("SELECT MAX(data) FROM cliente_eventos WHERE cliente_id=? AND tipo='aula' AND excluido_em IS NULL", (c["id"],)).fetchone()[0]
     livres = financeiro.creditos(con, c["id"]).get(c["id"], [])
     return {"renova": (renovacao["efetiva"] if renovacao else c["data_renovacao"]) or "", "efetiva": renovacao["efetiva"] if renovacao else "",
-            "cob": cob, "ultima_aula": ult,
+            "vence": (renovacao.get("vence") or renovacao["efetiva"]) if renovacao else "", "cob": cob, "ultima_aula": ult,
             "credito": financeiro.credito_aplicavel(livres, c["valor"])[0], "valor": alu.frase_valor(c["valor"], livres)}
 
 

@@ -331,6 +331,17 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Proposta ligada a um cliente com valor na ficha (e mesmo tipo de serviço) agora mostra: "Hoje você paga R$ X. Com esta proposta, passa a pagar R$ Y por pessoa: você economiza R$ Z (−N%)" (`main._hoje_paga`). O "de/por −15%" continua.
 - Se a proposta sai mais cara que o que ele paga, ou o tipo de serviço é outro (período diferente), não mostra economia nenhuma. Lead continua como antes.
 
+## Cobrança com crédito: multa e juros só sobre o saldo (PR `claude/cobranca-credito`, 06/11/2026)
+- Bug: Alexei (mensalidade R$ 2.042,50, crédito R$ 612,75, 1 dia de atraso) aparecia "Cobrar R$ 2.084,03": multa e juros sobre o cheio e o crédito ignorado. Agora: saldo 1.429,75 + multa 28,60 + juros 0,48 = **R$ 1.458,83**.
+- Um motor só (`financeiro.cobranca(..., credito, dia)` e `financeiro.cobranca_do_aluno`): o crédito sai do mês vencido mais antigo **antes** da multa e dos juros (o mesmo mês em que `usar_credito` o consome); os meses seguintes vão cheios. Alerta, Registrar pagamento, ficha, cartão, Pix, Assistente e "a cobrar" da Saúde financeira usam ele.
+- Crédito que paga o mês vencido inteiro: não cobra; o alerta diz "o crédito cobre esse mês" e oferece "Pulou o mês".
+- Renovação marcada sem pagamento (pendente): cobra desde a data do vencimento renovado, com multa e juros (antes só aparecia no vencimento seguinte, cobrando 1 mês). `renovacoes()` devolve `vence` (de quando deve) e `dia`.
+- Vencimento no fim do mês: o 2º mês de atraso cai no dia do cadastro (31/03, não 28/03).
+- "Registrar pagamento" de quem está vencido já vem com o total do "Cobrar" (editável) e a nota "Crédito descontado · multa e juros incluídos". Ficha mostra a conta: "Total = saldo (cheio − crédito) + multa + juros". Cartão: linha "Crédito descontado".
+- Multa e juros arredondam meio para cima; o total é a soma das partes mostradas.
+- Sem mudança: lembrete e "vence hoje" (já descontavam o crédito) e pagamento parcial (continua quitando o mês).
+- Testes: `tests/test_cobranca_credito.py`.
+
 ## Reserva no Google Cloud Run (04/11/2026)
 - O Render grátis dormia e levava ~1 min para acordar. O Victor desligou o serviço. A reserva (`crm-reserva`) passa para o Google Cloud Run, que acorda em poucos segundos.
 - `Dockerfile` (fixa `TZ`, `CRM_NUVEM=1` e `CRM_ENDERECOS`), `.dockerignore` e `cloudflare/worker-reserva.js` (Worker que repassa `crm-reserva` para o `*.run.app`). O `render.yaml` saiu.

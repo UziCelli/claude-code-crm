@@ -295,7 +295,8 @@ def contexto(con, hoje=None, metricas=None, estados=None) -> dict:
         "sugestao_salario": financeiro.sugestao_salario(con, mes), "colchao": financeiro.colchao(con, mes), "previsao": previsao,
         "fixos_pj": financeiro.fixos_previstos(con, mes, "PJ"), "dividas": dividas,
         "ids_cobrar": [i for i, e in estados.items() if e["situacao"] == "cobrar"],
-        "cobrar_total": round(sum((e["cobranca"] or {}).get("valor") or e["valor"] for e in estados.values() if e["situacao"] == "cobrar"), 2),
+        # saldo devedor (crédito já descontado); sem cobrança = o crédito cobre o mês (0) ou cadastro sem valor mensal
+        "cobrar_total": round(sum((e["cobranca"] or {}).get("valor") or 0 for e in estados.values() if e["situacao"] == "cobrar"), 2),
         "ex_alunos": ex_alunos, "veteranos": veteranos, "solos": solos, "abaixo": abaixo, "leads_perdidos": perdidos_leads,
         "novos_por_canal": novos_por_canal, "vale_livre": vale_livre, "espera_vale": espera_vale, "gastos_canal": gastos,
         "cac_max": float(metas.get("cac_max") or 0), "ticket_medio": round(sum(valores) / len(valores), 2) if valores else 0.0,

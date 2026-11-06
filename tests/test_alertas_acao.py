@@ -44,14 +44,16 @@ def test_renovacao_vencida_tem_registrar_pagamento_cobrar_e_pular_mes(con_temp, 
     pagar, wa, pular = a["acoes"]
     venceu = dt.date.today() - dt.timedelta(days=20)
     assert pagar["rotulo"] == "Registrar pagamento" and pagar["dialogo"] == "dlg-pgto"
-    assert pagar["dados"] == {"titulo": "Registrar pagamento de Dora", "cliente_id": cid, "valor": "400,00",
+    # vencido: o pagamento vem com o mesmo total do "Cobrar" (400 + multa 8 + juros 2,67); a mensalidade cheia é a base do "cobre quantos meses?"
+    assert pagar["dados"] == {"titulo": "Registrar pagamento de Dora", "cliente_id": cid, "valor": "410,67", "mensal": "400,00",
+                              "nota": "multa de R$ 8,00 e juros de R$ 2,67 incluídos",
                               "descricao": f"Mensalidade {venceu:%m/%Y}"}   # o mês que venceu, não o de hoje
-    assert wa == {"wa": True} and a["botao"].startswith("Cobrar R$")        # a cobrança continua do jeito de antes
+    assert wa == {"wa": True} and a["botao"].startswith("Cobrar R$ 410,67")  # o mesmo valor do Registrar pagamento
     assert pular == {"rotulo": "Pular mês", "href": f"/clientes/{cid}#renovacao"}
 
     painel = http.get("/").text
     assert painel.count('id="dlg-pgto"') == 1
-    assert f'data-abrir="dlg-pgto" data-voltar="/" data-titulo="Registrar pagamento de Dora" data-cliente_id="{cid}" data-valor="400,00"' in painel
+    assert f'data-abrir="dlg-pgto" data-voltar="/" data-titulo="Registrar pagamento de Dora" data-cliente_id="{cid}" data-valor="410,67"' in painel
     assert f'data-descricao="Mensalidade {venceu:%m/%Y}"' in painel
     assert f'href="/clientes/{cid}#renovacao"' in painel and "Pular mês" in painel and "Cobrar R$" in painel
 
