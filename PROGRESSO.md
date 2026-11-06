@@ -353,6 +353,16 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Sem mudança: lembrete e "vence hoje" (já descontavam o crédito) e pagamento parcial (continua quitando o mês).
 - Testes: `tests/test_cobranca_credito.py`.
 
+## Botão "Cobrar" igual em todo lugar (PR `claude/cobranca-igual`, 06/11/2026)
+- Bug (pedido do Victor, print do Alexei): o "Cobrar R$ 1.458,83" da lista de Clientes mandava o texto antigo, sem o cartão com QR e com **R$ 1.429,75** (o saldo, sem multa e juros). Igual na ficha (quadro "Situação") e na lista "Cobrar vencidos". Só os Alertas/Painel e o menu "WhatsApp ▾" da ficha usavam o cartão.
+- Causa: 2 botões. `_alertas.html` tinha o formulário do cartão; a macro `botoes` (`_acoes.html`) tinha o link wa.me com `{valor}` = saldo. E o cartão só era calculado dentro de `main.alertas()`.
+- Agora: o cartão nasce no estado do aluno (`alunos._cartao`, chamado em `alunos.estado`), e um botão só (`botao_wa` em `_acoes.html`) serve Alertas, Painel, Clientes, "Cobrar vencidos", ficha e Mensalidades. `main.alertas()` só lê o estado.
+- Vale a regra de antes: vencido ou faltando até 2 dias → cartão com o rótulo do estágio ("Cobrar R$ 1.458,83 · 1 dia", "Lembrete: vence em 2 dias"). De 3 a 7 dias, o WhatsApp de renovação de sempre.
+- Financeiro › Mensalidades ganhou o botão de cobrar (antes não tinha).
+- Sem telefone: o botão vira "Cadastre o telefone" (leva ao cadastro). Nunca mais sai o texto antigo.
+- `main.cobranca_atual` aceita `hoje` e os modelos/dados do Pix já lidos (lidos uma vez por `estado()`: as consultas não crescem com o número de alunos).
+- Testes: `tests/test_cobranca_botoes.py`.
+
 ## Reserva no Google Cloud Run (04/11/2026)
 - O Render grátis dormia e levava ~1 min para acordar. O Victor desligou o serviço. A reserva (`crm-reserva`) passa para o Google Cloud Run, que acorda em poucos segundos.
 - `Dockerfile` (fixa `TZ`, `CRM_NUVEM=1` e `CRM_ENDERECOS`), `.dockerignore` e `cloudflare/worker-reserva.js` (Worker que repassa `crm-reserva` para o `*.run.app`). O `render.yaml` saiu.

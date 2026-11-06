@@ -325,24 +325,15 @@ def alertas(con):
     # alunos: UM algoritmo (alu.estado) diz a situação de cada um e traz os botões; aqui só vira alerta
     estados = alu.estado(con, hoje)
     incompletos = []
-    # renovação vencida ou a até 2 dias: o botão do WhatsApp é o mesmo da ficha (cartão-imagem + Pix, registra o evento)
-    cobraveis = [e["id"] for e in estados.values() if e["modelo"] in ("cobranca", "renovacao") and e["renovacao"]]
-    clientes = {r["id"]: r for r in con.execute(
-        f"SELECT id, nome, status, valor FROM clientes WHERE id IN ({','.join('?' * len(cobraveis))})", cobraveis)} if cobraveis else {}
     for e in sorted(estados.values(), key=lambda e: (alu.ORDEM.index(e["situacao"]), e["ordem"])):
         if e["situacao"] == "em_dia":
             continue
         if e["situacao"] == "cadastro_incompleto":
             incompletos.append(e["id"])   # um alerta só para todos, no fim da lista
             continue
-        botao, cartao = e["botao"], None
-        if e["id"] in clientes and e["tel"]:
-            ca = cobranca_atual(con, clientes[e["id"]], {"efetiva": e["renovacao"]["efetiva"], "vence": e["renovacao"]["vence"],
-                                                         "cob": e["cobranca"], "credito": e["credito"]})
-            if ca:
-                botao, cartao = rotulo_cobranca(ca)[0], {"cid": e["id"], "codigo": ca["codigo"]}
+        # vencido ou a até 2 dias: o estado já traz o cartão (imagem + Pix), o mesmo botão de todas as telas
         add(e["cor"], alu.frase(e), f"/clientes/{e['id']}", e["tel"], e["modelo"], e["nome"], e["data_modelo"], extra=e["extra"],
-            botao=botao, acoes=e["acoes"], cartao=cartao)
+            botao=e["botao"], acoes=e["acoes"], cartao=e["cartao"])
     if estados and not dados_mensagem(con)["pix"]:   # há aluno ativo e a mensagem de renovação não tem para onde mandar o dinheiro
         add("azul", "Cadastre a chave PIX para a mensagem de renovação", "/configuracoes#cfg-msg_dados",
             acoes=[{"rotulo": "Cadastrar PIX", "href": "/configuracoes#cfg-msg_dados"}])
@@ -787,15 +778,16 @@ def estagio_cobranca(d: int) -> str | None:
     return "esquecimento" if d > -10 else "moderada" if d > -30 else "critica"
 
 
-def cobranca_atual(con, c, ctx) -> dict | None:
+def cobranca_atual(con, c, ctx, hoje=None, modelos=None, dados=None) -> dict | None:
     """A cobrança do dia (estágio, modelo, valor, texto do cartão e código Pix) ou None se não há o que cobrar.
     ctx = wa_contexto. Lembrete e vence hoje cobram a mensalidade (menos o crédito); depois do vencimento, o total atualizado
     (financeiro.cobranca: crédito já descontado, multa e juros só sobre o saldo). A data é a de quando deve (ctx['vence']:
-    a renovação pendente ou a efetiva)."""
+    a renovação pendente ou a efetiva). hoje = a data do estado do aluno (padrão: hoje). modelos e dados (msg_whatsapp e
+    dados_mensagem) já lidos: quem chama para vários alunos lê uma vez só."""
     efetiva = ctx.get("vence") or ctx.get("efetiva")
     if c["status"] != "ativo" or not data_iso(efetiva):
         return None
-    d = (dt.date.fromisoformat(efetiva) - dt.date.today()).days
+    d = (dt.date.fromisoformat(efetiva) - (hoje or dt.date.today())).days
     estagio = estagio_cobranca(d)
     if not estagio:
         return None
@@ -806,8 +798,8 @@ def cobranca_atual(con, c, ctx) -> dict | None:
     if valor <= 0:
         return None
     nome, modelo = ESTAGIOS[estagio]
-    modelos = db.parametros(con, "msg_whatsapp")
-    dados = dados_mensagem(con)
+    modelos = modelos if modelos is not None else db.parametros(con, "msg_whatsapp")
+    dados = dados if dados is not None else dados_mensagem(con)
     extra = {**dados, **(texto_cobranca(cob) if cob else {}), "valor": moeda(valor), "total": moeda(valor),
              "faltam": max(d, 0), "dias": max(-d, 0)}
     texto = preencher(modelos.get(modelo) or modelos.get("cobranca") or "", c["nome"], data_br(efetiva), extra)

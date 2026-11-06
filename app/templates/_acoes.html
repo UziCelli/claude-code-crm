@@ -1,7 +1,15 @@
 {# Botões de um aluno (acoes do estado, app/alunos.py): {"wa"}: WhatsApp do modelo; {"dialogo"}: abre o diálogo com data-*; senão link.
    Importar com contexto: {% from "_acoes.html" import botoes with context %}. e = o estado do aluno; voltar = para onde ir depois de salvar. #}
+
+{# O botão do WhatsApp, igual em toda tela (alertas, Painel, Clientes, ficha, Mensalidades). Com cartao (cobrança do dia, alunos._cartao):
+   o formulário que gera o cartão-imagem com o QR Pix (app.js) e registra o envio. Sem cartao: o link wa.me com o texto do modelo. #}
+{% macro botao_wa(tel, modelo, nome, data, extra, botao, cartao) %}
+{% if cartao %}<form method="post" action="/clientes/{{ cartao.cid }}/wa/cobranca" target="_blank" class="inline" data-cartao="/clientes/{{ cartao.cid }}/cobranca/cartao.svg" data-codigo="{{ cartao.codigo }}"><button type="submit" class="claro pequeno">{{ botao }}</button></form>
+{% else %}<a class="btn claro pequeno" href="{{ wa(tel, modelos[modelo]|preencher(nome, data, extra)) }}" target="_blank" rel="noopener">{{ botao or 'WhatsApp' }}</a>{% endif %}
+{% endmacro %}
+
 {% macro botoes(acoes, e, voltar) %}{% for x in acoes %}
-{% if x.wa %}<a class="btn claro pequeno" href="{{ wa(e.tel, modelos[e.modelo]|preencher(e.nome, e.data_modelo, e.extra)) }}" target="_blank" rel="noopener">{{ e.botao or 'WhatsApp' }}</a>
+{% if x.wa %}{{ botao_wa(e.tel, e.modelo, e.nome, e.data_modelo, e.extra, e.botao, e.cartao) }}
 {% elif x.dialogo %}<button type="button" class="{{ x.classe or 'claro' }} pequeno" data-abrir="{{ x.dialogo }}" data-voltar="{{ voltar }}"{% for k, v in x.dados.items() %} data-{{ k }}="{{ v }}"{% endfor %}>{{ x.rotulo }}</button>
 {% else %}<a class="btn claro pequeno" href="{{ x.href }}">{{ x.rotulo }}</a>{% endif %}
 {% endfor %}{% endmacro %}

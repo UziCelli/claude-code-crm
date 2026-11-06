@@ -64,7 +64,9 @@ def test_cobrar_renovacao_vencida_com_multa_e_juros(con_temp):
     assert (e["situacao"], e["cor"], e["rotulo"]) == ("cobrar", "vermelho", "Vencida")
     assert e["texto"] == f"renovação venceu em {main.data_br(dia(-20))}"
     assert e["renovacao"]["vencida"] and e["renovacao"]["dias"] == -20
-    assert rotulos(e) == ["Registrar pagamento", "wa", "Pular mês"] and e["botao"] == "Cobrar R$ 410,67"
+    # o mesmo botão de todas as telas: o rótulo do estágio e o cartão com o QR Pix (não o texto antigo)
+    assert rotulos(e) == ["Registrar pagamento", "wa", "Pular mês"] and e["botao"] == "Cobrar R$ 410,67 · 20 dias"
+    assert e["cartao"]["cid"] == cid
 
 
 def test_pago_sem_aula_oferece_pulou_e_credito(con_temp):
