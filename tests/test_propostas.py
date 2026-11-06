@@ -16,8 +16,9 @@ def http(tmp_path, monkeypatch):
         con.execute("UPDATE parametros SET valor=53 WHERE grupo='mao_obra' AND chave='valor_hora'")
     locais.criar_local(con, "SmartFit", taxa_aula=20, tempo_deslocamento=30)
     with con:
-        con.execute("""INSERT OR REPLACE INTO grade_slots (tipo_calculo, dia, local, hora, status, multiplicador)
-                       VALUES ('Pacotes', 1, 'SmartFit', 7, 'livre', 0.86), ('Pacotes', 3, 'SmartFit', 19, 'ocupado', 1.0)""")
+        con.execute("""INSERT OR REPLACE INTO grade_slots (tipo_calculo, dia, local, hora, status)
+                       VALUES ('Pacotes', 1, 'SmartFit', 7, 'livre'), ('Pacotes', 3, 'SmartFit', 19, 'ocupado')""")
+        con.execute("UPDATE parametros SET valor=0.86 WHERE grupo='mult_horario' AND chave='07'")   # 7h é vale em todos os locais
         cid = con.execute("INSERT INTO clientes (nome) VALUES ('Ana')").lastrowid
     con.close()
     return TestClient(main.app, base_url="http://localhost"), cid
@@ -48,7 +49,10 @@ def test_adiciona_varios_dias_de_uma_vez_e_tira_a_media(http):
     r = c.get("/propostas", params={"plano": PLANO, "nd": [1, 3], "nh": 7, "nl": "SmartFit"})
     assert r.status_code == 200
     assert r.text.count('name="h" value="1-7-SmartFit"') == 2 and 'value="3-7-SmartFit"' in r.text   # GET + salvar
-    # Seg 7h é vale (x0,86), Qua 7h não tem slot (x1): média 0,93
+    # o multiplicador é da hora: Seg e Qua 7h são vale (x0,86), mesmo a Qua sem célula na grade
+    assert main.moeda(_cheio([("SmartFit", 0.86), ("SmartFit", 0.86)])) in r.text
+    # horas diferentes: Seg 7h (x0,86) e Qua 8h (x1) tiram a média
+    r = c.get("/propostas", params={"plano": PLANO, "h": ["1-7-SmartFit", "3-8-SmartFit"]})
     assert main.moeda(_cheio([("SmartFit", 0.86), ("SmartFit", 1.0)])) in r.text and "média" in r.text
 
 
@@ -90,7 +94,7 @@ def test_salva_com_desconto_e_pdf_mostra_de_por(http):
     hs = con.execute("SELECT dia, hora, local FROM proposta_horarios WHERE proposta_id=? ORDER BY id", (p["id"],)).fetchall()
     con.close()
     assert [tuple(h) for h in hs] == [(2, 7, "CIA"), (4, 7, "SmartFit")]
-    cheio = _cheio([("CIA", 1.0), ("SmartFit", 1.0)])
+    cheio = _cheio([("CIA", 0.86), ("SmartFit", 0.86)])   # 7h é vale em todos os locais (fixture)
     assert p["local"] == "CIA + SmartFit" and p["preco_cheio"] == pytest.approx(cheio) and p["desconto"] == pytest.approx(0.02)
     pdf = c.get(f"/propostas/{p['id']}").text
     assert f"<s>{main.moeda(cheio)}</s>" in pdf and main.moeda(cheio * 0.98) in pdf and "−2,0% de desconto" in pdf

@@ -153,6 +153,10 @@ _IMPACTO = [
     ("PF Transporte", 20, 0), ("PF Educação", 10, 0.02), ("PF Pessoal", 0, 0), ("PF Lazer", 0, 0), ("PF Vestuário", 0, 0),
     ("PF Outros", 0, 0),
 ]
+# Multiplicador do preço por horário (Grade > Multiplicadores): um por hora, igual em todos os dias e locais. Abaixo de 1 = vale.
+PARAMETROS_INICIAIS += [("mult_horario", f"{h:02d}", 1.0, None, h) for h in range(5, 24)]
+# Ida até a CIA (como os outros locais): R$ por aula (gasolina, Uber) e minutos por aula (contam como trabalho)
+PARAMETROS_INICIAIS += [("cia_deslocamento", "reais_por_aula", 0, None, 1), ("cia_deslocamento", "minutos_por_aula", 0, None, 2)]
 PARAMETROS_INICIAIS += [("impacto_curto", k, c, None, i) for i, (k, c, _) in enumerate(_IMPACTO, 1)]
 PARAMETROS_INICIAIS += [("impacto_juros", k, j, None, i) for i, (k, _, j) in enumerate(_IMPACTO, 1)]
 LISTAS_INICIAIS = {

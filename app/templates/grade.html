@@ -9,6 +9,7 @@
     <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" name="vale" value="1" {{ 'checked' if vale }} onchange="this.form.submit()"> Só horários de vale</label>
   </form>
   <button type="button" class="claro" id="modo-sel" aria-pressed="false">Selecionar vários</button>
+  <button type="button" class="claro" data-abrir="dlg-mult">Multiplicadores</button>
   <button type="button" class="claro" data-abrir="dlg-local" data-voltar="/grade">+ Novo local</button>
   {% if custos_local %}{% set c = custos_local %}
   <button type="button" class="claro" data-abrir="dlg-local" data-acao="/locais/editar" data-titulo="Editar {{ local }}" data-nome="{{ local }}"
@@ -18,6 +19,7 @@
   <form method="post" action="/locais/excluir" style="margin:0" onsubmit="return confirm('Excluir o local {{ local }}? Preços e grade dele somem.')">
     <input type="hidden" name="nome" value="{{ local }}"><button class="claro">Excluir local</button></form>
   {% endif %}
+  {% if local == 'CIA' %}<a class="btn claro" href="/configuracoes#cfg-cia_deslocamento">Editar CIA</a>{% endif %}
 </div>
 <div class="linha" style="justify-content:space-between">
   <div class="legenda">
@@ -27,7 +29,8 @@
   </div>
   <div class="muted">{{ resumo.livres }} livres · {{ resumo.ocupados }} ocupados · {{ resumo.vale }} de vale{% if base %} · referência: {{ base.tipo_servico }} {{ base.qtd_aulas or base.freq_semanal ~ 'x/sem' }}{% endif %}</div>
 </div>
-<p class="muted" style="margin:6px 0 0"><b>Em cada horário livre:</b> número grande = preço por aula · Total = valor do {{ 'pacote' if tipo == 'Pacotes' else 'mês' }} de referência · Lucro = quanto sobra desse total (R$ e %) · x0,90 = multiplicador do horário (abaixo de 1 = vale)</p>
+<p class="muted" style="margin:6px 0 0"><b>Em cada horário livre:</b> número grande = preço por aula · Total = valor do {{ 'pacote' if tipo == 'Pacotes' else 'mês' }} de referência · Lucro = quanto sobra desse total (R$ e %) · x0,90 = multiplicador do horário (abaixo de 1 = vale; muda em <b>Multiplicadores</b>)<br>
+<b>Vale para todos os locais:</b> horário ocupado ou indisponível em outro local aparece aqui com o nome dele.</p>
 <div class="rolagem mt">
 <table class="grade">
   <tr><th></th>{% for d in range(1,7) %}<th>{{ d|dia }}</th>{% endfor %}</tr>
@@ -38,15 +41,17 @@
     <td>
       {% if c %}
       <button class="cel {{ c.status if c.status != 'livre' else (c.margem|cor(minima)) }} {{ 'apagado' if c.apagado }} {{ 'vale' if c.status == 'livre' and c.multiplicador < 1 }}"
-        data-abrir="dlg-slot" data-titulo="{{ d|dia }} {{ '%02d'|format(h) }}h — {{ local }}" data-dia="{{ d }}" data-hora="{{ h }}" data-status="{{ c.status }}" data-cliente_id="{{ c.cliente_id or '' }}" data-multiplicador="{{ c.multiplicador }}">
+        data-abrir="dlg-slot" data-titulo="{{ d|dia }} {{ '%02d'|format(h) }}h — {{ local }}" data-dia="{{ d }}" data-hora="{{ h }}" data-status="{{ c.status }}" data-cliente_id="{{ c.cliente_id or '' }}"
+        {% if c.outro_local %}data-nota="Hoje esse horário está em {{ c.outro_local }}. Salvar como ocupado ou indisponível passa ele para {{ local }}; Livre solta em todos os locais."{% endif %}>
         {% if c.status == 'ocupado' %}<span class="t">{{ c.cliente_nome or 'Ocupado' }}</span>
-        {% elif c.status == 'indisponivel' %}<span class="t">Indisponível</span><br>{{ c.bloqueio or '' }}
+        {% elif c.status == 'indisponivel' %}<span class="t">Indisponível</span>{% if not c.outro_local %}<br>{{ c.bloqueio or '' }}{% endif %}
         {% elif c.preco_aula %}<span class="t">{{ c.preco_aula|moeda }}</span>
         <small class="miudo">Total {{ c.preco_total|moeda }}<br>Lucro {{ c.lucro|moeda }} · {{ c.margem|pct }}{% if c.multiplicador != 1 %} · x{{ c.multiplicador|num(2) }}{% endif %}</small>
         {% else %}<span class="t">Livre</span>{% endif %}
+        {% if c.outro_local %}<small class="miudo">em {{ c.outro_local }}</small>{% endif %}
       </button>
       {% else %}
-      <button class="cel indisponivel" data-abrir="dlg-slot" data-titulo="{{ d|dia }} {{ '%02d'|format(h) }}h — {{ local }}" data-dia="{{ d }}" data-hora="{{ h }}" data-status="livre" data-multiplicador="1">—</button>
+      <button class="cel indisponivel" data-abrir="dlg-slot" data-titulo="{{ d|dia }} {{ '%02d'|format(h) }}h — {{ local }}" data-dia="{{ d }}" data-hora="{{ h }}" data-status="livre">—</button>
       {% endif %}
     </td>
     {% endfor %}
@@ -54,6 +59,28 @@
   {% endfor %}
 </table>
 </div>
+{% if comparar %}
+<details class="card mt" id="porque">
+  <summary><b>Por que esse preço? Compare os locais</b></summary>
+  <p class="muted" style="margin:6px 0">De onde vem o preço de <b>1 aula</b> (1 pessoa, x1,00) no plano de referência
+    {% if base %}({{ base.tipo_servico }} {{ base.qtd_aulas|int ~ ' aulas' if tipo == 'Pacotes' else base.freq_semanal|int ~ 'x/semana' }}){% endif %}.
+    A linha que mais muda de um local para o outro é a que deixa o preço mais alto.</p>
+  <div class="rolagem">
+  <table class="comparar">
+    <tr><th>Por aula</th>{% for x in comparar %}<th class="{{ 'atual' if x.local == local }}">{{ x.local }}</th>{% endfor %}</tr>
+    <tr class="total"><td>Preço por aula</td>{% for x in comparar %}<td class="{{ 'atual' if x.local == local }}">{{ x.preco|moeda }}</td>{% endfor %}</tr>
+    <tr class="total"><td>Custo por aula<br><small class="muted">a soma das linhas abaixo</small></td>{% for x in comparar %}<td class="{{ 'atual' if x.local == local }}">{{ x.custo|moeda }}</td>{% endfor %}</tr>
+    <tr><td>Taxa do local</td>{% for x in comparar %}<td class="{{ 'atual' if x.local == local }}">{{ x.taxa|moeda }}</td>{% endfor %}</tr>
+    <tr><td>Taxa mensal ÷ aulas do mês</td>{% for x in comparar %}<td class="{{ 'atual' if x.local == local }}">{{ x.mensal|moeda }}</td>{% endfor %}</tr>
+    <tr><td>Deslocamento (R$)</td>{% for x in comparar %}<td class="{{ 'atual' if x.local == local }}">{{ x.ida_reais|moeda }}</td>{% endfor %}</tr>
+    <tr><td>Seu tempo<br><small class="muted">minutos × R$/hora</small></td>{% for x in comparar %}<td class="{{ 'atual' if x.local == local }}">{{ x.salario|moeda }}<br><small class="muted">{{ x.minutos|num(0) }} min{% if x.minutos_ida %} (ida {{ x.minutos_ida|num(0) }}){% endif %}</small></td>{% endfor %}</tr>
+    <tr><td>Custos fixos rateados</td>{% for x in comparar %}<td class="{{ 'atual' if x.local == local }}">{{ x.rateio|moeda }}</td>{% endfor %}</tr>
+  </table>
+  </div>
+  <p class="muted" style="margin:6px 0 0">Taxa, taxa mensal e deslocamento de um local: <b>Editar local</b>. Os da CIA: <b>Editar CIA</b> (Configurações).
+    Seu tempo e os custos fixos: Configurações.</p>
+</details>
+{% endif %}
 <div class="barra-sel" id="barra-sel">
   <span id="sel-txt" aria-live="polite"></span>
   <button type="button" id="sel-editar">Editar selecionados</button>
@@ -65,11 +92,25 @@
   <form method="post" action="/grade/slot">
     <input type="hidden" name="tipo" value="{{ tipo }}"><input type="hidden" name="local" value="{{ local }}"><input type="hidden" name="ref" value="{{ ref_atual|int if ref_atual else 0 }}">
     <input type="hidden" name="dia"><input type="hidden" name="hora">
-    <div class="campo"><label>Situação</label><select name="status"><option value="livre">Livre</option><option value="ocupado">Ocupado</option><option value="indisponivel">Indisponível</option><option value="" hidden>Não alterar</option></select></div>
+    <p class="nota-grade" data-nota hidden></p>
+    <div class="campo"><label>Situação</label><select name="status" required><option value="" hidden>Escolha a situação</option><option value="livre">Livre</option><option value="ocupado">Ocupado</option><option value="indisponivel">Indisponível</option></select></div>
     <div class="campo"><label>Cliente (se ocupado)</label><select name="cliente_id"><option value="">—</option>{% for cl in clientes %}<option value="{{ cl.id }}">{{ cl.nome }}</option>{% endfor %}</select></div>
-    <div class="campo"><label>Multiplicador de preço (abaixo de 1 = vale)</label><input name="multiplicador" value="1"></div>
-    <div class="campo"><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="so_este" value="1"> Aplicar só em {{ tipo }} (por padrão vale para Pacotes e Mensalidades)</label></div>
+    <p class="muted" style="margin:0 0 8px">Vale para todos os locais, em Pacotes e Mensalidades.
+      Preço do horário: <button type="button" class="claro pequeno" data-abrir="dlg-mult" onclick="this.closest('dialog').close()">Multiplicadores</button></p>
     <div class="linha"><button>Salvar</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
+  </form>
+</dialog>
+<dialog id="dlg-mult">
+  <h2 data-titulo>Multiplicadores</h2>
+  <form method="post" action="/grade/multiplicadores?tipo={{ tipo|urlencode }}&local={{ local|urlencode }}&ref={{ ref_atual|int if ref_atual else 0 }}">
+    <p class="muted" style="margin:0 0 8px">Vale para <b>todos os locais e todos os dias</b>, em Pacotes e Mensalidades.
+      1,00 = preço normal · acima de 1 = mais caro · abaixo de 1 = vale (horário para encher).</p>
+    <div class="mults">
+      {% for h, m in mults.items() %}
+      <label>{{ '%02d'|format(h) }}h <input name="m_{{ '%02d'|format(h) }}" value="{{ m|num(2) }}" inputmode="decimal" size="5" aria-label="Multiplicador das {{ '%02d'|format(h) }}h"></label>
+      {% endfor %}
+    </div>
+    <div class="linha mt"><button>Salvar</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
   </form>
 </dialog>
 <script>
@@ -77,7 +118,6 @@
   var tb = document.querySelector("table.grade"), dlg = document.getElementById("dlg-slot"), f = dlg.querySelector("form");
   var barra = document.getElementById("barra-sel"), btnModo = document.getElementById("modo-sel"), modo = false, ultima = null;
   var cels = Array.prototype.slice.call(tb.querySelectorAll("button.cel"));
-  var nao = f.status.querySelector('option[value=""]');
   function marcados() { return cels.filter(function (c) { return c.classList.contains("sel"); }); }
   function marca(c, on) { c.classList.toggle("sel", on); c.setAttribute("aria-pressed", on); }
   function atualiza() {
@@ -120,13 +160,13 @@
       var i = document.createElement("input"); i.type = "hidden"; i.name = "celulas"; i.value = c.dataset.dia + "-" + c.dataset.hora; f.appendChild(i);
     });
     f.dia.value = 0; f.hora.value = 0;
-    nao.hidden = false; f.status.value = ""; f.multiplicador.value = ""; f.multiplicador.placeholder = "não alterar";
+    f.status.value = "";
+    var nota = dlg.querySelector("[data-nota]"); nota.hidden = true; nota.textContent = "";
     dlg.querySelector("[data-titulo]").textContent = m.length + " horários selecionados — " + f.local.value;
     dlg.showModal();
   });
   dlg.addEventListener("close", function () {
     f.querySelectorAll('input[name="celulas"]').forEach(function (i) { i.remove(); });
-    nao.hidden = true; f.multiplicador.placeholder = "";
   });
 })();
 </script>

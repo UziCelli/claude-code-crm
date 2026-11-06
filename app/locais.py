@@ -2,7 +2,8 @@
 
 O preço não fica guardado: o motor de preços (precos.custo_servico) lê estes custos na hora, junto com o seu
 salário/hora, o tempo de deslocamento e o rateio dos custos fixos. Mudou um custo, todos os preços do local mudam.
-Grade: copia os horários e multiplicadores da referência, todos livres (sem grade na referência: Seg-Sáb, 05h-23h).
+Grade: copia os horários da referência, todos livres (sem grade na referência: Seg-Sáb, 05h-23h). O multiplicador de cada hora
+e a situação de cada horário (ocupado, indisponível) valem para todos os locais: ficam em Grade > Multiplicadores e na Grade.
 """
 import sqlite3
 import unicodedata
@@ -13,11 +14,10 @@ CAMPOS = ("taxa_aula", "taxa_pessoa_extra", "max_pessoas", "deslocamento", "temp
 
 
 def custo_aula_local(con, local: str) -> float:
-    """R$ por aula (1 pessoa) que o local cobra: CIA = taxa_cia[1]; local criado aqui = seus custos; outro = 0."""
-    if local == "CIA":
-        return precos.taxas_cia(con)[0].get(1, 0.0)
-    c = precos.custos_locais(con).get(local)
-    return precos.custo_por_aula(c) if c else 0.0
+    """R$ por aula (1 pessoa) que o local custa: CIA = taxa_cia[1] + a ida; local criado aqui = seus custos; outro = 0."""
+    from . import db
+    p = {"taxa_cia": precos.taxas_cia(con)[0], "cia_desloc": db.parametros(con, "cia_deslocamento"), "locais": precos.custos_locais(con)}
+    return precos.custo_aula_local(p, local)
 
 
 def referencias(con) -> list[str]:

@@ -215,9 +215,13 @@ def test_horarios_de_vale_livres(con_temp):
     montar(con_temp, reserva=40000)
     assert "horarios_de_vale" not in todas(con_temp)
     with con_temp:
-        con_temp.execute("""INSERT INTO grade_slots (tipo_calculo, dia, local, hora, status, multiplicador) VALUES
-                            ('Pacotes', 2, 'CIA', 14, 'livre', 0.9), ('Mensalidades', 2, 'CIA', 14, 'livre', 0.9),
-                            ('Pacotes', 3, 'CIA', 18, 'livre', 1.1), ('Pacotes', 4, 'CIA', 15, 'ocupado', 0.9)""")
+        con_temp.execute("""INSERT INTO grade_slots (tipo_calculo, dia, local, hora, status) VALUES
+                            ('Pacotes', 2, 'CIA', 14, 'livre'), ('Mensalidades', 2, 'CIA', 14, 'livre'),
+                            ('Pacotes', 3, 'CIA', 18, 'livre'), ('Pacotes', 4, 'CIA', 14, 'livre'), ('Pacotes', 4, 'Prédio', 14, 'ocupado')""")
+    assert "horarios_de_vale" not in todas(con_temp)   # sem hora de vale (tudo x1,00)
+    with con_temp:   # 14h vira vale; 18h fica acima de 1. Qui 14h está ocupada em outro local: não conta
+        con_temp.execute("UPDATE parametros SET valor=0.9 WHERE grupo='mult_horario' AND chave='14'")
+        con_temp.execute("UPDATE parametros SET valor=1.1 WHERE grupo='mult_horario' AND chave='18'")
     s = todas(con_temp)["horarios_de_vale"]
     assert s["titulo"] == "Ofereça os 1 horários de vale que estão livres." or "1 horário" in s["titulo"]
     assert s["acoes"][0]["href"] == "/grade?vale=1"
@@ -316,7 +320,8 @@ def cenario_completo(con):
         con.execute("UPDATE parametros SET valor=7000 WHERE grupo='salario' AND chave='valor'")
         con.execute("INSERT INTO leads (nome, canal_origem, etapa, data_mudanca_etapa) VALUES ('Recente','Google','perdido','2026-11-20')")
         con.execute("INSERT INTO lista_espera (nome, hora) VALUES ('Carla', 18)")
-        con.execute("INSERT INTO grade_slots (tipo_calculo, dia, local, hora, status, multiplicador) VALUES ('Pacotes', 2, 'CIA', 14, 'livre', 0.9)")
+        con.execute("INSERT INTO grade_slots (tipo_calculo, dia, local, hora, status) VALUES ('Pacotes', 2, 'CIA', 14, 'livre')")
+        con.execute("UPDATE parametros SET valor=0.9 WHERE grupo='mult_horario' AND chave='14'")
         con.execute("INSERT INTO gastos_marketing (mes, canal, anuncios, clientes) VALUES ('2026-11', 'Instagram Ads', 900, 0)")
     lancar(con, "saida", 1500, "2026-12-20", pago_em=None, escopo="PF", categoria="Dívidas", descricao="Moto", parcela_num=1, parcela_total=4)
     alunos_demais(con, 2)

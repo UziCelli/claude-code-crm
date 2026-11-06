@@ -24,6 +24,7 @@ def carregar_parametros(con) -> dict:
         "cia_max": cia_max,
         "grupo_mo": {int(k): v for k, v in g("grupo_mao_obra_extra").items()},
         "locais": custos_locais(con),
+        "cia_desloc": g("cia_deslocamento"),   # ida até a CIA: reais_por_aula e minutos_por_aula
         "mo": g("mao_obra"),
     }
     auto = valor_hora_automatico(con, p)
@@ -68,10 +69,19 @@ def base_motor(tipo: str, qtd: int = 0, freq: int = 0, local: str | None = None)
             "freq_semanal": freq if tipo == "Mensalidade" else 0, "sessoes_mes": sessoes}
 
 
-def custo_aula_local(p: dict, local: str | None) -> float:
-    """R$ por aula (1 pessoa) que o local cobra: CIA = taxa da CIA de 1 pessoa; local criado aqui = custo_por_aula; outro = 0."""
+def deslocamento(p: dict, local: str | None) -> tuple[float, float]:
+    """(R$ por aula, minutos por aula) da ida até o local. CIA: Configurações > Deslocamento até a CIA; local criado aqui: os custos dele."""
     if local == "CIA":
-        return float(p.get("taxa_cia", {}).get(1, 0.0))
+        c = p.get("cia_desloc") or {}
+        return float(c.get("reais_por_aula") or 0), float(c.get("minutos_por_aula") or 0)
+    c = (p.get("locais") or {}).get(local) or {}
+    return float(c.get("deslocamento") or 0), float(c.get("tempo_deslocamento") or 0)
+
+
+def custo_aula_local(p: dict, local: str | None) -> float:
+    """R$ por aula (1 pessoa) que o local custa: CIA = taxa da CIA de 1 pessoa + a ida; local criado aqui = custo_por_aula; outro = 0."""
+    if local == "CIA":
+        return float(p.get("taxa_cia", {}).get(1, 0.0)) + deslocamento(p, "CIA")[0]
     c = (p.get("locais") or {}).get(local)
     return custo_por_aula(c) if c else 0.0
 
@@ -114,7 +124,7 @@ def minutos_trabalho(base: dict, p: dict, local: str | None = None) -> float:
     r = p.get("mo") or {}
     tipo = base.get("tipo_servico")
     sessoes = float(base.get("sessoes_mes") or 0)
-    desloc = float(((p.get("locais") or {}).get(local or base.get("local")) or {}).get("tempo_deslocamento") or 0)
+    desloc = deslocamento(p, local or base.get("local"))[1]
     aula = float(r.get("min_aula", 60) or 0) + desloc
     if tipo in _COM_AULA:
         plan = r.get("min_planejamento_mes" if tipo == "Mensalidade" else "min_planejamento_pacote")
@@ -136,6 +146,45 @@ def custo_servico(base: dict, p: dict, local: str | None = None) -> tuple[float,
     horas = minutos_trabalho(base, p, local) / 60
     mo = horas * float((p.get("mo") or {}).get("valor_hora") or 0)
     return custo_aula_local(p, local) * sessoes + float(p.get("rateio_hora") or 0) * horas, mo, horas
+
+
+def decompor(base: dict, p: dict, local: str | None = None) -> dict:
+    """De onde vem o preço de 1 aula (1 pessoa, sem multiplicador do horário) num local: as partes do custo por aula, que somam o custo,
+    e o preço de tabela por aula. Para a Grade comparar os locais ("Por que esse preço?")."""
+    local = local or base.get("local")
+    sessoes = float(base.get("sessoes_mes") or 0) or 1.0
+    reais, minutos_ida = deslocamento(p, local)
+    if local == "CIA":
+        taxa, mensal = float(p.get("taxa_cia", {}).get(1, 0.0)), 0.0
+    else:
+        c = (p.get("locais") or {}).get(local) or {}
+        taxa = float(c.get("taxa_aula") or 0)
+        mensal = (c.get("taxa_mensal") or 0) / c["aulas_mes"] if c.get("aulas_mes") else 0.0
+    resto, mo, horas = custo_servico(base, p, local)
+    rateio = float(p.get("rateio_hora") or 0) * horas
+    custo = resto + mo
+    r = calcular(base, p, local=local)
+    partes = {"taxa": taxa, "mensal": mensal, "ida_reais": reais, "salario": mo / sessoes, "rateio": rateio / sessoes}
+    return {**{k: round(v, 2) for k, v in partes.items()}, "custo": round(custo / sessoes, 2),
+            "minutos": round(horas * 60 / sessoes, 1), "minutos_ida": minutos_ida,
+            "valor_hora": round(float((p.get("mo") or {}).get("valor_hora") or 0), 2),
+            "preco": round(r["preco_cheio"] / sessoes, 2), "sessoes": sessoes}
+
+
+HORAS_GRADE = range(5, 24)
+
+
+def mult_horario(con) -> dict:
+    """Multiplicador do preço de cada horário (Grade > Multiplicadores): {hora: x}. O mesmo em todos os dias, locais e tipos.
+    Abaixo de 1 = vale (horário para encher)."""
+    from . import db
+    m = {}
+    for k, v in db.parametros(con, "mult_horario").items():
+        try:
+            m[int(k)] = float(v)
+        except (TypeError, ValueError):
+            pass
+    return {h: (m.get(h) or 1.0) for h in HORAS_GRADE}
 
 
 def custos_locais(con) -> dict:
