@@ -273,8 +273,11 @@ def contexto(con, hoje=None, metricas=None, estados=None) -> dict:
                            "mensalidade": c["tipo_servico"] == "Mensalidade"})
     perdidos_leads = [dict(r) for r in con.execute(
         """SELECT id, nome, telefone FROM leads WHERE excluido_em IS NULL AND etapa='perdido' AND data_mudanca_etapa >= ?""", (ate90,))]
-    vale_livre = con.execute("""SELECT COUNT(*) FROM (SELECT DISTINCT dia, local, hora FROM grade_slots
-                                WHERE status='livre' AND COALESCE(multiplicador, 1) < 1 AND dia BETWEEN 1 AND 6)""").fetchone()[0]
+    # horários de vale (multiplicador da hora < 1) livres em todos os locais: o professor é um só
+    horas_vale = [h for h, x in precos.mult_horario(con).items() if x < 1]
+    vale_livre = con.execute(f"""SELECT COUNT(*) FROM (SELECT dia, hora FROM grade_slots
+                                 WHERE dia BETWEEN 1 AND 6 AND hora IN ({','.join('?' * len(horas_vale))}) GROUP BY dia, hora
+                                 HAVING SUM(status IN ('ocupado','indisponivel')) = 0)""", horas_vale).fetchone()[0] if horas_vale else 0
     espera_vale = con.execute("SELECT COUNT(*) FROM lista_espera WHERE excluido_em IS NULL AND hora NOT IN (7,9,18,19)").fetchone()[0]
     gastos = {r[0]: {"gasto": r[1], "clientes": r[2]} for r in con.execute(
         """SELECT canal, SUM(mensalidade+anuncios+comissoes+outros), SUM(clientes) FROM gastos_marketing

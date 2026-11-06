@@ -568,8 +568,10 @@ def _previsao_de_caixa(con, a):
 def _mensalidades_do_mes(con, a):
     mes = _mes(a, "mes", _hoje()[:7])
     itens = financeiro.mensalidades(con, mes)
-    return {"mes": mes, "previsto": round(sum(i["previsto"] for i in itens), 2), "recebido": round(sum(i["recebido"] for i in itens), 2),
+    # previsto = o que cai no mês (igual à tela): quem pagou adiantado num mês anterior fica em ja_pago_adiantado, fora do previsto
+    return {"mes": mes, "previsto": round(sum(i["entra"] for i in itens), 2), "recebido": round(sum(i["recebido"] for i in itens), 2),
             "falta_receber": round(sum(i["previsto"] for i in itens if not i["quitado"]), 2),
+            "ja_pago_adiantado": round(sum(i["previsto"] for i in itens if i["situacao"] == "pago adiantado"), 2),
             "alunos": [{"cliente_id": i["id"], "nome": i["nome"], "previsto": i["previsto"], "recebido": i["recebido"],
                         "em_aberto": i["aberto"], "falta_lancar": i["falta"], "situacao": i["situacao"],
                         "mes_quitado": i["quitado"]} for i in itens],

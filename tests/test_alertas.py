@@ -176,7 +176,8 @@ def test_alerta_de_renovacao_some_com_pagamento_e_vira_cobranca_sem_ele(con_temp
     [th] = do_aluno(con_temp, "Dora")
     assert (th["cor"], th["modelo"], th["botao"]) == ("vermelho", "cobranca", "Cobrar R$ 410,67 · 20 dias")
     texto = main.preencher(db.parametros(con_temp, "msg_whatsapp")["cobranca"], th["nome"], th["data"], th["extra"])
-    assert "R$ 400,00" in texto and "15/10/2026" in texto and "multa" not in texto   # o total atualizado vai no cartão
+    venceu = dt.date.fromisoformat(dia(-20)).strftime("%d/%m/%Y")   # data calculada: fixa, o teste quebrava no dia seguinte
+    assert "R$ 400,00" in texto and venceu in texto and "multa" not in texto   # o total atualizado vai no cartão
     sem_valor = cliente(con_temp, "Sem valor", dia(-5), valor=0)
     [sv] = do_aluno(con_temp, "Sem valor")
     assert (sv["modelo"], sv["botao"]) == ("renovacao", None)   # sem valor mensal não dá para calcular: WhatsApp normal

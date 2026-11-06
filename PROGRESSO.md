@@ -321,8 +321,19 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Painel: cartão "O mês cobre seus custos?". Mensalidades − impostos/taxas − custos do negócio − custos pessoais inteiros da PF (`main.cobre_custos`).
 - Tela `/calculos`: a conta acima, de onde vem o salário/hora e as variáveis editáveis (mão de obra, agenda cheia, margens, taxas, grupo). Salvar volta para ela.
 
+## Preço pelo custo no local (04/11/2026)
+- Academia sem taxa copiada da CIA no "Manter a margem" nascia barata: tirar a taxa derrubava o preço na mesma proporção do custo, e o pró-labore novo (regra do tempo + deslocamento) comia tudo. Ex. do teste: CIA 8 aulas R$ 1100 → local sem taxa R$ 408; com 30 min de deslocamento o lucro dava −R$ 217 e, no pico (x1,6), só +R$ 14.
+- Novo modo **"Montar pelo custo"** no "+ Novo local" e no "Editar local" (`locais._preco_pelo_custo`): o preço base = preço sugerido do motor (margem mínima do plano, 1 pessoa, sem multiplicador). No mesmo exemplo: R$ 760, margem 15% no horário normal.
+- Para a ALLP Fit: Grade › ALLP Fit › Editar local › "Montar pelo custo" › Salvar.
+
+## Proposta para quem já é aluno: economia sobre o que ele paga (05/11/2026)
+- O "Você economiza" da proposta era preço cheio − preço com desconto (desconto de tabela). Para um aluno que vira dupla, isso mentia: ele não paga o preço cheio hoje.
+- Proposta ligada a um cliente com valor na ficha (e mesmo tipo de serviço) agora mostra: "Hoje você paga R$ X. Com esta proposta, passa a pagar R$ Y por pessoa: você economiza R$ Z (−N%)" (`main._hoje_paga`). O "de/por −15%" continua.
+- Se a proposta sai mais cara que o que ele paga, ou o tipo de serviço é outro (período diferente), não mostra economia nenhuma. Lead continua como antes.
+
 ## A fazer: preço próprio para cada local novo (pedido do Victor, 04/11/2026)
 - Hoje o "+ Novo local" copia a grade e os preços da CIA (ou de outro local) e só ajusta a diferença de custo por aula (`app/locais.py`: `criar_local`, `_gravar`). Os locais novos ficam presos aos preços da CIA.
 - Exemplo: Allp Fit (sem taxa; 33 min de deslocamento ida e volta; R$ 10,60 de passagem) ficou com margens ruins.
 - Quero: tirar a opção de copiar grade e preços. Cada local calcula os próprios preços pelos custos dele (as perguntas do cadastro do local: taxa por aula, taxa mensal, pessoa extra, máximo de pessoas, deslocamento em R$ e em minutos) + mão de obra (salário/hora) + impostos/taxas + margem mínima.
 - Conferir antes: se o "custo operacional" da CIA na planilha já traz passagem embutida, os locais copiados contam a passagem 2 vezes.
+- Situação (06/11/2026): em parte feito. Já existe o modo "Montar pelo custo" no "+ Novo local" e no "Editar local" (seção "Preço pelo custo no local" acima). Falta tirar a opção de copiar a grade e os preços de outro local.

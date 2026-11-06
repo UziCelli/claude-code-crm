@@ -14,6 +14,7 @@
     <strong>{{ i.descricao }}</strong><strong class="num">{{ i.valor|moeda }}</strong>
   </div>
   <div class="muted">{{ dm(i.data) }} <span class="tag neutro">{{ i.escopo }}</span>
+    {% if i.fixo %}<span class="tag azul" title="Vem de uma conta recorrente marcada como custo fixo">fixo</span>{% else %}<span class="tag neutro" title="Conta avulsa, imposto, local ou recorrente marcada como &quot;varia&quot;">variável</span>{% endif %}
     <span class="tag {{ 'vermelho' if i.status == 'atrasado' else ('amarelo' if i.dias <= 3 else 'neutro') }}">{{ i.prazo }}</span>
     {% if i.talvez_pago %}<span class="tag amarelo" title="Há um lançamento seu parecido neste mês. Veja em Conferir.">talvez já pago</span>{% endif %}</div>
   {% if i.auto and i.observacao %}<div class="muted como-calculei"><small>Como calculei: {{ i.observacao }}</small></div>{% endif %}
@@ -51,7 +52,22 @@
     <h2 id="t-contas" style="margin:0">Contas a pagar</h2>
     {% if so_vencidas %}<a class="btn claro pequeno" href="/financeiro">Ver todas</a>{% endif %}
   </div>
-  <p style="margin:0 0 4px;font-size:18px">{% if so_vencidas %}Vencidas ou vencendo em 3 dias{% else %}Para pagar até {{ dm(contas.ate) }}{% endif %}: <strong>{{ contas.total|moeda }}</strong></p>
+  <p style="margin:0 0 4px;font-size:18px">{% if so_vencidas %}Vencidas ou vencendo em 3 dias{% else %}Para pagar até {{ dm(contas.ate) }}{% endif %}{% if custo == 'fixo' %} (só fixos){% elif custo == 'variavel' %} (só variáveis){% endif %}: <strong>{{ contas.total|moeda }}</strong></p>
+  {% set base_url = '/financeiro?mes=' ~ mes ~ '&escopo=' ~ escopo ~ ('&vencidas=1' if so_vencidas else '') ~ ('&conta=' ~ conta|urlencode if conta else '') %}
+  <div class="filtros-contas">
+    <div class="linha" role="group" aria-label="Ordenar contas a pagar">
+      <span class="muted">Ordenar:</span>
+      {% for k, r in [('urgencia', 'Mais urgente'), ('data', 'Por data'), ('valor', 'Maior valor')] %}
+      <a class="btn pequeno {{ '' if ordem == k else 'claro' }}" href="{{ base_url }}&ordem={{ k }}&custo={{ custo }}#t-contas"{% if ordem == k %} aria-current="true"{% endif %}>{{ r }}</a>
+      {% endfor %}
+    </div>
+    <div class="linha" role="group" aria-label="Filtrar por tipo de custo">
+      <span class="muted">Mostrar:</span>
+      {% for k, r in [('todos', 'Tudo · ' ~ (contas.total_fixos + contas.total_variaveis)|moeda), ('fixo', 'Fixos · ' ~ contas.total_fixos|moeda), ('variavel', 'Variáveis · ' ~ contas.total_variaveis|moeda)] %}
+      <a class="btn pequeno {{ '' if custo == k else 'claro' }}" href="{{ base_url }}&ordem={{ ordem }}&custo={{ k }}#t-contas"{% if custo == k %} aria-current="true"{% endif %}>{{ r }}</a>
+      {% endfor %}
+    </div>
+  </div>
   {% if resumo.sem_saldo or resumo.desatualizado %}
   <p><button class="claro pequeno" data-abrir="dlg-saldos" data-titulo="Atualizar saldos">Atualizar saldos</button></p>
   {% else %}
@@ -61,7 +77,7 @@
   <div class="card">
     {% for i in contas.itens %}{{ conta_item(i) }}
     {% else %}
-    <p style="margin:0">{% if so_vencidas %}Tudo em dia: nenhuma conta vencida nem vencendo em 3 dias.{% else %}Nenhuma conta a pagar nos próximos 30 dias. Cadastre as contas fixas em Contas recorrentes (abaixo) para elas aparecerem aqui todo mês.{% endif %}</p>
+    <p style="margin:0">{% if custo != 'todos' and (contas.n_fixos + contas.n_variaveis) %}Nenhuma conta {{ 'fixa' if custo == 'fixo' else 'variável' }} nesse período. <a href="{{ base_url }}&ordem={{ ordem }}&custo=todos#t-contas">Ver tudo</a>{% elif so_vencidas %}Tudo em dia: nenhuma conta vencida nem vencendo em 3 dias.{% else %}Nenhuma conta a pagar nos próximos 30 dias. Cadastre as contas fixas em Contas recorrentes (abaixo) para elas aparecerem aqui todo mês.{% endif %}</p>
     {% endfor %}
   </div>
   <div class="card mt">

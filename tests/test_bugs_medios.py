@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import main, precos
-from tests.test_locais import con  # noqa: F401  (banco temporário com preços da CIA)
+from tests.test_locais import con  # noqa: F401  (banco temporário)
 
 
 @pytest.fixture
@@ -30,7 +30,7 @@ def test_legenda_da_grade_mostra_a_margem_minima_do_plano(http, con):  # noqa: F
 def test_margem_minima_mais_taxas_acima_de_100_vira_mensagem(con):  # noqa: F811
     p = precos.carregar_parametros(con)
     p["margens"]["Pacote de Aulas"] = 0.99
-    base = dict(con.execute("SELECT * FROM precos_base WHERE tipo_servico='Pacote de Aulas'").fetchone())
+    base = precos.base_motor("Pacote de Aulas", 8, local="CIA")
     with pytest.raises(ValueError, match="100%"):
         precos.calcular(base, p)
 

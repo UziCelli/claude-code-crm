@@ -13,10 +13,11 @@
 </form>
 
 <div class="grid c3 mt">
-  <div class="kpi"><div class="rotulo">Previsto</div><div class="valor">{{ previsto|moeda }}</div><div class="meta">Valor mensal dos alunos ativos</div></div>
+  <div class="kpi"><div class="rotulo">Previsto</div><div class="valor">{{ previsto|moeda }}</div><div class="meta">O que cai neste mês (recebido + falta receber)</div></div>
   <div class="kpi verde"><div class="rotulo">Recebido</div><div class="valor">{{ recebido|moeda }}</div><div class="meta">Pago pelos alunos da lista (entradas ligadas à ficha)</div></div>
   <div class="kpi {{ 'verde' if falta == 0 else 'amarelo' }}"><div class="rotulo">Falta receber</div><div class="valor">{{ falta|moeda }}</div><div class="meta">Soma do que falta de cada aluno</div></div>
 </div>
+{% if adiantado %}<p class="muted mt">Já pago adiantado: {{ adiantado|moeda }}. Esse dinheiro caiu no mês em que pagaram, não entra neste.</p>{% endif %}
 
 {% if sem_aluno %}
 <div class="card mt atencao">

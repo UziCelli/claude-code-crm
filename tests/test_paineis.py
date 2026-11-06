@@ -30,13 +30,6 @@ def sem_das(con):
         con.execute("UPDATE parametros SET valor=0 WHERE grupo='imposto' AND chave='DAS'")
 
 
-def base_pacote(con, qtd=8, preco=900, op=500, mo=300, total=800):
-    with con:
-        con.execute("""INSERT INTO precos_base (tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal, sessoes_mes, preco_base,
-                       custo_operacional, mao_obra, custo_total) VALUES ('Pacote de Aulas','CIA','PIX',?,0,?,?,?,?,?)""",
-                    (qtd, qtd, preco, op, mo, total))
-
-
 def aluno(con, nome, valor, local="CIA", pessoas=1, canal=None, data_inicio=None):
     with con:
         return con.execute("""INSERT INTO clientes (nome, valor, tipo_servico, plano, local, pessoas, forma_pagamento, canal_origem, data_inicio)
@@ -170,11 +163,12 @@ def test_livro_caixa_pj_e_pf_nao_soma_o_salario_duas_vezes(cliente_http):
 
 
 # ---------- painel principal ----------
-def test_lucro_hora_so_conta_as_horas_de_quem_tem_preco_base(con_temp):
+def test_lucro_hora_so_conta_as_horas_de_quem_tem_plano_no_motor(con_temp):
     con = con_temp
-    base_pacote(con, qtd=8, preco=900, op=500, mo=300, total=800)
     aluno(con, "Com base", 900)
-    aluno(con, "Sem base (SmartFit)", 900, local="SmartFit")
+    with con:   # plano que o motor não conhece: as 8 aulas contam nas horas, mas não no lucro/h
+        con.execute("""INSERT INTO clientes (nome, valor, tipo_servico, plano, local, pessoas, forma_pagamento)
+                       VALUES ('Sem base', 900, 'Outro', 'Pacote 8 aulas', 'SmartFit', 1, 'PIX')""")
     m = main.calcular_metricas(con)
     com_base = main.estimativa_cliente(con, con.execute("SELECT * FROM clientes WHERE nome='Com base'").fetchone(), main.precos.carregar_parametros(con))
     assert m["horas_ocupadas"] == 16
@@ -183,7 +177,6 @@ def test_lucro_hora_so_conta_as_horas_de_quem_tem_preco_base(con_temp):
 
 def test_ficha_nao_multiplica_o_valor_pago_pelo_grupo_e_bate_com_o_painel(cliente_http):
     http, con = cliente_http
-    base_pacote(con)
     cid = aluno(con, "Dupla", 1440, pessoas=2)
     c = con.execute("SELECT * FROM clientes WHERE id=?", (cid,)).fetchone()
     est = main.estimativa_cliente(con, c, main.precos.carregar_parametros(con))
