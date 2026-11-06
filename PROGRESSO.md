@@ -337,7 +337,8 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Regra (custeio por absorção, capacidade normal): salário **e** custos fixos dividem por `precos.horas_base` = max(horas de trabalho, agenda cheia). A meta é só piso. `carregar_parametros` calcula as horas uma vez (`main.horas_trabalho_detalhe`, por parte) e passa para `valor_hora_automatico` e `rateio_fixos`.
 - "O mês cobre?": a parte das contas fixas que nenhum aluno paga (agenda abaixo da meta, aluno sem plano) entra inteira (`fixos_ociosos`), como o custo pessoal.
 - Telas: /calculos mostra "÷ 96 h de trabalho no mês" e a conta "96 h = X h de aula + Y h de deslocamento + …" (`precos.partes_minutos`); o texto do piso só aparece quando ele vale. Painel e `_salario_hora.html`, idem.
-- Lucro por hora do Painel: agora sobre as horas de **trabalho** (`est["horas"]`, as mesmas da ficha e das propostas), não só as de aula. KPI "Lucro médio por hora de trabalho". O histórico até out/2026 fica como foi gravado, marcado com * (por hora de aula); a seta "vs mês anterior" não compara bases diferentes (`LUCRO_HORA_TRABALHO_DESDE`).
+- Lucro por hora do Painel: agora sobre as horas de **trabalho** (`est["horas"]`, as mesmas da ficha e das propostas), não só as de aula. KPI "Lucro médio por hora de trabalho". Cada mês do histórico guarda a regra com que foi gravado (`metricas_mensais.lucro_hora_trabalho`: 0 = antigo, por hora de aula, marcado com *); a seta "vs mês anterior" não compara regras diferentes.
+- Revisão por 3 agentes independentes (conta, regressões/desempenho, telas): nenhum erro de conta; o * por data foi trocado pela coluna e o texto do KPI ganhou "avaliação".
 - Celular: valores de tabela não quebram mais no meio ("R$ 9.600,0 / 0").
 - Testes: `tests/test_horas_base.py`.
 

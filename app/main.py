@@ -526,7 +526,7 @@ def calcular_metricas(con, mes=None):
     return dict(mes=mes, clientes_ativos=len(clientes), horas_ocupadas=round(horas, 1), lucro_hora=round(lucro_hora, 2),
                 pct_receita_grupos=(receita_grupos / receita) if receita else 0, faturamento_recorrente=round(receita, 2),
                 entra_mes=round(sum(entra.values()), 2),
-                clientes_perdidos=perdidos, vendas_abaixo_10=abaixo10, nivel=nivel, espera_pico=espera_pico,
+                clientes_perdidos=perdidos, vendas_abaixo_10=abaixo10, nivel=nivel, espera_pico=espera_pico, lucro_hora_trabalho=1,
                 salario_hora=p["salario_hora"], cobre=cobre_custos(con, p, bases, mes, caixa))
 
 
@@ -566,16 +566,14 @@ def metricas_por_canal(con, mes):
 def gravar_mes(con, m):
     with con:
         con.execute("""INSERT INTO metricas_mensais (mes, clientes_ativos, horas_ocupadas, lucro_hora, pct_receita_grupos,
-                       faturamento_recorrente, clientes_perdidos, vendas_abaixo_10, nivel) VALUES
+                       faturamento_recorrente, clientes_perdidos, vendas_abaixo_10, nivel, lucro_hora_trabalho) VALUES
                        (:mes,:clientes_ativos,:horas_ocupadas,:lucro_hora,:pct_receita_grupos,:faturamento_recorrente,
-                       :clientes_perdidos,:vendas_abaixo_10,:nivel) ON CONFLICT(mes) DO UPDATE SET
+                       :clientes_perdidos,:vendas_abaixo_10,:nivel,1) ON CONFLICT(mes) DO UPDATE SET
                        clientes_ativos=excluded.clientes_ativos, horas_ocupadas=excluded.horas_ocupadas,
                        lucro_hora=excluded.lucro_hora, pct_receita_grupos=excluded.pct_receita_grupos,
                        faturamento_recorrente=excluded.faturamento_recorrente, clientes_perdidos=excluded.clientes_perdidos,
-                       vendas_abaixo_10=excluded.vendas_abaixo_10, nivel=excluded.nivel, fechado_em=datetime('now','localtime')""", m)
-
-
-LUCRO_HORA_TRABALHO_DESDE = "2026-11"   # antes disso o histórico gravou o lucro/h por hora de AULA, não de trabalho
+                       vendas_abaixo_10=excluded.vendas_abaixo_10, nivel=excluded.nivel, fechado_em=datetime('now','localtime'),
+                       lucro_hora_trabalho=1""", m)   # lucro_hora_trabalho: o lucro/h gravado já é por hora de trabalho
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -596,7 +594,7 @@ def painel(request: Request, con=Depends(get_db)):
         traceback.print_exc()
         saude = None
     return render(request, "painel.html", con, m=m, ant=ant, metas=metas, canais=metricas_por_canal(con, m["mes"]),
-                  historico=historico[-12:], fases=fase_atual(con), saude=saude, lucro_hora_desde=LUCRO_HORA_TRABALHO_DESDE)
+                  historico=historico[-12:], fases=fase_atual(con), saude=saude)
 
 
 @app.post("/painel/fechar-mes")
@@ -3817,7 +3815,8 @@ def exportar_arquivo(nome: str, fmt: str, con=Depends(get_db)):
         atual = calcular_metricas(con)
         if not any(h["mes"] == atual["mes"] for h in historico):
             historico.append({k: atual.get(k) for k in ["mes", "clientes_ativos", "horas_ocupadas", "lucro_hora", "pct_receita_grupos",
-                                                          "faturamento_recorrente", "clientes_perdidos", "vendas_abaixo_10", "nivel"]})
+                                                          "faturamento_recorrente", "clientes_perdidos", "vendas_abaixo_10", "nivel",
+                                                          "lucro_hora_trabalho"]})
         cab, linhas = exportar.de_dicts(historico)
     else:
         try:

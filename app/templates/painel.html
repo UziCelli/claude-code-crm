@@ -40,8 +40,8 @@
          'verde' if m.horas_ocupadas >= metas.horas_dez26 else ('amarelo' if m.horas_ocupadas >= metas.horas_dez26 * 0.7 else 'vermelho'), ' de ' ~ metas.horas_vendaveis|int, atual=m.horas_ocupadas, ant=ant.horas_ocupadas) }}
   {{ kpi('Lucro médio por hora de trabalho', m.lucro_hora|moeda, metas.lucro_hora_dez26|moeda, metas.lucro_hora_mar27|moeda,
          'verde' if m.lucro_hora >= metas.lucro_hora_dez26 else ('amarelo' if m.lucro_hora >= metas.lucro_hora_dez26 * 0.7 else 'vermelho'), atual=m.lucro_hora,
-         ant=(ant.lucro_hora if ant and ant.mes >= lucro_hora_desde else none),
-         extra='aulas + deslocamento + planejamento + consultoria, pelo dinheiro que entra no mês') }}
+         ant=(ant.lucro_hora if ant and ant.lucro_hora_trabalho else none),
+         extra='aulas + deslocamento + planejamento + consultoria + avaliação, pelo dinheiro que entra no mês') }}
   {{ kpi('Receita vinda de grupos', m.pct_receita_grupos|pct, metas.pct_grupos_dez26|pct, metas.pct_grupos_mar27|pct,
          'verde' if m.pct_receita_grupos >= metas.pct_grupos_dez26 else ('amarelo' if m.pct_receita_grupos > 0 else 'vermelho'), atual=m.pct_receita_grupos, ant=ant.pct_receita_grupos) }}
   {{ kpi('Carteira mensal', m.faturamento_recorrente|moeda, metas.recorrente_dez26|moeda, metas.recorrente_mar27|moeda,
@@ -97,11 +97,11 @@
     </div>
     <table class="mt"><tr><th>Mês</th><th class="num">Clientes</th><th class="num sec">Horas</th><th class="num">Lucro/h</th><th class="num sec">Grupos</th><th class="num dest">Carteira</th><th class="num sec">Perdidos</th><th class="num">Nível</th></tr>
       {% for h in historico|reverse %}
-      <tr><td>{{ h.mes[5:] }}/{{ h.mes[:4] }}</td><td class="num">{{ h.clientes_ativos }}</td><td class="num">{{ h.horas_ocupadas|num(0) }}</td><td class="num">{{ h.lucro_hora|moeda }}{{ '*' if h.mes < lucro_hora_desde }}</td>
+      <tr><td>{{ h.mes[5:] }}/{{ h.mes[:4] }}</td><td class="num">{{ h.clientes_ativos }}</td><td class="num">{{ h.horas_ocupadas|num(0) }}</td><td class="num">{{ h.lucro_hora|moeda }}{{ '*' if not h.lucro_hora_trabalho }}</td>
         <td class="num">{{ h.pct_receita_grupos|pct }}</td><td class="num">{{ h.faturamento_recorrente|moeda }}</td><td class="num">{{ h.clientes_perdidos }}</td><td class="num">{{ h.nivel }}</td></tr>
       {% endfor %}
     </table>
-    {% if historico and historico[0].mes < lucro_hora_desde %}<p class="muted">* Lucro/h por hora de aula (antes de {{ lucro_hora_desde[5:] }}/{{ lucro_hora_desde[:4] }}). Agora é por hora de trabalho: aulas + deslocamento + planejamento + consultoria.</p>{% endif %}
+    {% if historico|rejectattr('lucro_hora_trabalho')|list %}<p class="muted">* Lucro/h gravado por hora de aula, pela regra antiga. Agora é por hora de trabalho: aulas + deslocamento + planejamento + consultoria + avaliação.</p>{% endif %}
   </div>
   <div class="card">
     <h2>Por canal — {{ m.mes[5:] }}/{{ m.mes[:4] }}</h2>

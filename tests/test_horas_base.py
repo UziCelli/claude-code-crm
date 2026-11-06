@@ -109,3 +109,39 @@ def test_telas_explicam_o_piso_quando_a_agenda_esta_abaixo_da_meta(con):
     assert "contas fixas que nenhum aluno paga" in t and "R$ 158,00" in t
     assert "R$ 194,00/mês ÷ 97 h da agenda cheia (as mesmas do salário)" in t
     assert "÷ 97 h da agenda cheia" in texto(http.get("/").text)
+
+
+def test_historico_marca_so_os_meses_gravados_pela_regra_antiga(con):
+    """O * (lucro/h por hora de aula) vem de como o mês foi gravado, não da data: um mês antigo gravado agora já é por hora
+    de trabalho; e a seta "vs mês anterior" do lucro/h não compara regras diferentes."""
+    aluno(con, "Ana")
+    http = TestClient(main.app, base_url="http://localhost")
+    http.get("/")   # grava o mês anterior pela regra nova
+    assert con.execute("SELECT COUNT(*) FROM metricas_mensais WHERE lucro_hora_trabalho=0").fetchone()[0] == 0
+    t = http.get("/").text
+    assert "Lucro/h gravado por hora de aula" not in t
+    with con:   # um mês gravado antes desta versão (a coluna nova chega com 0)
+        con.execute("INSERT INTO metricas_mensais (mes, clientes_ativos, horas_ocupadas, lucro_hora, pct_receita_grupos, "
+                    "faturamento_recorrente, clientes_perdidos, vendas_abaixo_10, nivel, lucro_hora_trabalho) "
+                    "VALUES ('2020-01', 3, 24, 80, 0, 2700, 0, 0, 1, 0)")
+    t = texto(http.get("/").text)
+    assert "Lucro/h gravado por hora de aula" in t and "R$ 80,00*" in t
+
+
+def test_seta_do_lucro_hora_some_quando_o_mes_anterior_e_da_regra_antiga(con):
+    aluno(con, "Ana")
+    http = TestClient(main.app, base_url="http://localhost")
+    http.get("/")
+    ant = con.execute("SELECT mes FROM metricas_mensais ORDER BY mes DESC LIMIT 1").fetchone()[0]
+
+    def seta_do_lucro():
+        html = http.get("/").text
+        card = html[html.index("Lucro médio por hora de trabalho"):]
+        return "vs mês anterior" in card[:card.index("Meta dez/26")]
+
+    with con:
+        con.execute("UPDATE metricas_mensais SET lucro_hora=999, lucro_hora_trabalho=1 WHERE mes=?", (ant,))
+    assert seta_do_lucro()          # mesma regra: compara
+    with con:
+        con.execute("UPDATE metricas_mensais SET lucro_hora_trabalho=0 WHERE mes=?", (ant,))
+    assert not seta_do_lucro()      # regra antiga: não compara
