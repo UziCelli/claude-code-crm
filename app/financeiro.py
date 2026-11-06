@@ -62,7 +62,7 @@ def _recorrencias_abertas(con: sqlite3.Connection, comp: str, hoje: str) -> list
         data = vencimento(r["dia_vencimento"], comp)
         itens.append({"origem": "recorrencia", "id": r["id"], "escopo": r["escopo"], "tipo": "saida", "data": data,
                       "descricao": r["descricao"], "categoria": r["categoria"], "valor": r["valor"], "competencia": comp,
-                      "prioridade": r["prioridade"], "status": status({"pago_em": None, "data": data}, hoje)})
+                      "prioridade": r["prioridade"], "status": status({"pago_em": None, "data": data}, hoje), "fixo": r["fixo"] == 1})
     return itens
 
 
@@ -96,7 +96,7 @@ def em_aberto_ate(con: sqlite3.Connection, ate: str, hoje: str) -> list[dict]:
     da competência de 3 meses atrás até a de 'ate'. Pago com data no futuro (agendado) ainda está na conta:
     conta como aberto, na data do pagamento."""
     itens = []
-    for r in con.execute("""SELECT l.*, rc.prioridade AS prioridade FROM lancamentos l LEFT JOIN recorrencias rc ON rc.id = l.recorrencia_id
+    for r in con.execute("""SELECT l.*, rc.prioridade AS prioridade, rc.fixo AS fixo FROM lancamentos l LEFT JOIN recorrencias rc ON rc.id = l.recorrencia_id
                             WHERE (l.pago_em IS NULL OR l.pago_em > ?) AND l.excluido_em IS NULL
                             AND COALESCE(l.pago_em, l.data) <= ?""", (hoje, ate)):
         data = r["pago_em"] or r["data"]
@@ -104,7 +104,7 @@ def em_aberto_ate(con: sqlite3.Connection, ate: str, hoje: str) -> list[dict]:
                       "descricao": r["descricao"] or r["categoria"], "categoria": r["categoria"], "valor": r["valor"],
                       "prioridade": r["prioridade"], "status": status({"pago_em": None, "data": data}, hoje),
                       "agendado": bool(r["pago_em"]), "recorrencia_id": r["recorrencia_id"], "competencia": r["competencia"],
-                      "auto": r["auto"], "observacao": r["observacao"]})
+                      "auto": r["auto"], "observacao": r["observacao"], "fixo": r["fixo"] == 1})
     comp, fim = somar_meses(hoje[:7], -3), ate[:7]
     while comp <= fim:
         itens += [i for i in _recorrencias_abertas(con, comp, hoje) if i["data"] <= ate]
@@ -416,11 +416,19 @@ def chave_conta(i: dict) -> tuple:
     return (i["origem"], i["id"], i.get("competencia") if i["origem"] == "recorrencia" else None)
 
 
-def contas_a_pagar(con: sqlite3.Connection, hoje: str, dias: int = 30, so: set | None = None) -> dict:
+ORDENS_CONTAS = ("urgencia", "data", "valor")   # urgencia = a fila de sempre (atrasadas, impacto, data)
+CUSTOS_CONTAS = ("todos", "fixo", "variavel")
+
+
+def contas_a_pagar(con: sqlite3.Connection, hoje: str, dias: int = 30, so: set | None = None,
+                   ordem: str = "urgencia", custo: str = "todos") -> dict:
     """A lista única de contas a pagar: toda saída em aberto até hoje+dias (o mesmo horizonte do saldo_livre; atrasadas incluídas).
-    Ordem: atrasadas primeiro; depois a nota de impacto (multa, essencial, urgência: nota_impacto); depois a data.
+    ordem: 'urgencia' (atrasadas primeiro; depois a nota de impacto: multa, essencial, urgência; depois a data),
+    'data' (vencimento mais perto primeiro) ou 'valor' (maior primeiro).
+    custo: 'fixo' (vem de conta recorrente marcada como fixa), 'variavel' (o resto: avulsa, DAS, locais...) ou 'todos'.
     Pagamento já agendado para o futuro não entra (já está pago). `so` = conjunto de chave_conta: mostra só essas.
-    Devolve {ate, itens, total}; cada item traz 'dias' (até o vencimento), 'prazo' (texto), 'custo_atraso' e 'motivo'."""
+    Devolve {ate, itens, total, total_fixos, total_variaveis, n_fixos, n_variaveis}; as somas por tipo de custo são da lista
+    inteira (antes do filtro de custo). Cada item traz 'fixo', 'dias' (até o vencimento), 'prazo' (texto), 'custo_atraso' e 'motivo'."""
     ate = (dt.date.fromisoformat(hoje) + dt.timedelta(days=dias)).isoformat()
     curto, juros = db.parametros(con, "impacto_curto"), db.parametros(con, "impacto_juros")
     itens = []
@@ -431,8 +439,21 @@ def contas_a_pagar(con: sqlite3.Connection, hoje: str, dias: int = 30, so: set |
         i["dias"] = _dias_com_sinal(i["data"], hoje)
         i["prazo"] = _texto_prazo(i["dias"])
         itens.append(i)
-    itens.sort(key=lambda i: (i["status"] != "atrasado", -i["nota"], i["data"], -i["valor"]))
-    return {"ate": ate, "itens": itens, "total": round(sum(i["valor"] for i in itens), 2)}
+    fixos = [i for i in itens if i["fixo"]]
+    variaveis = [i for i in itens if not i["fixo"]]
+    if custo == "fixo":
+        itens = fixos
+    elif custo == "variavel":
+        itens = variaveis
+    if ordem == "data":
+        itens.sort(key=lambda i: (i["data"], -i["nota"], -i["valor"]))
+    elif ordem == "valor":
+        itens.sort(key=lambda i: (-i["valor"], i["data"]))
+    else:
+        itens.sort(key=lambda i: (i["status"] != "atrasado", -i["nota"], i["data"], -i["valor"]))
+    return {"ate": ate, "itens": itens, "total": round(sum(i["valor"] for i in itens), 2),
+            "total_fixos": round(sum(i["valor"] for i in fixos), 2), "total_variaveis": round(sum(i["valor"] for i in variaveis), 2),
+            "n_fixos": len(fixos), "n_variaveis": len(variaveis)}
 
 
 def saldos_resumo(con: sqlite3.Connection, hoje: str) -> dict:

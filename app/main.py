@@ -2774,8 +2774,14 @@ def _fin_voltar(volta, msg=None, erro=None):
 
 
 @app.get("/financeiro", response_class=HTMLResponse)
-def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", conta: str = "", vencidas: int = 0, con=Depends(get_db)):
+def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", conta: str = "", vencidas: int = 0,
+                    ordem: str = "", custo: str = "", con=Depends(get_db)):
     h = dt.date.today().isoformat()
+    # filtros de Contas a pagar: o que vier na URL vale e fica lembrado (cookie); sem nada na URL, usa o último escolhido
+    ordem = ordem if ordem in financeiro.ORDENS_CONTAS else request.cookies.get("contas_ordem", "")
+    ordem = ordem if ordem in financeiro.ORDENS_CONTAS else "urgencia"
+    custo = custo if custo in financeiro.CUSTOS_CONTAS else request.cookies.get("contas_custo", "")
+    custo = custo if custo in financeiro.CUSTOS_CONTAS else "todos"
     contas_auto.garantir(con, h, forcar=True)   # abrir o Financeiro recalcula a conta automática que ainda está em aberto
     mes = mes if RE_MES.match(mes) else mes_atual()
     escopo = escopo if escopo in ("PJ", "PF") else "todos"
@@ -2800,7 +2806,7 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", cont
         p["dias"] = (dt.date.fromisoformat(h) - dt.date.fromisoformat(p["data"])).days if p["status"] == "atrasado" else 0
     # ?vencidas=1 (link do alerta): a mesma lista, só com as contas que o alerta conta (de qualquer mês)
     so = {financeiro.chave_conta(p) for p in contas_vencendo(con, h)} if vencidas else None
-    contas = financeiro.contas_a_pagar(con, h, so=so)
+    contas = financeiro.contas_a_pagar(con, h, so=so, ordem=ordem, custo=custo)
     parecidas = [s for s in financeiro.saidas_parecidas(con) if s["escopo"] in lista]
     # recorrência em aberto cuja conta parece já ter sido lançada à mão naquele mês: etiqueta "talvez já pago"
     talvez = {(c["id"], s["data"][:7]) for s in parecidas for c in s["candidatos"] if not c["ja_baixada"]}
@@ -2812,15 +2818,19 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", cont
     tabela = [l for l in lancs if l["conta"] == conta] if conta else lancs   # filtro só do livro-caixa: as somas do mês ficam como estão
     recs = con.execute(f"SELECT * FROM recorrencias WHERE excluido_em IS NULL AND escopo IN ({qs}) ORDER BY escopo, dia_vencimento, descricao", lista).fetchall()
     clientes_ = con.execute("SELECT id, nome FROM clientes WHERE excluido_em IS NULL ORDER BY nome").fetchall()
-    return render(request, "financeiro.html", con, mes=mes, escopo=escopo, conta=conta, lancs=tabela, entradas=entradas, saidas=saidas,
+    resp = render(request, "financeiro.html", con, mes=mes, escopo=escopo, conta=conta, lancs=tabela, entradas=entradas, saidas=saidas,
                   saldo=round(entradas - saidas, 2), transferencia=round(sum(l["valor"] for l in transf if l["tipo"] == "saida"), 2),
                   emprestado=emprestado, devolvido=devolvido, pend=pend, contas=contas, so_vencidas=bool(vencidas), recs=recs, clientes_=clientes_,
+                  ordem=ordem, custo=custo,
                   volta=f"mes={mes}&escopo={escopo}" + ("&vencidas=1" if vencidas else ""),   # pagou uma, continua vendo as outras
                   resumo=financeiro.saldos_resumo(con, h), saldos=financeiro.saldos_atuais(con), frentes=financeiro.FRENTES,
                   salario=financeiro.salario_mes(con, h[:7], h), imposto=financeiro.imposto_mes(con, h[:7], h),
                   das_txt=financeiro.texto_pct(financeiro.pct_das(con, h)), previa=contas_auto.previa(con, h), parecidas=parecidas,
                   n_conferir=len(repetidos) + len(parecidas) + len(financeiro.recorrencias_retirada(con)) + sum(not b["bate"] for b in bancos),
                   recs_todas=con.execute("SELECT * FROM recorrencias WHERE excluido_em IS NULL ORDER BY escopo, descricao").fetchall())
+    for nome, valor in (("contas_ordem", ordem), ("contas_custo", custo)):
+        resp.set_cookie(nome, valor, max_age=365 * 24 * 3600, httponly=True, samesite="lax")
+    return resp
 
 
 @app.get("/financeiro/previsao", response_class=HTMLResponse)
