@@ -1190,11 +1190,48 @@ def usar_credito(con: sqlite3.Connection, lancamento_id: int | None, cliente_id:
 def entradas_sem_aluno(con: sqlite3.Connection, mes: str) -> list[dict]:
     """Entradas PJ do mês (pagas ou em aberto) sem aluno ligado. Podem ser o pagamento de alguém que aparece 'em aberto'
     nas mensalidades: a previsão as desconta do estimado e as telas pedem para ligar ao aluno.
-    Empréstimo não entra: não é pagamento de aluno."""
+    Empréstimo e a diferença de multa e juros (já tem aluno pela origem; ligar faria ela 'pagar o mês') não entram."""
     return [dict(r) for r in con.execute(
         """SELECT id, data, pago_em, valor, descricao, contraparte, categoria FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
-           AND excluido_em IS NULL AND cliente_id IS NULL AND categoria != ? AND substr(data,1,7)=? ORDER BY data, id""",
-        (EMPRESTIMO, mes))]
+           AND excluido_em IS NULL AND cliente_id IS NULL AND categoria NOT IN (?, ?) AND substr(data,1,7)=? ORDER BY data, id""",
+        (EMPRESTIMO, MULTA_JUROS, mes))]
+
+
+def falta_multa(con: sqlite3.Connection, c, valor, pago_em: str) -> dict | None:
+    """Pagou depois do vencimento um valor sem a multa e os juros (o Pix antigo: o QR estático não expira)?
+    Calcula a cobrança na data do pagamento, antes de registrá-lo (c = linha de clientes). Devolve {falta, cob} quando faltou
+    só multa e juros (0 < falta ≤ multa + juros); None se pagou no prazo, pagou tudo ou pagou menos que a mensalidade."""
+    ren = renovacoes(con, c["id"]).get(c["id"])
+    cob = cobranca_do_aluno(con, c, ren, pago_em)
+    if not cob:
+        return None
+    falta = round(cob["total"] - float(valor or 0), 2)
+    if falta < 0.01 or falta > cob["multa"] + cob["juros"] + 0.005:
+        return None
+    return {"falta": falta, "cob": cob}
+
+
+def lancar_diferenca(con: sqlite3.Connection, c, lancamento_id: int, falta: float, pago: float, pago_em: str) -> int:
+    """A diferença de multa e juros vira uma entrada PJ em aberto, sem cliente_id (assim nunca 'paga o mês' nem mexe na renovação,
+    que leem os pagamentos pelo aluno): o aluno fica na origem ('MULTA:<id do pagamento>') e no nome da contraparte."""
+    return con.execute(
+        """INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao, contraparte, origem)
+           VALUES ('PJ', 'entrada', ?, NULL, ?, ?, ?, ?, ?)""",
+        (pago_em, falta, MULTA_JUROS, f"Multa e juros: Pix de {moeda_br(pago)} em {pago_em[8:10]}/{pago_em[5:7]}, depois do vencimento",
+         c["nome"], f"MULTA:{lancamento_id}")).lastrowid
+
+
+def diferencas(con: sqlite3.Connection, cliente_id: int | None = None) -> dict[int, list[dict]]:
+    """Diferenças de multa e juros ainda em aberto: {cliente_id: [{id, valor, pago, pago_em}]} (o aluno vem do pagamento da origem)."""
+    filtro, args = ("AND p.cliente_id=?", (MULTA_JUROS, cliente_id)) if cliente_id else ("", (MULTA_JUROS,))
+    out = {}
+    for r in con.execute(f"""SELECT m.id, m.valor, p.cliente_id, p.valor AS pago, p.pago_em FROM lancamentos m
+                             JOIN lancamentos p ON m.origem = 'MULTA:' || p.id
+                             WHERE m.categoria=? AND m.pago_em IS NULL AND m.excluido_em IS NULL AND p.excluido_em IS NULL
+                             AND p.cliente_id IS NOT NULL {filtro} ORDER BY m.data, m.id""", args):
+        out.setdefault(r["cliente_id"], []).append({"id": r["id"], "valor": round(r["valor"], 2), "pago": round(r["pago"], 2),
+                                                    "pago_em": str(r["pago_em"] or "")[:10]})
+    return out
 
 
 def parece_emprestimo(texto: str) -> bool:
@@ -1240,6 +1277,8 @@ RETIRADA = "Retirada"
 # Empréstimo da PJ (não emite nota): entra no caixa e paga contas, mas não é receita (não paga DAS, não é lucro, não é mensalidade)
 EMPRESTIMO = "Empréstimo"
 DEVOLUCAO = "Empréstimo (devolução)"
+# a diferença de multa e juros de quem pagou o Pix antigo depois do vencimento (lancar_diferenca): receita, mas não é mensalidade
+MULTA_JUROS = "Multa e juros"
 
 
 def _salario_parametros(con: sqlite3.Connection) -> tuple[float, int]:

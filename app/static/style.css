@@ -38,6 +38,8 @@ main { padding: 20px 24px 60px; max-width: 1400px; margin: 0 auto; }
 @keyframes aviso-entra { from { opacity: 0; transform: translateY(-8px); } }
 .aviso.ok { background: var(--verde-f); color: #14663a; border: 1px solid #b6e6c7; }
 .aviso.erro { background: var(--vermelho-f); color: #8f1d17; border: 1px solid #f3b6b1; }
+/* diálogo de pagamento: o valor ficou sem a multa e os juros (o Pix antigo pago depois do vencimento) */
+.aviso-diferenca { background: var(--amarelo-f); border: 1px solid #f1d98a; color: #7a5300; border-radius: 10px; padding: 10px 14px; margin: 4px 0 12px; font-weight: 600; }
 .alertas-topo { background: var(--amarelo-f); border: 1px solid #f1d98a; border-radius: 10px; padding: 8px 14px; margin-bottom: 16px; }
 .alertas-topo summary { cursor: pointer; font-weight: 600; color: #7a5300; }
 .lista-alertas { margin: 8px 0 0; padding-left: 0; list-style: none; }

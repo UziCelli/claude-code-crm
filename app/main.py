@@ -334,7 +334,15 @@ def alertas(con):
         # vencido ou a até 2 dias: o estado já traz o cartão (imagem + Pix), o mesmo botão de todas as telas
         add(e["cor"], alu.frase(e), f"/clientes/{e['id']}", e["tel"], e["modelo"], e["nome"], e["data_modelo"], extra=e["extra"],
             botao=e["botao"], acoes=e["acoes"], cartao=e["cartao"])
-    if estados and not dados_mensagem(con)["pix"]:   # há aluno ativo e a mensagem de renovação não tem para onde mandar o dinheiro
+    dados = dados_mensagem(con)
+    # pagou o Pix antigo depois do vencimento e ficou faltando a multa e os juros: cobrar a diferença, recebi ou dispensar
+    if difs := financeiro.diferencas(con):
+        for c in con.execute(f"SELECT id, nome, telefone FROM clientes WHERE excluido_em IS NULL AND id IN ({','.join('?' * len(difs))}) ORDER BY nome",
+                             list(difs)):
+            p = pendencia_diferenca(c, difs[c["id"]], dados)
+            add("amarelo", p["texto"], f"/clientes/{c['id']}#diferenca", c["telefone"], "cobranca_diferenca" if p["cartao"] else None, c["nome"],
+                botao=p["botao"], acoes=p["acoes"], cartao=p["cartao"])
+    if estados and not dados["pix"]:   # há aluno ativo e a mensagem de renovação não tem para onde mandar o dinheiro
         add("azul", "Cadastre a chave PIX para a mensagem de renovação", "/configuracoes#cfg-msg_dados",
             acoes=[{"rotulo": "Cadastrar PIX", "href": "/configuracoes#cfg-msg_dados"}])
     n = aulas_sem_marcar(con, hoje)
@@ -749,7 +757,8 @@ def renovacao_e_cobranca(con, c):
 WA_ROTULOS = {"cobranca": "Cobrar", "renovacao": "Renovação", "falta": "Falta", "boas_vindas": "Boas-vindas", "reativacao": "Reativação",
               "indicacao": "Indicação", "dupla": "Treino em dupla", "depoimento": "Pedir depoimento",
               "cobranca_lembrete": "Cobrança: lembrete", "cobranca_hoje": "Cobrança: vence hoje",
-              "cobranca_moderada": "Cobrança: moderada", "cobranca_critica": "Cobrança: crítica"}
+              "cobranca_moderada": "Cobrança: moderada", "cobranca_critica": "Cobrança: crítica",
+              "cobranca_diferenca": "Cobrança: diferença de multa e juros"}
 WA_ORDEM = ("renovacao", "falta", "boas_vindas", "reativacao", "indicacao", "dupla", "depoimento")   # a cobrança, quando há, vem antes de todos
 DEPOIMENTO_DIAS = 90   # depois de pedir, o item fica marcado por tantos dias
 
@@ -806,7 +815,48 @@ def cobranca_atual(con, c, ctx, hoje=None, modelos=None, dados=None) -> dict | N
     credito = cob["credito"] if d < 0 else min(float(ctx.get("credito") or 0), float(c["valor"] or 0))
     return {"estagio": estagio, "nome": nome, "modelo": modelo, "faltam": max(d, 0), "dias": max(-d, 0), "vencimento": efetiva,
             "valor": valor, "rotulo_valor": "Total atualizado" if d < 0 else "Valor", "cob": cob, "texto": texto, "credito": credito,
+            "mensalidade": float(c["valor"] or 0),
+            # o QR estático não expira: até o vencimento o valor vale até 23:59 dele; depois, só no dia (os juros mudam amanhã)
+            "valido_ate": efetiva if d >= 0 else (hoje or dt.date.today()).isoformat(),
             "codigo": pix.br_code(dados["pix"], dados["pix_nome"], dados["pix_cidade"], valor), "dados": dados}
+
+
+def cartao_cobranca(cid, codigo, tipo="cobranca") -> dict:
+    """O botão-cartão (_acoes.html, botao_wa): o POST que registra e abre o WhatsApp e o SVG que vira a imagem.
+    tipo 'cobranca' = a mensalidade do dia; 'diferenca' = a multa e os juros que faltaram (pagou o Pix antigo depois do vencimento)."""
+    modelo = "cobranca" if tipo == "cobranca" else "cobranca_diferenca"
+    return {"cid": cid, "codigo": codigo, "acao": f"/clientes/{cid}/wa/{modelo}", "svg": f"/clientes/{cid}/{tipo}/cartao.svg"}
+
+
+def diferenca_cartao(c, itens, dados, modelos) -> dict:
+    """O cartão da diferença de multa e juros (financeiro.diferencas): o texto do modelo, o QR do total e uma linha por Pix que veio curto."""
+    total = round(sum(i["valor"] for i in itens), 2)
+    ult = itens[-1]
+    texto = preencher(modelos.get("cobranca_diferenca") or "", c["nome"], data_br(ult["pago_em"]),
+                      {**dados, "valor": moeda(total), "pago": moeda(ult["pago"])})
+    linhas = [(f"Pix de {moeda(i['pago'])} em {data_br(i['pago_em'])[:5]}: faltou", moeda(i["valor"]), False) for i in itens]
+    linhas.append(("Falta pagar", moeda(total), True))
+    return {"nome": "Multa e juros", "texto": texto, "codigo": pix.br_code(dados["pix"], dados["pix_nome"], dados["pix_cidade"], total),
+            "dados": dados, "linhas": linhas, "total": total}
+
+
+def pendencia_diferenca(c, itens, dados) -> dict:
+    """A diferença de multa e juros pronta para o alerta e a ficha: {texto, frase, total, botao, cartao, acoes}.
+    Cobrar = o mesmo botão-cartão da cobrança; Recebi = baixa no lançamento; Dispensar = lixeira (as rotas do financeiro)."""
+    total = round(sum(i["valor"] for i in itens), 2)
+    pagos = ", ".join(f"Pix de {moeda(i['pago'])} em {data_br(i['pago_em'])[:5]}" for i in itens)
+    tem_tel = bool("".join(ch for ch in str(c["telefone"] or "") if ch.isdigit()))
+    botao = f"Cobrar diferença {moeda(total)}"
+    cartao = cartao_cobranca(c["id"], pix.br_code(dados["pix"], dados["pix_nome"], dados["pix_cidade"], total), "diferenca") if tem_tel else None
+    acoes = [{"wa": True, "botao": botao, "cartao": cartao} if tem_tel else {"rotulo": "Cadastre o telefone", "href": f"/clientes/{c['id']}#cadastro"}]
+    for i in itens:
+        v = moeda(i["valor"])
+        acoes.append({"rotulo": f"Recebi {v}" if len(itens) > 1 else "Recebi", "post": f"/financeiro/lancamento/{i['id']}/baixa", "classe": "verde",
+                      "confirmar": f"Recebeu hoje os {v} de multa e juros de {c['nome']}?"})
+        acoes.append({"rotulo": "Dispensar", "post": f"/financeiro/lancamento/{i['id']}/excluir",
+                      "confirmar": f"Dispensar os {v} de multa e juros de {c['nome']}? O lançamento vai para a lixeira."})
+    frase = f"faltou {moeda(total)} de multa e juros ({pagos}, depois do vencimento)"
+    return {"texto": f"{c['nome']}: {frase}", "frase": frase, "total": total, "botao": botao, "cartao": cartao, "acoes": acoes}
 
 
 def rotulo_cobranca(ca) -> tuple[str, str]:
@@ -842,6 +892,12 @@ def wa_texto(con, c, modelo) -> tuple[str | None, str | None]:
     modelos = db.parametros(con, "msg_whatsapp")
     if modelo not in modelos:
         return None, "Mensagem desconhecida."
+    if modelo == "cobranca_diferenca":   # pagou o Pix antigo depois do vencimento: o WhatsApp leva o código Pix da diferença
+        itens = financeiro.diferencas(con, c["id"]).get(c["id"])
+        if not itens:
+            return None, "Esse aluno não tem diferença de multa e juros em aberto."
+        ca = diferenca_cartao(c, itens, dados_mensagem(con), modelos)
+        return ca["codigo"] or ca["texto"], None
     ctx = wa_contexto(con, c)
     d = wa_data_modelo(modelo, ctx)
     if "{data}" in modelos[modelo] and not data_iso(d):
@@ -895,7 +951,9 @@ def cliente_ficha(request: Request, cid: int, con=Depends(get_db)):
                UNION ALL SELECT 1 FROM cliente_eventos WHERE cliente_id=? AND tipo='pagamento' AND excluido_em IS NULL LIMIT 1""", (cid, cid)).fetchone():
         m = financeiro.proxima_renovacao(renovacao["efetiva"], -1)
         pago_ate = f"{m[5:7]}/{m[:4]}"
+    difs = financeiro.diferencas(con, cid).get(cid)   # pagou o Pix antigo depois do vencimento: a multa e os juros que faltaram
     return render(request, "cliente.html", con, c=c, eventos=eventos, estimativa=estimativa, propostas=propostas, pagamentos=pagamentos,
+                  diferenca=pendencia_diferenca(c, difs, dados_mensagem(con)) if difs else None,
                   renovacao=renovacao, cobranca=cob, texto_cob=texto_cobranca(cob) if cob else None, pago_ate=pago_ate,
                   estado=alu.estado_aluno(con, cid), menu_wa=wa_menu(con, c, renovacao, cob, eventos),
                   indicadores=indicacoes.alunos_para_escolher(con, cid),
@@ -1003,6 +1061,17 @@ def cliente_wa(cid: int, modelo: str, con=Depends(get_db)):
     return RedirectResponse(wa(c["telefone"], texto), status_code=303)   # sempre https://wa.me/...: o destino não vem do navegador
 
 
+@app.get("/clientes/{cid}/diferenca/cartao.svg")
+def cliente_cartao_diferenca(cid: int, con=Depends(get_db)):
+    """O cartão da diferença de multa e juros (SVG): quem pagou o Pix antigo depois do vencimento, o QR com o que faltou."""
+    c = con.execute("SELECT * FROM clientes WHERE id=? AND excluido_em IS NULL", (cid,)).fetchone()
+    itens = financeiro.diferencas(con, cid).get(cid) if c else None
+    if not itens:
+        return PlainTextResponse("Sem diferença de multa e juros em aberto.", status_code=404)
+    ca = diferenca_cartao(c, itens, dados_mensagem(con), db.parametros(con, "msg_whatsapp"))
+    return Response(cartao.svg(ca, moeda, data_br), media_type="image/svg+xml", headers={"Cache-Control": "no-store"})
+
+
 @app.get("/clientes/{cid}/cobranca/cartao.svg")
 def cliente_cartao(cid: int, con=Depends(get_db)):
     """O cartão de cobrança do dia (SVG): o texto do estágio, o QR Pix, os dados de pagamento e a logo."""
@@ -1010,7 +1079,8 @@ def cliente_cartao(cid: int, con=Depends(get_db)):
     ca = cobranca_atual(con, c, wa_contexto(con, c)) if c else None
     if not ca:
         return PlainTextResponse("Sem cobrança em aberto.", status_code=404)
-    return Response(cartao.svg(ca, moeda, data_br), media_type="image/svg+xml", headers={"Cache-Control": "no-store"})
+    return Response(cartao.svg(ca, moeda, data_br, db.parametros(con, "cobranca")), media_type="image/svg+xml",
+                    headers={"Cache-Control": "no-store"})
 
 
 @app.post("/clientes/{cid}/depoimento")
@@ -3130,6 +3200,12 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
             parcial = con.execute("""SELECT id, valor FROM lancamentos WHERE cliente_id=? AND escopo='PJ' AND tipo='entrada' AND pago_em IS NULL
                                      AND excluido_em IS NULL AND substr(data,1,7)=? ORDER BY data, id LIMIT 1""",
                                   (cliente_id, f["data"][:7])).fetchone()
+    # pagou o Pix antigo depois do vencimento (o QR estático não expira)? Calcula antes de salvar, com a renovação de antes do pagamento
+    aluno, falta = None, None
+    if not lid and cliente_id and pago_em and f["escopo"] == "PJ" and f["tipo"] == "entrada" and (meses or 1) <= 1 \
+            and f["categoria"] not in (financeiro.EMPRESTIMO, financeiro.MULTA_JUROS):
+        aluno = con.execute("SELECT * FROM clientes WHERE id=? AND excluido_em IS NULL", (cliente_id,)).fetchone()
+        falta = financeiro.falta_multa(con, aluno, valor, pago_em) if aluno else None
     try:
         with con:
             if rec_id:
@@ -3158,6 +3234,13 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
                                      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (*campos, rec_id, competencia)).lastrowid
             if "meses" in f:   # o diálogo de pagamento manda; a edição do livro-caixa não tem o campo e não mexe no que já está
                 con.execute("UPDATE lancamentos SET meses=? WHERE id=?", (meses, lid))
+            if falta:
+                faltou = moeda(falta["falta"])
+                if f.get("diferenca") == "1":   # a caixa do diálogo: a diferença fica a receber, com o botão "Cobrar diferença"
+                    financeiro.lancar_diferenca(con, aluno, lid, falta["falta"], valor, pago_em)
+                    aviso += f"Pagou depois do vencimento: faltaram {faltou} de multa e juros. Lancei a receber; cobre pelo botão \"Cobrar diferença\". "
+                else:
+                    aviso += f"Atenção: pagou depois do vencimento e faltaram {faltou} de multa e juros. "
     except ValueError as e:
         return _fin_voltar(volta, erro=str(e))
     except sqlite3.IntegrityError:

@@ -46,7 +46,7 @@ def test_renovacao_vencida_tem_registrar_pagamento_cobrar_e_pular_mes(con_temp, 
     assert pagar["rotulo"] == "Registrar pagamento" and pagar["dialogo"] == "dlg-pgto"
     # vencido: o pagamento vem com o mesmo total do "Cobrar" (400 + multa 8 + juros 2,67); a mensalidade cheia é a base do "cobre quantos meses?"
     assert pagar["dados"] == {"titulo": "Registrar pagamento de Dora", "cliente_id": cid, "valor": "410,67", "mensal": "400,00",
-                              "nota": "multa de R$ 8,00 e juros de R$ 2,67 incluídos",
+                              "nota": "multa de R$ 8,00 e juros de R$ 2,67 incluídos", "encargos": "10,67",   # o diálogo avisa se faltarem
                               "descricao": f"Mensalidade {venceu:%m/%Y}"}   # o mês que venceu, não o de hoje
     assert wa == {"wa": True} and a["botao"].startswith("Cobrar R$ 410,67")  # o mesmo valor do Registrar pagamento
     assert pular == {"rotulo": "Pular mês", "href": f"/clientes/{cid}#renovacao"}

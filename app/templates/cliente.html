@@ -51,6 +51,14 @@
 </div>
 {% endif %}
 
+{% if diferenca %}{# pagou o Pix antigo depois do vencimento: a multa e os juros que faltaram (main.pendencia_diferenca) #}
+<div class="card borda-amarelo" id="diferenca" style="margin-bottom:14px">
+  <div class="linha" style="justify-content:space-between"><h2 style="margin:0">Multa e juros</h2><span class="tag amarelo">a receber</span></div>
+  <p style="margin:8px 0">{{ diferenca.frase[:1]|upper ~ diferenca.frase[1:] }}.</p>
+  <div class="acoes-alerta">{{ botoes(diferenca.acoes, diferenca, '/clientes/' ~ c.id) }}</div>
+</div>
+{% endif %}
+
 {% if c and ofertas_ficha %}
 <div class="card" id="ofertas" style="margin-bottom:14px">
   <h2>Ofertas</h2>
