@@ -330,3 +330,10 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - O "Você economiza" da proposta era preço cheio − preço com desconto (desconto de tabela). Para um aluno que vira dupla, isso mentia: ele não paga o preço cheio hoje.
 - Proposta ligada a um cliente com valor na ficha (e mesmo tipo de serviço) agora mostra: "Hoje você paga R$ X. Com esta proposta, passa a pagar R$ Y por pessoa: você economiza R$ Z (−N%)" (`main._hoje_paga`). O "de/por −15%" continua.
 - Se a proposta sai mais cara que o que ele paga, ou o tipo de serviço é outro (período diferente), não mostra economia nenhuma. Lead continua como antes.
+
+## A fazer: preço próprio para cada local novo (pedido do Victor, 04/11/2026)
+- Hoje o "+ Novo local" copia a grade e os preços da CIA (ou de outro local) e só ajusta a diferença de custo por aula (`app/locais.py`: `criar_local`, `_gravar`). Os locais novos ficam presos aos preços da CIA.
+- Exemplo: Allp Fit (sem taxa; 33 min de deslocamento ida e volta; R$ 10,60 de passagem) ficou com margens ruins.
+- Quero: tirar a opção de copiar grade e preços. Cada local calcula os próprios preços pelos custos dele (as perguntas do cadastro do local: taxa por aula, taxa mensal, pessoa extra, máximo de pessoas, deslocamento em R$ e em minutos) + mão de obra (salário/hora) + impostos/taxas + margem mínima.
+- Conferir antes: se o "custo operacional" da CIA na planilha já traz passagem embutida, os locais copiados contam a passagem 2 vezes.
+- Situação (06/11/2026): em parte feito. Já existe o modo "Montar pelo custo" no "+ Novo local" e no "Editar local" (seção "Preço pelo custo no local" acima). Falta tirar a opção de copiar a grade e os preços de outro local.
