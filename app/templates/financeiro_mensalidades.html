@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_acoes.html" import botoes with context %}
+{% from "_acoes.html" import botoes, botao_wa with context %}
 {% block titulo %}Mensalidades · VFITCOACH CRM{% endblock %}
 {% block conteudo %}
 <a class="voltar" href="/financeiro">← Financeiro</a>
@@ -56,6 +56,8 @@
         {% if i.situacao == 'em aberto' %}<a class="btn claro pequeno" href="/clientes/{{ i.id }}#pagamentos">Pagou adiantado?</a> {% endif %}
         {% if i.falta > 0 %}<button class="{{ 'claro' if i.abertos else 'verde' }} pequeno" data-abrir="dlg-pgto" data-titulo="Registrar pagamento de {{ i.nome }}" data-cliente_id="{{ i.id }}" data-valor="{{ ('%.2f'|format(i.falta))|replace('.', ',') }}" data-descricao="Mensalidade {{ mes[5:] }}/{{ mes[:4] }}" data-data="{{ hoje() if hoje()[:7] == mes else mes ~ '-01' }}"{% if i.credito %} data-nota="Crédito de {{ i.credito|moeda }} descontado"{% endif %}>Registrar pagamento</button>{% endif %}
       {% endif %}
+      {# vencido ou a até 2 dias: o mesmo botão de cobrança das outras telas (cartão com QR Pix, total com multa e juros) #}
+      {% if e and e.cartao %}{{ botao_wa(e.tel, e.modelo, e.nome, e.data_modelo, e.extra, e.botao, e.cartao) }}{% endif %}
       {# pagou ou ficou sem pagar e não veio: as soluções do estado (Pulou o mês, Crédito na próxima) #}
       {% if e and e.situacao in ('pago_sem_aula', 'sem_pagar_sem_aula') %}{{ botoes(e.acoes|rejectattr('rotulo', 'equalto', 'Registrar pagamento')|rejectattr('rotulo', 'equalto', 'Não tem aula (consultoria)')|list, e, volta) }}{% endif %}</td>
     </tr>

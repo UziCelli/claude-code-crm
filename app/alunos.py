@@ -124,7 +124,7 @@ def estado(con, hoje=None, ids=None) -> dict[int, dict]:
         if not ids:
             return {}
     so, args_so = ("", ()) if ids is None or len(ids) > 500 else (f" AND cliente_id IN ({','.join('?' * len(ids))})", tuple(ids))
-    alunos = [c for c in con.execute("""SELECT id, nome, telefone, tipo_servico, plano, valor, data_inicio, data_renovacao FROM clientes
+    alunos = [c for c in con.execute("""SELECT id, nome, status, telefone, tipo_servico, plano, valor, data_inicio, data_renovacao FROM clientes
                                         WHERE excluido_em IS NULL AND status='ativo' ORDER BY nome""") if ids is None or c["id"] in ids]
     if not alunos:
         return {}
@@ -158,7 +158,7 @@ def estado(con, hoje=None, ids=None) -> dict[int, dict]:
     livres = financeiro.creditos(con, ids[0] if ids and len(ids) == 1 else None)
     mens = {i["id"]: i for i in financeiro.mensalidades(con, h[:7])}
 
-    out = {}
+    out, msgs = {}, {}   # msgs: os modelos e os dados do Pix, lidos uma vez para todos os cartões
     for c in alunos:
         cid = c["id"]
         tipo = (c["tipo_servico"] or "").strip()
@@ -241,10 +241,11 @@ def estado(con, hoje=None, ids=None) -> dict[int, dict]:
              "credito": credito, "credito_total": total_livre, "credito_sugerido": sugerido,
              "pausado_no_mes": any(i <= h and f >= h[:7] + "-01" for i, f in pausas.get(cid, [])),
              "situacao": sit, "rotulo": ROTULO[sit], "cor": COR[sit], "grav": GRAV[COR[sit]], "modelo": None, "botao": None, "extra": None,
-             "data_modelo": None, "cobranca": None, "ordem": c["nome"]}
+             "data_modelo": None, "cobranca": None, "cartao": None, "ordem": c["nome"]}
         e["frase_valor"] = frase_valor(valor, livres.get(cid))
         recente_pgto = bool(ultimo_pago.get(cid)) and ultimo_pago[cid] >= (hoje - dt.timedelta(days=365)).isoformat()
         _texto_e_acoes(e, c, sit, efetiva, ciclo, ult, faltas, par_cob, h, tem and cid not in com_horario, recente_pgto)
+        _cartao(con, e, c, hoje, msgs)
         out[cid] = e
     return out
 
@@ -345,6 +346,28 @@ def _texto_e_acoes(e, c, sit, efetiva, ciclo, ult, faltas, par_cob, h, converter
     elif e["credito"] and sit in ("pago_sem_aula", "sem_pagar_sem_aula", "vence_logo"):
         e["texto"] += f" (crédito de {financeiro.moeda_br(e['credito'])} no próximo pagamento)"
     e["ordem"] = vence if sit in ("cobrar", "vence_logo") else c["nome"]
+
+
+def _cartao(con, e, c, hoje, msgs) -> None:
+    """Cobrança do dia (vencido ou a até 2 dias, main.cobranca_atual): o botão do WhatsApp é o cartão-imagem com o QR Pix, em toda tela
+    (alertas, Painel, Clientes, ficha, Mensalidades), com o rótulo do estágio. O valor é o total da cobrança (crédito descontado,
+    multa e juros incluídos), nunca o texto antigo com o saldo. Sem telefone, o botão pede o telefone.
+    msgs = {} compartilhado pelo estado(): os modelos e os dados do Pix são lidos no 1º aluno e valem para os outros."""
+    ren = e["renovacao"]
+    if e["modelo"] not in ("cobranca", "renovacao") or not ren:
+        return
+    m = _main()
+    if not msgs:
+        msgs.update(modelos=db.parametros(con, "msg_whatsapp"), dados=m.dados_mensagem(con))
+    ca = m.cobranca_atual(con, c, {"efetiva": ren["efetiva"], "vence": ren["vence"], "cob": e["cobranca"], "credito": e["credito"]}, hoje,
+                          msgs["modelos"], msgs["dados"])
+    if not ca:
+        return
+    if "".join(ch for ch in str(e["tel"] or "") if ch.isdigit()):
+        e["botao"], e["cartao"] = m.rotulo_cobranca(ca)[0], {"cid": e["id"], "codigo": ca["codigo"]}
+    else:   # sem modelo: o alerta não põe de volta o WhatsApp antigo (main.alertas)
+        e["modelo"] = None
+        e["acoes"] = [{"rotulo": "Cadastre o telefone", "href": f"/clientes/{e['id']}#cadastro"} if x.get("wa") else x for x in e["acoes"]]
 
 
 def frase(e) -> str:
