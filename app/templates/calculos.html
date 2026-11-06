@@ -9,7 +9,9 @@
   <table>
     <tr><td>Mensalidades que entram no mês</td><td class="num">{{ c.receita|moeda }}</td></tr>
     <tr><td>− Impostos ({{ das_txt }}% de DAS) e taxas de pagamento</td><td class="num">{{ c.impostos|moeda }}</td></tr>
-    <tr><td>− Custos do negócio (local, CIA, deslocamento)</td><td class="num">{{ c.negocio|moeda }}</td></tr>
+    <tr><td>− Custos do negócio (local, CIA, deslocamento, contas fixas)</td><td class="num">{{ c.negocio|moeda }}</td></tr>
+    {% if c.fixos_ociosos %}<tr><td class="muted">&nbsp;&nbsp;dos quais contas fixas que nenhum aluno paga (agenda abaixo da cheia ou aluno sem plano)</td>
+        <td class="num muted">{{ c.fixos_ociosos|moeda }}</td></tr>{% endif %}
     <tr><td>− Seus custos pessoais {% if c.pessoal_pf %}(média dos gastos da PF){% else %}(mão de obra dos alunos){% endif %}</td><td class="num">{{ c.pessoal|moeda }}</td></tr>
     <tr><th>{{ 'Sobra no mês' if c.cobre else 'Falta no mês' }}</th>
         <th class="num" style="color:var(--{{ 'verde' if c.cobre else 'vermelho' }})">{{ (c.sobra if c.cobre else -c.sobra)|moeda }}</th></tr>
@@ -35,17 +37,22 @@
 <div class="card mt">
   <h2>Seu salário por hora</h2>
   {% if sh.usado %}
-  <p><strong>{{ sh.valor_hora|moeda }}</strong> = custos pessoais {{ sh.custo_pessoal|moeda }}/mês ÷ {{ sh.horas_base|num(0) }} h.</p>
-  <p class="muted">Divide pelas horas da agenda cheia ({{ sh.horas_cheia|num(0) }} h), não só pelas de hoje ({{ sh.horas|num(0) }} h).
-    Assim cada aluno paga a parte dele do seu salário, e não o salário inteiro dividido pelos poucos alunos de agora.
-    Se o mês cobre tudo está no quadro acima.</p>
+  <p><strong>{{ sh.valor_hora|moeda }}</strong> = custos pessoais {{ sh.custo_pessoal|moeda }}/mês ÷ {{ sh.horas_base|num(0) }} h
+    {{ 'da agenda cheia' if sh.piso else 'de trabalho no mês' }}.</p>
+  {% set nomes = {'aulas': 'de aula', 'deslocamento': 'de deslocamento', 'planejamento': 'de planejamento', 'consultoria': 'de consultoria', 'avaliacao': 'de avaliação'} %}
+  <p class="muted" id="horas-trabalho">{{ sh.horas|num(0) }} h de trabalho =
+    {% for k, v in sh.partes.items() if v >= 0.05 %}{{ ' + ' if not loop.first }}<span style="white-space:nowrap">{{ v|num(0 if v >= 10 or (v - v|round)|abs < 0.05 else 1) }} h {{ nomes[k] }}</span>{% endfor %}
+    (os minutos de cada coisa estão em Mão de obra, abaixo).</p>
+  {% if sh.piso %}<p class="muted">Hoje você trabalha {{ sh.horas|num(0) }} h, menos que a agenda cheia ({{ sh.horas_cheia|num(0) }} h): divide por
+    {{ sh.horas_cheia|num(0) }} h para os poucos alunos de agora não pagarem o salário inteiro. O que faltar aparece no quadro acima.</p>{% endif %}
   {% else %}{% include "_salario_hora.html" %}{% endif %}
 </div>
 
 {% set ra = rateio %}
 <div class="card mt" id="rateio">
   <h2>Custos fixos no preço</h2>
-  <p><strong>{{ (ra.por_hora or 0)|moeda }} por hora de trabalho</strong> = {{ ra.total|moeda }}/mês ÷ {{ ra.horas|num(0) }} h da agenda cheia.</p>
+  <p><strong>{{ (ra.por_hora or 0)|moeda }} por hora de trabalho</strong> = {{ ra.total|moeda }}/mês ÷ {{ ra.horas|num(0) }} h
+    {{ 'da agenda cheia' if ra.piso else 'de trabalho no mês' }} (as mesmas do salário).</p>
   {% if ra.itens %}
   <table>
     {% for i in ra.itens %}<tr><td>{{ i.descricao }}</td><td class="num">{{ i.valor|moeda }}</td></tr>{% endfor %}

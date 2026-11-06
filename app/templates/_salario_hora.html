@@ -2,7 +2,8 @@
 {% set sh = salario_hora %}
 <p class="muted" style="margin:8px 0 0">
   {% if sh.usado %}Salário por hora em uso: <strong>{{ sh.valor_hora|moeda }}</strong> = custos pessoais {{ sh.custo_pessoal|moeda }}/mês
-    (média de {{ sh.meses }} mês(es) da PF) ÷ {{ sh.horas_base|num(1) }} h (agenda cheia; hoje {{ sh.horas|num(1) }} h de trabalho).
+    (média de {{ sh.meses }} mês(es) da PF) ÷ {{ sh.horas_base|num(1) }} h
+    {%- if sh.piso %} (agenda cheia: hoje você trabalha só {{ sh.horas|num(1) }} h){% else %} de trabalho no mês{% endif %}.
   {% elif sh.ligado %}Salário por hora em uso: <strong>{{ sh.fixo|moeda }}</strong> (o fixo). O automático precisa de
     {% if not sh.custo_pessoal %}saídas pagas na PF nos últimos 3 meses{% else %}alunos ativos{% endif %}.
   {% elif sh.fixo %}Salário por hora em uso: <strong>{{ sh.fixo|moeda }}</strong> (fixo; valor_hora_auto = 0).

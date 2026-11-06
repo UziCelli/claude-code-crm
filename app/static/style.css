@@ -309,6 +309,8 @@ table.cartoes tr.foco td:first-child { box-shadow: inset 4px 0 0 var(--amarelo);
   .card { padding: 12px; overflow-wrap: anywhere; }   /* caminhos e textos sem espaço quebram em vez de vazar */
   /* ...mas etiqueta, botão e seletor não: senão "Pendente"/"Feito" encolhem e viram uma letra por linha */
   .card .tag, .card button, .card .btn, .card select { overflow-wrap: normal; }
+  /* nem valor de tabela: "R$ 9.600,00" virava "R$ / 9.600,0 / 0"; a coluna do texto encolhe no lugar */
+  .card td.num, .card th.num { overflow-wrap: normal; white-space: nowrap; }
   .kpi .valor { font-size: 24px; }
 
   /* tabelas viram cartões: título = 1ª coluna; demais linhas = "rótulo   valor" */

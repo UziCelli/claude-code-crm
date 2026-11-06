@@ -27,23 +27,36 @@ def carregar_parametros(con) -> dict:
         "cia_desloc": g("cia_deslocamento"),   # ida até a CIA: reais_por_aula e minutos_por_aula
         "mo": g("mao_obra"),
     }
-    auto = valor_hora_automatico(con, p)
+    from .main import horas_trabalho_detalhe
+    trabalho = horas_trabalho_detalhe(con, p)   # uma vez só: salário e custos fixos dividem pela mesma base
+    auto = valor_hora_automatico(con, p, trabalho)
     p["salario_hora"] = auto
     if auto["usado"]:
         p["mo"] = {**p["mo"], "valor_hora": auto["valor_hora"]}
-    p["rateio"] = rateio_fixos(con, p)
+    p["rateio"] = rateio_fixos(con, p, trabalho["total"])
     p["rateio_hora"] = p["rateio"]["por_hora"]
     return p
 
 
-def rateio_fixos(con, p: dict) -> dict:
+def horas_base(con, horas: float) -> tuple[float, float]:
+    """(base que divide o salário e os custos fixos, horas da agenda cheia). Custeio por absorção na capacidade normal:
+    divide pelas suas horas de trabalho do mês; a agenda cheia (metas > horas_vendaveis) é só o piso, para os poucos alunos
+    de uma agenda vazia não pagarem o custo inteiro (a parte ociosa sai do lucro, em main.cobre_custos)."""
+    from . import db
+    cheia = float(db.parametros(con, "metas").get("horas_vendaveis") or 0)
+    return max(float(horas or 0), cheia), cheia
+
+
+def rateio_fixos(con, p: dict, horas: float = 0.0) -> dict:
     """Custos fixos do negócio (MFIT, softwares, assinaturas: as contas fixas da PJ, financeiro.custos_fixos_rateio)
-    divididos pelas horas da agenda cheia (metas > horas_vendaveis): cada hora de trabalho paga a sua parte."""
-    from . import db, financeiro
+    divididos pelas mesmas horas do salário (horas_base): cada hora de trabalho paga a sua parte, e a soma das partes
+    dos alunos dá o total das contas. horas = suas horas de trabalho no mês (main.horas_trabalho_mes)."""
+    from . import financeiro
     from .main import mes_atual
     fixos = financeiro.custos_fixos_rateio(con, mes_atual(), list(p.get("locais") or {}))
-    horas = float(db.parametros(con, "metas").get("horas_vendaveis") or 0)
-    return {**fixos, "horas": round(horas, 1), "por_hora": round(fixos["total"] / horas, 4) if horas > 0 else 0.0}
+    base, cheia = horas_base(con, horas)
+    return {**fixos, "horas": round(base, 1), "horas_trabalho": round(float(horas or 0), 1), "horas_cheia": round(cheia, 1),
+            "piso": cheia > (horas or 0), "por_hora": round(fixos["total"] / base, 4) if base > 0 else 0.0}
 
 
 # ---------- Planos montados pelo motor (sem a tabela de preços base da planilha) ----------
@@ -86,26 +99,27 @@ def custo_aula_local(p: dict, local: str | None) -> float:
     return custo_por_aula(c) if c else 0.0
 
 
-def valor_hora_automatico(con, p: dict) -> dict:
-    """Salário por hora = seus custos pessoais do mês ÷ as horas da agenda cheia (metas > horas_vendaveis).
+def valor_hora_automatico(con, p: dict, trabalho: dict | None = None) -> dict:
+    """Salário por hora = seus custos pessoais do mês ÷ suas horas de trabalho no mês (horas_base, a mesma dos custos fixos).
       Custos pessoais: média das saídas pagas da PF nos 3 meses fechados (financeiro.custo_pessoal_medio).
-      Horas de hoje: as da agenda dos alunos ativos + planejamento + consultoria (main.horas_trabalho_mes).
-      Divide pela maior das duas: dividir só pelas horas de hoje jogava o custo de vida inteiro nos poucos alunos atuais
-      (com 1 aluno, ele "custava" o salário todo) e toda margem dava -50%, -80%. Se cobre ou não os custos está em
-      main.cobre_custos, que usa o custo pessoal inteiro.
+      Horas de trabalho: aulas + deslocamento + planejamento + consultoria dos alunos ativos (main.horas_trabalho_detalhe).
+      Piso na agenda cheia (metas > horas_vendaveis): com a agenda vazia, dividir só pelas horas de hoje jogava o custo
+      de vida inteiro nos poucos alunos atuais (com 1 aluno, ele "custava" o salário todo). Se cobre ou não os custos está
+      em main.cobre_custos, que usa o custo pessoal inteiro.
     usado=False (automático desligado, sem gasto na PF ou sem aluno): vale o valor_hora digitado em Configurações."""
-    from . import db, financeiro
-    from .main import horas_trabalho_mes, mes_atual
+    from . import financeiro
+    from .main import horas_trabalho_detalhe, mes_atual
     mo = p.get("mo") or {}
     fixo = float(mo.get("valor_hora") or 0)
     ligado = bool(float(mo.get("valor_hora_auto") or 0)) and fixo > 0   # valor_hora 0 desliga a regra toda
     custo, meses = financeiro.custo_pessoal_medio(con, mes_atual()) if ligado else (0.0, 0)
-    horas = horas_trabalho_mes(con, p) if ligado else 0.0
-    cheia = float(db.parametros(con, "metas").get("horas_vendaveis") or 0)
-    base = max(horas, cheia)
+    trabalho = trabalho if trabalho is not None else horas_trabalho_detalhe(con, p)
+    horas = trabalho["total"] if ligado else 0.0
+    base, cheia = horas_base(con, horas)
     usado = custo > 0 and horas > 0
     return {"ligado": ligado, "usado": usado, "custo_pessoal": round(custo, 2), "meses": meses, "horas": round(horas, 1),
-            "horas_cheia": round(cheia, 1), "horas_base": round(base, 1),
+            "horas_cheia": round(cheia, 1), "horas_base": round(base, 1), "piso": cheia > horas,
+            "partes": {k: round(v, 1) for k, v in trabalho.items() if k != "total"},
             "valor_hora": round(custo / base, 2) if usado else fixo, "fixo": fixo}
 
 
@@ -115,8 +129,11 @@ _CONSULTORIAS = ("Consultoria Online", "Consultoria Híbrida")
 _AVALIACOES = ("Avaliação Física", "Avaliação")
 
 
-def minutos_trabalho(base: dict, p: dict, local: str | None = None) -> float:
-    """Minutos do seu trabalho (1 pessoa) num plano, pela regra do tempo (Configurações > Mão de obra):
+PARTES_TRABALHO = ("aulas", "deslocamento", "planejamento", "consultoria", "avaliacao")
+
+
+def partes_minutos(base: dict, p: dict, local: str | None = None) -> dict:
+    """Minutos do seu trabalho (1 pessoa) num plano, por parte, pela regra do tempo (Configurações > Mão de obra):
       Pacote / avulsa: aulas x (aula + deslocamento do local) + planejamento do pacote
       Mensalidade:     aulas do mês x (aula + deslocamento) + planejamento do mês
       Consultoria:     tempo da consultoria no mês (+ as aulas presenciais da Híbrida)
@@ -125,15 +142,21 @@ def minutos_trabalho(base: dict, p: dict, local: str | None = None) -> float:
     tipo = base.get("tipo_servico")
     sessoes = float(base.get("sessoes_mes") or 0)
     desloc = deslocamento(p, local or base.get("local"))[1]
-    aula = float(r.get("min_aula", 60) or 0) + desloc
-    if tipo in _COM_AULA:
-        plan = r.get("min_planejamento_mes" if tipo == "Mensalidade" else "min_planejamento_pacote")
-        return sessoes * aula + float(plan or 0)
-    if tipo in _CONSULTORIAS:
-        return float(r.get("min_consultoria_mes") or 0) + sessoes * aula
+    out = dict.fromkeys(PARTES_TRABALHO, 0.0)
     if tipo in _AVALIACOES:
-        return float(r.get("min_avaliacao") or 0) + desloc
-    return sessoes * aula
+        out.update(avaliacao=float(r.get("min_avaliacao") or 0), deslocamento=desloc)
+        return out
+    out.update(aulas=sessoes * float(r.get("min_aula", 60) or 0), deslocamento=sessoes * desloc)
+    if tipo in _COM_AULA:
+        out["planejamento"] = float(r.get("min_planejamento_mes" if tipo == "Mensalidade" else "min_planejamento_pacote") or 0)
+    elif tipo in _CONSULTORIAS:
+        out["consultoria"] = float(r.get("min_consultoria_mes") or 0)
+    return out
+
+
+def minutos_trabalho(base: dict, p: dict, local: str | None = None) -> float:
+    """Minutos do seu trabalho (1 pessoa) num plano: a soma das partes (partes_minutos)."""
+    return sum(partes_minutos(base, p, local).values())
 
 
 def custo_servico(base: dict, p: dict, local: str | None = None) -> tuple[float, float, float]:

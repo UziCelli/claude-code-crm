@@ -55,7 +55,8 @@ def test_rateio_por_hora_entra_no_custo_de_cada_hora_de_trabalho(con):
 
 def test_sem_contas_fixas_o_rateio_e_zero(con):
     p = precos.carregar_parametros(con)
-    assert p["rateio"] == {"total": 0, "itens": [], "horas": 97, "por_hora": 0}
+    r = p["rateio"]
+    assert (r["total"], r["itens"], r["horas"], r["por_hora"]) == (0, [], 97, 0)
 
 
 def test_pacote_de_4_na_opfit_fica_na_faixa_certa(con):

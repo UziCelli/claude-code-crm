@@ -172,7 +172,8 @@ def test_lucro_hora_so_conta_as_horas_de_quem_tem_plano_no_motor(con_temp):
     m = main.calcular_metricas(con)
     com_base = main.estimativa_cliente(con, con.execute("SELECT * FROM clientes WHERE nome='Com base'").fetchone(), main.precos.carregar_parametros(con))
     assert m["horas_ocupadas"] == 16
-    assert m["lucro_hora"] == pytest.approx(com_base["lucro"] / 8, abs=0.01)   # antes: lucro / 16 horas, metade do real
+    # só as horas de TRABALHO de quem tem plano (aulas + deslocamento + planejamento): o lucro/h da ficha dele
+    assert m["lucro_hora"] == pytest.approx(com_base["lucro"] / com_base["horas"], abs=0.01) == com_base["lucro_hora"]
 
 
 def test_ficha_nao_multiplica_o_valor_pago_pelo_grupo_e_bate_com_o_painel(cliente_http):
@@ -182,7 +183,7 @@ def test_ficha_nao_multiplica_o_valor_pago_pelo_grupo_e_bate_com_o_painel(client
     est = main.estimativa_cliente(con, c, main.precos.carregar_parametros(con))
     assert est["preco_total"] == 1440   # o aluno paga 1.440: não vira 1.440 x 1,6
     m = main.calcular_metricas(con)
-    assert m["lucro_hora"] == pytest.approx(est["lucro"] / 8)   # painel e ficha usam o mesmo cálculo
+    assert m["lucro_hora"] == pytest.approx(est["lucro_hora"], abs=0.01)   # painel e ficha usam o mesmo cálculo e as mesmas horas
     t = http.get(f"/clientes/{cid}").text
     assert main.moeda(est["lucro"]) in t
 
