@@ -39,8 +39,48 @@ def _texto(x, y, conteudo, tam, cor=TEXTO, peso=400, ancora="start") -> str:
             f"{escape(conteudo)}</text>")
 
 
-def svg(ca: dict, moeda, data_br) -> str:
-    """ca = main.cobranca_atual(...). moeda e data_br vêm do main (o mesmo formato da tela)."""
+def _pct(v) -> str:
+    """0.02 -> '2%'; 0.025 -> '2,5%'."""
+    return f"{float(v) * 100:.2f}".rstrip("0").rstrip(".").replace(".", ",") + "%"
+
+
+def linhas_cobranca(ca: dict, moeda, data_br, par: dict | None = None) -> list[tuple[str, str, bool]]:
+    """As linhas do valor no cartão: (rótulo, valor, destaque). Depois do vencimento, as partes do total (mensalidade, crédito,
+    multa e juros: financeiro.cobranca); antes, a mensalidade e o crédito (se houver) e o valor. par = parâmetros 'cobranca' (o % da multa)."""
+    cob, par, out = ca.get("cob"), par or {}, []
+    if cob and ca.get("dias"):
+        meses = cob.get("meses") or 1
+        out.append(("Mensalidade" if meses == 1 else f"Mensalidades ({meses})", moeda(cob["bruto"]), False))
+        if cob.get("credito"):
+            out.append(("Crédito descontado", "− " + moeda(cob["credito"]), False))
+        if cob.get("multa"):
+            out.append((f"Multa ({_pct(par['multa'])})" if par.get("multa") else "Multa", moeda(cob["multa"]), False))
+        if cob.get("juros"):
+            dias = cob.get("dias") or ca["dias"]
+            out.append((f"Juros ({dias} dia{'s' if dias > 1 else ''} de atraso)", moeda(cob["juros"]), False))
+    elif ca.get("credito"):
+        if ca.get("mensalidade"):
+            out.append(("Mensalidade", moeda(ca["mensalidade"]), False))
+        out.append(("Crédito descontado", "− " + moeda(ca["credito"]), False))
+    out.append((ca["rotulo_valor"], moeda(ca["valor"]), True))
+    out.append(("Vencimento", data_br(ca["vencimento"]), False))
+    return out
+
+
+def validade(ca: dict, data_br) -> tuple[str, str] | None:
+    """(frase, observação) do prazo do Pix: o QR estático não expira sozinho, então o cartão diz até quando o valor vale.
+    Até o vencimento, vale até 23:59 dele; depois, só no dia (amanhã os juros mudam e sai um QR novo)."""
+    ate = ca.get("valido_ate")
+    if not ate:
+        return None
+    if ca.get("dias"):
+        return f"Vale só hoje, {data_br(ate)[:5]}, até 23:59", "Amanhã os juros mudam: peça o Pix atualizado"
+    return f"Pague até 23:59 de {data_br(ate)}", "Depois do vencimento entram multa e juros"
+
+
+def svg(ca: dict, moeda, data_br, par: dict | None = None) -> str:
+    """ca = main.cobranca_atual(...) ou um cartão pronto com ca['linhas'] (a diferença de multa e juros).
+    moeda e data_br vêm do main (o mesmo formato da tela). par = parâmetros 'cobranca' (o % da multa na linha)."""
     partes, y = [], 0
     # o texto do estágio
     y = MARGEM + 20
@@ -62,19 +102,24 @@ def svg(ca: dict, moeda, data_br) -> str:
         y += caixa + 40
         partes.append(_texto(LARGURA // 2, y, "Aponte a câmera do app do banco", 26, APAGADO, 500, "middle"))
         y += 60
-    # dados de pagamento
+    # até quando o valor vale (o QR estático não expira: o cartão avisa)
+    if prazo := validade(ca, data_br):
+        partes.append(_texto(LARGURA // 2, y, prazo[0], 34, DESTAQUE, 700, "middle"))
+        y += 44
+        partes.append(_texto(LARGURA // 2, y, prazo[1], 24, APAGADO, 500, "middle"))
+        y += 64
+    # dados de pagamento: o valor (com multa e juros separados, depois do vencimento) e o favorecido
     d = ca["dados"]
-    # crédito do aluno (aula paga e não usada): o valor abaixo já vem sem ele; a linha mostra para o aluno o desconto
-    linhas = [("Crédito descontado", "− " + moeda(ca["credito"]))] if ca.get("credito") else []
-    linhas += [(ca["rotulo_valor"], moeda(ca["valor"])), ("Vencimento", data_br(ca["vencimento"]))]
-    linhas += [(r, v) for r, v in (("Favorecido", d.get("pix_nome")), ("Banco", d.get("pix_banco")), ("Chave Pix", d.get("pix"))) if v]
+    linhas = list(ca.get("linhas") or linhas_cobranca(ca, moeda, data_br, par))
+    linhas += [(r, v, False) for r, v in (("Favorecido", d.get("pix_nome")), ("Banco", d.get("pix_banco")), ("Chave Pix", d.get("pix"))) if v]
     partes.append(f'<line x1="{MARGEM}" y1="{y - 20}" x2="{LARGURA - MARGEM}" y2="{y - 20}" stroke="#2C5C8F" stroke-width="2"/>')
     y += 30
-    for rotulo, valor in linhas:
-        partes.append(_texto(MARGEM, y, rotulo, 30, APAGADO, 500))
-        tam = 34 if len(valor) <= 30 else max(22, int(34 * 30 / len(valor)))
+    for rotulo, valor, destaque in linhas:
+        partes.append(_texto(MARGEM, y, rotulo, 32 if destaque else 30, TEXTO if destaque else APAGADO, 700 if destaque else 500))
+        base = 40 if destaque else 34
+        tam = base if len(valor) <= 30 else max(22, int(base * 30 / len(valor)))
         partes.append(_texto(LARGURA - MARGEM, y, valor, tam, TEXTO, 700, "end"))
-        y += 56
+        y += 62 if destaque else 56
     # o código copia-e-cola
     if ca["codigo"]:
         y += 20

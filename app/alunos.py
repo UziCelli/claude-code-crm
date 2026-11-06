@@ -79,6 +79,8 @@ def acao_pagamento(c, efetiva, valor, credito=0, cob=None) -> dict:
     nota = [f"Crédito de {financeiro.moeda_br(credito)} descontado"] if credito else []
     if cob and (cob["multa"] or cob["juros"]):
         nota.append(f"multa de {financeiro.moeda_br(cob['multa'])} e juros de {financeiro.moeda_br(cob['juros'])} incluídos")
+        # o diálogo avisa na hora se o valor digitado ficou sem a multa e os juros (o Pix antigo pago depois do vencimento)
+        dados["encargos"] = f"{cob['multa'] + cob['juros']:.2f}".replace(".", ",")
     if nota:
         dados["nota"] = " · ".join(nota)
     return {"rotulo": "Registrar pagamento", "dialogo": "dlg-pgto", "classe": "verde", "dados": dados}
@@ -364,7 +366,7 @@ def _cartao(con, e, c, hoje, msgs) -> None:
     if not ca:
         return
     if "".join(ch for ch in str(e["tel"] or "") if ch.isdigit()):
-        e["botao"], e["cartao"] = m.rotulo_cobranca(ca)[0], {"cid": e["id"], "codigo": ca["codigo"]}
+        e["botao"], e["cartao"] = m.rotulo_cobranca(ca)[0], m.cartao_cobranca(e["id"], ca["codigo"])
     else:   # sem modelo: o alerta não põe de volta o WhatsApp antigo (main.alertas)
         e["modelo"] = None
         e["acoes"] = [{"rotulo": "Cadastre o telefone", "href": f"/clientes/{e['id']}#cadastro"} if x.get("wa") else x for x in e["acoes"]]

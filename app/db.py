@@ -63,6 +63,9 @@ PARAMETROS_INICIAIS = [
                                                 "Se aconteceu algum imprevisto, me avisa aqui pra gente dar um jeito.", 12),
     ("msg_whatsapp", "cobranca_critica", None, "{nome}, sua mensalidade está vencida há mais de um mês (desde {data}). "
                                                "Me chama aqui pra fecharmos um acordo e evitar o bloqueio do serviço.", 13),
+    # pagou o Pix antigo (sem multa e juros) depois do vencimento: o cartão da diferença ({pago} = o que caiu, {data} = o dia do pagamento)
+    ("msg_whatsapp", "cobranca_diferenca", None, "Oi, {nome}! Recebi seu Pix de {pago} em {data}, obrigado! Como ele caiu depois do "
+                                                 "vencimento, ficou faltando {valor} de multa e juros. Segue o Pix da diferença.", 14),
     # cobrança de mensalidade atrasada (botão "Cobrar" no alerta): multa uma vez + juros ao mês proporcional aos dias
     ("cobranca", "multa", 0.02, None, 1),
     ("cobranca", "juros_ao_mes", 0.01, None, 2),
@@ -171,7 +174,8 @@ LISTAS_INICIAIS = {
                             "Consultoria Híbrida", "Empréstimo", "Retirada", "Empréstimo (devolução)", "Aluguel",
                             "Internet/Telefone", "Material de Trabalho",
                             "Transporte", "Marketing/Divulgação", "Impostos/Taxas", "Alimentação",
-                            "Software/Assinaturas", "Manutenção", "Outros"],
+                            "Software/Assinaturas", "Manutenção", "Outros",
+                            "Multa e juros"],   # no fim: num banco antigo entra com uma ordem que ainda não existe
     "lista_categorias_pf": ["Alimentação", "Moradia", "Transporte", "Pessoal", "Lazer", "Educação", "Vestuário",
                             "Saúde", "Salário", "Dívidas", "Fatura", "Outros"],
     "lista_formas_lancamento": ["PIX", "Transferência", "Boleto", "Dinheiro", "Cartão Crédito", "Cartão Débito",

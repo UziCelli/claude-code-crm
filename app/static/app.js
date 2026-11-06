@@ -37,10 +37,24 @@ document.addEventListener("click", function (e) {
     var n = parseFloat(t);
     return isFinite(n) ? n : 0;
   }
+  // Vencido: o botão traz o total (data-valor) e a multa + juros (data-encargos). Valor digitado menor só por eles = pagou o Pix
+  // antigo depois do vencimento: avisa quanto faltou e libera a caixa "Lançar a diferença a receber" (o servidor confere a conta).
+  function diferenca(d) {
+    var box = d.querySelector("[data-diferenca]"), campo = d.querySelector("[name=valor]");
+    if (!box || !campo) return;
+    var total = numero(d.dataset.total), enc = numero(d.dataset.encargos), v = numero(campo.value);
+    var falta = Math.round((total - v) * 100) / 100;
+    var mostra = total > 0 && enc > 0 && v > 0 && falta >= 0.01 && falta <= enc + 0.005;
+    box.hidden = !mostra;
+    box.querySelector("input[name=diferenca]").disabled = !mostra;
+    if (mostra) box.querySelector("[data-diferenca-texto]").textContent =
+      "Faltam R$ " + falta.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " de multa e juros.";
+  }
   document.addEventListener("input", function (e) {
     var campo = e.target;
     if (!campo.matches || !campo.matches("#dlg-pgto [name=valor]")) return;
     var d = campo.closest("dialog"), sel = d.querySelector("select[name=meses]");
+    diferenca(d);
     var mensal = numero(d.dataset.mensal), v = numero(campo.value);
     if (!sel || mensal <= 0 || sel.dataset.mexeu) return;   // quem escolheu à mão não é desfeito
     sel.value = v >= 1.5 * mensal ? String(Math.min(Math.max(Math.round(v / mensal), 1), 12)) : "1";
@@ -49,8 +63,13 @@ document.addEventListener("click", function (e) {
     if (e.target.matches && e.target.matches("#dlg-pgto select[name=meses]")) e.target.dataset.mexeu = "1";
   });
   document.addEventListener("click", function (e) {
-    var b = e.target.closest("[data-abrir=dlg-pgto]"), sel = document.querySelector("#dlg-pgto select[name=meses]");
-    if (b && sel) delete sel.dataset.mexeu;   // diálogo reaberto: volta a sugerir
+    var b = e.target.closest("[data-abrir=dlg-pgto]"), d = document.getElementById("dlg-pgto");
+    if (!b || !d) return;
+    var sel = d.querySelector("select[name=meses]");
+    if (sel) delete sel.dataset.mexeu;   // diálogo reaberto: volta a sugerir
+    d.dataset.total = b.dataset.encargos ? b.dataset.valor || "" : "";
+    d.dataset.encargos = b.dataset.encargos || "";
+    diferenca(d);
   });
 })();
 document.addEventListener("click", function (e) {
@@ -317,7 +336,8 @@ document.addEventListener("keydown", function (e) {
 });
 
 // Cobrança no WhatsApp: o cartão (SVG do servidor) vira PNG. No celular vai pelo compartilhar (imagem + código Pix de legenda);
-// no PC baixa o PNG e o formulário abre o wa.me só com o código (é só anexar a imagem baixada). O POST registra o evento.
+// no PC copia o PNG para a área de transferência e o formulário abre o wa.me só com o código: na conversa é só Ctrl+V
+// (o link do WhatsApp não aceita imagem). Sem área de transferência (navegador antigo ou bloqueou), baixa o PNG. O POST registra o evento.
 (function () {
   var forms = document.querySelectorAll("form[data-cartao]");
   if (!forms.length) return;
@@ -354,9 +374,20 @@ document.addEventListener("keydown", function (e) {
   function preparar(f) {   // prepara antes do clique: o compartilhar precisa sair no mesmo toque
     gerar(f.dataset.cartao).then(function (b) { prontos[f.dataset.cartao] = b; }).catch(function () {});
   }
-  function enviado(f) {
+  function enviado(f, texto) {
     var b = f.querySelector("button");
-    if (b) b.textContent = "Enviado ✓";
+    if (b) b.textContent = texto || "Enviado ✓";
+  }
+  // PC: a imagem vai para a área de transferência no próprio clique (o navegador só deixa com o clique, em localhost ou https).
+  // O ClipboardItem aceita a promessa do PNG: se ainda não ficou pronto, a cópia espera por ele sem perder o clique.
+  function copiar(url) {
+    if (!window.ClipboardItem || !navigator.clipboard || !navigator.clipboard.write) return Promise.reject(new Error("sem clipboard"));
+    var png = prontos[url] || gerar(url);
+    try {
+      return navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+    } catch (erro) {
+      return Promise.reject(erro);
+    }
   }
   if ("IntersectionObserver" in window) {   // só gera quando aparece (os alertas também ficam no <details> do topo)
     var obs = new IntersectionObserver(function (vistos) {
@@ -379,10 +410,15 @@ document.addEventListener("keydown", function (e) {
         .catch(function () { /* cancelou o compartilhar: nada registrado */ });
       return;
     }
-    // PC (ou sem compartilhar arquivo): baixa a imagem e deixa o formulário abrir o wa.me com o código
-    if (blob) baixar(blob);
-    else gerar(f.dataset.cartao).then(baixar).catch(function () {});
-    setTimeout(function () { enviado(f); }, 0);
+    // PC (ou sem compartilhar arquivo): copia a imagem (Ctrl+V na conversa) e deixa o formulário abrir o wa.me com o código;
+    // se não der para copiar, baixa a imagem como antes
+    var url = f.dataset.cartao;
+    copiar(url)
+      .then(function () { enviado(f, "Copiada ✓ · Ctrl+V no WhatsApp"); })
+      .catch(function () {
+        (prontos[url] ? Promise.resolve(prontos[url]) : gerar(url)).then(baixar).catch(function () {});
+        enviado(f);
+      });
   }, true);
 })();
 

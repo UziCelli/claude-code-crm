@@ -16,6 +16,11 @@
         <p class="muted" style="margin:4px 0 0;font-size:13px">Pagou adiantado ou parcelou no cartão? Escolha quantos meses este pagamento cobre.</p></div>
       <div class="campo largo"><label>Pago em (deixe vazio se ainda não caiu)</label><input name="pago_em" type="date" value="{{ hoje() }}" max="{{ hoje() }}"></div>
     </div>
+    {# valor abaixo do total, só pela multa e os juros (o Pix antigo pago depois do vencimento): app.js mostra e libera a caixa; escondida, ela não vai #}
+    <div class="aviso-diferenca" data-diferenca hidden>
+      <p style="margin:0 0 6px" data-diferenca-texto></p>
+      <label class="linha" style="gap:8px;align-items:flex-start;flex-wrap:nowrap;margin:0;font-weight:400"><input type="checkbox" name="diferenca" value="1" checked disabled style="width:auto;margin-top:3px"><span>Lançar a diferença a receber, para cobrar depois</span></label>
+    </div>
     <div class="linha"><button class="verde">Salvar</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
   </form>
 </dialog>

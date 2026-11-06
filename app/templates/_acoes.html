@@ -1,15 +1,21 @@
-{# Botões de um aluno (acoes do estado, app/alunos.py): {"wa"}: WhatsApp do modelo; {"dialogo"}: abre o diálogo com data-*; senão link.
+{# Botões de um aluno (acoes do estado, app/alunos.py): {"wa"}: WhatsApp do modelo (pode trazer o próprio cartao e botao);
+   {"dialogo"}: abre o diálogo com data-*; {"post"}: botão que envia um formulário (com data-confirmar); senão link.
    Importar com contexto: {% from "_acoes.html" import botoes with context %}. e = o estado do aluno; voltar = para onde ir depois de salvar. #}
 
-{# O botão do WhatsApp, igual em toda tela (alertas, Painel, Clientes, ficha, Mensalidades). Com cartao (cobrança do dia, alunos._cartao):
-   o formulário que gera o cartão-imagem com o QR Pix (app.js) e registra o envio. Sem cartao: o link wa.me com o texto do modelo. #}
+{# O botão do WhatsApp, igual em toda tela (alertas, Painel, Clientes, ficha, Mensalidades). Com cartao (main.cartao_cobranca: a cobrança
+   do dia ou a diferença de multa e juros): o formulário que gera o cartão-imagem com o QR Pix (app.js) e registra o envio.
+   Sem cartao: o link wa.me com o texto do modelo. #}
 {% macro botao_wa(tel, modelo, nome, data, extra, botao, cartao) %}
-{% if cartao %}<form method="post" action="/clientes/{{ cartao.cid }}/wa/cobranca" target="_blank" class="inline" data-cartao="/clientes/{{ cartao.cid }}/cobranca/cartao.svg" data-codigo="{{ cartao.codigo }}"><button type="submit" class="claro pequeno">{{ botao }}</button></form>
+{% if cartao %}<form method="post" action="{{ cartao.acao }}" target="_blank" class="inline" data-cartao="{{ cartao.svg }}" data-codigo="{{ cartao.codigo }}"><button type="submit" class="claro pequeno">{{ botao }}</button></form>
 {% else %}<a class="btn claro pequeno" href="{{ wa(tel, modelos[modelo]|preencher(nome, data, extra)) }}" target="_blank" rel="noopener">{{ botao or 'WhatsApp' }}</a>{% endif %}
 {% endmacro %}
 
+{# Ação que muda algo no servidor (ex.: Recebi / Dispensar a diferença de multa e juros): volta para a mesma tela. #}
+{% macro botao_post(x, voltar) %}<form method="post" action="{{ x.post }}" class="inline"{% if x.confirmar %} data-confirmar="{{ x.confirmar }}"{% endif %}><input type="hidden" name="volta" value="{{ voltar }}"><input type="hidden" name="voltar" value="{{ voltar }}"><button type="submit" class="{{ x.classe or 'claro' }} pequeno">{{ x.rotulo }}</button></form>{% endmacro %}
+
 {% macro botoes(acoes, e, voltar) %}{% for x in acoes %}
-{% if x.wa %}{{ botao_wa(e.tel, e.modelo, e.nome, e.data_modelo, e.extra, e.botao, e.cartao) }}
+{% if x.wa %}{{ botao_wa(e.tel, e.modelo, e.nome, e.data_modelo, e.extra, x.botao or e.botao, x.cartao or e.cartao) }}
+{% elif x.post %}{{ botao_post(x, voltar) }}
 {% elif x.dialogo %}<button type="button" class="{{ x.classe or 'claro' }} pequeno" data-abrir="{{ x.dialogo }}" data-voltar="{{ voltar }}"{% for k, v in x.dados.items() %} data-{{ k }}="{{ v }}"{% endfor %}>{{ x.rotulo }}</button>
 {% else %}<a class="btn claro pequeno" href="{{ x.href }}">{{ x.rotulo }}</a>{% endif %}
 {% endfor %}{% endmacro %}

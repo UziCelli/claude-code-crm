@@ -363,6 +363,18 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - `main.cobranca_atual` aceita `hoje` e os modelos/dados do Pix já lidos (lidos uma vez por `estado()`: as consultas não crescem com o número de alunos).
 - Testes: `tests/test_cobranca_botoes.py`.
 
+## Cartão com multa e juros separados, validade do Pix e colar no PC (PR `claude/cartao-multa-validade`, 06/11/2026)
+- Pedido do Victor: separar multa e juros no cartão, o QR "expirar" às 23:59 do vencimento e, no PC, não só baixar a imagem.
+- **Cartão** (`cartao.linhas_cobranca`): depois do vencimento mostra Mensalidade (ou "Mensalidades (N)"), Crédito descontado, Multa (2%), Juros (N dias de atraso), **Total atualizado** e Vencimento. Linha com valor 0 não aparece. Antes do vencimento: Mensalidade, Crédito (se houver), Valor, Vencimento.
+- **Validade** (`cartao.validade`), abaixo do QR: "Pague até 23:59 de DD/MM/AAAA" até o vencimento; depois, "Vale só hoje, DD/MM, até 23:59 · Amanhã os juros mudam". `cobranca_atual` devolve `valido_ate`.
+- **Limite:** o QR estático (`app/pix.py`) não tem campo de validade (regra do Banco Central). O cartão é gerado na hora, então cada dia depois do vencimento sai com a multa e os juros do dia; mas o QR antigo continua pagável. A etapa 2 (abaixo, "A fazer") resolve isso de verdade.
+- **Pagou o Pix antigo depois do vencimento** (`financeiro.falta_multa`): ao registrar o pagamento (entrada PJ nova, paga, com aluno, 1 mês), se faltou só multa e juros, o CRM avisa quanto faltou. O diálogo "Registrar pagamento" mostra na hora "Faltam R$ X de multa e juros" e a caixa "Lançar a diferença a receber" (marcada).
+- Com a caixa: lançamento em aberto, categoria **"Multa e juros"** (`financeiro.MULTA_JUROS`), contraparte = aluno, `origem = "MULTA:<id do pagamento>"` e **sem `cliente_id`**. Assim a diferença nunca "paga o mês" nem mexe na renovação. Só `entradas_sem_aluno` deixa essa categoria de fora. Entra como receita normal e em "a receber".
+- **Cobrar a diferença** (`financeiro.diferencas`, `main.pendencia_diferenca`): alerta amarelo e quadro "Multa e juros" na ficha, com "Cobrar diferença R$ X" (o mesmo botão-cartão, QR da diferença: `/clientes/{cid}/diferenca/cartao.svg`, modelo `cobranca_diferenca` editável), "Recebi" (dá baixa) e "Dispensar" (vai para a lixeira).
+- `botao_wa` (`_acoes.html`): o cartão traz as próprias URLs (`acao`, `svg`); ação nova `post` (botão que envia formulário, com confirmação).
+- **PC** (`app.js`): o clique copia o PNG para a área de transferência (`navigator.clipboard.write` + `ClipboardItem`) e abre o wa.me com o código Pix; o botão diz "Copiada ✓ · Ctrl+V no WhatsApp". Se o navegador recusar, baixa como antes. Funciona em `localhost` e no HTTPS do túnel. O wa.me só aceita texto, por isso o Ctrl+V continua.
+- Testes: `tests/test_cartao_multa_validade.py`.
+
 ## Reserva no Google Cloud Run (04/11/2026)
 - O Render grátis dormia e levava ~1 min para acordar. O Victor desligou o serviço. A reserva (`crm-reserva`) passa para o Google Cloud Run, que acorda em poucos segundos.
 - `Dockerfile` (fixa `TZ`, `CRM_NUVEM=1` e `CRM_ENDERECOS`), `.dockerignore` e `cloudflare/worker-reserva.js` (Worker que repassa `crm-reserva` para o `*.run.app`). O `render.yaml` saiu.
@@ -375,3 +387,8 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Quero: tirar a opção de copiar grade e preços. Cada local calcula os próprios preços pelos custos dele (as perguntas do cadastro do local: taxa por aula, taxa mensal, pessoa extra, máximo de pessoas, deslocamento em R$ e em minutos) + mão de obra (salário/hora) + impostos/taxas + margem mínima.
 - Conferir antes: se o "custo operacional" da CIA na planilha já traz passagem embutida, os locais copiados contam a passagem 2 vezes.
 - Situação (06/11/2026): em parte feito. Já existe o modo "Montar pelo custo" no "+ Novo local" e no "Editar local" (seção "Preço pelo custo no local" acima). Falta tirar a opção de copiar a grade e os preços de outro local.
+
+## A fazer: Pix com vencimento de verdade (etapa 2 do cartão, pedido do Victor, 06/11/2026)
+- Hoje o QR é estático: mostra a validade, mas o banco aceita pagar depois. O CRM só avisa e cobra a diferença (seção "Cartão com multa e juros separados" acima).
+- Etapa 2: QR dinâmico com vencimento (**cobv**) por um intermediário (Mercado Pago, Asaas ou Efí). Com ele: o QR expira de verdade, o banco calcula a multa e os juros e o CRM pode dar baixa sozinho (webhook de pagamento).
+- Estudar antes: taxa por Pix de cada um, se aceita CPF/MEI, como guardar a chave da API (Configurações, como a do Assistente) e o que fazer quando a internet ou o intermediário cair (voltar ao QR estático).
