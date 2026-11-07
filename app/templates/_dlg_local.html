@@ -1,5 +1,8 @@
-{# Pop-up "+ Novo local" (Grade, Agenda e Propostas); incluído no fim de grade.html, agenda.html e propostas.html. Abre por botão com data-abrir="dlg-local"
-   e data-voltar (a tela para onde voltar). Grava os custos do local e copia a grade do local de referência. #}
+{# Pop-up "+ Novo local" e "Editar local" (Grade, Agenda e Propostas); incluído no fim de grade.html, agenda.html e propostas.html. Abre por botão com data-abrir="dlg-local"
+   e data-voltar (a tela para onde voltar). Grava os custos do local e copia a grade do local de referência.
+   [data-previa]: app.js manda os campos para /locais/previa enquanto você digita e mostra como o custo vira preço (nada é gravado).
+   O mesmo pop-up edita todo local, a CIA inclusive (botão com data-cia): na CIA, [data-so-cia] (preço da aula com 2 e 3 pessoas)
+   troca de lugar com [data-nao-cia] (taxa por pessoa a mais), porque a CIA cobra a aula pelo nº de pessoas. #}
 <dialog id="dlg-local">
   <h2 data-titulo>Novo local</h2>
   <p class="muted" data-so-novo>Academia, condomínio, casa do aluno... Diga quanto custa dar aula lá: o motor monta os preços com isso.</p>
@@ -8,8 +11,10 @@
     <div class="campo"><label>Nome do local</label><input name="nome" required autocomplete="off" placeholder="ex.: SmartFit Centro"></div>
     <div class="form-grid">
       <div class="campo"><label>Taxa por aula (1 pessoa, R$)</label><input name="taxa_aula" inputmode="decimal" placeholder="0"></div>
-      <div class="campo"><label>Taxa por pessoa a mais (R$/aula)</label><input name="taxa_pessoa_extra" inputmode="decimal" placeholder="0"></div>
-      <div class="campo"><label>Máximo de pessoas (0 = sem limite)</label><input name="max_pessoas" inputmode="numeric" placeholder="0"></div>
+      <div class="campo" data-nao-cia><label>Taxa por pessoa a mais (R$/aula)</label><input name="taxa_pessoa_extra" inputmode="decimal" placeholder="0"></div>
+      <div class="campo" data-so-cia hidden><label>Aula com 2 pessoas (R$, total)</label><input name="taxa_2" inputmode="decimal" disabled></div>
+      <div class="campo" data-so-cia hidden><label>Aula com 3 pessoas (R$, total)</label><input name="taxa_3" inputmode="decimal" disabled></div>
+      <div class="campo"><label>Máximo de pessoas<span data-nao-cia> (0 = sem limite)</span></label><input name="max_pessoas" inputmode="numeric" placeholder="0"></div>
       <div class="campo"><label>Deslocamento (R$ por aula)</label><input name="deslocamento" inputmode="decimal" placeholder="Uber, gasolina, estacionamento"></div>
       <div class="campo"><label>Tempo de deslocamento (min por aula)</label><input name="tempo_deslocamento" inputmode="numeric" placeholder="ida e volta; entra no lucro/hora"></div>
       <div class="campo"><label>Taxa mensal fixa (R$)</label><input name="taxa_mensal" inputmode="decimal" placeholder="0"></div>
@@ -17,6 +22,7 @@
       <div class="campo" data-so-novo><label>Copiar a grade de</label><select name="referencia">{% for l in locais_ref %}<option {{ 'selected' if l == 'CIA' }}>{{ l }}</option>{% endfor %}</select></div>
     </div>
     <p class="muted" data-so-novo>Todos os horários começam livres. Os preços saem destes custos + o seu salário/hora + o rateio dos custos fixos.</p>
+    <div class="previa" data-previa data-tipo="{{ tipo or '' }}" data-ref="{{ ref_grade or 0 }}" aria-live="polite" hidden></div>
     <div class="linha"><button class="verde" data-botao>Criar local</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
   </form>
 </dialog>

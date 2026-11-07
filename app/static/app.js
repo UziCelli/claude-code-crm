@@ -18,17 +18,52 @@ document.addEventListener("click", function (e) {
   if (titulo && b.dataset.titulo) titulo.textContent = b.dataset.titulo;
   var nota = d.querySelector("[data-nota]");   // aviso opcional (ex.: "Crédito de R$ 100,00 descontado")
   if (nota) { nota.textContent = b.dataset.nota || ""; nota.hidden = !b.dataset.nota; }
-  if (d.id === "dlg-local") {   // o mesmo pop-up cria e edita: na edição o nome trava e a referência some
-    var editar = !!b.dataset.acao, nome = d.querySelector("[name=nome]"), bt = d.querySelector("[data-botao]");
+  if (d.id === "dlg-local") {   // o mesmo pop-up cria e edita todo local: na edição o nome trava e a referência some
+    var editar = !!b.dataset.acao, cia = editar && !!b.dataset.cia, nome = d.querySelector("[name=nome]"), bt = d.querySelector("[data-botao]");
     nome.readOnly = editar;
     if (!editar && titulo) titulo.textContent = "Novo local";
     if (bt) bt.textContent = editar ? "Salvar e refazer preços" : "Criar local";
     d.querySelectorAll("[data-so-novo]").forEach(function (x) { x.hidden = editar; });
+    // CIA: preço da aula com 2 e 3 pessoas no lugar da taxa por pessoa a mais (campo escondido não vai no formulário)
+    function liga(sel, on) {
+      d.querySelectorAll(sel).forEach(function (x) {
+        x.hidden = !on;
+        x.querySelectorAll("input").forEach(function (i) { i.disabled = !on; });
+      });
+    }
+    liga("[data-so-cia]", cia); liga("[data-nao-cia]", !cia);
+    var box = d.querySelector("[data-previa]");
+    if (box) { if (cia) box.dataset.cia = "1"; else delete box.dataset.cia; }
   }
   // base do "cobre quantos meses?": a mensalidade cheia (data-mensal); sem ela, o valor do botão
   if (d.id === "dlg-pgto") d.dataset.mensal = b.dataset.mensal || b.dataset.valor || "";
   d.showModal();
+  if (window.previaLocal) window.previaLocal(d, 0);   // pop-up do local (CIA inclusive): mostra o preço com os números de agora
 });
+// Pop-up do local (CIA inclusive): enquanto você digita, /locais/previa mostra como o custo vira preço (nada é gravado).
+// Sem resposta (offline, erro), a caixa some e o Salvar continua funcionando.
+(function () {
+  var espera = null, pedido = 0;
+  window.previaLocal = function (d, ms) {
+    var box = d && d.querySelector("[data-previa]"), frm = box && box.closest("form");
+    if (!box || !frm) return;
+    clearTimeout(espera);
+    espera = setTimeout(function () {
+      var dados = new FormData(frm), meu = ++pedido;
+      dados.set("tipo", box.dataset.tipo || "");
+      dados.set("ref", box.dataset.ref || "0");
+      if (box.dataset.cia) dados.set("cia", "1");
+      fetch("/locais/previa", { method: "POST", body: dados, credentials: "same-origin" })
+        .then(function (r) { if (!r.ok) throw r; return r.text(); })
+        .then(function (html) { if (meu !== pedido) return; box.innerHTML = html; box.hidden = false; })
+        .catch(function () { if (meu === pedido) box.hidden = true; });
+    }, ms === undefined ? 350 : ms);
+  };
+  document.addEventListener("input", function (e) {
+    var d = e.target.closest && e.target.closest("dialog");
+    if (d && d.querySelector("[data-previa]")) window.previaLocal(d);
+  });
+})();
 // Pagamento de aluno: valor digitado a partir de 1,5× a mensalidade sugere "cobre N meses" (a pessoa pode trocar)
 (function () {
   function numero(t) {

@@ -1,0 +1,27 @@
+{# Prévia do preço nos pop-ups "Editar local" (todo local, CIA inclusive) e "+ Novo local" (POST /locais/previa, app.js troca o conteúdo de [data-previa]).
+   r = locais.previa: agora (precos.decompor + minimo + grupo), hoje (preço e custo com o que está salvo), contas_fixas. Nada é gravado. #}
+{% if erro %}
+<p class="previa-erro">{{ erro }}</p>
+{% elif r %}{% set a = r.agora %}
+<div class="previa-topo">
+  <div><small>Preço de tabela por aula</small><b>{{ a.preco|moeda }}</b></div>
+  {% if r.hoje and (r.hoje.preco - a.preco)|abs >= 0.01 %}
+  <div class="previa-antes"><small>hoje</small>{{ r.hoje.preco|moeda }}
+    <span class="{{ 'sobe' if a.preco > r.hoje.preco else 'desce' }}">{{ '+' if a.preco > r.hoje.preco }}{{ (a.preco - r.hoje.preco)|moeda }}</span></div>
+  {% endif %}
+</div>
+<p class="muted previa-sub">1 aula, 1 pessoa, horário x1,00, no {{ r.plano }}</p>
+<table class="previa-partes">
+  <tr><td>{{ 'Taxa da CIA (1 pessoa)' if r.local == 'CIA' else 'Taxa do local' }}</td><td>{{ a.taxa|moeda }}</td></tr>
+  {% if a.mensal %}<tr><td>Taxa mensal ÷ aulas do mês</td><td>{{ a.mensal|moeda }}</td></tr>{% endif %}
+  <tr><td>Deslocamento (R$)</td><td>{{ a.ida_reais|moeda }}</td></tr>
+  <tr><td>Seu tempo <small class="muted">{{ a.minutos|num(0) }} min × {{ a.valor_hora|moeda }}/h</small></td><td>{{ a.salario|moeda }}</td></tr>
+  <tr><td>Custos fixos rateados</td><td>{{ a.rateio|moeda }}</td></tr>
+  <tr class="total"><td>Custo da aula</td><td>{{ a.custo|moeda }}</td></tr>
+</table>
+<p class="muted previa-sub">Preço mínimo (margem mínima): <b>{{ a.minimo|moeda }}</b>{% for g in a.grupo %} · {{ g.pessoas }} pessoas: {{ g.preco|moeda }} cada{% endfor %}</p>
+{% for c in r.contas_fixas %}
+<p class="nota-grade">Conta fixa <b>{{ c.descricao }}</b> ({{ c.valor|moeda }}/mês) cita este local. Com custos aqui, ela sai dos custos fixos
+  rateados e só entra no preço deste local: ponha o valor em <b>Taxa mensal</b>.</p>
+{% endfor %}
+{% endif %}

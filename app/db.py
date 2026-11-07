@@ -160,6 +160,8 @@ _IMPACTO = [
 PARAMETROS_INICIAIS += [("mult_horario", f"{h:02d}", 1.0, None, h) for h in range(5, 24)]
 # Ida até a CIA (como os outros locais): R$ por aula (gasolina, Uber) e minutos por aula (contam como trabalho)
 PARAMETROS_INICIAIS += [("cia_deslocamento", "reais_por_aula", 0, None, 1), ("cia_deslocamento", "minutos_por_aula", 0, None, 2)]
+# taxa mensal fixa da CIA, dividida pelas aulas do mês (os mesmos campos de qualquer local; 0 = sem taxa)
+PARAMETROS_INICIAIS += [("cia_mensal", "taxa_mensal", 0, None, 1), ("cia_mensal", "aulas_mes", 0, None, 2)]
 PARAMETROS_INICIAIS += [("impacto_curto", k, c, None, i) for i, (k, c, _) in enumerate(_IMPACTO, 1)]
 PARAMETROS_INICIAIS += [("impacto_juros", k, j, None, i) for i, (k, _, j) in enumerate(_IMPACTO, 1)]
 LISTAS_INICIAIS = {
@@ -233,10 +235,11 @@ def iniciar_banco(caminho: Path = None) -> None:
         for chave, antigo, novo in (("renovacao", RENOVACAO_ANTIGA, RENOVACAO_NOVA), ("indicacao", INDICACAO_ANTIGA, INDICACAO_NOVA),
                                     ("cobranca", COBRANCA_ANTIGA, COBRANCA_NOVA)):
             con.execute("UPDATE parametros SET valor_texto=? WHERE grupo='msg_whatsapp' AND chave=? AND valor_texto=?", (novo, chave, antigo))
-        for grupo, itens in LISTAS_INICIAIS.items():
+        removidos = {r[0] for r in con.execute("SELECT chave FROM parametros WHERE grupo='removido_lista'")}
+        for grupo, itens in LISTAS_INICIAIS.items():   # o que você tirou da lista (Excluir local, x em Configurações) não volta
             con.executemany(
                 "INSERT OR IGNORE INTO parametros (grupo, chave, valor_texto, ordem) VALUES (?,?,?,?)",
-                [(grupo, nome, nome, i) for i, nome in enumerate(itens, 1)],
+                [(grupo, nome, nome, i) for i, nome in enumerate(itens, 1) if f"{grupo}|{nome}" not in removidos],
             )
         if con.execute("SELECT COUNT(*) FROM campanha_fases").fetchone()[0] == 0:
             con.executemany(
@@ -307,6 +310,13 @@ def parametros(con: sqlite3.Connection, grupo: str) -> dict:
 
 def lista(con: sqlite3.Connection, nome: str) -> list[str]:
     return list(parametros(con, nome).values())
+
+
+def marcar_removido(con: sqlite3.Connection, grupo: str, nome: str) -> None:
+    """Anota que o item saiu da lista, para iniciar_banco não pôr de volta um item da lista inicial (ex.: SmartFit).
+    Chamar dentro de `with con`. Criar o item de novo funciona igual: a anotação só vale quando ele não está na lista."""
+    con.execute("INSERT OR IGNORE INTO parametros (grupo, chave, valor_texto, ordem) VALUES ('removido_lista', ?, ?, 0)",
+                (f"{grupo}|{nome}", nome))
 
 
 # ---------- backup ----------

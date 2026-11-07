@@ -160,16 +160,18 @@ def _texto_cia(aulas: dict, taxa: dict) -> str:
 def cia_mes(con: sqlite3.Connection, mes: str, rodada: "_Rodada | None" = None) -> dict:
     """Conta da CIA pelas aulas Feitas no mês: {mes, aulas: {pessoas: quantas aulas}, valor, vencimento, texto}.
     Duas pessoas Feitas no mesmo (data, hora) são UMA aula de 2 pessoas (taxa_cia['2']); acima do máximo vale a taxa do máximo.
+    A taxa mensal da CIA (cia_mensal) entra uma vez, só se houve aula no mês, como num local.
     O vencimento é o dia `contas_auto.dia_cia` (padrão 5) do mês seguinte, antecipado para a sexta se cair no fim de semana."""
     r = rodada or _Rodada(con)
     taxa, maximo = precos.taxas_cia(con)
     aulas = {p: 0 for p in range(1, maximo + 1)}
     for pessoas in r.aulas(mes).get("cia", {}).values():
         aulas[min(len(pessoas), maximo)] += 1
-    valor = round(sum(n * taxa.get(p, taxa.get(maximo, 0)) for p, n in aulas.items()), 2)
+    mensal = float(db.parametros(con, "cia_mensal").get("taxa_mensal") or 0) if sum(aulas.values()) else 0.0   # uma vez, com aula no mês
+    valor = round(sum(n * taxa.get(p, taxa.get(maximo, 0)) for p, n in aulas.items()) + mensal, 2)
     dia = int(r.params().get("dia_cia") or DIA_CIA)
-    return {"mes": mes, "aulas": aulas, "valor": valor, "vencimento": vencimento_util(dia, somar_meses(mes, 1)),
-            "texto": _texto_cia(aulas, taxa)}
+    texto = _texto_cia(aulas, taxa) + (f" + taxa mensal {moeda_br(mensal)}" if mensal else "")
+    return {"mes": mes, "aulas": aulas, "valor": valor, "vencimento": vencimento_util(dia, somar_meses(mes, 1)), "texto": texto}
 
 
 # ---------- locais criados pelo "+ Novo local" ----------

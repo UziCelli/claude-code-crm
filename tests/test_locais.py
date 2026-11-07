@@ -146,7 +146,7 @@ def test_rota_erro_volta_para_a_tela_com_a_frase(http):
 
 
 def test_referencia_so_cia_ou_local_criado_aqui(con):
-    with pytest.raises(ValueError, match="CIA ou um local criado aqui"):
+    with pytest.raises(ValueError, match="CIA ou um local com custos"):
         locais.criar_local(con, "Novo", "SmartFit")
     locais.criar_local(con, "Prédio", taxa_aula=30)
     assert locais.referencias(con) == ["CIA", "Prédio"]

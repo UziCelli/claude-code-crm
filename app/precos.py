@@ -10,8 +10,11 @@ def taxas_cia(con) -> tuple[dict, int]:
     return {int(k): v for k, v in cia.items() if k.isdigit()}, int(cia.get("maximo_pessoas", 3))
 
 
-def carregar_parametros(con) -> dict:
-    """Monta o dicionário de parâmetros a partir da tabela `parametros`."""
+def carregar_parametros(con, troca: dict | None = None) -> dict:
+    """Monta o dicionário de parâmetros a partir da tabela `parametros`.
+    troca: custos simulados, sem gravar (a prévia do pop-up do local e da CIA): {"locais": {nome: custos}, "taxa_cia": {pessoas: R$},
+    "cia_max": n, "cia_desloc": {reais_por_aula, minutos_por_aula}, "cia_mensal": {taxa_mensal, aulas_mes}}. Entram antes das horas, do salário/hora e do rateio:
+    a prévia passa pelo motor inteiro, igual ao preço depois de salvar."""
     from . import db, financeiro
     g = lambda grupo: db.parametros(con, grupo)  # noqa: E731
     taxa_cia, cia_max = taxas_cia(con)
@@ -25,8 +28,14 @@ def carregar_parametros(con) -> dict:
         "grupo_mo": {int(k): v for k, v in g("grupo_mao_obra_extra").items()},
         "locais": custos_locais(con),
         "cia_desloc": g("cia_deslocamento"),   # ida até a CIA: reais_por_aula e minutos_por_aula
+        "cia_mensal": g("cia_mensal"),   # taxa mensal fixa da CIA e as aulas do mês que a dividem (como num local)
         "mo": g("mao_obra"),
     }
+    if troca:
+        p["locais"] = {**p["locais"], **(troca.get("locais") or {})}
+        for k in ("taxa_cia", "cia_max", "cia_desloc", "cia_mensal"):
+            if troca.get(k) is not None:
+                p[k] = troca[k]
     from .main import horas_trabalho_detalhe
     trabalho = horas_trabalho_detalhe(con, p)   # uma vez só: salário e custos fixos dividem pela mesma base
     auto = valor_hora_automatico(con, p, trabalho)
@@ -91,10 +100,17 @@ def deslocamento(p: dict, local: str | None) -> tuple[float, float]:
     return float(c.get("deslocamento") or 0), float(c.get("tempo_deslocamento") or 0)
 
 
+def mensal_por_aula(p: dict, local: str | None) -> float:
+    """A taxa mensal fixa do local dividida pelas aulas do mês (0 sem taxa ou sem aulas). CIA: Editar local da CIA."""
+    c = (p.get("cia_mensal") or {}) if local == "CIA" else ((p.get("locais") or {}).get(local) or {})
+    return float(c.get("taxa_mensal") or 0) / float(c["aulas_mes"]) if c.get("aulas_mes") else 0.0
+
+
 def custo_aula_local(p: dict, local: str | None) -> float:
-    """R$ por aula (1 pessoa) que o local custa: CIA = taxa da CIA de 1 pessoa + a ida; local criado aqui = custo_por_aula; outro = 0."""
+    """R$ por aula (1 pessoa) que o local custa: CIA = taxa da CIA de 1 pessoa + a ida + a taxa mensal ÷ aulas;
+    local com custos = custo_por_aula; outro = 0."""
     if local == "CIA":
-        return float(p.get("taxa_cia", {}).get(1, 0.0)) + deslocamento(p, "CIA")[0]
+        return float(p.get("taxa_cia", {}).get(1, 0.0)) + deslocamento(p, "CIA")[0] + mensal_por_aula(p, "CIA")
     c = (p.get("locais") or {}).get(local)
     return custo_por_aula(c) if c else 0.0
 
@@ -178,11 +194,10 @@ def decompor(base: dict, p: dict, local: str | None = None) -> dict:
     sessoes = float(base.get("sessoes_mes") or 0) or 1.0
     reais, minutos_ida = deslocamento(p, local)
     if local == "CIA":
-        taxa, mensal = float(p.get("taxa_cia", {}).get(1, 0.0)), 0.0
+        taxa = float(p.get("taxa_cia", {}).get(1, 0.0))
     else:
-        c = (p.get("locais") or {}).get(local) or {}
-        taxa = float(c.get("taxa_aula") or 0)
-        mensal = (c.get("taxa_mensal") or 0) / c["aulas_mes"] if c.get("aulas_mes") else 0.0
+        taxa = float(((p.get("locais") or {}).get(local) or {}).get("taxa_aula") or 0)
+    mensal = mensal_por_aula(p, local)
     resto, mo, horas = custo_servico(base, p, local)
     rateio = float(p.get("rateio_hora") or 0) * horas
     custo = resto + mo
