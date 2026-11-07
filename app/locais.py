@@ -1,4 +1,4 @@
-"""Locais (academia, condomínio...): os custos de cada local, editar, excluir e a prévia do preço. A CIA tem o pop-up dela.
+"""Locais (academia, condomínio...): os custos de cada local, editar, excluir e a prévia do preço. Um pop-up só para todos, CIA incluída.
 
 O preço não fica guardado: o motor de preços (precos.custo_servico) lê estes custos na hora, junto com o seu
 salário/hora, o tempo de deslocamento e o rateio dos custos fixos. Mudou um custo, todos os preços do local mudam.
@@ -17,8 +17,9 @@ PESSOAS_CIA = (1, 2, 3)   # o pop-up da CIA sempre mostra estes (e os a mais que
 
 
 def custo_aula_local(con, local: str) -> float:
-    """R$ por aula (1 pessoa) que o local custa: CIA = taxa_cia[1] + a ida; local com custos = seus custos; outro = 0."""
-    p = {"taxa_cia": precos.taxas_cia(con)[0], "cia_desloc": db.parametros(con, "cia_deslocamento"), "locais": precos.custos_locais(con)}
+    """R$ por aula (1 pessoa) que o local custa: CIA = taxa_cia[1] + a ida + a taxa mensal ÷ aulas; local com custos = seus custos; outro = 0."""
+    p = {"taxa_cia": precos.taxas_cia(con)[0], "cia_desloc": db.parametros(con, "cia_deslocamento"),
+         "cia_mensal": db.parametros(con, "cia_mensal"), "locais": precos.custos_locais(con)}
     return precos.custo_aula_local(p, local)
 
 
@@ -56,7 +57,7 @@ def criar_local(con, nome: str, referencia: str = "CIA", **custos) -> dict:
     if not nome:
         raise ValueError("Dê um nome ao local")
     if eh_cia(nome):
-        raise ValueError("A CIA já existe: edite no botão Editar CIA, na Grade")
+        raise ValueError("A CIA já existe: escolha a CIA na Grade e clique em Editar local")
     outro = next((x for x in nomes(con) if _sem_espaco(x) == _sem_espaco(nome)), None)
     # o mesmo nome de um local da lista que ainda não tem custos (SmartFit) ganha os custos aqui, como no Editar local
     sem_custos = outro is not None and outro.strip() == nome and \
@@ -84,20 +85,24 @@ def _custos(custos: dict) -> dict:
 
 
 def _editavel(con, nome: str) -> str:
-    """O nome do local como está gravado, se dá para editar ou excluir. A CIA não: ela tem o pop-up dela."""
+    """O nome do local como está gravado, se dá para editar ou excluir. A CIA fica fora: edita por editar_cia e não exclui."""
     nome = (nome or "").strip()
     if eh_cia(nome):
-        raise ValueError("A CIA se edita no botão Editar CIA")
+        raise ValueError("A CIA não dá para excluir: só editar")
     achado = next((x for x in nomes(con) if x.strip() == nome), None)
     if not achado:
         raise ValueError(f"O local '{nome}' não existe mais. Recarregue a tela")
     return achado
 
 
-def editar_local(con, nome: str, **custos) -> dict:
-    """Troca os custos de qualquer local que não é a CIA e devolve {"horarios": n criados}. Os preços acompanham sozinhos
+def editar_local(con, nome: str, grupo: dict | None = None, **custos) -> dict:
+    """Troca os custos de qualquer local e devolve {"horarios": n criados}. Os preços acompanham sozinhos
     (o motor lê os custos na hora). Local da lista sem custos (SmartFit) ganha a linha agora; sem grade, copia a da CIA.
+    A CIA usa os mesmos campos e grava nos parâmetros dela (editar_cia; grupo = preço da aula com 2, 3 pessoas).
     O nome não muda: ele está gravado nos alunos, na agenda, na grade e nas contas. A grade que já existe fica como está."""
+    if eh_cia(nome):
+        editar_cia(con, grupo, **custos)
+        return {"horarios": 0}
     nome = _editavel(con, nome)
     c = _custos(custos)
     with con:
@@ -154,36 +159,48 @@ def _copiar_grade(con, nome, referencia) -> int:
 
 # ---------- CIA ----------
 def cia_atual(con) -> dict:
-    """O que o pop-up da CIA mostra: {taxas: {pessoas: R$ da aula}, maximo, reais_por_aula, minutos_por_aula}."""
+    """Os custos da CIA nos mesmos campos de um local (CAMPOS, sem a pessoa a mais) + grupo {pessoas: R$ da aula com elas}:
+    a CIA cobra a aula pelo nº de pessoas (taxa_cia), em vez de uma taxa por pessoa a mais."""
     taxas, maximo = precos.taxas_cia(con)
-    ida = db.parametros(con, "cia_deslocamento")
-    return {"taxas": {n: float(taxas.get(n) or 0) for n in sorted(set(taxas) | set(PESSOAS_CIA))}, "maximo": maximo,
-            "reais_por_aula": float(ida.get("reais_por_aula") or 0), "minutos_por_aula": float(ida.get("minutos_por_aula") or 0)}
+    ida, mensal = db.parametros(con, "cia_deslocamento"), db.parametros(con, "cia_mensal")
+    return {"taxa_aula": float(taxas.get(1) or 0),
+            "grupo": {n: float(taxas.get(n) or 0) for n in sorted(set(taxas) | set(PESSOAS_CIA)) if n > 1},
+            "max_pessoas": maximo, "deslocamento": float(ida.get("reais_por_aula") or 0),
+            "tempo_deslocamento": float(ida.get("minutos_por_aula") or 0),
+            "taxa_mensal": float(mensal.get("taxa_mensal") or 0), "aulas_mes": float(mensal.get("aulas_mes") or 0)}
 
 
-def _cia(taxas: dict, maximo, reais_por_aula, minutos_por_aula) -> dict:
-    t = {int(n): float(v or 0) for n, v in taxas.items()}
-    if any(v < 0 for v in t.values()) or float(reais_por_aula or 0) < 0 or float(minutos_por_aula or 0) < 0:
-        raise ValueError("Use só números positivos")
-    if t.get(1, 0) <= 0:
+def _cia(con, custos: dict, grupo: dict | None) -> dict:
+    """Os campos do pop-up (os mesmos de um local) no formato do motor: {taxa_cia, cia_max, cia_desloc, cia_mensal}.
+    grupo: {pessoas: R$ da aula com elas}; quem não veio fica como está."""
+    c = _custos(custos)   # os mesmos números e a mesma regra da taxa mensal de um local
+    if c["taxa_aula"] <= 0:
         raise ValueError("Diga quanto a CIA cobra pela aula de 1 pessoa")
-    maximo = int(float(maximo or 0))
-    if maximo < 1:
+    if c["max_pessoas"] < 1:
         raise ValueError("Máximo de pessoas na CIA: pelo menos 1")
-    return {"taxa_cia": t, "cia_max": maximo,
-            "cia_desloc": {"reais_por_aula": float(reais_por_aula or 0), "minutos_por_aula": float(minutos_por_aula or 0)}}
+    taxas = dict(precos.taxas_cia(con)[0])
+    for n, v in (grupo or {}).items():
+        if float(v or 0) <= 0:
+            raise ValueError(f"Diga quanto a CIA cobra pela aula com {int(n)} pessoas")
+        taxas[int(n)] = float(v)
+    taxas[1] = c["taxa_aula"]
+    return {"taxa_cia": dict(sorted(taxas.items())), "cia_max": c["max_pessoas"],
+            "cia_desloc": {"reais_por_aula": c["deslocamento"], "minutos_por_aula": c["tempo_deslocamento"]},
+            "cia_mensal": {"taxa_mensal": c["taxa_mensal"], "aulas_mes": c["aulas_mes"]}}
 
 
-def editar_cia(con, taxas: dict, maximo, reais_por_aula, minutos_por_aula) -> None:
-    """Grava o pop-up da CIA nos parâmetros de sempre (taxa_cia e cia_deslocamento). Preços e a conta da CIA em aberto acompanham."""
-    c = _cia(taxas, maximo, reais_por_aula, minutos_por_aula)
+def editar_cia(con, grupo: dict | None = None, **custos) -> None:
+    """Grava o Editar local da CIA nos parâmetros de sempre (taxa_cia, cia_deslocamento, cia_mensal: os mesmos de Configurações).
+    Preços e a conta da CIA em aberto acompanham."""
+    c = _cia(con, custos, grupo)
     linhas = [("taxa_cia", str(n), v) for n, v in c["taxa_cia"].items()] + [("taxa_cia", "maximo_pessoas", c["cia_max"])]
     linhas += [("cia_deslocamento", k, v) for k, v in c["cia_desloc"].items()]
+    linhas += [("cia_mensal", k, v) for k, v in c["cia_mensal"].items()]
     with con:
-        for grupo, chave, valor in linhas:
+        for grupo_, chave, valor in linhas:
             con.execute("""INSERT OR IGNORE INTO parametros (grupo, chave, valor, ordem)
-                           VALUES (?, ?, 0, (SELECT COALESCE(MAX(ordem),0)+1 FROM parametros WHERE grupo=?))""", (grupo, chave, grupo))
-            con.execute("UPDATE parametros SET valor=? WHERE grupo=? AND chave=?", (valor, grupo, chave))
+                           VALUES (?, ?, 0, (SELECT COALESCE(MAX(ordem),0)+1 FROM parametros WHERE grupo=?))""", (grupo_, chave, grupo_))
+            con.execute("UPDATE parametros SET valor=? WHERE grupo=? AND chave=?", (valor, grupo_, chave))
 
 
 # ---------- prévia do preço (pop-up do local e da CIA) ----------
@@ -218,19 +235,20 @@ def _conta(base: dict, p: dict, local: str, maximo: int) -> dict:
     return d
 
 
-def previa(con, nome: str = "", custos: dict | None = None, cia: dict | None = None, tipo: str = "Pacotes", ref: int = 0) -> dict:
+def previa(con, nome: str = "", custos: dict | None = None, grupo: dict | None = None, cia: bool = False,
+           tipo: str = "Pacotes", ref: int = 0) -> dict:
     """Quanto 1 aula (1 pessoa, horário x1,00) custa e quanto sai com os custos digitados, sem gravar nada.
-    custos: os campos do pop-up do local; cia: {taxas, maximo, reais_por_aula, minutos_por_aula} do pop-up da CIA.
+    custos: os campos do pop-up (CAMPOS, iguais para todo local); cia=True: o pop-up é o da CIA, com grupo {pessoas: R$ da aula}.
     {local, plano, agora: partes do preço, hoje: preço e custo com o que está salvo (None num local novo), contas_fixas}.
     ValueError com a frase para a tela."""
-    if cia is not None:
+    if cia:
         local = "CIA"
-        troca = _cia(cia.get("taxas") or {}, cia.get("maximo"), cia.get("reais_por_aula"), cia.get("minutos_por_aula"))
+        troca = _cia(con, custos or {}, grupo)
         maximo = troca["cia_max"]
     else:
         local = (nome or "").strip() or "Novo local"
         if eh_cia(local):
-            raise ValueError("A CIA já existe: edite no botão Editar CIA, na Grade")
+            raise ValueError("A CIA já existe: escolha a CIA na Grade e clique em Editar local")
         c = _custos(custos or {})
         troca, maximo = {"locais": {local: {"local": local, **c}}}, c["max_pessoas"]
     base = _plano(tipo, ref, local)

@@ -1,4 +1,4 @@
-{# Prévia do preço nos pop-ups "Editar local" / "+ Novo local" / "Editar CIA" (POST /locais/previa, app.js troca o conteúdo de [data-previa]).
+{# Prévia do preço nos pop-ups "Editar local" (todo local, CIA inclusive) e "+ Novo local" (POST /locais/previa, app.js troca o conteúdo de [data-previa]).
    r = locais.previa: agora (precos.decompor + minimo + grupo), hoje (preço e custo com o que está salvo), contas_fixas. Nada é gravado. #}
 {% if erro %}
 <p class="previa-erro">{{ erro }}</p>
