@@ -1,5 +1,6 @@
-{# Pop-up "+ Novo local" (Grade, Agenda e Propostas); incluído no fim de grade.html, agenda.html e propostas.html. Abre por botão com data-abrir="dlg-local"
-   e data-voltar (a tela para onde voltar). Grava os custos do local e copia a grade do local de referência. #}
+{# Pop-up "+ Novo local" e "Editar local" (Grade, Agenda e Propostas); incluído no fim de grade.html, agenda.html e propostas.html. Abre por botão com data-abrir="dlg-local"
+   e data-voltar (a tela para onde voltar). Grava os custos do local e copia a grade do local de referência.
+   [data-previa]: app.js manda os campos para /locais/previa enquanto você digita e mostra como o custo vira preço (nada é gravado). #}
 <dialog id="dlg-local">
   <h2 data-titulo>Novo local</h2>
   <p class="muted" data-so-novo>Academia, condomínio, casa do aluno... Diga quanto custa dar aula lá: o motor monta os preços com isso.</p>
@@ -17,6 +18,7 @@
       <div class="campo" data-so-novo><label>Copiar a grade de</label><select name="referencia">{% for l in locais_ref %}<option {{ 'selected' if l == 'CIA' }}>{{ l }}</option>{% endfor %}</select></div>
     </div>
     <p class="muted" data-so-novo>Todos os horários começam livres. Os preços saem destes custos + o seu salário/hora + o rateio dos custos fixos.</p>
+    <div class="previa" data-previa data-tipo="{{ tipo or '' }}" data-ref="{{ ref_grade or 0 }}" aria-live="polite" hidden></div>
     <div class="linha"><button class="verde" data-botao>Criar local</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
   </form>
 </dialog>

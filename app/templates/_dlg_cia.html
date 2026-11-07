@@ -1,0 +1,22 @@
+{# Pop-up "Editar CIA" da Grade (incluído no fim de grade.html quando o local é a CIA). cia = locais.cia_atual.
+   A CIA cobra pela aula conforme o nº de pessoas; grava nos mesmos parâmetros de Configurações (taxa_cia, cia_deslocamento).
+   [data-previa] com data-cia: app.js manda os campos para /locais/previa e mostra o preço que sai (nada é gravado). #}
+<dialog id="dlg-cia">
+  <h2>Editar CIA</h2>
+  <p class="muted">Quanto a CIA cobra por aula, conforme quantas pessoas treinam juntas. Os preços e a conta da CIA em aberto acompanham.</p>
+  <form method="post" action="/locais/cia">
+    <div class="form-grid">
+      {% for n, v in cia.taxas.items() %}
+      <div class="campo"><label>Aula com {{ n }} pessoa{{ 's' if n > 1 }} (R$, total)</label>
+        <input name="taxa_{{ n }}" inputmode="decimal" value="{{ ('%.2f'|format(v))|replace('.', ',') }}" placeholder="0"></div>
+      {% endfor %}
+      <div class="campo"><label>Máximo de pessoas por horário</label><input name="maximo" inputmode="numeric" value="{{ cia.maximo }}" required></div>
+      <div class="campo"><label>Deslocamento até a CIA (R$ por aula)</label>
+        <input name="reais_por_aula" inputmode="decimal" value="{{ ('%.2f'|format(cia.reais_por_aula))|replace('.', ',') }}" placeholder="0"></div>
+      <div class="campo"><label>Tempo de deslocamento (min por aula)</label>
+        <input name="minutos_por_aula" inputmode="numeric" value="{{ cia.minutos_por_aula|int }}" placeholder="ida e volta; entra no lucro/hora"></div>
+    </div>
+    <div class="previa" data-previa data-cia="1" data-tipo="{{ tipo or '' }}" data-ref="{{ ref_grade or 0 }}" aria-live="polite" hidden></div>
+    <div class="linha"><button class="verde">Salvar e refazer preços</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
+  </form>
+</dialog>

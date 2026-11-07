@@ -11,15 +11,15 @@
   <button type="button" class="claro" id="modo-sel" aria-pressed="false">Selecionar vários</button>
   <button type="button" class="claro" data-abrir="dlg-mult">Multiplicadores</button>
   <button type="button" class="claro" data-abrir="dlg-local" data-voltar="/grade">+ Novo local</button>
-  {% if custos_local %}{% set c = custos_local %}
+  {% if custos_local is not none %}{% set c = custos_local %}
   <button type="button" class="claro" data-abrir="dlg-local" data-acao="/locais/editar" data-titulo="Editar {{ local }}" data-nome="{{ local }}"
     data-taxa_aula="{{ ('%.2f'|format(c.taxa_aula or 0))|replace('.', ',') }}" data-taxa_pessoa_extra="{{ ('%.2f'|format(c.taxa_pessoa_extra or 0))|replace('.', ',') }}" data-max_pessoas="{{ c.max_pessoas or 0 }}"
     data-deslocamento="{{ ('%.2f'|format(c.deslocamento or 0))|replace('.', ',') }}" data-tempo_deslocamento="{{ (c.tempo_deslocamento or 0)|int }}" data-taxa_mensal="{{ ('%.2f'|format(c.taxa_mensal or 0))|replace('.', ',') }}"
     data-aulas_mes="{{ (c.aulas_mes or 0)|int }}">Editar local</button>
-  <form method="post" action="/locais/excluir" style="margin:0" onsubmit="return confirm('Excluir o local {{ local }}? Preços e grade dele somem.')">
+  <form method="post" action="/locais/excluir" style="margin:0" data-confirmar="Excluir o local {{ local }}? Custos e grade dele somem. Aulas e contas antigas ficam.">
     <input type="hidden" name="nome" value="{{ local }}"><button class="claro">Excluir local</button></form>
   {% endif %}
-  {% if local == 'CIA' %}<a class="btn claro" href="/configuracoes#cfg-cia_deslocamento">Editar CIA</a>{% endif %}
+  {% if cia %}<button type="button" class="claro" data-abrir="dlg-cia">Editar CIA</button>{% endif %}
 </div>
 <div class="linha" style="justify-content:space-between">
   <div class="legenda">
@@ -77,7 +77,7 @@
     <tr><td>Custos fixos rateados</td>{% for x in comparar %}<td class="{{ 'atual' if x.local == local }}">{{ x.rateio|moeda }}</td>{% endfor %}</tr>
   </table>
   </div>
-  <p class="muted" style="margin:6px 0 0">Taxa, taxa mensal e deslocamento de um local: <b>Editar local</b>. Os da CIA: <b>Editar CIA</b> (Configurações).
+  <p class="muted" style="margin:6px 0 0">Taxa, taxa mensal e deslocamento de um local: escolha o local e clique em <b>Editar local</b>. Os da CIA: <b>Editar CIA</b>.
     Seu tempo e os custos fixos: Configurações.</p>
 </details>
 {% endif %}
@@ -170,5 +170,6 @@
   });
 })();
 </script>
-{% include "_dlg_local.html" %}{# "+ Novo local" #}
+{% include "_dlg_local.html" %}{# "+ Novo local" e "Editar local" #}
+{% if cia %}{% include "_dlg_cia.html" %}{% endif %}
 {% endblock %}

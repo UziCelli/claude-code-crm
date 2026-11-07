@@ -233,10 +233,11 @@ def iniciar_banco(caminho: Path = None) -> None:
         for chave, antigo, novo in (("renovacao", RENOVACAO_ANTIGA, RENOVACAO_NOVA), ("indicacao", INDICACAO_ANTIGA, INDICACAO_NOVA),
                                     ("cobranca", COBRANCA_ANTIGA, COBRANCA_NOVA)):
             con.execute("UPDATE parametros SET valor_texto=? WHERE grupo='msg_whatsapp' AND chave=? AND valor_texto=?", (novo, chave, antigo))
-        for grupo, itens in LISTAS_INICIAIS.items():
+        removidos = {r[0] for r in con.execute("SELECT chave FROM parametros WHERE grupo='removido_lista'")}
+        for grupo, itens in LISTAS_INICIAIS.items():   # o que você tirou da lista (Excluir local, x em Configurações) não volta
             con.executemany(
                 "INSERT OR IGNORE INTO parametros (grupo, chave, valor_texto, ordem) VALUES (?,?,?,?)",
-                [(grupo, nome, nome, i) for i, nome in enumerate(itens, 1)],
+                [(grupo, nome, nome, i) for i, nome in enumerate(itens, 1) if f"{grupo}|{nome}" not in removidos],
             )
         if con.execute("SELECT COUNT(*) FROM campanha_fases").fetchone()[0] == 0:
             con.executemany(
@@ -307,6 +308,13 @@ def parametros(con: sqlite3.Connection, grupo: str) -> dict:
 
 def lista(con: sqlite3.Connection, nome: str) -> list[str]:
     return list(parametros(con, nome).values())
+
+
+def marcar_removido(con: sqlite3.Connection, grupo: str, nome: str) -> None:
+    """Anota que o item saiu da lista, para iniciar_banco não pôr de volta um item da lista inicial (ex.: SmartFit).
+    Chamar dentro de `with con`. Criar o item de novo funciona igual: a anotação só vale quando ele não está na lista."""
+    con.execute("INSERT OR IGNORE INTO parametros (grupo, chave, valor_texto, ordem) VALUES ('removido_lista', ?, ?, 0)",
+                (f"{grupo}|{nome}", nome))
 
 
 # ---------- backup ----------

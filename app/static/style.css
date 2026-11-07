@@ -264,6 +264,20 @@ dialog[open]::backdrop { opacity: 1; transition-duration: var(--dur-normal); }
 .comparar .atual { background: var(--neutro-f); }
 .comparar tr.total td { font-weight: 700; }
 table.cartoes.comparar tr:not(.cab) td.atual { background: var(--neutro-f); border-radius: 6px; padding-left: 6px; padding-right: 6px; font-weight: 700; }
+/* prévia do preço nos pop-ups do local e da CIA (_previa_local.html) */
+.previa { background: var(--azul-f); border-radius: 10px; padding: 10px 12px; margin: 12px 0; font-size: 13px; }
+.previa-topo { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.previa-topo small { display: block; color: var(--cinza); font-size: 12px; }
+.previa-topo b { font-size: 1.35rem; color: var(--marinho); font-variant-numeric: tabular-nums; }
+.previa-antes { text-align: right; font-variant-numeric: tabular-nums; }
+.previa-antes span { color: var(--aco); font-weight: 700; margin-left: 4px; }
+.previa-sub { margin: 4px 0 8px; }
+.previa-partes { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.previa-partes td { padding: 3px 0; border-bottom: 1px solid var(--borda); }
+.previa-partes td:last-child { text-align: right; white-space: nowrap; padding-left: 8px; }
+.previa-partes tr.total td { font-weight: 700; border-bottom: 0; }
+.previa .nota-grade { margin: 8px 0 0; }
+.previa-erro { color: #8f1d17; margin: 0; font-weight: 600; }
 button.claro.ativo { background: var(--aco); color: #fff; }
 .barra-sel { position: sticky; bottom: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; padding: 10px 14px; background: var(--branco); border: 1px solid var(--borda); border-radius: 10px; opacity: 0; visibility: hidden; transform: translateY(8px); transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out), visibility var(--dur-fast); }
 .barra-sel.on { opacity: 1; visibility: visible; transform: none; }

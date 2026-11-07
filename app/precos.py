@@ -10,8 +10,11 @@ def taxas_cia(con) -> tuple[dict, int]:
     return {int(k): v for k, v in cia.items() if k.isdigit()}, int(cia.get("maximo_pessoas", 3))
 
 
-def carregar_parametros(con) -> dict:
-    """Monta o dicionário de parâmetros a partir da tabela `parametros`."""
+def carregar_parametros(con, troca: dict | None = None) -> dict:
+    """Monta o dicionário de parâmetros a partir da tabela `parametros`.
+    troca: custos simulados, sem gravar (a prévia do pop-up do local e da CIA): {"locais": {nome: custos}, "taxa_cia": {pessoas: R$},
+    "cia_max": n, "cia_desloc": {reais_por_aula, minutos_por_aula}}. Entram antes das horas, do salário/hora e do rateio:
+    a prévia passa pelo motor inteiro, igual ao preço depois de salvar."""
     from . import db, financeiro
     g = lambda grupo: db.parametros(con, grupo)  # noqa: E731
     taxa_cia, cia_max = taxas_cia(con)
@@ -27,6 +30,11 @@ def carregar_parametros(con) -> dict:
         "cia_desloc": g("cia_deslocamento"),   # ida até a CIA: reais_por_aula e minutos_por_aula
         "mo": g("mao_obra"),
     }
+    if troca:
+        p["locais"] = {**p["locais"], **(troca.get("locais") or {})}
+        for k in ("taxa_cia", "cia_max", "cia_desloc"):
+            if troca.get(k) is not None:
+                p[k] = troca[k]
     from .main import horas_trabalho_detalhe
     trabalho = horas_trabalho_detalhe(con, p)   # uma vez só: salário e custos fixos dividem pela mesma base
     auto = valor_hora_automatico(con, p, trabalho)

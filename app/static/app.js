@@ -28,7 +28,32 @@ document.addEventListener("click", function (e) {
   // base do "cobre quantos meses?": a mensalidade cheia (data-mensal); sem ela, o valor do botão
   if (d.id === "dlg-pgto") d.dataset.mensal = b.dataset.mensal || b.dataset.valor || "";
   d.showModal();
+  if (window.previaLocal) window.previaLocal(d, 0);   // pop-up do local / da CIA: mostra o preço com os números de agora
 });
+// Pop-up do local e da CIA: enquanto você digita, /locais/previa mostra como o custo vira preço (nada é gravado).
+// Sem resposta (offline, erro), a caixa some e o Salvar continua funcionando.
+(function () {
+  var espera = null, pedido = 0;
+  window.previaLocal = function (d, ms) {
+    var box = d && d.querySelector("[data-previa]"), frm = box && box.closest("form");
+    if (!box || !frm) return;
+    clearTimeout(espera);
+    espera = setTimeout(function () {
+      var dados = new FormData(frm), meu = ++pedido;
+      dados.set("tipo", box.dataset.tipo || "");
+      dados.set("ref", box.dataset.ref || "0");
+      if (box.dataset.cia) dados.set("cia", "1");
+      fetch("/locais/previa", { method: "POST", body: dados, credentials: "same-origin" })
+        .then(function (r) { if (!r.ok) throw r; return r.text(); })
+        .then(function (html) { if (meu !== pedido) return; box.innerHTML = html; box.hidden = false; })
+        .catch(function () { if (meu === pedido) box.hidden = true; });
+    }, ms === undefined ? 350 : ms);
+  };
+  document.addEventListener("input", function (e) {
+    var d = e.target.closest && e.target.closest("dialog");
+    if (d && d.querySelector("[data-previa]")) window.previaLocal(d);
+  });
+})();
 // Pagamento de aluno: valor digitado a partir de 1,5× a mensalidade sugere "cobre N meses" (a pessoa pode trocar)
 (function () {
   function numero(t) {

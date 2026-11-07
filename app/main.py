@@ -1369,7 +1369,8 @@ def grade(request: Request, tipo: str = "Pacotes", local: str = "CIA", vale: int
             comparar.append({"local": l, **precos.decompor(dict(b), p, l)})
     return render(request, "grade.html", con, celulas=celulas, minima=minima, tipo=tipo, local=local, vale=vale, locais=locais,
                   horas=precos.HORAS_GRADE, clientes=clientes_, base=base, resumo=resumo, refs=refs, ref_atual=base[col] if base else None,
-                  custos_local=None if local == "CIA" else precos.custos_locais(con).get(local), mults=mults, comparar=comparar)
+                  custos_local=None if loc.eh_cia(local) else (p["locais"].get(local) or {}), mults=mults, comparar=comparar,
+                  cia=loc.cia_atual(con) if loc.eh_cia(local) else None, ref_grade=ref)
 
 
 @app.post("/grade/multiplicadores")
@@ -3731,11 +3732,52 @@ def locais_editar(nome: str = Form(...), taxa_aula: str = Form("0"),
     nums = dict(taxa_aula=taxa_aula, taxa_pessoa_extra=taxa_pessoa_extra, max_pessoas=max_pessoas, deslocamento=deslocamento,
                 tempo_deslocamento=tempo_deslocamento, taxa_mensal=taxa_mensal, aulas_mes=aulas_mes)
     try:
-        loc.editar_local(con, nome, **{k: _num_br(v) for k, v in nums.items()})
+        r = loc.editar_local(con, nome, **{k: _num_br(v) for k, v in nums.items()})
     except ValueError as e:
-        msg = str(e) if "could not convert" not in str(e) else "Confira os números (use só algarismos e vírgula)"
-        return voltar(url, erro=msg)
-    return voltar(url, msg=f"Local {nome.strip()} atualizado: os preços já usam os custos novos.")
+        return voltar(url, erro=_erro_numero(e))
+    grade = f" {r['horarios']} horários livres na grade (copiados da CIA)." if r["horarios"] else ""
+    return voltar(url, msg=f"Local {nome.strip()} atualizado: os preços já usam os custos novos.{grade}")
+
+
+def _erro_numero(e: ValueError) -> str:
+    return str(e) if "could not convert" not in str(e) else "Confira os números (use só algarismos e vírgula)"
+
+
+def _taxas_cia_form(form) -> dict:
+    """{pessoas: R$} dos campos taxa_1, taxa_2... do pop-up da CIA (vazio = 0)."""
+    return {int(k[5:]): _num_br(v) for k, v in form.items() if k.startswith("taxa_") and k[5:].isdigit()}
+
+
+@app.post("/locais/cia")
+async def locais_cia(request: Request, con=Depends(get_db)):
+    """Pop-up "Editar CIA" da Grade: taxa da aula por nº de pessoas, máximo de pessoas e a ida até a CIA.
+    Grava nos mesmos parâmetros de Configurações; preços e a conta da CIA em aberto acompanham."""
+    form = await request.form()
+    try:
+        loc.editar_cia(con, _taxas_cia_form(form), _num_br(form.get("maximo")),
+                       _num_br(form.get("reais_por_aula")), _num_br(form.get("minutos_por_aula")))
+    except ValueError as e:
+        return voltar("/grade?local=CIA", erro=_erro_numero(e))
+    return voltar("/grade?local=CIA", msg="CIA atualizada: os preços já usam as taxas novas.")
+
+
+@app.post("/locais/previa", response_class=HTMLResponse)
+async def locais_previa(request: Request, con=Depends(get_db)):
+    """Prévia do pop-up do local e da CIA: as partes do preço de 1 aula com os números digitados, sem gravar nada."""
+    form = await request.form()
+    tipo = "Mensalidades" if form.get("tipo") == "Mensalidades" else "Pacotes"
+    try:
+        ref = max(0, int(_num_br(form.get("ref"))))
+        if form.get("cia"):
+            cia = {"taxas": _taxas_cia_form(form), "maximo": _num_br(form.get("maximo")),
+                   "reais_por_aula": _num_br(form.get("reais_por_aula")), "minutos_por_aula": _num_br(form.get("minutos_por_aula"))}
+            r = await run_in_threadpool(loc.previa, con, cia=cia, tipo=tipo, ref=ref)
+        else:
+            custos = {k: _num_br(form.get(k)) for k in loc.CAMPOS}
+            r = await run_in_threadpool(loc.previa, con, form.get("nome") or "", custos, tipo=tipo, ref=ref)
+    except ValueError as e:
+        return templates.TemplateResponse(request, "_previa_local.html", {"r": None, "erro": _erro_numero(e)})
+    return templates.TemplateResponse(request, "_previa_local.html", {"r": r, "erro": None})
 
 
 @app.post("/locais/excluir")
@@ -3750,7 +3792,10 @@ def locais_excluir(nome: str = Form(...), con=Depends(get_db)):
 @app.post("/configuracoes/lista/{pid}/remover")
 def configuracoes_lista_remover(pid: int, con=Depends(get_db)):
     with con:
+        item = con.execute("SELECT grupo, chave FROM parametros WHERE id=? AND grupo LIKE 'lista_%'", (pid,)).fetchone()
         con.execute("DELETE FROM parametros WHERE id=? AND grupo LIKE 'lista_%'", (pid,))
+        if item:   # item da lista inicial não volta quando o app abre de novo
+            db.marcar_removido(con, item["grupo"], item["chave"])
     return voltar("/configuracoes", msg="Item removido da lista.")
 
 
