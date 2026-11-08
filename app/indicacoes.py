@@ -7,12 +7,12 @@ O presente é um cliente_eventos tipo 'brinde' do indicador, com indicado_id = o
 """
 from . import financeiro
 
-SUGESTOES = ["Avaliação física", "Camiseta", "Garrafa", "Treino extra para casa"]
+# as sugestões do presente vêm de vantagens.sugestoes_presente: o leque que cabe no local de quem indicou
 CANAL = "Indicação"   # canal de origem de quem veio por indicação (lista_canais)
 
 # 1º pagamento de verdade do indicado (data em que caiu) e o presente já dado (o mais antigo ativo), numa consulta só
 _BASE = f"""
-SELECT r.id AS indicador_id, r.nome AS indicador, i.id AS indicado_id, i.nome AS indicado,
+SELECT r.id AS indicador_id, r.nome AS indicador, r.local AS indicador_local, i.id AS indicado_id, i.nome AS indicado,
        (SELECT MIN(l.pago_em) FROM lancamentos l WHERE l.cliente_id = i.id AND l.escopo='PJ' AND l.tipo='entrada'
            AND l.pago_em IS NOT NULL AND l.excluido_em IS NULL AND l.categoria != '{financeiro.EMPRESTIMO}') AS pago_em,
        (SELECT MIN(e.id) FROM cliente_eventos e WHERE e.tipo='brinde' AND e.indicado_id = i.id AND e.excluido_em IS NULL) AS brinde_id,
