@@ -1,5 +1,6 @@
 {# Diálogo único do presente da indicação (ficha e botão do alerta); vem do base.html, em toda tela. Abre por botão com data-abrir="dlg-presente",
-   data-acao (rota /clientes/{id}/indicacao/{id}/presente), data-titulo (quem ganha) e data-voltar (para onde ir depois). É presente, nunca desconto. #}
+   data-acao (rota /clientes/{id}/indicacao/{id}/presente), data-titulo (quem ganha) e data-voltar (para onde ir depois). É presente, nunca desconto.
+   data-sugestoes ("A|B|C", vantagens.sugestoes_presente): as sugestões que cabem no local de quem indicou; app.js troca o datalist. #}
 <dialog id="dlg-presente">
   <h2>Registrar presente</h2>
   <p class="muted" data-titulo></p>

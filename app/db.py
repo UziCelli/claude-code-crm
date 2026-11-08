@@ -241,6 +241,7 @@ def iniciar_banco(caminho: Path = None) -> None:
                 "INSERT OR IGNORE INTO parametros (grupo, chave, valor_texto, ordem) VALUES (?,?,?,?)",
                 [(grupo, nome, nome, i) for i, nome in enumerate(itens, 1) if f"{grupo}|{nome}" not in removidos],
             )
+        _semear_vantagens(con, removidos)
         if con.execute("SELECT COUNT(*) FROM campanha_fases").fetchone()[0] == 0:
             con.executemany(
                 "INSERT INTO campanha_fases (nome, inicio, fim, tipo, ordem) VALUES (?,?,?,?,?)",
@@ -286,6 +287,22 @@ def iniciar_banco(caminho: Path = None) -> None:
         con.execute("""UPDATE rotina_tarefas SET texto = 'atualizar os saldos das contas'
                        WHERE chave = 'saldos' AND texto = 'atualizar os saldos das contas e olhar o Saldo livre'""")
     con.close()
+
+
+def _semear_vantagens(con, removidos: set) -> None:
+    """Vantagens da indicação (app/vantagens.py): semeia a lista (a que você tirou não volta) e, uma vez só, traz o texto antigo
+    de 'Dados das mensagens > Vantagem da indicação' se você o tinha mudado, marcado como 'gasta uma aula' (o lado seguro)."""
+    from . import vantagens
+    g = vantagens.GRUPO
+    con.executemany("INSERT OR IGNORE INTO parametros (grupo, chave, valor, valor_texto, ordem) VALUES (?,?,?,?,?)",
+                    [(g, t, aula, t, i) for i, (t, aula) in enumerate(vantagens.INICIAIS, 1) if f"{g}|{t}" not in removidos])
+    if con.execute("SELECT 1 FROM parametros WHERE grupo='migracao' AND chave='vantagem_lista'").fetchone():
+        return
+    antiga = con.execute("SELECT valor_texto FROM parametros WHERE grupo='msg_dados' AND chave='vantagem'").fetchone()
+    antiga = " ".join(str(antiga[0] or "").split()) if antiga else ""
+    if antiga and antiga != vantagens.INICIAIS[0][0]:
+        con.execute("INSERT OR IGNORE INTO parametros (grupo, chave, valor, valor_texto, ordem) VALUES (?,?,1,?,0)", (g, antiga, antiga))
+    con.execute("INSERT OR IGNORE INTO parametros (grupo, chave, valor, ordem) VALUES ('migracao', 'vantagem_lista', 1, 1)")
 
 
 def _garantir_coluna(con, tabela: str, coluna: str, tipo: str) -> None:

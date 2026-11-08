@@ -26,6 +26,7 @@ from . import cartao, pix   # código Pix copia-e-cola, QR e o cartão-imagem da
 from . import acesso, assistente, atualizar, contas_auto, db, exportar, financeiro, importar, precos, sugestoes, vigia
 from . import locais as loc   # "+ Novo local": custos do local, preços e grade ('locais' é nome de variável nas telas)
 from . import indicacoes   # quem indicou quem e o presente da indicação (brinde, nunca desconto)
+from . import vantagens   # o leque de vantagens da indicação que cabe no local de quem indicou
 from . import ofertas   # ofertas de upsell: proposta transparente, resposta do aluno e fim do valor da oferta
 from . import alunos as alu   # estado de cada aluno (um algoritmo só); 'alunos' é nome de variável em várias rotas
 from .vigencia import fixo_vale, trocada_no_dia   # a linha do horário fixo valia naquele dia?
@@ -162,9 +163,13 @@ def texto_cobranca(cob) -> dict:
 
 
 def dados_mensagem(con) -> dict:
-    """{pix, pix_nome, pix_cidade, pix_banco, link_avaliacao, vantagem} de Configurações > Dados das mensagens (vazio se não cadastrado)."""
+    """{pix, pix_nome, pix_cidade, pix_banco, link_avaliacao, vantagem} de Configurações > Dados das mensagens (vazio se não cadastrado).
+    vantagem = o leque seguro (sem o que gasta aula), para quando o local do aluno não é conhecido; quem tem o aluno usa
+    vantagens.do_aluno(con, c['local'])."""
     d = db.parametros(con, "msg_dados")
-    return {k: str(d.get(k) or "").strip() for k in ("pix", "pix_nome", "pix_cidade", "pix_banco", "link_avaliacao", "vantagem")}
+    out = {k: str(d.get(k) or "").strip() for k in ("pix", "pix_nome", "pix_cidade", "pix_banco", "link_avaliacao")}
+    out["vantagem"] = vantagens.do_aluno(con, None)
+    return out
 
 
 templates.env.filters["preencher"] = preencher_filtro
@@ -389,7 +394,8 @@ def alertas(con):
         add("azul", f"Dar o presente a {p['indicador']} (indicou {p['indicado']})", f"/clientes/{p['indicador_id']}",
             acoes=[{"rotulo": "Registrar presente", "dialogo": "dlg-presente", "classe": "verde",
                     "dados": {"acao": f"/clientes/{p['indicador_id']}/indicacao/{p['indicado_id']}/presente",
-                              "titulo": f"Presente para {p['indicador']}, que indicou {p['indicado']}"}}])
+                              "titulo": f"Presente para {p['indicador']}, que indicou {p['indicado']}",
+                              "sugestoes": vantagens.sugestoes_presente(con, p["indicador_local"])}}])
     for d in ofertas.descontos_acabando(con, hoje):   # o valor da oferta acaba: a mensalidade volta ao normal com um clique
         quando = data_br(d["ate_desconto"])[:5]
         add("azul", f"O desconto de {d['nome']} {'acaba' if d['ate_desconto'] >= h else 'acabou'} em {quando}: volta para {moeda(d['valor_normal'])}",
@@ -695,6 +701,7 @@ def clientes(request: Request, status: str = "ativo", busca: str = "", ids: str 
                 minimos[c["id"]] = est["preco_minimo"]
         rows = [c for c in rows if c["id"] in minimos]
     ren = financeiro.renovacoes(con)
+    leque = vantagens.lista(con) if motivo == "indicacao" else None
     itens = []
     for c in rows:
         alerta = None
@@ -704,7 +711,8 @@ def clientes(request: Request, status: str = "ativo", busca: str = "", ids: str 
             alerta = "vermelho" if dias < 0 else ("amarelo" if dias <= 7 else None)
         faltas = [t for t, falta in (("falta telefone", not c["telefone"]), ("falta data de renovação", not c["data_renovacao"])) if falta]
         itens.append({**dict(c), "data_renovacao": renova, "alerta": alerta, "faltas": faltas, "estado": estados.get(c["id"]),
-                      "minimo": minimos.get(c["id"])})
+                      "minimo": minimos.get(c["id"]),
+                      "vantagem": vantagens.texto(vantagens.do_local(con, c["local"], leque)) if leque is not None else None})
     totais = {r[0]: r[1] for r in con.execute("SELECT status, COUNT(*) FROM clientes WHERE excluido_em IS NULL GROUP BY status")}
     motivo_ok = motivo if motivo in MOTIVOS_LISTA else ""
     return render(request, "clientes.html", con, clientes=itens, status=status, busca=busca, totais=totais, filtrado=bool(filtro),
@@ -908,6 +916,7 @@ def wa_texto(con, c, modelo) -> tuple[str | None, str | None]:
             return None, "Esse aluno não tem cobrança em aberto."
         return ca["codigo"] or ca["texto"], None
     extra = dados_mensagem(con)
+    extra["vantagem"] = vantagens.do_aluno(con, c["local"])   # o leque que cabe no local de quem indica
     if modelo == "renovacao":
         extra["valor"] = ctx["valor"]
     return preencher(modelos[modelo], c["nome"], data_br(d) if d else "", extra), None
@@ -958,6 +967,7 @@ def cliente_ficha(request: Request, cid: int, con=Depends(get_db)):
                   estado=alu.estado_aluno(con, cid), menu_wa=wa_menu(con, c, renovacao, cob, eventos),
                   indicadores=indicacoes.alunos_para_escolher(con, cid),
                   indicou=indicacoes.do_aluno(con, cid), indicado_por=indicacoes.quem_indicou(con, cid),
+                  sugestoes_presente=vantagens.sugestoes_presente(con, c["local"]),
                   ofertas_ficha=ofertas.situacao_aluno(con, cid) if c["status"] == "ativo" else [])
 
 
@@ -3609,7 +3619,11 @@ def configuracoes(request: Request, con=Depends(get_db)):
     ultima = con.execute("SELECT * FROM importacoes ORDER BY id DESC LIMIT 1").fetchone()
     msgs = con.execute("SELECT id, chave, valor_texto FROM parametros WHERE grupo='msg_whatsapp' ORDER BY ordem").fetchall()
     dados = con.execute("SELECT id, chave, valor_texto FROM parametros WHERE grupo='msg_dados' ORDER BY ordem").fetchall()
+    leque = vantagens.lista(con)
+    previa = [{"local": nome, "cobra": vantagens.cobra_por_aula(con, nome), "texto": vantagens.texto(vantagens.do_local(con, nome, leque))}
+              for nome in loc.nomes(con)]
     return render(request, "configuracoes.html", con, grupos=grupos, msgs=msgs, msgs_dados=dados, listas_cfg=listas_, ultima=ultima,
+                  vantagens_cfg=leque, vantagens_previa=previa, vantagens_max=vantagens.MAX_LEQUE,
                   planilha=str(db.PLANILHA), planilha_existe=db.PLANILHA.exists(), assistente=assistente.info(),
                   salario_hora=precos.carregar_parametros(con)["salario_hora"],
                   das=financeiro.das_competencia(con, mes_atual()), das_txt=financeiro.texto_pct(financeiro.pct_das(con, dt.date.today().isoformat())))
@@ -3690,6 +3704,39 @@ def configuracoes_assistente(chave: str = Form(""), con=Depends(get_db)):
 def configuracoes_assistente_remover(con=Depends(get_db)):
     assistente.remover_chave(con)
     return voltar("/configuracoes", msg="Chave do Assistente removida.")
+
+
+@app.post("/configuracoes/vantagem")
+def configuracoes_vantagem(texto: str = Form(""), gasta_aula: str = Form(""), con=Depends(get_db)):
+    texto = " ".join(texto.split())
+    if not texto:
+        return voltar("/configuracoes#cfg-vantagens", erro="Escreva a vantagem.")
+    g = vantagens.GRUPO
+    with con:
+        cur = con.execute("""INSERT OR IGNORE INTO parametros (grupo, chave, valor, valor_texto, ordem)
+                             VALUES (?,?,?,?, (SELECT COALESCE(MAX(ordem),0)+1 FROM parametros WHERE grupo=?))""",
+                          (g, texto, 1 if gasta_aula else 0, texto, g))
+    if not cur.rowcount:
+        return voltar("/configuracoes#cfg-vantagens", erro=f"'{texto}' já está na lista.")
+    return voltar("/configuracoes#cfg-vantagens", msg=f"'{texto}' adicionada.")
+
+
+@app.post("/configuracoes/vantagem/{pid}/marcar")
+def configuracoes_vantagem_marcar(pid: int, con=Depends(get_db)):
+    """Liga/desliga 'gasta uma aula no local'."""
+    with con:
+        con.execute("UPDATE parametros SET valor = CASE WHEN valor THEN 0 ELSE 1 END WHERE id=? AND grupo=?", (pid, vantagens.GRUPO))
+    return voltar("/configuracoes#cfg-vantagens", msg="Vantagem atualizada.")
+
+
+@app.post("/configuracoes/vantagem/{pid}/remover")
+def configuracoes_vantagem_remover(pid: int, con=Depends(get_db)):
+    with con:
+        item = con.execute("SELECT chave FROM parametros WHERE id=? AND grupo=?", (pid, vantagens.GRUPO)).fetchone()
+        con.execute("DELETE FROM parametros WHERE id=? AND grupo=?", (pid, vantagens.GRUPO))
+        if item:   # a vantagem inicial não volta quando o app abre de novo
+            db.marcar_removido(con, vantagens.GRUPO, item["chave"])
+    return voltar("/configuracoes#cfg-vantagens", msg="Vantagem removida.")
 
 
 @app.post("/configuracoes/lista")

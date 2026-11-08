@@ -47,7 +47,7 @@
     {% elif motivo in ('indicacao', 'dupla', 'reativar', 'reajuste') %}
     {% if motivo == 'reajuste' %}<div style="margin-top:6px">Hoje <strong>{{ c.valor|moeda }}</strong> · mínimo <strong>{{ c.minimo|moeda }}</strong></div>{% endif %}
     <div class="linha mt" style="margin-top:10px">
-      <a class="btn pequeno" href="{{ wa(c.telefone, (modelos[modelo_lista]|preencher(c.nome)) if modelo_lista else '') }}" target="_blank" rel="noopener">WhatsApp</a>
+      <a class="btn pequeno" href="{{ wa(c.telefone, (modelos[modelo_lista]|preencher(c.nome, '', {'vantagem': c.vantagem} if c.vantagem is not none else none)) if modelo_lista else '') }}" target="_blank" rel="noopener">WhatsApp</a>
       <a class="btn claro pequeno" href="/clientes/{{ c.id }}">Abrir ficha</a>
     </div>
     {% elif motivo == 'upsell' %}

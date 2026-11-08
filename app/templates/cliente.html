@@ -100,7 +100,7 @@
       {% if i.status == 'pendente' %}<strong>presente pendente</strong>
       {% elif i.status == 'entregue' %}presente entregue em {{ i.data|data }}{% if i.o_que %} ({{ i.o_que }}){% endif %}
       {% else %}<span class="muted">aguardando o 1º pagamento</span>{% endif %}</span>
-    {% if i.status == 'pendente' %}<button type="button" class="verde pequeno" data-abrir="dlg-presente" data-acao="/clientes/{{ c.id }}/indicacao/{{ i.indicado_id }}/presente" data-titulo="Presente para {{ c.nome }}, que indicou {{ i.indicado }}" data-voltar="/clientes/{{ c.id }}">Registrar presente</button>{% endif %}
+    {% if i.status == 'pendente' %}<button type="button" class="verde pequeno" data-abrir="dlg-presente" data-acao="/clientes/{{ c.id }}/indicacao/{{ i.indicado_id }}/presente" data-titulo="Presente para {{ c.nome }}, que indicou {{ i.indicado }}" data-sugestoes="{{ sugestoes_presente }}" data-voltar="/clientes/{{ c.id }}">Registrar presente</button>{% endif %}
   </div>
   {% endfor %}
 </div>

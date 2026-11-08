@@ -152,7 +152,9 @@ def test_wa_registra_o_envio_e_vai_para_o_wa_me(http, con_temp):
     r = http.post(f"/clientes/{cid}/wa/indicacao", follow_redirects=False)
     host, texto = enviado(r)
     assert host == "https://wa.me" and r.headers["location"].startswith("https://wa.me/5511999990000?text=")
-    assert texto.startswith("Oi, Ana!") and "{" not in texto and "uma avaliação física grátis" in texto
+    # Ana sem local: o lado seguro (nada que gaste aula), o leque das outras vantagens
+    assert texto.startswith("Oi, Ana!") and "{" not in texto and "à sua escolha: uma camiseta, uma garrafa" in texto
+    assert "avaliação física" not in texto
     [e] = con_temp.execute("SELECT * FROM cliente_eventos WHERE cliente_id=? AND tipo='mensagem'", (cid,)).fetchall()
     assert e["descricao"] == "WhatsApp: Indicação" and e["data"] == dia(0)
     assert "WhatsApp: Indicação" in http.get(f"/clientes/{cid}").text   # o histórico mostra, sem erro de tipo
@@ -313,15 +315,17 @@ def test_ancora_do_alerta_existe_em_configuracoes(http):
 # ---------- Configurações ----------
 def test_configuracoes_salva_os_dados_das_mensagens(http, con_temp):
     html = http.get("/configuracoes").text
-    for rotulo in ("Chave PIX", "Link para avaliação", "Vantagem da indicação"):
+    for rotulo in ("Chave PIX", "Link para avaliação", "Vantagens da indicação"):
         assert rotulo in html
     for v in ("{nome}", "{data}", "{valor}", "{pix}", "{link_avaliacao}", "{vantagem}"):
         assert v in html
     ids = {r["chave"]: r["id"] for r in con_temp.execute("SELECT id, chave FROM parametros WHERE grupo='msg_dados'")}
-    r = http.post("/configuracoes", data={f"t_{ids['pix']}": f" {PIX} ", f"t_{ids['link_avaliacao']}": "https://g.page/r/abc",
-                                          f"t_{ids['vantagem']}": "uma aula grátis"}, follow_redirects=False)
+    assert f'name="t_{ids["vantagem"]}"' not in html   # o texto fixo saiu: a vantagem muda pelo local (app/vantagens.py)
+    r = http.post("/configuracoes", data={f"t_{ids['pix']}": f" {PIX} ", f"t_{ids['link_avaliacao']}": "https://g.page/r/abc"},
+                  follow_redirects=False)
     assert r.status_code == 303
-    assert main.dados_mensagem(con_temp) == {"pix": PIX, "link_avaliacao": "https://g.page/r/abc", "vantagem": "uma aula grátis",
+    assert main.dados_mensagem(con_temp) == {"pix": PIX, "link_avaliacao": "https://g.page/r/abc",
+                                             "vantagem": "à sua escolha: uma camiseta, uma garrafa ou um treino extra para fazer em casa",
                                              "pix_nome": "", "pix_cidade": "", "pix_banco": ""}
 
 

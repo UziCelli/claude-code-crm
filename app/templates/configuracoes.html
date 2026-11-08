@@ -73,7 +73,8 @@
     {% if not (dados_msg.pix and dados_msg.pix_nome and dados_msg.pix_cidade) %}
     <div class="aviso mt">Preencha a chave, o favorecido e a cidade do PIX para o cartão de cobrança sair com o QR Code (com o valor).</div>
     {% endif %}
-    {% for m in msgs_dados %}
+    <div class="muted mt">A vantagem da indicação ({vantagem}) muda conforme o local do aluno: veja <a href="#cfg-vantagens">Vantagens da indicação</a>.</div>
+    {% for m in msgs_dados if m.chave != 'vantagem' %}
     <div class="campo"><label for="t_{{ m.id }}">{{ rotulos[m.chave][0] if m.chave in rotulos else m.chave }}</label>
       <input id="t_{{ m.id }}" name="t_{{ m.id }}" value="{{ m.valor_texto or '' }}" placeholder="{{ rotulos[m.chave][1] if m.chave in rotulos else '' }}"></div>
     {% endfor %}
@@ -89,6 +90,34 @@
   </div>
   <div class="mt"><button type="submit">Salvar parâmetros</button></div>
 </form>
+
+<div class="card mt" id="cfg-vantagens">
+  <h2>Vantagens da indicação</h2>
+  <div class="muted">Quem indica ganha uma destas. O CRM olha o local de quem indica: num local que cobra por aula (a CIA), as que
+    <strong>gastam uma aula</strong> somem da mensagem. A mensagem mostra até {{ vantagens_max }}, na ordem da lista.</div>
+  {% for v in vantagens_cfg %}
+  <div class="linha" style="justify-content:space-between;padding:4px 0;border-top:1px solid var(--borda)">
+    <span style="flex:1">{{ v.texto }}</span>
+    <form method="post" action="/configuracoes/vantagem/{{ v.id }}/marcar" class="inline">
+      <button class="claro pequeno{{ ' ativo' if v.gasta_aula }}" title="Clique para trocar">{{ 'Gasta uma aula' if v.gasta_aula else 'Não gasta aula' }}</button>
+    </form>
+    <form method="post" action="/configuracoes/vantagem/{{ v.id }}/remover" class="inline" data-confirmar="Remover '{{ v.texto }}' das vantagens?"><button class="claro pequeno">x</button></form>
+  </div>
+  {% else %}
+  <div class="aviso mt">Nenhuma vantagem cadastrada: a mensagem de indicação sai sem a vantagem.</div>
+  {% endfor %}
+  <form method="post" action="/configuracoes/vantagem" class="linha mt" style="flex-wrap:wrap">
+    <input name="texto" placeholder="ex.: uma camiseta" required style="flex:1 1 220px">
+    <label class="linha" style="margin:0;gap:4px"><input type="checkbox" name="gasta_aula" value="1" style="width:auto"> gasta uma aula no local</label>
+    <button class="pequeno">Adicionar</button>
+  </form>
+  <div class="mt">
+    <div class="muted">Como a mensagem sai em cada local:</div>
+    {% for p in vantagens_previa %}
+    <div style="margin-top:6px"><strong>{{ p.local }}</strong> <span class="muted">({{ 'cobra por aula' if p.cobra else 'não cobra por aula' }})</span>: {{ p.texto or '—' }}</div>
+    {% endfor %}
+  </div>
+</div>
 
 <h2 class="mt">Listas</h2>
 <div class="grid c4">

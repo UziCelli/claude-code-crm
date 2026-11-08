@@ -37,6 +37,14 @@ document.addEventListener("click", function (e) {
   }
   // base do "cobre quantos meses?": a mensalidade cheia (data-mensal); sem ela, o valor do botão
   if (d.id === "dlg-pgto") d.dataset.mensal = b.dataset.mensal || b.dataset.valor || "";
+  // presente da indicação: as sugestões que cabem no local de quem indicou (sem botão com data-sugestoes, fica a lista do HTML)
+  if (d.id === "dlg-presente" && b.dataset.sugestoes) {
+    var dl = d.querySelector("datalist");
+    if (dl) {
+      dl.textContent = "";
+      b.dataset.sugestoes.split("|").forEach(function (t) { var o = document.createElement("option"); o.value = t; dl.appendChild(o); });
+    }
+  }
   d.showModal();
   if (window.previaLocal) window.previaLocal(d, 0);   // pop-up do local (CIA inclusive): mostra o preço com os números de agora
 });
