@@ -207,7 +207,7 @@ def test_dialogo_tem_o_campo_e_o_post_grava_meses(cliente_http):
     assert "cobre 6 meses" in ficha and 'action="/financeiro/lancamento/1/meses"' in ficha
     assert "erro=" in unquote(post(meses="30").headers["location"]) and con.execute("SELECT COUNT(*) FROM lancamentos").fetchone()[0] == 1
     post(meses="1")
-    post(meses="")
+    post(meses="", valor="2161,00")   # outro valor: o mesmo envio igualzinho em seguida seria recusado (clique duplo, D21)
     assert [x[0] for x in con.execute("SELECT meses FROM lancamentos ORDER BY id")] == [6, None, None]
     # editar pelo livro-caixa (sem o campo) não apaga o que o aluno disse
     http.post("/financeiro/lancamento", data={"id": 1, "escopo": "PJ", "tipo": "entrada", "data": hoje, "pago_em": hoje, "valor": "2160,00",
