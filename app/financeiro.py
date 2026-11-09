@@ -843,6 +843,18 @@ def recorrencias_retirada(con: sqlite3.Connection) -> list:
                        (RETIRADA,)).fetchall()
 
 
+def marketing_divergencia(con: sqlite3.Connection, mes: str) -> dict | None:
+    """Marketing do mês nas duas bases: Campanhas (gastos_marketing) e Financeiro (saída PJ 'Marketing/Divulgação').
+    Devolve os dois totais se não batem (mais de meio centavo de diferença); senão None. O CAC segue usando Campanhas."""
+    campanhas = con.execute("""SELECT COALESCE(SUM(COALESCE(mensalidade,0)+COALESCE(anuncios,0)+COALESCE(comissoes,0)+COALESCE(outros,0)), 0)
+                               FROM gastos_marketing WHERE excluido_em IS NULL AND mes=?""", (mes,)).fetchone()[0]
+    fin = con.execute("""SELECT COALESCE(SUM(valor), 0) FROM lancamentos WHERE escopo='PJ' AND tipo='saida' AND categoria='Marketing/Divulgação'
+                         AND excluido_em IS NULL AND substr(data,1,7)=?""", (mes,)).fetchone()[0]
+    if abs(campanhas - fin) > 0.005:
+        return {"campanhas": campanhas, "financeiro": fin}
+    return None
+
+
 def resumo_mes(con: sqlite3.Connection, mes: str, escopo: str = "PJ") -> dict:
     """Números do mês, só com lançamentos pagos. Fixo = saída vinda de recorrência fixa; o resto das saídas é variável."""
     soma = {}   # (tipo, fixo) -> total
@@ -868,7 +880,7 @@ def resumo_mes(con: sqlite3.Connection, mes: str, escopo: str = "PJ") -> dict:
     pf = {}
     for tipo, total in con.execute(
         """SELECT tipo, SUM(valor) FROM lancamentos WHERE escopo='PF' AND excluido_em IS NULL AND pago_em IS NOT NULL
-           AND substr(data,1,7)=? GROUP BY tipo""", (mes,)):
+           AND substr(pago_em,1,7)=? GROUP BY tipo""", (mes,)):   # PF conta pelo dia em que pagou/recebeu, igual ao salario_mes
         pf[tipo] = total
     entradas, saidas = pf.get("entrada", 0), pf.get("saida", 0)
     return {

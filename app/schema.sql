@@ -220,7 +220,8 @@ CREATE TABLE IF NOT EXISTS metricas_mensais (
     vendas_abaixo_10 INTEGER,
     nivel INTEGER,
     fechado_em TEXT DEFAULT (datetime('now','localtime')),
-    lucro_hora_trabalho INTEGER DEFAULT 0   -- 1 = lucro_hora por hora de TRABALHO; 0 = gravado antes, por hora de aula
+    lucro_hora_trabalho INTEGER DEFAULT 0,  -- 1 = lucro_hora por hora de TRABALHO; 0 = gravado antes, por hora de aula
+    foto INTEGER                            -- 1 = foto automática do mês em andamento; NULL = fechado à mão ou linha antiga
 );
 
 CREATE TABLE IF NOT EXISTS rotina_tarefas (   -- itens do checklist da semana (o usuário inclui e exclui)

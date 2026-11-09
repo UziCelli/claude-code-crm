@@ -571,14 +571,30 @@ def metricas_por_canal(con, mes):
 def gravar_mes(con, m):
     with con:
         con.execute("""INSERT INTO metricas_mensais (mes, clientes_ativos, horas_ocupadas, lucro_hora, pct_receita_grupos,
-                       faturamento_recorrente, clientes_perdidos, vendas_abaixo_10, nivel, lucro_hora_trabalho) VALUES
+                       faturamento_recorrente, clientes_perdidos, vendas_abaixo_10, nivel, lucro_hora_trabalho, foto) VALUES
                        (:mes,:clientes_ativos,:horas_ocupadas,:lucro_hora,:pct_receita_grupos,:faturamento_recorrente,
-                       :clientes_perdidos,:vendas_abaixo_10,:nivel,1) ON CONFLICT(mes) DO UPDATE SET
+                       :clientes_perdidos,:vendas_abaixo_10,:nivel,1,NULL) ON CONFLICT(mes) DO UPDATE SET
                        clientes_ativos=excluded.clientes_ativos, horas_ocupadas=excluded.horas_ocupadas,
                        lucro_hora=excluded.lucro_hora, pct_receita_grupos=excluded.pct_receita_grupos,
                        faturamento_recorrente=excluded.faturamento_recorrente, clientes_perdidos=excluded.clientes_perdidos,
                        vendas_abaixo_10=excluded.vendas_abaixo_10, nivel=excluded.nivel, fechado_em=datetime('now','localtime'),
-                       lucro_hora_trabalho=1""", m)   # lucro_hora_trabalho: o lucro/h gravado já é por hora de trabalho
+                       lucro_hora_trabalho=1, foto=NULL""", m)   # lucro_hora_trabalho: o lucro/h gravado já é por hora de trabalho
+
+
+def _foto_do_mes(con, m):
+    """Foto automática do mês em andamento (foto=1), refeita a cada visita ao Painel. Linha fechada à mão ou antiga (foto NULL) não é tocada."""
+    atual = con.execute("SELECT foto FROM metricas_mensais WHERE mes=?", (m["mes"],)).fetchone()
+    with con:
+        if atual is None:
+            con.execute("""INSERT INTO metricas_mensais (mes, clientes_ativos, horas_ocupadas, lucro_hora, pct_receita_grupos,
+                           faturamento_recorrente, clientes_perdidos, vendas_abaixo_10, nivel, lucro_hora_trabalho, foto) VALUES
+                           (:mes,:clientes_ativos,:horas_ocupadas,:lucro_hora,:pct_receita_grupos,:faturamento_recorrente,
+                           :clientes_perdidos,:vendas_abaixo_10,:nivel,1,1)""", m)
+        elif atual["foto"] == 1:
+            con.execute("""UPDATE metricas_mensais SET clientes_ativos=:clientes_ativos, horas_ocupadas=:horas_ocupadas,
+                           lucro_hora=:lucro_hora, pct_receita_grupos=:pct_receita_grupos, faturamento_recorrente=:faturamento_recorrente,
+                           clientes_perdidos=:clientes_perdidos, vendas_abaixo_10=:vendas_abaixo_10, nivel=:nivel,
+                           lucro_hora_trabalho=1, fechado_em=datetime('now','localtime') WHERE mes=:mes AND foto=1""", m)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -587,9 +603,7 @@ def painel(request: Request, con=Depends(get_db)):
     m = calcular_metricas(con)
     metas = db.parametros(con, "metas")
     ant_mes = (dt.date.fromisoformat(m["mes"] + "-01") - dt.timedelta(days=1)).strftime("%Y-%m")
-    if not con.execute("SELECT 1 FROM metricas_mensais WHERE mes=?", (ant_mes,)).fetchone():
-        # ponytail: foto do primeiro acesso no mês; use Fechar o mês para histórico exato
-        gravar_mes(con, calcular_metricas(con, ant_mes))
+    _foto_do_mes(con, m)
     ant = con.execute("SELECT * FROM metricas_mensais WHERE mes=?", (ant_mes,)).fetchone()
     historico = [dict(r) for r in con.execute("SELECT * FROM metricas_mensais ORDER BY mes")]
     historico = [h for h in historico if h["mes"] != m["mes"]] + [m]
@@ -2776,7 +2790,7 @@ def campanhas(request: Request, mes: str = "", con=Depends(get_db)):
                       "vencida": bool(o["valida_ate"] and o["valida_ate"] < hoje), "para_enviar": pend.get(o["id"], [])}
                      for o in ofertas.todas(con) for res in [ofertas.resultado(con, o["id"])]]
     return render(request, "campanhas.html", con, fases=fases, checkpoints=checkpoints, gastos=gastos, mes=mes, meses=meses,
-                  ofertas=lista_ofertas)
+                  ofertas=lista_ofertas, divergencia=financeiro.marketing_divergencia(con, mes))
 
 
 # ---------- ofertas (upsell) ----------
@@ -3511,7 +3525,7 @@ def financeiro_painel(request: Request, mes: str = "", con=Depends(get_db)):
     das_pct = financeiro.texto_pct(financeiro.das_competencia(con, mes)["efetiva"])
     return render(request, "financeiro_painel.html", con, mes=mes, r=serie[-1], serie=serie, maximo=maximo, das_pct=das_pct,
                   salario=financeiro.salario_mes(con, mes, dt.date.today().isoformat()), colchao=financeiro.colchao(con, mes),
-                  saude=sugestoes.painel(con, limite=sugestoes.LIMITE), voltar_saude=f"/financeiro/painel?mes={mes}")
+                  saude=sugestoes.painel(con, limite=sugestoes.LIMITE), voltar_saude=f"/financeiro/painel?mes={mes}", mes_atual=mes_atual())
 
 
 @app.post("/financeiro/sugestao/adiar")
