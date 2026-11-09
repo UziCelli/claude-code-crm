@@ -917,8 +917,23 @@ def _cobertura_adiantada(con: sqlite3.Connection, mes: str) -> dict[int, dict]:
     return out
 
 
-def mensalidades(con: sqlite3.Connection, mes: str) -> list[dict]:
+AVULSOS = ("Pacote de Aulas", "Avaliação Física")   # venda que não se repete sozinha todo mês
+
+
+def _meses_da_venda(c, renovacao: dict | None) -> set | None:
+    """Meses 'AAAA-MM' em que o aluno de Pacote ou Avaliação deve: o mês em que começou e o mês da renovação (a próxima compra
+    esperada; anda com o pagamento, como em renovacoes). None = não é venda avulsa, ou o cadastro não tem nenhuma das duas datas:
+    aí não dá para saber o mês da venda e o aluno segue previsto todo mês, como sempre foi."""
+    if (c["tipo_servico"] or "").strip() not in AVULSOS:
+        return None
+    datas = [c["data_inicio"], (renovacao or {}).get("vence") or c["data_renovacao"]]
+    return {str(d).strip()[:7] for d in datas if ISO_DATA.fullmatch(str(d or "").strip()[:10])} or None
+
+
+def mensalidades(con: sqlite3.Connection, mes: str, ren: dict | None = None) -> list[dict]:
     """Alunos ativos: previsto = clientes.valor; recebido = entradas PJ pagas do cliente no mês;
+    Pacote e Avaliação (AVULSOS) só devem no mês da venda (_meses_da_venda); fora dele o previsto é 0 e o aluno só aparece se
+    pagou, está coberto por pagamento adiantado, pulou o mês ou tem entrada lançada em aberto. `ren`: o retorno de renovacoes(con), se quem chama já tem.
     abertos = entradas PJ do cliente no mês já lançadas e ainda sem baixa; falta = previsto − recebido − em aberto (nem foi lançado).
     Aluno que só começa depois do mês fica de fora. Qualquer pagamento quita o mês: recebido > 0 é 'recebido' com falta 0
     (os abertos dele ficam listados com quitado=True e não contam como a receber); senão 'em aberto'.
@@ -942,7 +957,7 @@ def mensalidades(con: sqlite3.Connection, mes: str) -> list[dict]:
     adiantados = _cobertura_adiantada(con, mes)
     itens = []
     for c in con.execute(
-        """SELECT c.id, c.nome, c.data_inicio, COALESCE(c.valor, 0) AS previsto,
+        """SELECT c.id, c.nome, c.data_inicio, c.tipo_servico, c.data_renovacao, COALESCE(c.valor, 0) AS previsto,
                   (SELECT COALESCE(SUM(l.valor), 0) FROM lancamentos l WHERE l.cliente_id = c.id AND l.escopo='PJ' AND l.tipo='entrada'
                    AND l.excluido_em IS NULL AND l.pago_em IS NOT NULL AND substr(l.data,1,7)=?) AS recebido
            FROM clientes c WHERE c.excluido_em IS NULL AND c.status='ativo' ORDER BY c.nome""", (mes,)):
@@ -951,7 +966,16 @@ def mensalidades(con: sqlite3.Connection, mes: str) -> list[dict]:
             continue
         previsto, recebido = round(c["previsto"], 2), round(c["recebido"], 2)
         pulou = c["id"] in pulados
-        if previsto <= 0 and recebido <= 0:
+        fora_da_venda = False
+        # pacote ou avaliação sem pagamento no mês (nem adiantado, nem mês pulado): só deve no mês da venda
+        if recebido <= 0 and not pulou and c["id"] not in adiantados and (c["tipo_servico"] or "").strip() in AVULSOS:
+            if ren is None:
+                ren = renovacoes(con)
+            venda = _meses_da_venda(c, ren.get(c["id"]))
+            fora_da_venda = venda is not None and mes not in venda
+        if fora_da_venda:
+            previsto = 0.0
+        if previsto <= 0 and recebido <= 0 and not (fora_da_venda and c["id"] in abertos):
             continue
         credito = round(min(credito_aplicavel([x for x in livres.get(c["id"], []) if x["mes"] < mes], previsto)[0]
                             + descontados.get(c["id"], 0), previsto), 2)   # só vale para o mês seguinte ao não usado
@@ -1455,8 +1479,9 @@ def previsao(con: sqlite3.Connection, hoje: str, semanas: int = 13) -> dict:
         recebido = _receita_pj(con, mes)
         falta, sem = _mensalidades_a_receber(con, mes)
         sem_aluno += [dict(e, mes=mes) for e in sem]
-        abertas = sum(i["valor"] for i in itens if i["escopo"] == "PJ" and i["tipo"] == "entrada" and i["data"][:7] == mes
-                      and i["categoria"] != EMPRESTIMO)
+        # entrada em aberto conta no mês em que vai ser recebida: a atrasada de mês anterior entra no mês de hoje
+        abertas = sum(i["valor"] for i in itens if i["escopo"] == "PJ" and i["tipo"] == "entrada" and not i["estimado"]
+                      and max(i["data"], hoje)[:7] == mes and i["categoria"] != EMPRESTIMO)
         receita[mes] = recebido + falta + abertas
         add("PJ", "entrada", vencimento(int(par.get("dia_recebimento") or 10), mes), "Mensalidades a receber", falta)
         # salário: só o que falta tirar da PJ (Retirada à mão também vale); a entrada na PF não volta se ela já está lançada
