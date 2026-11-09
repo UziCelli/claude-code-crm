@@ -215,6 +215,43 @@ def mes_atual():
     return dt.date.today().strftime("%Y-%m")
 
 
+# ---------- envio repetido (clique duplo com rede lenta) e restaurar o que já foi recriado ----------
+# A trava do botão (app.js) destrava em 8 s; aqui é o servidor que recusa o segundo envio igual. As rotas que criam são
+# "async def" sem await entre conferir e gravar: dois envios nunca conferem ao mesmo tempo.
+JANELA_REPETIDO = 60   # segundos: registro igualzinho criado há menos que isso é o mesmo envio chegando de novo
+_AGORA_HA_POUCO = f"criado_em >= datetime('now','localtime','-{JANELA_REPETIDO} seconds')"
+
+
+def lancamento_repetido(con, campos, meses) -> bool:
+    """Já existe um lançamento ativo igual em tudo (os 13 campos do formulário + os meses que cobre), criado agora há pouco?
+    Lançamento ligado a conta recorrente não passa por aqui: financeiro.liberar_vaga já recusa a 2ª baixa do mês."""
+    nomes = ("escopo", "tipo", "data", "pago_em", "valor", "categoria", "descricao", "contraparte", "cliente_id", "conta", "forma",
+             "parcela_num", "parcela_total", "meses")
+    onde = " AND ".join("ROUND(valor, 2) = ROUND(?, 2)" if n == "valor" else f"{n} IS ?" for n in nomes)
+    return con.execute(f"SELECT 1 FROM lancamentos WHERE excluido_em IS NULL AND {_AGORA_HA_POUCO} AND {onde}",
+                       (*campos, meses)).fetchone() is not None
+
+
+def igual_valendo(con, tabela, rid) -> str | None:
+    """Nome do registro ativo igual ao que está na lixeira (restaurar criaria em dobro), ou None. Só para o que se recria à mão:
+    aluno (mesmo nome), conta recorrente (mesma frente e descrição) e lançamento (mesma frente, tipo, data, valor, aluno, descrição e parcela)."""
+    if tabela == "clientes":
+        r = con.execute("""SELECT o.nome FROM clientes x JOIN clientes o ON o.id != x.id AND o.excluido_em IS NULL
+                           AND LOWER(TRIM(o.nome)) = LOWER(TRIM(x.nome)) WHERE x.id=?""", (rid,)).fetchone()
+    elif tabela == "recorrencias":
+        r = con.execute("""SELECT o.descricao FROM recorrencias x JOIN recorrencias o ON o.id != x.id AND o.excluido_em IS NULL
+                           AND o.escopo = x.escopo AND LOWER(TRIM(o.descricao)) = LOWER(TRIM(x.descricao)) WHERE x.id=?""", (rid,)).fetchone()
+    elif tabela == "lancamentos":
+        r = con.execute("""SELECT COALESCE(o.descricao, o.categoria) || ' de ' || substr(o.data, 9, 2) || '/' || substr(o.data, 6, 2)
+                           FROM lancamentos x JOIN lancamentos o ON o.id != x.id AND o.excluido_em IS NULL AND o.escopo = x.escopo
+                           AND o.tipo = x.tipo AND o.data = x.data AND ROUND(o.valor, 2) = ROUND(x.valor, 2) AND o.cliente_id IS x.cliente_id
+                           AND COALESCE(o.descricao, '') = COALESCE(x.descricao, '') AND o.parcela_num IS x.parcela_num
+                           WHERE x.id=?""", (rid,)).fetchone()
+    else:
+        return None
+    return r[0] if r else None
+
+
 def aulas_mes(c) -> float:
     """Sessões por mês estimadas a partir do plano do cliente."""
     plano = (c["plano"] or "")
@@ -757,6 +794,10 @@ async def cliente_criar(request: Request, con=Depends(get_db)):
         return voltar("/clientes/novo", erro="Informe o nome.")
     if erro := _indicado_por(con, d):
         return voltar("/clientes/novo", erro=erro)
+    ja = con.execute(f"""SELECT id FROM clientes WHERE excluido_em IS NULL AND {_AGORA_HA_POUCO} AND nome IS ? AND telefone IS ?
+                         ORDER BY id DESC""", (d["nome"], d["telefone"])).fetchone()
+    if ja:   # o mesmo envio chegando de novo (clique duplo com rede lenta)
+        return voltar(f"/clientes/{ja['id']}", msg="Esse cliente já tinha sido cadastrado agora há pouco: não criei outro.")
     with con:
         cur = con.execute(f"INSERT INTO clientes ({','.join(CAMPOS_CLIENTE)}) VALUES ({','.join(':' + k for k in CAMPOS_CLIENTE)})", d)
     return voltar(f"/clientes/{cur.lastrowid}", msg="Cliente cadastrado.")
@@ -3208,6 +3249,8 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
             competencia = atual["competencia"]
     if not (cliente_id and f["escopo"] == "PJ" and f["tipo"] == "entrada"):
         meses = None   # "cobre N meses" é só de entrada de aluno
+    if not lid and not rec_id and lancamento_repetido(con, campos, meses):   # o mesmo envio chegando de novo (clique duplo com rede lenta)
+        return _fin_voltar(volta, msg="Esse lançamento já tinha sido salvo agora há pouco: não criei outro igual.")
     aberta, parcial, aviso = None, None, ""
     if not lid and cliente_id and pago_em and f["escopo"] == "PJ" and f["tipo"] == "entrada":
         # o aluno já tem essa entrada lançada em aberto no mês: dar baixa nela em vez de criar outra (senão conta duas vezes)
@@ -3429,6 +3472,10 @@ async def financeiro_recorrencia(request: Request, con=Depends(get_db)):
         return _fin_voltar(volta, erro=str(e))
     campos = [f["escopo"], f["descricao"].strip(), f["categoria"], valor, int(f["dia_vencimento"]), 1 if f.get("fixo") == "1" else 0,
               f.get("conta") or None, f["inicio"], fim, int(f["prioridade"]) if f.get("prioridade") else None]
+    if not rid and con.execute("""SELECT 1 FROM recorrencias WHERE excluido_em IS NULL AND escopo=? AND LOWER(TRIM(descricao))=LOWER(?)
+                                  AND categoria=? AND ROUND(valor, 2)=ROUND(?, 2) AND dia_vencimento=?""", campos[:5]).fetchone():
+        # o mesmo envio chegando de novo (clique duplo com rede lenta), ou a mesma conta cadastrada duas vezes
+        return _fin_voltar(volta, msg="Essa conta recorrente já estava salva: não criei outra igual.")
     try:
         with con:
             if rid:
@@ -3932,9 +3979,12 @@ def restaurar(nome: str = Form(...), confirmar: str = Form("")):
 
 
 @app.post("/lixeira/restaurar")
-def lixeira_restaurar(tabela: str = Form(...), rid: int = Form(...), con=Depends(get_db)):
+def lixeira_restaurar(tabela: str = Form(...), rid: int = Form(...), forcar: str = Form(""), con=Depends(get_db)):
     if tabela not in {t for t, _, _ in LIXEIRA}:
         return voltar("/dados", erro="Tabela inválida.")
+    if forcar != "1" and (igual := igual_valendo(con, tabela, rid)):   # já foi recriado: restaurar deixaria em dobro
+        return voltar(f"/dados?forcar={tabela}:{rid}", erro=f"Já existe um igual valendo ({igual}): restaurar deixaria em dobro. "
+                                                             "Se for outro mesmo, aperte \"Restaurar mesmo assim\" na linha dele.")
     fixo = None
     if tabela == "agenda_fixos":   # cabem 2 alunos por horário, sem repetir
         fixo = con.execute("""SELECT f.dia, f.hora, f.local, f.cliente_id, f.excluido_em, c.nome FROM agenda_fixos f JOIN clientes c ON c.id=f.cliente_id
