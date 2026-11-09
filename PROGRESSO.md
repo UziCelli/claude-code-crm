@@ -101,7 +101,7 @@ A auditoria financeira de 16/10 tinha 5 PRs: os 5 estão na `main` (#26 a #30). 
 
 **Código: o que a auditoria achou e nenhum dos 5 PRs corrigiu (baixa gravidade, ordem sugerida)**
 - [x] Pacote e avaliação entram em "Mensalidades a receber" todo mês (D2): só deveriam entrar no mês em que foram vendidos. Feito (PR #95): entra no mês em que começou e no mês da renovação; sem data nenhuma no cadastro segue todo mês.
-- [x] Duplo envio e restaurar da lixeira (D21): rede lenta (mais de 8 s) ou restaurar algo que já foi recriado gera lançamento, recorrência ou aluno em dobro. Feito (PR `ccr-dbc902ff-jp0zh2-d21`): o servidor recusa o envio igual repetido em 60 s e restaurar pede confirmação se já existe um igual valendo.
+- [x] Duplo envio e restaurar da lixeira (D21): rede lenta (mais de 8 s) ou restaurar algo que já foi recriado gera lançamento, recorrência ou aluno em dobro. Feito (PR #96): o servidor recusa o envio igual repetido em 60 s e restaurar pede confirmação se já existe um igual valendo.
 - [x] Fuso no Render (D26): no servidor reserva (UTC), depois das 21h o "hoje" já é amanhã. O PC não é afetado. Feito antes: TZ fixado em `app/__init__.py`.
 - [x] Setas "vs mês anterior" (N6): sem "Fechar o mês", o mês anterior é gravado na 1ª visita com os alunos de hoje. Feito: o Painel guarda a foto do mês em andamento (coluna `foto`); sem mês anterior gravado não há seta.
 - [x] Lucro/h de serviço sem aulas (N9): Consultoria Online vai para o topo do Explorador ordenado por lucro/h. Já estava resolvido: o motor conta horas de trabalho (consultoria = 150 min/mês), então todo serviço tem horas > 0; fica o teste de regressão.
