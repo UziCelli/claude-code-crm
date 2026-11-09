@@ -35,21 +35,21 @@
 
 <div class="grid c4 mt">
   {{ kpi('Clientes ativos', m.clientes_ativos, metas.clientes_dez26|int, metas.clientes_mar27|int,
-         'verde' if m.clientes_ativos >= metas.clientes_dez26 else ('amarelo' if m.clientes_ativos >= metas.clientes_dez26 * 0.7 else 'vermelho'), atual=m.clientes_ativos, ant=ant.clientes_ativos) }}
+         'verde' if m.clientes_ativos >= metas.clientes_dez26 else ('amarelo' if m.clientes_ativos >= metas.clientes_dez26 * 0.7 else 'vermelho'), atual=m.clientes_ativos, ant=(ant.clientes_ativos if ant else none)) }}
   {{ kpi('Horas ocupadas / mês', m.horas_ocupadas|num(0), metas.horas_dez26|int, metas.horas_mar27|int,
-         'verde' if m.horas_ocupadas >= metas.horas_dez26 else ('amarelo' if m.horas_ocupadas >= metas.horas_dez26 * 0.7 else 'vermelho'), ' de ' ~ metas.horas_vendaveis|int, atual=m.horas_ocupadas, ant=ant.horas_ocupadas) }}
+         'verde' if m.horas_ocupadas >= metas.horas_dez26 else ('amarelo' if m.horas_ocupadas >= metas.horas_dez26 * 0.7 else 'vermelho'), ' de ' ~ metas.horas_vendaveis|int, atual=m.horas_ocupadas, ant=(ant.horas_ocupadas if ant else none)) }}
   {{ kpi('Lucro médio por hora de trabalho', m.lucro_hora|moeda, metas.lucro_hora_dez26|moeda, metas.lucro_hora_mar27|moeda,
          'verde' if m.lucro_hora >= metas.lucro_hora_dez26 else ('amarelo' if m.lucro_hora >= metas.lucro_hora_dez26 * 0.7 else 'vermelho'), atual=m.lucro_hora,
          ant=(ant.lucro_hora if ant and ant.lucro_hora_trabalho else none),
          extra='aulas + deslocamento + planejamento + consultoria + avaliação, pelo dinheiro que entra no mês') }}
   {{ kpi('Receita vinda de grupos', m.pct_receita_grupos|pct, metas.pct_grupos_dez26|pct, metas.pct_grupos_mar27|pct,
-         'verde' if m.pct_receita_grupos >= metas.pct_grupos_dez26 else ('amarelo' if m.pct_receita_grupos > 0 else 'vermelho'), atual=m.pct_receita_grupos, ant=ant.pct_receita_grupos) }}
+         'verde' if m.pct_receita_grupos >= metas.pct_grupos_dez26 else ('amarelo' if m.pct_receita_grupos > 0 else 'vermelho'), atual=m.pct_receita_grupos, ant=(ant.pct_receita_grupos if ant else none)) }}
   {{ kpi('Carteira mensal', m.faturamento_recorrente|moeda, metas.recorrente_dez26|moeda, metas.recorrente_mar27|moeda,
-         'verde' if m.faturamento_recorrente >= metas.recorrente_dez26 else ('amarelo' if m.faturamento_recorrente >= metas.recorrente_dez26 * 0.7 else 'vermelho'), atual=m.faturamento_recorrente, ant=ant.faturamento_recorrente,
+         'verde' if m.faturamento_recorrente >= metas.recorrente_dez26 else ('amarelo' if m.faturamento_recorrente >= metas.recorrente_dez26 * 0.7 else 'vermelho'), atual=m.faturamento_recorrente, ant=(ant.faturamento_recorrente if ant else none),
          extra='Entra no mês: ' ~ (m.entra_mes|moeda)) }}
   {{ kpi('Clientes perdidos no mês', m.clientes_perdidos, '≤ ' ~ metas.perdidos_max|int, '≤ ' ~ metas.perdidos_max|int,
-         'verde' if m.clientes_perdidos <= metas.perdidos_max else 'vermelho', atual=m.clientes_perdidos, ant=ant.clientes_perdidos, menor_melhor=true) }}
-  {{ kpi('Vendas com margem < 10%', m.vendas_abaixo_10, 0, 0, 'verde' if m.vendas_abaixo_10 == 0 else 'vermelho', atual=m.vendas_abaixo_10, ant=ant.vendas_abaixo_10, menor_melhor=true) }}
+         'verde' if m.clientes_perdidos <= metas.perdidos_max else 'vermelho', atual=m.clientes_perdidos, ant=(ant.clientes_perdidos if ant else none), menor_melhor=true) }}
+  {{ kpi('Vendas com margem < 10%', m.vendas_abaixo_10, 0, 0, 'verde' if m.vendas_abaixo_10 == 0 else 'vermelho', atual=m.vendas_abaixo_10, ant=(ant.vendas_abaixo_10 if ant else none), menor_melhor=true) }}
   {% if m.salario_hora %}{% set sh = m.salario_hora %}
   <div class="kpi {{ 'amarelo' if sh.ligado and not sh.usado else '' }}">
     <div class="rotulo">Seu salário por hora</div>

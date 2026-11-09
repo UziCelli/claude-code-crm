@@ -263,6 +263,7 @@ def iniciar_banco(caminho: Path = None) -> None:
         _garantir_coluna(con, "leads", "indicado_por", "INTEGER")
         _garantir_coluna(con, "cliente_eventos", "indicado_id", "INTEGER")
         _garantir_coluna(con, "metricas_mensais", "lucro_hora_trabalho", "INTEGER DEFAULT 0")   # meses gravados por hora de aula
+        _garantir_coluna(con, "metricas_mensais", "foto", "INTEGER")           # banco de antes da foto automática do mês em andamento
         _garantir_coluna(con, "lancamentos", "auto", "TEXT")                   # banco de antes das contas automáticas (DAS e CIA)
         _garantir_coluna(con, "propostas", "preco_cheio", "REAL")              # banco de antes do "de R$ X por R$ Y" na proposta
         _garantir_coluna(con, "propostas", "consultoria", "TEXT")              # pacote + consultoria (acompanhamento completo)

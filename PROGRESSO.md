@@ -100,15 +100,15 @@ A auditoria financeira de 16/10 tinha 5 PRs: os 5 estão na `main` (#26 a #30). 
 - [ ] Conferir no Painel o card "Seu salário por hora". Se a PF tiver saídas que não são custo de vida (investimento, pagar a PJ), o valor sai alto.
 
 **Código: o que a auditoria achou e nenhum dos 5 PRs corrigiu (baixa gravidade, ordem sugerida)**
-- [ ] Pacote e avaliação entram em "Mensalidades a receber" todo mês (D2): só deveriam entrar no mês em que foram vendidos.
-- [ ] Duplo envio e restaurar da lixeira (D21): rede lenta (mais de 8 s) ou restaurar algo que já foi recriado gera lançamento, recorrência ou aluno em dobro.
-- [ ] Fuso no Render (D26): no servidor reserva (UTC), depois das 21h o "hoje" já é amanhã. O PC não é afetado.
-- [ ] Setas "vs mês anterior" (N6): sem "Fechar o mês", o mês anterior é gravado na 1ª visita com os alunos de hoje.
-- [ ] Lucro/h de serviço sem aulas (N9): Consultoria Online vai para o topo do Explorador ordenado por lucro/h.
-- [ ] DAS e entrada atrasada de mês anterior (N10): o DAS estimado do mês seguinte não inclui uma entrada atrasada que vai ser recebida agora.
-- [ ] "Faturamento recorrente" (N11) soma o valor cadastrado de todo aluno ativo (inclui pacote, avaliação e quem não paga). Confirmar se é decisão da Rodada 1.
-- [ ] Mês por data × mês por pago_em (D10): cada tela diz qual regra usa, mas elas se misturam no card PF do painel financeiro.
-- [ ] Rótulo "mês em andamento" no lucro do mês corrente (D17) e gastos de marketing em duas bases, Campanhas e categoria "Marketing/Divulgação" (lance nos dois lugares ou o CAC diverge).
+- [x] Pacote e avaliação entram em "Mensalidades a receber" todo mês (D2): só deveriam entrar no mês em que foram vendidos. Feito (PR #95): entra no mês em que começou e no mês da renovação; sem data nenhuma no cadastro segue todo mês.
+- [x] Duplo envio e restaurar da lixeira (D21): rede lenta (mais de 8 s) ou restaurar algo que já foi recriado gera lançamento, recorrência ou aluno em dobro. Feito (PR #96): o servidor recusa o envio igual repetido em 60 s e restaurar pede confirmação se já existe um igual valendo.
+- [x] Fuso no Render (D26): no servidor reserva (UTC), depois das 21h o "hoje" já é amanhã. O PC não é afetado. Feito antes: TZ fixado em `app/__init__.py`.
+- [x] Setas "vs mês anterior" (N6): sem "Fechar o mês", o mês anterior é gravado na 1ª visita com os alunos de hoje. Feito: o Painel guarda a foto do mês em andamento (coluna `foto`); sem mês anterior gravado não há seta.
+- [x] Lucro/h de serviço sem aulas (N9): Consultoria Online vai para o topo do Explorador ordenado por lucro/h. Já estava resolvido: o motor conta horas de trabalho (consultoria = 150 min/mês), então todo serviço tem horas > 0; fica o teste de regressão.
+- [x] DAS e entrada atrasada de mês anterior (N10): o DAS estimado do mês seguinte não inclui uma entrada atrasada que vai ser recebida agora. Feito (PR #95): a entrada atrasada conta na base do DAS do mês em que vai ser recebida.
+- [x] "Faturamento recorrente" (N11) soma o valor cadastrado de todo aluno ativo (inclui pacote, avaliação e quem não paga). Confirmar se é decisão da Rodada 1. Feito (PR #95): a Carteira mensal não soma a Avaliação Física (pacote e quem deve continuam).
+- [x] Mês por data × mês por pago_em (D10): cada tela diz qual regra usa, mas elas se misturam no card PF do painel financeiro. Feito: o card PF conta por pago_em.
+- [x] Rótulo "mês em andamento" no lucro do mês corrente (D17) e gastos de marketing em duas bases, Campanhas e categoria "Marketing/Divulgação" (lance nos dois lugares ou o CAC diverge). Feito: rótulo no mês atual e aviso em Campanhas quando os dois totais não batem (o CAC segue usando Campanhas).
 
 **Decisões de projeto já registradas (não são bug)**
 - Só a fatura do cartão é registrada; compra no cartão fica para depois (D16). Saldo livre não conta entrada prevista. Recorrência some depois de 3 meses sem baixa (D19). Saldos de contas da planilha (`tblSaldosContas`) não foram migrados.

@@ -131,8 +131,10 @@ def test_historico_marca_so_os_meses_gravados_pela_regra_antiga(con):
 def test_seta_do_lucro_hora_some_quando_o_mes_anterior_e_da_regra_antiga(con):
     aluno(con, "Ana")
     http = TestClient(main.app, base_url="http://localhost")
-    http.get("/")
-    ant = con.execute("SELECT mes FROM metricas_mensais ORDER BY mes DESC LIMIT 1").fetchone()[0]
+    ant = (main.dt.date.fromisoformat(main.mes_atual() + "-01") - main.dt.timedelta(days=1)).strftime("%Y-%m")
+    with con:   # o Painel não grava mais o mês anterior sozinho: a linha antiga vem de um fechamento
+        con.execute("INSERT INTO metricas_mensais (mes, clientes_ativos, horas_ocupadas, lucro_hora, pct_receita_grupos,"
+                    " faturamento_recorrente, clientes_perdidos, vendas_abaixo_10, nivel) VALUES (?,1,1,1,0,0,0,0,1)", (ant,))
 
     def seta_do_lucro():
         html = http.get("/").text
