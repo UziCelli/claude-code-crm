@@ -223,8 +223,8 @@ def test_post_credito_cria_o_credito_e_o_proximo_pagamento_sai_com_desconto(con_
     pagar = e["acoes"][0]
     assert pagar["dados"]["valor"] == "250,00" and pagar["dados"]["nota"] == "Crédito de R$ 150,00 descontado"
     assert 'data-nota="Crédito de R$ 150,00 descontado"' in http.get(f"/clientes/{cid}").text
-    proximo = financeiro.somar_meses(dt.date.today().isoformat()[:7], 1)
-    assert {i["nome"]: i for i in financeiro.mensalidades(con_temp, proximo)}["Paula"]["previsto"] == 250.0   # Falta receber e previsão de caixa certos
+    # pacote só entra no mês da venda (D2): a próxima compra é no mês da renovação
+    assert {i["nome"]: i for i in financeiro.mensalidades(con_temp, renova[:7])}["Paula"]["previsto"] == 250.0   # Falta receber e previsão de caixa certos
 
     hoje = dt.date.today().isoformat()
     r = http.post("/financeiro/lancamento", data={"escopo": "PJ", "tipo": "entrada", "data": hoje, "pago_em": hoje, "valor": "250,00",
@@ -401,13 +401,12 @@ def test_ficha_tem_o_card_situacao_com_os_botoes(con_temp, http):
 
 def test_mensalidades_usa_o_estado_e_mostra_credito(con_temp, http):
     sem_bloqueio(con_temp)
-    cid, _ = aluno_pago_sem_aula(con_temp)
+    cid, renova = aluno_pago_sem_aula(con_temp)
     mes = dt.date.today().isoformat()[:7]
     pg = http.get(f"/financeiro/mensalidades?mes={mes}").text
     assert "Pagou sem aula" in pg and 'data-abrir="dlg-pulou"' in pg and 'data-abrir="dlg-credito"' in pg
     http.post(f"/alunos/{cid}/credito", data={"valor": "100,00", "mes": financeiro.somar_meses(mes, -1)})
-    proximo = financeiro.somar_meses(mes, 1)
-    pg = http.get(f"/financeiro/mensalidades?mes={proximo}").text
+    pg = http.get(f"/financeiro/mensalidades?mes={renova[:7]}").text   # pacote só entra no mês da venda (D2): o da renovação
     assert "crédito R$ 100,00" in pg and 'data-valor="300,00"' in pg and 'data-nota="Crédito de R$ 100,00 descontado"' in pg
 
 

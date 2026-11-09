@@ -451,6 +451,12 @@ def lucro_pelo_caixa(est: dict, valor: float, entra: float) -> float:
     return est["lucro"] + (entra - valor) * (1 - taxa)
 
 
+def eh_recorrente(c) -> bool:
+    """Entra na Carteira mensal (faturamento recorrente)? Tudo menos a Avaliação Física, que é venda de uma vez só.
+    Pacote entra: o aluno de pacote recompra todo mês."""
+    return (c["tipo_servico"] or "").strip() != "Avaliação Física"
+
+
 def cobre_custos(con, p, bases=None, mes=None, caixa=None) -> dict:
     """O mês fecha? Mensalidades que entram no mês - impostos e taxas - custos do negócio (local, CIA, deslocamento)
     - seus custos pessoais (o salário que a PF precisa). sobra < 0 = falta isso por mês para cobrir tudo.
@@ -466,7 +472,7 @@ def cobre_custos(con, p, bases=None, mes=None, caixa=None) -> dict:
     for c in con.execute("SELECT * FROM clientes WHERE excluido_em IS NULL AND status='ativo'"):
         valor = c["valor"] or 0
         e = entra.get(c["id"], 0.0)
-        carteira += valor
+        carteira += valor if eh_recorrente(c) else 0
         receita += e
         est = estimativa_cliente(con, c, p, bases)
         if not est:
@@ -502,11 +508,12 @@ def calcular_metricas(con, mes=None):
     caixa = entra_no_mes(con, mes)   # o dinheiro que cada aluno põe no caixa do mês (pago adiantado antes = 0)
     entra = caixa[0]
     horas = horas_com_preco = lucro_total = 0.0
-    receita = receita_grupos = 0.0
+    receita = receita_grupos = recorrente = 0.0
     for c in clientes:
         h = aulas_mes(c)
         horas += h
         receita += c["valor"] or 0
+        recorrente += (c["valor"] or 0) if eh_recorrente(c) else 0
         if (c["pessoas"] or 1) > 1:
             receita_grupos += c["valor"] or 0
         est = estimativa_cliente(con, c, p, bases)
@@ -529,7 +536,7 @@ def calcular_metricas(con, mes=None):
     if nivel == 3 and metas.get("preco_base_reajuste", 0) > 0:
         nivel = 4
     return dict(mes=mes, clientes_ativos=len(clientes), horas_ocupadas=round(horas, 1), lucro_hora=round(lucro_hora, 2),
-                pct_receita_grupos=(receita_grupos / receita) if receita else 0, faturamento_recorrente=round(receita, 2),
+                pct_receita_grupos=(receita_grupos / receita) if receita else 0, faturamento_recorrente=round(recorrente, 2),
                 entra_mes=round(sum(entra.values()), 2),
                 clientes_perdidos=perdidos, vendas_abaixo_10=abaixo10, nivel=nivel, espera_pico=espera_pico, lucro_hora_trabalho=1,
                 salario_hora=p["salario_hora"], cobre=cobre_custos(con, p, bases, mes, caixa))

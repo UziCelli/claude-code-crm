@@ -158,7 +158,7 @@ def estado(con, hoje=None, ids=None) -> dict[int, dict]:
         else:
             meses_credito.setdefault(r["cliente_id"], set()).add(str(r["data"])[:7])
     livres = financeiro.creditos(con, ids[0] if ids and len(ids) == 1 else None)
-    mens = {i["id"]: i for i in financeiro.mensalidades(con, h[:7])}
+    mens = {i["id"]: i for i in financeiro.mensalidades(con, h[:7], ren if ids is None or len(ids) != 1 else None)}
 
     out, msgs = {}, {}   # msgs: os modelos e os dados do Pix, lidos uma vez para todos os cartões
     for c in alunos:
