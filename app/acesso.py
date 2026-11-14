@@ -23,6 +23,7 @@ nuvem.carregar_env()   # no PC as variáveis CF_ACCESS_* ficam no .env: carregar
 LIGADO = os.environ.get("CRM_NUVEM") == "1"
 EQUIPE = os.environ.get("CF_ACCESS_TEAM_DOMAIN", "").strip().removeprefix("https://").strip("/")
 AUD = os.environ.get("CF_ACCESS_AUD", "").strip()
+METODOS_SEGUROS = {"GET", "HEAD", "OPTIONS"}
 LIVRES = {"/saude", "/health", "/healthz"}   # checagem de saúde da nuvem (qualquer nome): não mostra dado nenhum
 LOCAIS = {"localhost", "127.0.0.1", "::1"}   # nomes do próprio PC (o uvicorn só escuta em 127.0.0.1)
 # o Cloudflare (e o túnel) sempre acrescenta cf-ray e cf-connecting-ip; os outros denunciam qualquer proxy no caminho
@@ -92,10 +93,14 @@ def motivo_bloqueio(metodo: str, caminho: str, cabecalhos, cookies) -> str | Non
     Na nuvem tudo passa pela portaria; no PC, só o que chega de fora (túnel).
     Em qualquer lugar, um POST vindo de outro site é recusado (uma página aberta no navegador não pode apagar
     ou mudar dados do CRM em localhost:8765)."""
-    if caminho in LIVRES:
+    if caminho in LIVRES and metodo in {"GET", "HEAD"}:
         return None
+    altera = metodo not in METODOS_SEGUROS
+    # Fetch Metadata cobre formulários com Referrer-Policy: no-referrer (sem Origin/Referer).
+    if altera and cabecalhos.get("sec-fetch-site") == "cross-site":
+        return "origem"
     if not LIGADO and local(cabecalhos):
-        return "origem" if metodo == "POST" and _origem_estranha(cabecalhos) else None
+        return "origem" if altera and _origem_estranha(cabecalhos) else None
     if not (EQUIPE and AUD):
         return "config"
     token = cabecalhos.get("cf-access-jwt-assertion") or cookies.get("CF_Authorization")
@@ -105,6 +110,6 @@ def motivo_bloqueio(metodo: str, caminho: str, cabecalhos, cookies) -> str | Non
         verificar(token)
     except Exception:
         return "invalido"
-    if metodo == "POST" and (_origem_estranha(cabecalhos) or not (cabecalhos.get("origin") or cabecalhos.get("referer"))):
+    if altera and (_origem_estranha(cabecalhos) or not (cabecalhos.get("origin") or cabecalhos.get("referer"))):
         return "origem"   # pela internet o POST sem Origin/Referer também é recusado (como antes)
     return None
