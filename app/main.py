@@ -86,10 +86,18 @@ async def portaria(request: Request, call_next):
     atualizar.registrar_uso()   # alguém usando: a atualização automática não reinicia agora
     motivo = await run_in_threadpool(acesso.motivo_bloqueio, request.method, request.url.path, request.headers, request.cookies)
     if motivo:
-        return HTMLResponse("<!doctype html><meta charset='utf-8'><meta name='viewport' content='width=device-width'>"
+        response = HTMLResponse("<!doctype html><meta charset='utf-8'><meta name='viewport' content='width=device-width'>"
                             "<title>VFITCOACH CRM</title><body style='font-family:system-ui;padding:24px;background:#E8F0FA;color:#0F2A52'>"
                             f"<h1>Acesso restrito</h1><p>{acesso.MENSAGENS[motivo]}</p>", status_code=403)
-    return await call_next(request)
+    else:
+        response = await call_next(request)
+    # Todo o CRM é privado, inclusive exportações, redirects e respostas de erro.
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "same-origin"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Content-Security-Policy"] = "frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+    return response
 
 
 @app.api_route("/saude", methods=["GET", "HEAD"], response_class=PlainTextResponse)

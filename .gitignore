@@ -13,3 +13,13 @@ continuar-com-omniroute.bat
 
 # mapa do código do Graphify (gerado a cada sessão)
 graphify-out/
+
+# Variantes locais de segredos, bancos SQLite e chaves privadas
+.env.*
+!.env.example
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+*.pem
+*.key
