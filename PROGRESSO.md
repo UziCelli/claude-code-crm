@@ -74,7 +74,7 @@ Plano completo em `C:\Users\victo\.claude\plans\a-gente-vai-come-ar-functional-t
 - **Depois:** repositório privado no GitHub (feito: UziCelli/vfitcoach-crm, antes claude-code-crm; o serviço do Render continua com o nome antigo); agente de IA (Sonnet 5.5) adiado.
 - Forma de pagamento dos clientes importados vem como "Mensal"/"Parcelado" (texto da planilha); o motor usa PIX como padrão nesses casos.
 - Multiagente: tarefas simples em Haiku, implementação em Sonnet 5.5, modelo principal só para revisão.
-- PRs do Claude: sem check-ins agendados. Claude revisa e dá merge sozinho quando os testes passam e a revisão está limpa; se o merge já tiver sido feito à mão, só avisa que viu.
+- PRs do Claude: sem check-ins agendados. **O merge é automático** (pedido do Victor, 14/11/2026): assim que todos os revisores forem consultados e aprovarem (inclusive o Codex, chamado com `@codex review` no PR) e os testes do GitHub passarem na última versão, o Claude tira o PR do rascunho e dá merge sem perguntar. Se o merge já tiver sido feito à mão, só avisa que viu.
 
 ## O que falta fazer (atualizado em 17/10/2026, depois do PR 5)
 A auditoria financeira de 16/10 tinha 5 PRs: os 5 estão na `main` (#26 a #30). Não há PR da auditoria aberto.
@@ -404,3 +404,9 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Hoje o QR é estático: mostra a validade, mas o banco aceita pagar depois. O CRM só avisa e cobra a diferença (seção "Cartão com multa e juros separados" acima).
 - Etapa 2: QR dinâmico com vencimento (**cobv**) por um intermediário (Mercado Pago, Asaas ou Efí). Com ele: o QR expira de verdade, o banco calcula a multa e os juros e o CRM pode dar baixa sozinho (webhook de pagamento).
 - Estudar antes: taxa por Pix de cada um, se aceita CPF/MEI, como guardar a chave da API (Configurações, como a do Assistente) e o que fazer quando a internet ou o intermediário cair (voltar ao QR estático).
+
+## Agenda: dupla, Pendências e bugs (PR #98, 14/11/2026)
+- **Marcar várias:** no card em dupla, tocar fora dos nomes (ou Enter no card) pinta os dois; tocar no nome pinta só ele.
+- **Pendências** no topo da Agenda: aulas da semana sem marcar (tocar abre o card; no Marcar várias, pinta), "Marcar todas como feitas" (pinta tudo como Feita sem salvar), semanas anteriores com pendência (`GET /agenda/pendentes`, carregado depois da página) e reposições a fazer de todos os alunos ("a agendar" = saldo − reposições já agendadas e sem marca), com "Agendar reposição".
+- `saldos_reposicao` ganhou `sem_marca` e `a_agendar`; `aulas_da_semana(..., semanas=N)` lê várias semanas com as mesmas consultas.
+- **Bugs:** avulsa em cima da própria fixa desmarcada é recusada; reposição marcada pela ficha (sem hora) desconta do saldo; excluir avulsa marcada leva a marcação junto para a lixeira; mudar de hora no mesmo dia não esconde a aula já marcada (nesse dia vale a antiga); Pendências pintam pelo teclado; textos ("Faltou" também desconta).
