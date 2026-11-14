@@ -667,3 +667,27 @@ ol.passos li { margin: 4px 0; }
 /* Contas a pagar: botões de ordem e de tipo de custo */
 .filtros-contas { display: grid; gap: 6px; margin: 8px 0 10px; }
 .filtros-contas .linha { gap: 6px; align-items: center; }
+
+/* Pendências: sem marcar (esquerda) e reposições a fazer (direita); empilha no celular */
+.pendencias { margin-bottom: 18px; }
+.pend-titulo { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 10px; }
+.pend-colunas { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 24px; }
+.pend-bloco h3 { margin: 0 0 6px; font-size: 14px; color: var(--cinza); }
+.pend-linha, .repor-linha { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 6px 10px; margin-top: 4px; background: #fff;
+  border: 1px solid var(--borda); border-left: 5px solid var(--amarelo); border-radius: 8px; }
+.pend-linha { cursor: pointer; }
+.pend-linha.feita, .repor-linha.feita { border-left-color: var(--verde); }
+.pend-linha.faltou { border-left-color: var(--vermelho); }
+.pend-linha.desmarcou { border-left-color: var(--amarelo); }
+.pend-linha.cancelada { border-left-color: #8c97aa; }
+.pend-quando { font-weight: 700; color: var(--aco); font-variant-numeric: tabular-nums; }
+.repor-linha { border-left-color: var(--aco); justify-content: space-between; }
+.repor-quem { flex: 1 1 160px; min-width: 0; }
+.repor-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 13px; }
+.pend-acoes { margin-top: 8px; }
+.pend-anteriores { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.pend-anteriores:empty { display: none; }
+.pend-anteriores a.tag { text-decoration: none; }
+.repor-ok { margin-top: 8px; }
+.repor-ok summary { cursor: pointer; color: var(--cinza); font-size: 13px; }
+@media (max-width: 760px) { .pend-colunas { grid-template-columns: 1fr; } }

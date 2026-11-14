@@ -959,7 +959,8 @@ def repor(cid, data, hora=7, local="CIA", reposicao=1, excluida=False):
 def saldo(cid, hoje=dt.date(2026, 10, 15)):
     con = db.conectar()
     try:
-        return main.saldos_reposicao(con, [cid], hoje)[cid]
+        s = main.saldos_reposicao(con, [cid], hoje)[cid]
+        return {k: v for k, v in s.items() if k not in ("sem_marca", "a_agendar")}   # as 4 chaves de sempre; sem_marca/a_agendar têm testes próprios
     finally:
         con.close()
 
@@ -1246,7 +1247,7 @@ def test_saldos_de_todos_os_alunos_em_2_selects_agrupados(http, espiar):
         con.close()
     assert len(vistos) == 4 and all(v.startswith("SELECT") and "GROUP BY" in v for v in vistos)   # 2 por chamada, nunca por aluno
     assert todos[a]["saldo"] == 2 and todos[a]["agendadas"] == 1 and todos[b]["saldo"] == 1 and c not in todos
-    assert com_ids[c] == {"devidas": 0, "usadas": 0, "saldo": 0, "agendadas": 0}
+    assert com_ids[c] == main._zero_saldo()
     assert main.saldos_reposicao(db.conectar(), [], dt.date(2026, 10, 15)) == {}
 
 

@@ -8,3 +8,9 @@ Rules:
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
 - A committed graphify-out/graph.json is rewritten whole on every build, so a large diff to it in a pull request is expected. Do not flag it as churn or suggest skipping the graph rebuild or its hooks.
+
+## Pull requests (regra do dono do projeto)
+
+- O merge é automático: assim que todos os revisores foram consultados e aprovaram (inclusive o Codex, chamado com `@codex review` num comentário do PR) e os testes do GitHub (CI) passaram na última versão do PR, tire o PR do rascunho e dê merge sem perguntar.
+- Apontamento de revisor: confira no código, corrija o que for real, responda na conversa do apontamento e marque como resolvido antes do merge.
+- Sem check-ins agendados nos PRs. Se o merge já foi feito à mão, só avise que viu.

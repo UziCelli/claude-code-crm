@@ -248,3 +248,80 @@ def test_vigencias(http):
     finally:
         con.close()
     assert v == {a: "2026-10-20", b: None, c: None}
+
+
+# ---------- PR 98: bugs achados na revisão da Agenda ----------
+
+def test_avulsa_em_cima_da_propria_fixa_desmarcada_e_recusada(http):
+    """Avulsa comum no horário da própria fixa desmarcada misturava as marcações (marcar a avulsa apagava o desmarcou e a reposição)."""
+    a = aluno("Ana")
+    fixo(a, 1, 7)
+    marcar(http, a, SEG, 7, "desmarcou")
+    r = incluir(http, cliente_id=a, local="CIA", repetir=0, data=SEG, hora=7)
+    assert "horário fixo de Ana" in (erro(r) or "")
+    assert not consulta("SELECT 1 FROM agenda_avulsas WHERE cliente_id=?", a)
+    assert alunos_do_card(http, 1, 7) == ["Ana"]
+
+
+def test_reposicao_marcada_pela_ficha_sem_hora_desconta_do_saldo(http):
+    a = aluno("Ana")
+    grava("INSERT INTO cliente_eventos (cliente_id, tipo, data, hora) VALUES (?, 'desmarcou', '2026-10-05', 7)", a)
+    grava("INSERT INTO agenda_avulsas (cliente_id, data, hora, local, reposicao) VALUES (?, '2026-10-13', 10, 'CIA', 1)", a)
+    grava("INSERT INTO cliente_eventos (cliente_id, tipo, data) VALUES (?, 'aula', '2026-10-13')", a)   # lançada pela ficha: sem hora
+    con = db.conectar()
+    try:
+        s = main.saldos_reposicao(con, [a], dt.date(2026, 10, 15))[a]
+    finally:
+        con.close()
+    assert (s["usadas"], s["saldo"], s["sem_marca"], s["a_agendar"]) == (1, 0, 0, 0)
+
+
+def test_excluir_avulsa_marcada_leva_a_marcacao_junto(http):
+    a = aluno("Ana")
+    aid = grava("INSERT INTO agenda_avulsas (cliente_id, data, hora, local) VALUES (?, ?, 10, 'CIA')", a, SEG)
+    marcar(http, a, SEG, 10, "feita", avulsa=1)
+    r = http.post(f"/agenda/avulsa/{aid}/excluir", data={"semana": SEG}, follow_redirects=False)
+    assert "marcação dela" in (msg(r) or "")
+    assert not consulta("SELECT 1 FROM cliente_eventos WHERE cliente_id=? AND tipo='aula' AND excluido_em IS NULL", a)
+    r = http.post(f"/agenda/avulsa/{aid}/excluir", data={"semana": SEG}, follow_redirects=False)   # 2º clique
+    assert "já foi excluída" in (erro(r) or "")
+
+
+def test_excluir_avulsa_mantem_a_marcacao_da_fixa_no_mesmo_horario(http):
+    """Dado antigo: avulsa no horário da própria fixa. A marcação é da fixa também: fica."""
+    a = aluno("Ana")
+    fixo(a, 1, 7)
+    aid = grava("INSERT INTO agenda_avulsas (cliente_id, data, hora, local) VALUES (?, ?, 7, 'CIA')", a, SEG)
+    marcar(http, a, SEG, 7, "feita")
+    r = http.post(f"/agenda/avulsa/{aid}/excluir", data={"semana": SEG}, follow_redirects=False)
+    assert "marcação dela" not in (msg(r) or "")
+    assert consulta("SELECT tipo FROM cliente_eventos WHERE cliente_id=? AND excluido_em IS NULL AND tipo='aula'", a) == [("aula",)]
+
+
+def _troca_de_hora_no_dia(marcar_antiga=True, marcar_nova=False):
+    """Ana tinha Seg 9h desde antes; na segunda 12/10 a aula das 9h é marcada e às 11h ela passa para Seg 10h (vigente no mesmo dia)."""
+    a = aluno("Ana")
+    grava("INSERT INTO agenda_fixos (cliente_id, dia, hora, local, criado_em, excluido_em) VALUES (?, 1, 9, 'CIA', ?, ?)", a, ANTES, SEG + " 11:00:00")
+    grava("INSERT INTO agenda_fixos (cliente_id, dia, hora, local, vigente_de, criado_em) VALUES (?, 1, 10, 'CIA', ?, ?)", a, SEG, SEG + " 11:00:00")
+    if marcar_antiga:
+        grava("INSERT INTO cliente_eventos (cliente_id, tipo, data, hora) VALUES (?, 'aula', ?, 9)", a, SEG)
+    if marcar_nova:
+        grava("INSERT INTO cliente_eventos (cliente_id, tipo, data, hora) VALUES (?, 'aula', ?, 10)", a, SEG)
+    return a
+
+
+def test_mudar_de_hora_no_dia_mantem_a_aula_ja_marcada(http):
+    _troca_de_hora_no_dia()
+    seg = dt.date.fromisoformat(SEG)
+    assert [x for x in aulas(seg) if x[0] == SEG] == [(SEG, 9, "CIA", "feita")]   # a feita das 9h não some; a das 10h começa na outra semana
+    assert [x for x in aulas(seg + dt.timedelta(days=7)) if x[1] in (9, 10)] == [("2026-10-19", 10, "CIA", "pendente")]
+
+
+def test_mudar_de_hora_no_dia_sem_marca_continua_valendo_a_nova(http):
+    _troca_de_hora_no_dia(marcar_antiga=False)
+    assert [x for x in aulas(dt.date.fromisoformat(SEG)) if x[0] == SEG] == [(SEG, 10, "CIA", "pendente")]
+
+
+def test_mudar_de_hora_no_dia_com_as_duas_marcadas_mostra_as_duas(http):
+    _troca_de_hora_no_dia(marcar_nova=True)
+    assert [x for x in aulas(dt.date.fromisoformat(SEG)) if x[0] == SEG] == [(SEG, 9, "CIA", "feita"), (SEG, 10, "CIA", "feita")]
