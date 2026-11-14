@@ -296,3 +296,32 @@ def test_excluir_avulsa_mantem_a_marcacao_da_fixa_no_mesmo_horario(http):
     r = http.post(f"/agenda/avulsa/{aid}/excluir", data={"semana": SEG}, follow_redirects=False)
     assert "marcação dela" not in (msg(r) or "")
     assert consulta("SELECT tipo FROM cliente_eventos WHERE cliente_id=? AND excluido_em IS NULL AND tipo='aula'", a) == [("aula",)]
+
+
+def _troca_de_hora_no_dia(marcar_antiga=True, marcar_nova=False):
+    """Ana tinha Seg 9h desde antes; na segunda 12/10 a aula das 9h é marcada e às 11h ela passa para Seg 10h (vigente no mesmo dia)."""
+    a = aluno("Ana")
+    grava("INSERT INTO agenda_fixos (cliente_id, dia, hora, local, criado_em, excluido_em) VALUES (?, 1, 9, 'CIA', ?, ?)", a, ANTES, SEG + " 11:00:00")
+    grava("INSERT INTO agenda_fixos (cliente_id, dia, hora, local, vigente_de, criado_em) VALUES (?, 1, 10, 'CIA', ?, ?)", a, SEG, SEG + " 11:00:00")
+    if marcar_antiga:
+        grava("INSERT INTO cliente_eventos (cliente_id, tipo, data, hora) VALUES (?, 'aula', ?, 9)", a, SEG)
+    if marcar_nova:
+        grava("INSERT INTO cliente_eventos (cliente_id, tipo, data, hora) VALUES (?, 'aula', ?, 10)", a, SEG)
+    return a
+
+
+def test_mudar_de_hora_no_dia_mantem_a_aula_ja_marcada(http):
+    _troca_de_hora_no_dia()
+    seg = dt.date.fromisoformat(SEG)
+    assert [x for x in aulas(seg) if x[0] == SEG] == [(SEG, 9, "CIA", "feita")]   # a feita das 9h não some; a das 10h começa na outra semana
+    assert [x for x in aulas(seg + dt.timedelta(days=7)) if x[1] in (9, 10)] == [("2026-10-19", 10, "CIA", "pendente")]
+
+
+def test_mudar_de_hora_no_dia_sem_marca_continua_valendo_a_nova(http):
+    _troca_de_hora_no_dia(marcar_antiga=False)
+    assert [x for x in aulas(dt.date.fromisoformat(SEG)) if x[0] == SEG] == [(SEG, 10, "CIA", "pendente")]
+
+
+def test_mudar_de_hora_no_dia_com_as_duas_marcadas_mostra_as_duas(http):
+    _troca_de_hora_no_dia(marcar_nova=True)
+    assert [x for x in aulas(dt.date.fromisoformat(SEG)) if x[0] == SEG] == [(SEG, 9, "CIA", "feita"), (SEG, 10, "CIA", "feita")]

@@ -1638,14 +1638,24 @@ def aulas_da_semana(con, segunda, hoje=None, semanas=1) -> list:
                             AND f.dia BETWEEN 1 AND 6 AND f.hora BETWEEN 5 AND 23
                             AND (c.status='ativo' OR {marcado}) AND c.excluido_em IS NULL ORDER BY f.excluido_em IS NOT NULL, f.id""",
                          (primeiro, ultimo, primeiro, ultimo)).fetchall()
+    marcas = {}   # (aluno, data) -> [(hora, estado)] do mais antigo ao mais novo
+    for e in con.execute(f"""SELECT cliente_id, data, hora, tipo FROM cliente_eventos WHERE excluido_em IS NULL
+                             AND tipo IN ({TIPOS_MARCA}) AND data BETWEEN ? AND ? ORDER BY id""", (primeiro, ultimo)):
+        marcas.setdefault((e["cliente_id"], e["data"]), []).append((e["hora"], TIPO_ESTADO[e["tipo"]]))
+    com_hora = {(c, d, hr) for (c, d), lst in marcas.items() for hr, _ in lst if hr is not None}   # marcação desta hora (a da ficha, sem hora, não decide)
     dia_de = {}   # data -> dia da semana (1 a 6), de todas as semanas
     for datas in por_semana:
         dia_de.update({d: n for n, d in datas.items()})
         comecam = {(r["cliente_id"], r["dia"]) for r in linhas if r["vigente_de"] == datas[r["dia"]]}
+        # mudou de hora no dia em que a aula antiga já foi marcada: nesse dia vale a antiga (a aula que aconteceu), e a nova começa na semana seguinte
+        ficou = {(r["cliente_id"], r["dia"]) for r in linhas if trocada_no_dia(r, datas[r["dia"]], comecam) and fixo_vale(r, datas[r["dia"]])
+                 and (r["cliente_id"], datas[r["dia"]], r["hora"]) in com_hora}
         vistos = set()
         for r in linhas:
-            if ((r["dia"], r["hora"], r["cliente_id"]) in vistos or not fixo_vale(r, datas[r["dia"]])   # linha repetida (voltou da lixeira): conta uma vez só
-                    or trocada_no_dia(r, datas[r["dia"]], comecam)):
+            d = datas[r["dia"]]
+            if ((r["dia"], r["hora"], r["cliente_id"]) in vistos or not fixo_vale(r, d)   # linha repetida (voltou da lixeira): conta uma vez só
+                    or (trocada_no_dia(r, d, comecam) and (r["cliente_id"], r["dia"]) not in ficou)
+                    or (r["vigente_de"] == d and (r["cliente_id"], r["dia"]) in ficou and (r["cliente_id"], d, r["hora"]) not in com_hora)):
                 continue
             vistos.add((r["dia"], r["hora"], r["cliente_id"]))
             ini = str(r["data_inicio"] or "").strip()[:10]
@@ -1662,10 +1672,6 @@ def aulas_da_semana(con, segunda, hoje=None, semanas=1) -> list:
             aulas.append(dict(data=r["data"], dia=dia_de[r["data"]], hora=r["hora"], local=r["local"], cliente_id=r["cliente_id"],
                               nome=r["nome"], telefone=r["telefone"], avulsa=True, avulsa_id=r["id"], reposicao=bool(r["reposicao"]),
                               repoe=data_br(r["repoe"])[:5] if r["reposicao"] and r["repoe"] else "", ativo=r["status"] == "ativo"))   # dd/mm da aula desmarcada que ela repõe
-    marcas = {}   # (aluno, data) -> [(hora, estado)] do mais antigo ao mais novo
-    for e in con.execute(f"""SELECT cliente_id, data, hora, tipo FROM cliente_eventos WHERE excluido_em IS NULL
-                             AND tipo IN ({TIPOS_MARCA}) AND data BETWEEN ? AND ? ORDER BY id""", (primeiro, ultimo)):
-        marcas.setdefault((e["cliente_id"], e["data"]), []).append((e["hora"], TIPO_ESTADO[e["tipo"]]))
     fases, pausas = fases_bloqueio(con), pausas_por_aluno(con)
     for a in aulas:
         # vale a marca mais nova do aluno no dia com a mesma hora, ou sem hora (aula lançada pela ficha)
