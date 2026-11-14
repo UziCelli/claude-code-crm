@@ -623,7 +623,11 @@
   }
   document.querySelectorAll(".pend-linha").forEach(function (l) {
     l.addEventListener("click", function () { if (!ligado) abreCelula(l); });
-    l.addEventListener("keydown", function (e) { if ((e.key === "Enter" || e.key === " ") && !ligado) { e.preventDefault(); abreCelula(l); } });
+    l.addEventListener("keydown", function (e) {   // div com role=button: o teclado não gera clique sozinho (Espaço também não rola a tela)
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      if (ligado) pintar([l]); else abreCelula(l);
+    });
   });
   var btnTodas = document.getElementById("pend-todas");
   if (btnTodas) btnTodas.addEventListener("click", function () {   // liga o modo e pinta tudo como feita (não salva): o resto é corrigir as exceções e Salvar
