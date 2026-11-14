@@ -128,7 +128,7 @@
   <span><i class="l-feita"></i> feita</span><span><i class="l-faltou"></i> faltou</span><span><i class="l-desmarcou"></i> desmarcou (repõe)</span><span><i class="l-cancelada"></i> cancelada (não repõe)</span>
   <span><i class="l-pausa"></i> mês pulado</span><span><i class="l-pendente"></i> passou sem marcar</span><span><i class="l-futura"></i> ainda vai acontecer</span>
 </div>
-<p class="muted lote-info" hidden>Escolha o pincel na barra de baixo e toque nos nomes da grade ou nas aulas de hoje. Nada é salvo até apertar Salvar.</p>
+<p class="muted lote-info" hidden>Escolha o pincel na barra de baixo e toque nos nomes da grade ou nas aulas de hoje. Na dupla, tocar fora dos nomes marca os dois. Nada é salvo até apertar Salvar.</p>
 {% if not tem_aulas %}<p class="muted" style="margin:6px 0 0">Nenhuma aula nesta semana. Use <b>+ Incluir aula</b> ou toque em um horário para escolher o aluno.</p>{% endif %}
 <div class="rolagem mt">
 <table class="grade agenda">
@@ -529,30 +529,32 @@
     btnSalvar.disabled = !mud.size || mud.size > 300;
     aviso.hidden = mud.size <= 300;
   }
-  function pintar(e) {
-    var m = e._marca;
-    if (!m) return;
-    var k = chave(m), alvo = m.reposicao && pincel === "desmarcou" ? "cancelada" : pincel;   // na reposição, desmarcou = só cancelar
-    if (atual(m) === alvo) mud.delete(k);                          // tocar de novo com o mesmo pincel desfaz
-    else if ((m.estado || "") === alvo) mud.delete(k);              // volta ao que já estava salvo
-    else mud.set(k, {m: m, estado: alvo});
-    pinta(m);
+  function alvoDe(m) { return m.reposicao && pincel === "desmarcou" ? "cancelada" : pincel; }   // na reposição, desmarcou = só cancelar
+  function pintar(es) {   // es = 1 aula (nome, linha) ou as 2 da dupla (toque fora dos nomes)
+    var ms = es.map(function (e) { return e._marca; }).filter(Boolean);
+    if (!ms.length) return;
+    var desfaz = ms.every(function (m) { return atual(m) === alvoDe(m); });   // tocar de novo com o mesmo pincel desfaz (a dupla inteira)
+    ms.forEach(function (m) {
+      var k = chave(m), alvo = alvoDe(m);
+      if (desfaz || (m.estado || "") === alvo) mud.delete(k);   // volta ao que já estava salvo
+      else mud.set(k, {m: m, estado: alvo});
+      pinta(m);
+    });
     conta();
   }
-  function aula(e) {   // o que foi tocado: o nome, a linha do Hoje, ou o card (teclado) quando tem um aluno só
+  function aulas(e) {   // o que foi tocado: o nome, uma linha (Hoje / Pendências), ou o card: com 2 alunos, fora dos nomes, pinta os dois
     var n = e.target.closest(".n");
-    if (n && n._marca) return n;
-    var h = e.target.closest(".aula-hoje[data-marca]");
-    if (h && !e.target.closest("a")) return h;
+    if (n && n._marca) return [n];
+    var h = e.target.closest("[data-marca]");
+    if (h && h._marca && !e.target.closest("a")) return [h];
     var card = e.target.closest(".cel.aula");
-    var ns = card ? card.querySelectorAll(".n") : [];
-    return ns.length === 1 && ns[0]._marca ? ns[0] : null;
+    return card ? Array.prototype.filter.call(card.querySelectorAll(".n"), function (x) { return x._marca; }) : [];
   }
   // fase de captura: com o modo ligado, o toque no card só pinta e nunca abre a janelinha do horário
   document.addEventListener("click", function (e) {
     if (!ligado) return;
-    var alvo = aula(e);
-    if (alvo) { e.preventDefault(); e.stopImmediatePropagation(); pintar(alvo); return; }
+    var alvo = aulas(e);
+    if (alvo.length) { e.preventDefault(); e.stopImmediatePropagation(); pintar(alvo); return; }
     if (e.target.closest(".cel")) { e.preventDefault(); e.stopImmediatePropagation(); }
   }, true);
 
