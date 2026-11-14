@@ -2008,7 +2008,8 @@ def saldos_reposicao(con, ids=None, hoje=None) -> dict:
     for r in con.execute(f"SELECT e.cliente_id, COUNT(*) AS n FROM cliente_eventos e WHERE e.excluido_em IS NULL AND e.tipo='desmarcou' AND NOT {NA_REPOSICAO}"
                          + filtro("e.cliente_id") + " GROUP BY e.cliente_id", ids or []):
         out.setdefault(r["cliente_id"], _zero_saldo())["devidas"] = r["n"]
-    marca = """(SELECT COUNT(*) FROM cliente_eventos e WHERE e.cliente_id=a.cliente_id AND e.data=a.data AND e.hora=a.hora AND e.excluido_em IS NULL
+    # marcação sem hora (lançada pela ficha) vale para as aulas do dia, como na grade (aulas_da_semana)
+    marca = """(SELECT COUNT(*) FROM cliente_eventos e WHERE e.cliente_id=a.cliente_id AND e.data=a.data AND (e.hora=a.hora OR e.hora IS NULL) AND e.excluido_em IS NULL
                AND e.tipo IN ({}))"""
     for r in con.execute(f"""SELECT cliente_id, SUM(CASE WHEN com_af > 0 THEN 1 ELSE 0 END) AS usadas,
                             SUM(CASE WHEN com_qualquer = 0 AND data >= ? THEN 1 ELSE 0 END) AS agendadas,
@@ -2311,6 +2312,9 @@ def agenda_incluir(cliente_id: int = Form(0), local: str = Form(""), dia: int = 
         return voltar(url, erro=f"{c['nome']} já tem aula fixa em {quando}.")
     if reposicao and cliente_id in na_hora and not na_hora[cliente_id]["avulsa"]:   # a própria aula desmarcada/cancelada: repor noutro horário
         return voltar(url, erro=f"{quando} é o horário fixo de {c['nome']}: marque a reposição em outro dia ou hora.")
+    if cliente_id in na_hora and not na_hora[cliente_id]["avulsa"]:   # avulsa em cima da própria fixa desmarcada: as marcações das duas se misturariam
+        return voltar(url, erro=f"{quando} é o horário fixo de {c['nome']} (marcado como {na_hora[cliente_id]['situacao']}). "
+                                "Se ele vem mesmo assim, toque no horário e marque Feita.")
     outros = [a for x, a in na_hora.items() if x != cliente_id and a["situacao"] not in ("desmarcou", "cancelada")]
     if len(outros) >= 2:   # cabem 2 alunos por horário, como no fixo
         return voltar(url, erro=f"Horário cheio: {quando} já tem {' e '.join(a['nome'] for a in outros)}.")
@@ -2441,9 +2445,23 @@ def agenda_evento_excluir(eid: int, semana: str = Form(""), todas: int = Form(0)
 
 @app.post("/agenda/avulsa/{aid}/excluir")
 def agenda_avulsa_excluir(aid: int, semana: str = Form(""), todas: int = Form(0), aluno: str = Form(""), mes: str = Form(""), con=Depends(get_db)):
+    """Manda a avulsa para a lixeira e, junto, a marcação dela (Feita, Faltou...): senão a aula excluída continuaria contando no mês.
+    A marcação fica se o aluno ainda tem aula nesse dia e hora (outra avulsa ou o horário fixo). Marcação sem hora (da ficha) não é mexida."""
+    url = url_agenda(semana, todas, aluno, mes)
+    a = con.execute("SELECT cliente_id, data, hora FROM agenda_avulsas WHERE id=? AND excluido_em IS NULL", (aid,)).fetchone()
+    if not a:
+        return voltar(url, erro="Essa aula avulsa já foi excluída.")
+    d = data_iso(a["data"])
+    fica = not d or any(r["id"] is None or fixo_vale(r, d) for r in con.execute(   # id NULL = outra avulsa viva no mesmo horário
+        """SELECT id, vigente_de, criado_em, excluido_em FROM agenda_fixos WHERE cliente_id=? AND dia=? AND hora=?
+           UNION ALL SELECT NULL, NULL, NULL, NULL FROM agenda_avulsas WHERE cliente_id=? AND data=? AND hora=? AND id != ? AND excluido_em IS NULL""",
+        (a["cliente_id"], dt.date.fromisoformat(d).isoweekday() if d else 0, a["hora"], a["cliente_id"], a["data"], a["hora"], aid)))
+    agora = agora_txt()
     with con:
-        con.execute("UPDATE agenda_avulsas SET excluido_em=datetime('now','localtime') WHERE id=?", (aid,))
-    return voltar(url_agenda(semana, todas, aluno, mes), msg="Aula avulsa enviada para a lixeira (dá para restaurar em Dados).")
+        con.execute("UPDATE agenda_avulsas SET excluido_em=? WHERE id=?", (agora, aid))
+        n = 0 if fica else con.execute(f"""UPDATE cliente_eventos SET excluido_em=? WHERE cliente_id=? AND data=? AND hora=? AND excluido_em IS NULL
+                                           AND tipo IN ({TIPOS_MARCA})""", (agora, a["cliente_id"], a["data"], a["hora"])).rowcount
+    return voltar(url, msg="Aula avulsa" + (" e a marcação dela foram" if n else " enviada") + " para a lixeira (dá para restaurar em Dados).")
 
 
 # =====================================================================

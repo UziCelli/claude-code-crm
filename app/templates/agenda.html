@@ -121,7 +121,7 @@
     <div class="saldo {{ 'deve' if controle.saldo }}">
       <div class="saldo-n" aria-hidden="true">{{ controle.saldo }}</div>
       <div><strong>Reposições a fazer: {{ controle.saldo }}</strong>
-        <div class="muted">agendadas: {{ controle.agendadas }} · desmarcou no total: {{ controle.devidas }} · repostas no total: {{ controle.usadas }}</div></div>
+        <div class="muted">agendadas: {{ controle.agendadas }} · desmarcou no total: {{ controle.devidas }} · usadas no total (feita ou faltou): {{ controle.usadas }}</div></div>
     </div>
     <div class="linha mes-nav">
       <a class="btn claro pequeno" href="/agenda?semana={{ segunda }}{{ '&todas=1' if todas }}&aluno={{ controle.id }}&mes={{ controle.mes_ant }}" aria-label="Mês anterior">←</a>
@@ -264,7 +264,7 @@
         <div class="campo"><label>Hora</label>
           <select name="hora"><option value="">—</option>{% for n in range(5, 24) %}<option value="{{ n }}">{{ '%02d'|format(n) }}h</option>{% endfor %}</select></div>
       </div>
-      <div class="campo opcoes"><label><input type="checkbox" name="reposicao" value="1"> É reposição (desconta do saldo do aluno quando fica Feita)</label></div>
+      <div class="campo opcoes"><label><input type="checkbox" name="reposicao" value="1"> É reposição (desconta do saldo do aluno quando fica Feita ou Faltou)</label></div>
     </div>
     <div class="campo"><label>Local</label>
       <select name="local" required>{% for l in locais %}<option>{{ l }}</option>{% endfor %}</select></div>
