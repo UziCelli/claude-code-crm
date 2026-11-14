@@ -14,6 +14,63 @@
   </div>
 </div>
 
+{# Pendências: o que ficou sem marcar na semana e as reposições que ainda faltam agendar (tudo já calculado na rota; sem consulta extra) #}
+{% set DCURTO = {1: 'Seg', 2: 'Ter', 3: 'Qua', 4: 'Qui', 5: 'Sex', 6: 'Sáb'} %}
+{% set n_pend = pendentes|length %}
+{% set n_agendar = repor|sum(attribute='a_agendar') %}
+{% set repor_fazer = repor|selectattr('a_agendar', 'gt', 0)|list %}
+{% set repor_ok = repor|selectattr('a_agendar', 'equalto', 0)|list %}
+<div class="card pendencias" id="pendencias">
+  {% if not n_pend and not n_agendar %}
+  <h2 class="pend-titulo">Pendências <span class="tag verde">Tudo em dia.</span></h2>
+  {% else %}
+  <h2 class="pend-titulo">Pendências
+    <span class="tag {{ 'vermelho' if n_pend else 'neutro' }}">{{ n_pend }} sem marcar</span>
+    <span class="tag {{ 'amarelo' if n_agendar else 'neutro' }}">{{ n_agendar }} a agendar</span></h2>
+  {% endif %}
+  <div class="pend-colunas">
+    <section class="pend-bloco" aria-label="Sem marcar">
+      <h3>{{ 'Sem marcar nesta semana' if atual else 'Sem marcar na semana de ' ~ segunda[8:10] ~ '/' ~ segunda[5:7] }}</h3>
+      {% for a in pendentes %}
+      <div class="pend-linha" data-marca='{{ a.marca|tojson }}' data-dh="{{ a.dia }}-{{ a.hora }}" role="button" tabindex="0">
+        <span class="pend-quando">{{ DCURTO[a.dia] }} {{ a.data[8:10] }}/{{ a.data[5:7] }} · {{ '%02d'|format(a.hora) }}h</span>
+        <strong>{{ a.nome }}</strong>
+        {% if a.reposicao %}<span class="tag azul">reposição</span>{% elif a.avulsa %}<span class="tag azul">avulsa</span>{% endif %}
+        <span class="tag estado-lote" hidden></span>
+      </div>
+      {% else %}
+      <p class="muted" style="margin:0">Nada sem marcar.</p>
+      {% endfor %}
+      {% if n_pend %}<div class="pend-acoes"><button type="button" class="claro pequeno" id="pend-todas">Marcar todas como feitas</button></div>{% endif %}
+      <div id="pend-anteriores" class="pend-anteriores" data-extra="{{ extra }}"></div>
+    </section>
+    <section class="pend-bloco" aria-label="Reposições a fazer">
+      <h3>Reposições a fazer</h3>
+      {% for r in repor_fazer %}
+      <div class="repor-linha">
+        <span class="repor-quem"><strong>{{ r.nome }}</strong> <span class="muted">—</span> <b>{{ r.a_agendar }} a agendar</b>{% if r.agendadas %} <span class="muted">· {{ r.agendadas }} já agendada{{ 's' if r.agendadas > 1 }}</span>{% endif %}</span>
+        <span class="repor-acoes">
+          <button type="button" class="claro pequeno btn-repor-aluno" data-aluno="{{ r.id }}">Agendar reposição</button>
+          <a class="muted" href="/agenda?semana={{ segunda }}{{ '&todas=1' if todas }}&aluno={{ r.id }}">Ver controle</a>
+        </span>
+      </div>
+      {% else %}
+      {% if not repor_ok %}<p class="muted" style="margin:0">Nenhuma reposição a fazer.</p>{% endif %}
+      {% endfor %}
+      {% if repor_ok %}
+      <details class="repor-ok"><summary>Já agendadas ({{ repor_ok|length }})</summary>
+        {% for r in repor_ok %}
+        <div class="repor-linha">
+          <span class="repor-quem"><strong>{{ r.nome }}</strong> <span class="muted">· {{ r.agendadas }} já agendada{{ 's' if r.agendadas != 1 }}</span></span>
+          <span class="repor-acoes"><a class="muted" href="/agenda?semana={{ segunda }}{{ '&todas=1' if todas }}&aluno={{ r.id }}">Ver controle</a></span>
+        </div>
+        {% endfor %}
+      </details>
+      {% endif %}
+    </section>
+  </div>
+</div>
+
 {% if atual %}
 <div class="card card-hoje" id="hoje">
   <h2>Hoje — {{ hoje_d.isoweekday()|dia }} {{ hoje_d.strftime('%d/%m') }}</h2>
@@ -143,12 +200,12 @@
       {% for a in lst %}{% set r = '' if (a.bloqueio and not a.estado) else ROT[a.situacao] %}{% if r and r not in rots %}{% set _ = rots.append(r) %}{% endif %}{% endfor %}
       {% set locs = lst|map(attribute='local')|unique|list %}
       <button type="button" class="cel aula {{ 'dupla' if lst|length > 1 else ('bloq' if lst[0].bloqueio and not lst[0].estado else lst[0].situacao) }}"
-        data-info='{{ infos[(d.n, h)]|tojson }}' title="{{ lst|map(attribute='nome')|join(' + ') }} · {{ locs|join(' / ') }}"><span class="nomes">
+        data-dh="{{ d.n }}-{{ h }}" data-info='{{ infos[(d.n, h)]|tojson }}' title="{{ lst|map(attribute='nome')|join(' + ') }} · {{ locs|join(' / ') }}"><span class="nomes">
           {%- for a in lst %}{% if not loop.first %} <span class="seg"><span class="mais">+</span> {% endif %}<span class="n {{ 'bloq' if a.bloqueio and not a.estado else a.situacao }}">{{ a.curto }}{% if a.reposicao %} <span class="av">reposição</span>{% elif a.avulsa %} <span class="av">avulsa</span>{% endif %}</span>{% if not loop.first %}</span>{% endif %}{% endfor -%}
         </span>{% if rots or multi_local %}<small class="miudo"><span class="rots">{{ rots|join(' · ') }}{% if rots and multi_local %} · {% endif %}</span>{{ locs|join(' / ') if multi_local }}</small>{% endif %}
       </button>
       {% else %}
-      <button type="button" class="cel vazio" data-info='{{ infos[(d.n, h)]|tojson }}' aria-label="Escolher aluno de {{ d.n|dia }} às {{ '%02d'|format(h) }}h">+</button>
+      <button type="button" class="cel vazio" data-dh="{{ d.n }}-{{ h }}" data-info='{{ infos[(d.n, h)]|tojson }}' aria-label="Escolher aluno de {{ d.n|dia }} às {{ '%02d'|format(h) }}h">+</button>
       {% endif %}
     </td>
     {% endfor %}
@@ -436,8 +493,9 @@
 
   // "Agendar reposição" (painel do aluno): abre o incluir já com o aluno, "Só neste dia" e "É reposição".
   // Abre aqui (sem data-abrir): o app.js só copia valor e não marca botão de rádio nem caixa.
-  var repor = document.getElementById("btn-repor");
-  if (repor) repor.addEventListener("click", function () {
+  document.addEventListener("click", function (e) {   // vale para o botão do painel (#btn-repor) e para a lista de Pendências (.btn-repor-aluno)
+    var repor = e.target.closest(".btn-repor-aluno, #btn-repor");
+    if (!repor) return;
     f.reset();
     f.elements.cliente_id.value = repor.dataset.aluno;
     f.elements.repetir.value = "0";
@@ -496,7 +554,7 @@
       if (a) registra(n, {cliente_id: a.cliente_id, data: info.data, hora: info.hora, local: a.local, avulsa: a.avulsa, reposicao: a.reposicao, estado: a.estado, base: a.base});
     });
   });
-  document.querySelectorAll(".aula-hoje[data-marca]").forEach(function (e) {
+  document.querySelectorAll("[data-marca]").forEach(function (e) {   // linhas do "Hoje" e das Pendências
     try { registra(e, JSON.parse(e.dataset.marca)); } catch (_) { }
   });
   function atual(m) { var x = mud.get(chave(m)); return x ? x.estado : (m.estado || ""); }
@@ -511,7 +569,7 @@
         trocaCor(e, est || m.base);
         var card = e.closest(".cel.aula");
         if (card && !card.classList.contains("dupla")) trocaCor(card, est || m.base);   // card de 1 aluno: o card todo leva a cor
-      } else {   // linha do "Hoje"
+      } else {   // linha do "Hoje" ou das Pendências
         CORES.forEach(function (c) { e.classList.remove(c); });
         if (est) e.classList.add(est);
         var tag = e.querySelector(".estado-lote");
@@ -558,6 +616,27 @@
     if (e.target.closest(".cel")) { e.preventDefault(); e.stopImmediatePropagation(); }
   }, true);
 
+  // Pendências: fora do "Marcar várias", tocar na linha abre o mesmo card da grade (se a célula não está na tela, nada acontece)
+  function abreCelula(linha) {
+    var cel = document.querySelector('.cel[data-dh="' + linha.dataset.dh + '"]');
+    if (cel) cel.click();
+  }
+  document.querySelectorAll(".pend-linha").forEach(function (l) {
+    l.addEventListener("click", function () { if (!ligado) abreCelula(l); });
+    l.addEventListener("keydown", function (e) { if ((e.key === "Enter" || e.key === " ") && !ligado) { e.preventDefault(); abreCelula(l); } });
+  });
+  var btnTodas = document.getElementById("pend-todas");
+  if (btnTodas) btnTodas.addEventListener("click", function () {   // liga o modo e pinta tudo como feita (não salva): o resto é corrigir as exceções e Salvar
+    ligar(true);
+    document.querySelectorAll(".pend-linha").forEach(function (l) {
+      var m = l._marca;
+      if (!m || atual(m) === "feita") return;
+      mud.set(chave(m), {m: m, estado: "feita"});
+      pinta(m);
+    });
+    conta();
+  });
+
   function ligar(sim) {
     ligado = sim;
     document.body.classList.toggle("modo-lote", sim);
@@ -602,6 +681,21 @@
     document.body.appendChild(form);
     form.submit();
   });
+  // semanas anteriores com aula sem marcar: busca depois da página carregar (não atrasa a tela); se falhar, não mostra nada
+  var ant = document.getElementById("pend-anteriores");
+  if (ant && window.fetch) fetch("/agenda/pendentes", {credentials: "same-origin", headers: {Accept: "application/json"}})
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (d) {
+      var ss = (d && d.semanas) || [];
+      if (!ss.length) return;
+      ant.appendChild(el("span", "muted", "Semanas anteriores: "));
+      ss.forEach(function (s) {
+        var a = el("a", "tag amarelo", "Semana de " + s.txt.slice(0, 5) + ": " + s.n + " sem marcar");
+        a.href = "/agenda?semana=" + s.segunda + (ant.dataset.extra || "");
+        ant.appendChild(a);
+      });
+    })
+    .catch(function () { });
   window.addEventListener("beforeunload", function (e) {
     if (mud.size && !enviando) { e.preventDefault(); e.returnValue = ""; }
   });
