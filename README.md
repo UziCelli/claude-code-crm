@@ -163,3 +163,7 @@ baixa e reinicia (cerca de 10 segundos fora do ar). Bibliotecas novas são insta
 ```
 .venv\Scripts\python.exe -m pytest tests
 ```
+
+## Agentes e documentação
+
+Comece por [AGENTS.md](AGENTS.md) e pelo guia exclusivo do seu agente. Consulte o [índice](docs/README.md) somente conforme a tarefa.
