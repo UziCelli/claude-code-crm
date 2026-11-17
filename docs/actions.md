@@ -14,6 +14,6 @@ execuções de CI de commits diferentes, não evita conflitos entre agentes e n�
 substitui revisão de YAML antes do envio.
 
 
-O workflow `dependabot-juntar.yml` é disparado quando `CI` e `Segredos no código` terminam e junta o PR do Dependabot só se toda atualização for minor/patch e todas as verificações do commit estiverem verdes. Como a junção usa o `GITHUB_TOKEN`, ela não dispara workflows de push: a atualização vai ao ar junto com o próximo merge normal.
+O workflow `dependabot-juntar.yml` roda quando uma verificação de PR do Dependabot termina (Actions por `workflow_run`, apps externos como o Cloudflare por `check_suite`, commit statuses por `status`); a última a terminar faz a junção. Só junta se toda atualização for minor/patch e toda verificação do commit tiver terminado com `success` (pulada ou neutra não vale). Como a junção usa o `GITHUB_TOKEN`, ela não dispara workflows de push: a atualização vai ao ar junto com o próximo merge normal.
 
 Referência: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency
