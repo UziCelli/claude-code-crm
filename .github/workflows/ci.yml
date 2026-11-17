@@ -6,6 +6,8 @@ on:
   push:
     branches: [main]
   pull_request:
+    # Rascunho não roda (economia de minutos): roda ao sair do rascunho e a cada envio depois.
+    types: [opened, synchronize, reopened, ready_for_review]
   schedule:
     - cron: '17 11 * * 1'
   workflow_dispatch:
@@ -21,6 +23,7 @@ permissions:
 
 jobs:
   testes:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
