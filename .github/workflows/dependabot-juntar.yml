@@ -1,0 +1,71 @@
+name: Dependabot junta atualização pequena
+
+# Junta sozinho o PR do Dependabot, sem gastar IA, só quando TUDO abaixo for verdade:
+#  1. o PR é do Dependabot e todos os commits são dele;
+#  2. toda atualização é minor ou patch (major e versão sem número, como SHA, ficam para o Victor);
+#  3. toda verificação do commit atual terminou verde (CI, segredos e as demais).
+# Sem ação de terceiros e sem baixar código do PR: só lê metadados pela API do GitHub.
+# Junção feita pelo GITHUB_TOKEN não dispara workflows de push (como "Publicar"):
+# a atualização vai ao ar junto com o próximo merge normal.
+on:
+  workflow_run:
+    workflows: ['CI', 'Segredos no código']
+    types: [completed]
+
+concurrency:
+  group: repository-workflows
+  cancel-in-progress: false
+  queue: max
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+
+jobs:
+  juntar:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Conferir e juntar
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          PR: ${{ github.event.workflow_run.pull_requests[0].number }}
+        run: |
+          set -euo pipefail
+          parar() { echo "Não junto: $1"; exit 0; }
+
+          [ -n "$PR" ] || parar "sem PR associado a esta execução."
+          read -r estado rascunho cabeca autor < <(gh api "repos/$REPO/pulls/$PR" \
+            --jq '[.state, .draft, .head.sha, .user.login] | @tsv')
+          [ "$estado" = open ] || parar "PR não está aberto."
+          [ "$rascunho" = false ] || parar "PR está em rascunho."
+          [ "$cabeca" = "$SHA" ] || parar "o commit do PR mudou depois desta execução."
+          [ "$autor" = 'dependabot[bot]' ] || parar "PR não é do Dependabot."
+
+          commits="repos/$REPO/pulls/$PR/commits"
+          estranhos=$(gh api --paginate "$commits" --jq '.[] | select(.author.login != "dependabot[bot]") | .sha')
+          [ -z "$estranhos" ] || parar "há commit que não é do Dependabot."
+          mensagens=$(gh api --paginate "$commits" --jq '.[].commit.message')
+          total=$(grep -c -E '^[[:space:]]*-?[[:space:]]*dependency-name:' <<<"$mensagens" || true)
+          pequenas=$(grep -c -E '^[[:space:]]*update-type: version-update:semver-(minor|patch)[[:space:]]*$' <<<"$mensagens" || true)
+          echo "Atualizações no PR: $total; minor ou patch: $pequenas."
+          { [ "$total" -gt 0 ] && [ "$total" -eq "$pequenas" ]; } \
+            || parar "tem versão grande (major) ou sem número (SHA): fica para o Victor."
+
+          verificacoes="repos/$REPO/commits/$SHA/check-runs"
+          existentes=$(gh api --paginate "$verificacoes" --jq '.check_runs[].name')
+          [ -n "$existentes" ] || parar "nenhuma verificação encontrada no commit."
+          rodando=$(gh api --paginate "$verificacoes" --jq '.check_runs[] | select(.status != "completed") | .name')
+          [ -z "$rodando" ] || parar "ainda rodando ($(tr '\n' ' ' <<<"$rodando")). A próxima verificação que terminar confere de novo."
+          ruins=$(gh api --paginate "$verificacoes" --jq '.check_runs[] | select(.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral") | "\(.name): \(.conclusion)"')
+          [ -z "$ruins" ] || parar "verificação sem sucesso ($(tr '\n' ' ' <<<"$ruins"))."
+
+          gh pr merge "$PR" --repo "$REPO" --squash --delete-branch --match-head-commit "$SHA"
+          echo "PR $PR juntado: atualização pequena com tudo verde."

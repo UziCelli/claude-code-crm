@@ -1,7 +1,7 @@
 version: 2
 # Uma vez por mês. Atualizações pequenas (minor/patch) chegam juntas num PR só;
-# a tarefa do Claude confere e junta com CI verde. Versão grande (major) vem em PR
-# próprio: o Claude aponta o risco e avisa o Victor (ver AGENTS.md).
+# o workflow dependabot-juntar.yml junta sozinho com tudo verde. Versão grande (major) vem em
+# PR próprio e não é juntada: o Claude aponta o risco e avisa o Victor (ver AGENTS.md).
 updates:
   - package-ecosystem: pip
     directory: /
