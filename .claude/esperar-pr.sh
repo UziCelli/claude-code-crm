@@ -8,15 +8,22 @@ pr=${2:?informe o número do PR}
 repo=$(git remote get-url origin | sed -E 's#\.git$##; s#:#/#g' | awk -F/ '{print $(NF-1)"/"$NF}')
 
 codex() { # revisão do Codex no commit $1: ok | achados | pendente
-  local r
-  r=$(gh api "repos/$repo/issues/$pr/comments?per_page=100" --paginate \
+  # Vale o resumo "Codex Review" do commit ou um comentário "Revisão cruzada: OK" do Codex
+  # citando o commit. Achado pendente no resumo vence o comentário.
+  local estado aprovado
+  estado=$(gh api "repos/$repo/issues/$pr/comments?per_page=100" --paginate \
         --jq '.[] | select(.user.login == "chatgpt-codex-connector[bot]") | .body' 2>/dev/null \
       | grep -o 'codex-review-state:v1 {.*}' | tail -1 | sed 's/^codex-review-state:v1 //' \
       | jq -r --arg sha "$1" '.code_review
           | if .commit_sha == $sha and .status == "completed"
             then (if .has_unresolved_findings then "achados" else "ok" end)
             else "pendente" end' 2>/dev/null)
-  echo "${r:-pendente}"
+  aprovado=$(gh api "repos/$repo/issues/$pr/comments?per_page=100" --paginate \
+        --jq ".[] | select(.user.login == \"chatgpt-codex-connector[bot]\"
+                    and (.body | contains(\"Revisão cruzada: OK\")) and (.body | contains(\"${1:0:7}\"))) | .id" 2>/dev/null)
+  if [ "$estado" = achados ]; then echo achados
+  elif [ -n "$aprovado" ]; then echo ok
+  else echo "${estado:-pendente}"; fi
 }
 
 sleep 45 # dá tempo de o GitHub criar a rodada nova
@@ -36,7 +43,8 @@ for _ in $(seq 1 90); do
            | jq -r --arg desde "$pronto" '.workflow_runs[] | select(.created_at >= $desde)
                                           | [.status, (.conclusion // "-"), .name] | @tsv')
     if [ -n "$runs" ] && ! grep -qv '^completed' <<<"$runs"; then
-      falhas=$(awk -F'\t' '$2 != "success" && $2 != "skipped" && $2 != "neutral" {printf "%s (%s); ", $3, $2}' <<<"$runs")
+      # Depois de sair do rascunho, toda rodada obrigatória tem de dar success (pulada não conta).
+      falhas=$(awk -F'\t' '$2 != "success" {printf "%s (%s); ", $3, $2}' <<<"$runs")
       echo "ci: ${falhas:+vermelho: }${falhas:-verde} no commit ${sha:0:7} | codex: $(codex "$sha")"
       exit 0
     fi
