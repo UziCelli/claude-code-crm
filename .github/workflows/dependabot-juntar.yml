@@ -5,16 +5,17 @@ name: Dependabot junta atualização pequena
 #  2. toda atualização é minor ou patch (major e versão sem número, como SHA, ficam para o Victor);
 #  3. toda verificação do commit atual terminou com sucesso real: check-runs (Actions e apps
 #     externos, como o Cloudflare) e commit statuses. Pulada ou neutra NÃO conta como aprovação.
-# Roda quando uma verificação termina: Actions (workflow_run), app externo (check_suite) ou
-# commit status (status). A última a terminar faz a junção; as demais saem sem fazer nada.
+# Roda quando uma verificação termina: Actions (workflow_run) ou commit status (status); a última
+# a terminar faz a junção e as demais saem sem fazer nada. O GitHub não dispara workflow quando um
+# app externo (como o Cloudflare) termina num commit que tem Actions; por isso, se só ele faltar,
+# o job espera até 4 minutos por ele. Verificação do Actions pendente: sai na hora (ela mesma dispara
+# nova avaliação; esperar por ela travaria a fila, que está atrás deste job).
 # Sem ação de terceiros e sem baixar código do PR: só lê metadados pela API do GitHub.
 # Junção feita pelo GITHUB_TOKEN não dispara workflows de push (como "Publicar"):
 # a atualização vai ao ar junto com o próximo merge normal.
 on:
   workflow_run:
     workflows: ['CI', 'Segredos no código']
-    types: [completed]
-  check_suite:
     types: [completed]
   status:
 
@@ -32,9 +33,6 @@ jobs:
         && github.event.workflow_run.conclusion == 'success'
         && github.event.workflow_run.event == 'pull_request'
         && startsWith(github.event.workflow_run.head_branch, 'dependabot/'))
-      || (github.event_name == 'check_suite'
-        && github.event.check_suite.conclusion == 'success'
-        && startsWith(github.event.check_suite.head_branch, 'dependabot/'))
       || (github.event_name == 'status'
         && github.event.state == 'success'
         && contains(join(github.event.branches.*.name, ','), 'dependabot/'))
@@ -45,13 +43,13 @@ jobs:
       cancel-in-progress: false
       queue: max
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - name: Conferir e juntar
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          SHA: ${{ github.event.workflow_run.head_sha || github.event.check_suite.head_sha || github.event.sha }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.event.sha }}
         run: |
           set -euo pipefail
           parar() { echo "Não junto: $1"; exit 0; }
@@ -75,12 +73,20 @@ jobs:
           { [ "$total" -gt 0 ] && [ "$total" -eq "$pequenas" ]; } \
             || parar "tem versão grande (major) ou sem número (SHA): fica para o Victor."
 
+          # Verificações (check-runs): instantâneo a cada tentativa. Do Actions pendente: sai na hora.
+          # Externa pendente (ex.: Cloudflare): espera até 4 min, porque o fim dela não dispara este workflow.
           verificacoes="repos/$REPO/commits/$SHA/check-runs"
-          existentes=$(gh api --paginate "$verificacoes" --jq '.check_runs[].name')
-          [ -n "$existentes" ] || parar "nenhuma verificação encontrada no commit."
-          rodando=$(gh api --paginate "$verificacoes" --jq '.check_runs[] | select(.status != "completed") | .name')
-          [ -z "$rodando" ] || parar "ainda rodando ($(tr '\n' ' ' <<<"$rodando")). Quando terminar, o evento dela confere de novo."
-          ruins=$(gh api --paginate "$verificacoes" --jq '.check_runs[] | select(.conclusion != "success") | "\(.name): \(.conclusion)"')
+          for tentativa in $(seq 1 16); do
+            runs=$(gh api --paginate "$verificacoes" --jq '.check_runs[]' | jq -s '.')
+            [ "$(jq 'length' <<<"$runs")" -gt 0 ] || parar "nenhuma verificação encontrada no commit."
+            actions=$(jq -r '.[] | select(.status != "completed" and .app.slug == "github-actions") | .name' <<<"$runs")
+            [ -z "$actions" ] || parar "Actions ainda rodando ($(tr '\n' ' ' <<<"$actions")). O evento dela confere de novo."
+            externas=$(jq -r '.[] | select(.status != "completed") | .name' <<<"$runs")
+            [ -n "$externas" ] || break
+            [ "$tentativa" -lt 16 ] && sleep 15
+          done
+          [ -z "$externas" ] || parar "verificação externa ainda rodando depois de 4 minutos ($(tr '\n' ' ' <<<"$externas")). Reexecute este job quando ela terminar."
+          ruins=$(jq -r '.[] | select(.conclusion != "success") | "\(.name): \(.conclusion)"' <<<"$runs")
           [ -z "$ruins" ] || parar "verificação sem sucesso, pulada ou neutra não vale ($(tr '\n' ' ' <<<"$ruins"))."
 
           # Commit statuses (integrações antigas): sem nenhum, o GitHub devolve "pending" com total 0.
