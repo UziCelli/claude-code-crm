@@ -22,15 +22,20 @@ codex() { # revisão do Codex no commit $1: ok | achados | pendente
 sleep 45 # dá tempo de o GitHub criar a rodada nova
 sha=desconhecido
 for _ in $(seq 1 90); do
-  sha=$(gh api "repos/$repo/pulls/$pr" --jq .head.sha 2>/dev/null) || { sleep 60; continue; }
+  pr_json=$(gh api "repos/$repo/pulls/$pr" 2>/dev/null) || { sleep 60; continue; }
+  sha=$(jq -r .head.sha <<<"$pr_json")
   if [ "$modo" = codex ]; then
     r=$(codex "$sha")
     [ "$r" != pendente ] && { echo "codex: $r no commit ${sha:0:7}"; exit 0; }
-  else
-    runs=$(gh api "repos/$repo/commits/$sha/check-runs?per_page=100" \
-             --jq '.check_runs[] | [.status, (.conclusion // "-"), .name] | @tsv' 2>/dev/null)
-    # Pronto quando nada está rodando e ao menos um job de verdade (não pulado) terminou.
-    if [ -n "$runs" ] && ! grep -qv '^completed' <<<"$runs" && grep -qv $'^completed\tskipped\t' <<<"$runs"; then
+  elif [ "$(jq -r .draft <<<"$pr_json")" = false ]; then
+    # Só as rodadas do Actions criadas depois de o PR sair do rascunho: as do rascunho
+    # têm jobs pulados e checks de fora (ex.: Cloudflare) não são o CI obrigatório.
+    pronto=$(gh api "repos/$repo/issues/$pr/events?per_page=100" --paginate \
+               --jq '.[] | select(.event == "ready_for_review") | .created_at' 2>/dev/null | tail -1)
+    runs=$(gh api "repos/$repo/actions/runs?head_sha=$sha&per_page=100" 2>/dev/null \
+           | jq -r --arg desde "$pronto" '.workflow_runs[] | select(.created_at >= $desde)
+                                          | [.status, (.conclusion // "-"), .name] | @tsv')
+    if [ -n "$runs" ] && ! grep -qv '^completed' <<<"$runs"; then
       falhas=$(awk -F'\t' '$2 != "success" && $2 != "skipped" && $2 != "neutral" {printf "%s (%s); ", $3, $2}' <<<"$runs")
       echo "ci: ${falhas:+vermelho: }${falhas:-verde} no commit ${sha:0:7} | codex: $(codex "$sha")"
       exit 0
