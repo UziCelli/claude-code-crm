@@ -17,6 +17,19 @@ Instruções comuns: Codex lê CODEX.md; Claude Code lê CLAUDE.md; cada agente 
 - Claude revisa PR do Codex; Codex revisa PR do Claude. Antes do merge, registrar “Revisão cruzada: OK”, pelo outro agente, com commit revisado e parecer. Nova alteração exige revisão do novo diff. Não aprovar o próprio trabalho em nome do outro.
 - Só juntar após revisores consultados/aprovados, revisão cruzada válida, CI obrigatório verde na versão atual e autorização aplicável. Corrija achados reais e resolva as conversas antes de juntar. Não contorne proteções nem conte teste pulado como aprovação. Não publique uma branch de trabalho.
 - Validação proporcional: verificações afetadas, ampliando por risco/falha. Preserve o CI existente. Não repita testes aprovados sem mudança relevante.
+- **Minutos do Actions são limitados (repositórios privados, plano grátis).** PR em rascunho não roda CI; não reexecute verificação verde sem mudança; mudança só de documentação não pede teste.
 - Sem check-ins agendados nos PRs. Sem delegação automática para tarefas simples; operações básicas usam ferramentas.
 - Uma fonte por assunto; atualize documentação quando regra ou comportamento mudar, sem acumular diário nos guias iniciais.
-- Preserve o fluxo automático já autorizado: depois das aprovações dos revisores (incluindo Codex, solicitado com `@codex review` no PR) e CI verde, marcar pronta e juntar sem nova pergunta.
+
+## Fluxo automático de PR (Victor, 17/11/2026)
+
+Do PR ao merge sem esperar o Victor, com o mínimo de Actions e de uso das IAs.
+
+- **Todo PR abre em rascunho.** Rascunho não roda CI. Sai do rascunho só com a revisão cruzada OK no commit atual, para uma única rodada completa de CI.
+- **PR do Claude:** comentar `@codex review`. Vale como OK do Codex o resumo "Codex Review" concluído no commit atual sem achados pendentes, ou um comentário "Revisão cruzada: OK" do Codex. Achado real: corrigir, enviar e pedir `@codex review` de novo. Achado que não procede: responder na conversa com o motivo.
+- **PR do Codex (branch `codex/…`):** o Codex abre o PR só com o trabalho terminado e não envia commits depois (mudança pedida depois vira PR novo). Não precisa avisar ninguém: uma tarefa do Claude com gatilho do GitHub é acionada sozinha e revisa. Se achar problema, o Claude corrige no próprio PR e pede `@codex review` para o Codex conferir a correção. Com tudo OK, o Claude registra "Revisão cruzada: OK" com o commit.
+- **Dependabot (branch `dependabot/…`):** atualizações pequenas chegam juntas uma vez por mês; a mesma tarefa do Claude confere e junta com CI verde, sem revisão do Codex. Versão grande (major): o Claude comenta o risco no PR e avisa o Victor, sem juntar.
+- **Juntar sem perguntar:** o merge fica com o Claude. Com revisão cruzada OK no commit atual, nenhum achado pendente e CI obrigatório verde, ele tira do rascunho se preciso, junta conferindo o commit e acompanha a publicação. Perguntar ao Victor antes só se a mudança apagar ou migrar dados que já estão em produção, ou tiver custo em dinheiro.
+- **CI vermelho:** corrigir e repetir; mudança de código depois do OK pede novo `@codex review`. Falha que não é do PR: explicar ao Victor em linguagem simples. Instabilidade: reexecutar só o job que falhou, uma vez.
+- **Esperar não gasta IA:** a revisão do Codex e o CI são acompanhados por consulta à API do GitHub em segundo plano, sem rotina agendada nem conversa de verificação.
+- **No fim:** avisar o Victor em 2–3 tópicos (o que mudou e se já está no ar).

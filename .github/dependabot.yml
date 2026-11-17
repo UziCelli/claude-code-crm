@@ -1,11 +1,21 @@
 version: 2
+# Uma vez por mês. Atualizações pequenas (minor/patch) chegam juntas num PR só;
+# a tarefa do Claude confere e junta com CI verde. Versão grande (major) vem em PR
+# próprio: o Claude aponta o risco e avisa o Victor (ver AGENTS.md).
 updates:
-  - package-ecosystem: "pip"
-    directory: "/"
+  - package-ecosystem: pip
+    directory: /
     schedule:
-      interval: "weekly"
+      interval: monthly
     open-pull-requests-limit: 5
-  - package-ecosystem: "github-actions"
-    directory: "/"
+    groups:
+      pequenas:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
     schedule:
-      interval: "weekly"
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      pequenas:
+        update-types: [minor, patch]
