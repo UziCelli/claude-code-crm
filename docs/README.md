@@ -6,6 +6,7 @@ Leia somente o assunto necessário. Planos, relatórios e histórico não são c
 |---|---|
 | Regras comuns | [AGENTS.md](../AGENTS.md) |
 | Guia exclusivo | Codex: `CODEX.md`; Claude: `CLAUDE.md`. Leia somente o seu. |
+| Fila do GitHub Actions | [actions.md](actions.md) |
 | Segurança | [SECURITY.md](../SECURITY.md) |
 | Estilo | [CODE_STYLE.md](../CODE_STYLE.md) |
 | Arquitetura | [ARCHITETURE.md](../ARCHITETURE.md) |

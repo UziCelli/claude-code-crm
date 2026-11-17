@@ -9,6 +9,11 @@ on:
     - cron: '53 * * * *'
   workflow_dispatch:
 
+concurrency:
+  group: repository-workflows
+  cancel-in-progress: false
+  queue: max
+
 permissions:
   contents: read
   issues: write
