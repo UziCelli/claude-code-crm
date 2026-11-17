@@ -1,0 +1,98 @@
+name: Dependabot junta atualização pequena
+
+# Junta sozinho o PR do Dependabot, sem gastar IA, só quando TUDO abaixo for verdade:
+#  1. o PR é do Dependabot e todos os commits são dele;
+#  2. toda atualização é minor ou patch (major e versão sem número, como SHA, ficam para o Victor);
+#  3. toda verificação do commit atual terminou com sucesso real: check-runs (Actions e apps
+#     externos, como o Cloudflare) e commit statuses. Pulada ou neutra NÃO conta como aprovação.
+# Roda quando uma verificação termina: Actions (workflow_run) ou commit status (status); a última
+# a terminar faz a junção e as demais saem sem fazer nada. O GitHub não dispara workflow quando um
+# app externo (como o Cloudflare) termina num commit que tem Actions; por isso, se só ele faltar,
+# o job espera até 4 minutos por ele. Verificação do Actions pendente: sai na hora (ela mesma dispara
+# nova avaliação; esperar por ela travaria a fila, que está atrás deste job).
+# Sem ação de terceiros e sem baixar código do PR: só lê metadados pela API do GitHub.
+# Junção feita pelo GITHUB_TOKEN não dispara workflows de push (como "Publicar"):
+# a atualização vai ao ar junto com o próximo merge normal.
+on:
+  workflow_run:
+    workflows: ['CI', 'Segredos no código']
+    types: [completed]
+  status:
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  statuses: read
+
+jobs:
+  juntar:
+    # Só entra na fila (e gasta runner) para branch do Dependabot; o resto é pulado na hora.
+    if: >-
+      (github.event_name == 'workflow_run'
+        && github.event.workflow_run.conclusion == 'success'
+        && github.event.workflow_run.event == 'pull_request'
+        && startsWith(github.event.workflow_run.head_branch, 'dependabot/'))
+      || (github.event_name == 'status'
+        && github.event.state == 'success'
+        && contains(join(github.event.branches.*.name, ','), 'dependabot/'))
+    # Fila única do repositório, igual aos demais workflows; no nível do job para que
+    # os eventos pulados acima não ocupem vaga na fila.
+    concurrency:
+      group: repository-workflows
+      cancel-in-progress: false
+      queue: max
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Conferir e juntar
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.event.sha }}
+        run: |
+          set -euo pipefail
+          parar() { echo "Não junto: $1"; exit 0; }
+
+          PR=$(gh api "repos/$REPO/commits/$SHA/pulls" --jq '[.[] | select(.state == "open")] | .[0].number // empty')
+          [ -n "$PR" ] || parar "nenhum PR aberto para o commit $SHA."
+          read -r estado rascunho cabeca autor < <(gh api "repos/$REPO/pulls/$PR" \
+            --jq '[.state, .draft, .head.sha, .user.login] | @tsv')
+          [ "$estado" = open ] || parar "PR não está aberto."
+          [ "$rascunho" = false ] || parar "PR está em rascunho."
+          [ "$cabeca" = "$SHA" ] || parar "o commit do PR mudou depois desta execução."
+          [ "$autor" = 'dependabot[bot]' ] || parar "PR não é do Dependabot."
+
+          commits="repos/$REPO/pulls/$PR/commits"
+          estranhos=$(gh api --paginate "$commits" --jq '.[] | select(.author.login != "dependabot[bot]") | .sha')
+          [ -z "$estranhos" ] || parar "há commit que não é do Dependabot."
+          mensagens=$(gh api --paginate "$commits" --jq '.[].commit.message')
+          total=$(grep -c -E '^[[:space:]]*-?[[:space:]]*dependency-name:' <<<"$mensagens" || true)
+          pequenas=$(grep -c -E '^[[:space:]]*update-type: version-update:semver-(minor|patch)[[:space:]]*$' <<<"$mensagens" || true)
+          echo "Atualizações no PR: $total; minor ou patch: $pequenas."
+          { [ "$total" -gt 0 ] && [ "$total" -eq "$pequenas" ]; } \
+            || parar "tem versão grande (major) ou sem número (SHA): fica para o Victor."
+
+          # Verificações (check-runs): instantâneo a cada tentativa. Do Actions pendente: sai na hora.
+          # Externa pendente (ex.: Cloudflare): espera até 4 min, porque o fim dela não dispara este workflow.
+          verificacoes="repos/$REPO/commits/$SHA/check-runs"
+          for tentativa in $(seq 1 16); do
+            runs=$(gh api --paginate "$verificacoes" --jq '.check_runs[]' | jq -s '.')
+            [ "$(jq 'length' <<<"$runs")" -gt 0 ] || parar "nenhuma verificação encontrada no commit."
+            actions=$(jq -r '.[] | select(.status != "completed" and .app.slug == "github-actions") | .name' <<<"$runs")
+            [ -z "$actions" ] || parar "Actions ainda rodando ($(tr '\n' ' ' <<<"$actions")). O evento dela confere de novo."
+            externas=$(jq -r '.[] | select(.status != "completed") | .name' <<<"$runs")
+            [ -n "$externas" ] || break
+            [ "$tentativa" -lt 16 ] && sleep 15
+          done
+          [ -z "$externas" ] || parar "verificação externa ainda rodando depois de 4 minutos ($(tr '\n' ' ' <<<"$externas")). Reexecute este job quando ela terminar."
+          ruins=$(jq -r '.[] | select(.conclusion != "success") | "\(.name): \(.conclusion)"' <<<"$runs")
+          [ -z "$ruins" ] || parar "verificação sem sucesso, pulada ou neutra não vale ($(tr '\n' ' ' <<<"$ruins"))."
+
+          # Commit statuses (integrações antigas): sem nenhum, o GitHub devolve "pending" com total 0.
+          read -r qtd situacao < <(gh api "repos/$REPO/commits/$SHA/status" --jq '[.total_count, .state] | @tsv')
+          { [ "$qtd" -eq 0 ] || [ "$situacao" = success ]; } \
+            || parar "commit status não está verde ($situacao). Quando mudar, o evento dele confere de novo."
+
+          gh pr merge "$PR" --repo "$REPO" --squash --delete-branch --match-head-commit "$SHA"
+          echo "PR $PR juntado: atualização pequena com tudo verde."
