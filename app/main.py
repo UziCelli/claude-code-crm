@@ -2042,6 +2042,60 @@ def saldos_reposicao(con, ids=None, hoje=None) -> dict:
     return out
 
 
+def aulas_contratadas(c, semanas: float) -> int | None:
+    """Aulas que o aluno contratou no mês, pelo plano da ficha: Mensalidade Nx = N × semanas (Configurações > Agenda, padrão 4);
+    Pacote N = N. Outros (consultoria, avaliação, sem plano) = None: a Agenda só informa as aulas, sem meta."""
+    plano = c["plano"] or ""
+    m = re.search(r"Mensalidade (\d+)x", plano)
+    if m:
+        return int(round(int(m.group(1)) * semanas))
+    m = re.search(r"Pacote (?:de )?(\d+)", plano)
+    return int(m.group(1)) if m else None
+
+
+def resumo_aulas_mes(con, mes: str, hoje, ids=None) -> dict:
+    """As aulas do mês de cada aluno ativo, para ver se o mês fechou: {"alunos": [...], "total": {...}}.
+      contratadas = aulas_contratadas (None: sem meta, só informa)
+      previstas   = horários fixos da Agenda no mês (o calendário: 8, 9 ou 10), sem mês pulado e sem bloqueio; reposição e avulsa não contam
+      feitas      = aulas marcadas como Feita no mês (reposição inclusive: é aula dada)
+      faltam      = contratadas − feitas (nunca negativo); completo = feitas ≥ contratadas ("mês 100%")
+      passou      = max(previstas, feitas) − contratadas, quando passa: aula a mais que o plano não paga.
+      custo_extra = na CIA, que cobra por aula, passou × a taxa da aula (R$); nos outros locais é só informativo (0)."""
+    ano, m = int(mes[:4]), int(mes[5:7])
+    primeiro = dt.date(ano, m, 1)
+    ultimo = dt.date(ano + (m == 12), m % 12 + 1, 1) - dt.timedelta(days=1)
+    segunda = primeiro - dt.timedelta(days=primeiro.weekday())
+    semanas = (ultimo - segunda).days // 7 + 1
+    previstas, locais = {}, {}
+    for a in aulas_da_semana(con, segunda, hoje, semanas=semanas):
+        if a["data"][:7] != mes or a["avulsa"] or a["pausa"] or a["bloqueio"]:
+            continue
+        previstas[a["cliente_id"]] = previstas.get(a["cliente_id"], 0) + 1
+        locais.setdefault(a["cliente_id"], []).append(a["local"])
+    feitas = {r[0]: r[1] for r in con.execute(
+        "SELECT cliente_id, COUNT(*) FROM cliente_eventos WHERE tipo='aula' AND excluido_em IS NULL AND substr(data,1,7)=? GROUP BY cliente_id", (mes,))}
+    semanas_plano = float(db.parametros(con, "agenda").get("semanas_contratadas") or 4)
+    taxa_cia = precos.taxas_cia(con)[0]
+    alunos = []
+    for c in con.execute("SELECT id, nome, plano, pessoas FROM clientes WHERE excluido_em IS NULL AND status='ativo' ORDER BY nome"):
+        if ids is not None and c["id"] not in ids:
+            continue
+        contr, prev, feit = aulas_contratadas(c, semanas_plano), previstas.get(c["id"], 0), feitas.get(c["id"], 0)
+        if not (contr or prev or feit):
+            continue
+        lst = locais.get(c["id"], [])
+        cia = bool(lst) and sum(contas_auto.eh_local_cia(x) for x in lst) * 2 > len(lst)   # a maioria das aulas é na CIA
+        passou = max(max(prev, feit) - contr, 0) if contr else 0
+        pessoas = min(max(int(c["pessoas"] or 1), 1), max(taxa_cia) if taxa_cia else 1)
+        alunos.append({"id": c["id"], "nome": c["nome"], "contratadas": contr, "previstas": prev, "feitas": feit,
+                       "faltam": max(contr - feit, 0) if contr else None, "completo": bool(contr) and feit >= contr,
+                       "passou": passou, "cia": cia, "custo_extra": round(passou * taxa_cia.get(pessoas, 0), 2) if cia else 0.0})
+    soma = lambda k: sum(a[k] or 0 for a in alunos)   # noqa: E731
+    total = {k: soma(k) for k in ("contratadas", "previstas", "feitas", "faltam", "passou", "custo_extra")}
+    total["custo_extra"] = round(total["custo_extra"], 2)
+    return {"mes": mes, "mes_txt": f"{MESES[m - 1]} de {ano}", "alunos": alunos, "total": total}
+
+
 def controle_aluno(con, cid, mes, hoje) -> dict | None:
     """Painel do aluno na Agenda: saldo de reposições (sempre o total) e as aulas do mês (feitas, faltas, desmarcadas, canceladas e reposições
     agendadas). Cada linha de evento traz o id (eid) para os botões do desmarcou; a reposição ligada a uma desmarcação traz a data dela (repoe).
@@ -2085,6 +2139,7 @@ def controle_aluno(con, cid, mes, hoje) -> dict | None:
             "mes_ant": ant.strftime("%Y-%m"), "mes_prox": prox.strftime("%Y-%m"), "eh_atual": mes == hoje.strftime("%Y-%m"),
             "feitas": contar("feita"), "faltou": contar("faltou"), "desmarcou": contar("desmarcou"), "canceladas": contar("cancelada"),
             "repostas": sum(1 for l in linhas if l["estado"] == "feita" and l["reposicao"]), "linhas": linhas,
+            "resumo": next(iter(resumo_aulas_mes(con, mes, hoje, ids={cid})["alunos"]), None),   # contratadas, previstas, faltam, passou
             **saldos_reposicao(con, [cid], hoje)[cid]}
 
 
@@ -2147,6 +2202,8 @@ def agenda(request: Request, semana: str = "", todas: int = 0, aluno: str = "", 
                   hoje_aulas=[a for a in aulas if a["data"] == hoje.isoformat()] if atual else [],
                   multi_local=len({x["local"] for l in celulas.values() for x in l}) > 1, controle=controle, extra=extra, extra_aluno=extra_aluno,
                   hoje_segunda=inicio_semana(hoje.isoformat()).isoformat(), pendentes=pendentes, repor=repor,
+                  aulas_mes=resumo_aulas_mes(con, hoje.strftime("%Y-%m"), hoje),
+                  semanas_contratadas=float(db.parametros(con, "agenda").get("semanas_contratadas") or 4),
                   locais=locais, clientes=clientes_, com_aulas=com_aulas, data_padrao=(hoje if atual else segunda).isoformat())
 
 
@@ -3733,6 +3790,8 @@ GRUPOS_CONFIG = [("taxa_pagamento", "Taxas por forma de pagamento", "pct"),
                               "trabalho (aula, planejamento por pacote e por mês de mensalidade, consultoria por mês, avaliação; "
                               "0 = usa a planilha). O deslocamento vem de cada local (o da CIA fica em 'Deslocamento até a CIA'). "
                               "O lucro é o que sobra depois disso", "num"),
+                 ("agenda", "Agenda: semanas contratadas por mês na Mensalidade (aulas do mês = vezes por semana × isto; "
+                            "a aula a mais num mês de 5 semanas aparece como 'passou')", "num"),
                  ("lead_parado_dias", "Limite de dias parado por etapa", "num"),
                  ("funil_chance", "Chance de fechar por etapa do funil", "pct"),
                  ("fiscal", "Fiscal: salário mínimo (R$), pró-labore e INSS (frações, ex.: 0,28 = 28%)", "num"),
@@ -3771,9 +3830,10 @@ def configuracoes(request: Request, con=Depends(get_db)):
                   das=financeiro.das_competencia(con, mes_atual()), das_txt=financeiro.texto_pct(financeiro.pct_das(con, relogio.hoje().isoformat())))
 
 
-CALCULOS_GRUPOS = ["mao_obra", "metas", "margem_minima", "margem_alvo", "taxa_pagamento", "grupo_mao_obra_extra"]
+CALCULOS_GRUPOS = ["mao_obra", "metas", "agenda", "margem_minima", "margem_alvo", "taxa_pagamento", "grupo_mao_obra_extra"]
 CALCULOS_METAS = {"horas_vendaveis"}   # das metas, só as que entram no cálculo
 ROTULOS = {
+    "semanas_contratadas": "Semanas contratadas por mês (Mensalidade 2x = 2 × isto aulas no mês)",
     "valor_hora": "Valor da hora fixo (R$), usado sem gastos da PF; 0 desliga a regra do tempo",
     "valor_hora_auto": "Salário automático pelos gastos da PF (0 = usa o valor fixo acima; 1 = gastos da PF ÷ horas, "
                        "costuma inflar os preços)",

@@ -104,6 +104,8 @@ PARAMETROS_INICIAIS = [
     ("metas", "clientes_dez26", 14, None, 1),
     ("metas", "clientes_mar27", 18, None, 2),
     ("metas", "horas_vendaveis", 97, None, 3),
+    # Agenda: aulas contratadas no mês da Mensalidade = vezes por semana × semanas_contratadas (a 9ª aula num mês de 5 semanas "passou")
+    ("agenda", "semanas_contratadas", 4, None, 1),
     ("metas", "horas_dez26", 82, None, 4),
     ("metas", "horas_mar27", 90, None, 5),
     ("metas", "lucro_hora_dez26", 30, None, 6),

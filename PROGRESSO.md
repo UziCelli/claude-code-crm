@@ -445,3 +445,12 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Ficou como estava: pagar 2 mensalidades atrasadas de uma vez continua quitando os 2 meses (é mensal, só atrasado).
 - A mensagem "cobre N meses (até ...)" passou a usar a mesma regra da cobertura (pago até 7 dias antes do vencimento começa no mês seguinte): `financeiro.periodo_do_pagamento`.
 - Testes: `tests/test_pagamento_adiantado.py`.
+
+## Agenda: aulas do mês (contratadas, previstas, feitas, faltam, passou) (18/11/2026)
+- Pedido do Victor: ver quantas aulas faltam e quantas estavam previstas no mês; saber quando o mês fechou (100%) e quando passou (mês de 5 semanas, pacote que fecha mais aulas). Na CIA a aula a mais é prejuízo (paga por aula); na Smart Fit quase não muda.
+- `main.resumo_aulas_mes` (card "Aulas de <mês>" na Agenda, uma linha por aluno e o total) e `controle_aluno` (caixinhas Contratadas, Previstas, Faltam/Mês 100% e Passou no painel do aluno):
+  - contratadas = Mensalidade Nx × `agenda.semanas_contratadas` (novo, padrão 4, em Configurações e em Cálculos) ou Pacote N; consultoria e plano sem número ficam sem meta.
+  - previstas = horários fixos da Agenda no mês, sem mês pulado e sem bloqueio; reposição e avulsa não contam.
+  - feitas = marcas Feita do mês (reposição inclusive).
+  - passou = max(previstas, feitas) − contratadas; na CIA (a maioria das aulas lá) vira custo extra = passou × taxa da aula da CIA.
+- Testes: `tests/test_aulas_mes.py`.

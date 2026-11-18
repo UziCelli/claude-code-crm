@@ -71,6 +71,37 @@
   </div>
 </div>
 
+{% set am = aulas_mes %}{% set tm = am.total %}
+<div class="card aulas-mes" id="aulas-mes">
+  <h2 class="pend-titulo">Aulas de {{ am.mes_txt|lower }}
+    {% if tm.contratadas %}<span class="tag {{ 'verde' if not tm.faltam else 'neutro' }}">{{ tm.feitas }} feitas de {{ tm.contratadas }} contratadas</span>
+    {% if tm.faltam %}<span class="tag amarelo">faltam {{ tm.faltam }}</span>{% endif %}{% endif %}
+    {% if tm.passou %}<span class="tag vermelho">passou +{{ tm.passou }}{% if tm.custo_extra %} · {{ tm.custo_extra|moeda }} na CIA{% endif %}</span>{% endif %}</h2>
+  <p class="muted" style="margin:0 0 8px">Contratadas: Mensalidade = vezes por semana × {{ ('%g'|format(semanas_contratadas)) }} (Configurações &gt; Agenda); Pacote = nº de aulas.
+    Previstas: os horários fixos do mês na Agenda (reposição não conta). "Passou": aula a mais que o plano não paga; na CIA ela custa a taxa da aula.</p>
+  {% if am.alunos %}
+  <table class="aulas-mes-tab">
+    <thead><tr><th>Aluno</th><th class="num">Feitas</th><th class="num">Contratadas</th><th class="num">Previstas</th><th>Situação</th></tr></thead>
+    <tbody>
+    {% for a in am.alunos %}
+    <tr>
+      <td><a href="/agenda?aluno={{ a.id }}&semana={{ segunda }}{{ '&todas=1' if todas }}#controle">{{ a.nome }}</a></td>
+      <td class="num">{{ a.feitas }}</td>
+      <td class="num">{{ a.contratadas if a.contratadas is not none else '—' }}</td>
+      <td class="num">{{ a.previstas }}</td>
+      <td>{% if a.passou %}<span class="tag vermelho">passou +{{ a.passou }}{% if a.custo_extra %} · {{ a.custo_extra|moeda }} na CIA{% endif %}</span>
+          {% elif a.completo %}<span class="tag verde">mês 100%</span>
+          {% elif a.contratadas %}<span class="tag neutro">faltam {{ a.faltam }}</span>
+          {% else %}<span class="muted">sem meta (plano sem nº de aulas)</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted" style="margin:0">Nenhum aluno com aulas neste mês.</p>
+  {% endif %}
+</div>
+
 {% if atual %}
 <div class="card card-hoje" id="hoje">
   <h2>Hoje — {{ hoje_d.isoweekday()|dia }} {{ hoje_d.strftime('%d/%m') }}</h2>
@@ -106,7 +137,7 @@
 </div>
 {% endif %}
 
-<div class="card controle{{ ' mt' if atual }}">
+<div class="card controle{{ ' mt' if atual }}" id="controle">
   <form method="get" action="/agenda" class="linha controle-form" id="f-controle">
     <input type="hidden" name="semana" value="{{ segunda }}">{% if todas %}<input type="hidden" name="todas" value="1">{% endif %}
     <div class="campo"><label for="sel-aluno">Controle do aluno</label>
@@ -134,6 +165,13 @@
       <div class="contador desmarcou"><b>{{ controle.desmarcou }}</b><span>Desmarcou</span></div>
       <div class="contador cancelada"><b>{{ controle.canceladas }}</b><span>Canceladas</span></div>
       <div class="contador reposta"><b>{{ controle.repostas }}</b><span>Repostas</span></div>
+      {% set r = controle.resumo %}
+      {% if r and r.contratadas %}
+      <div class="contador"><b>{{ r.contratadas }}</b><span>Contratadas</span></div>
+      <div class="contador"><b>{{ r.previstas }}</b><span>Previstas</span></div>
+      <div class="contador {{ 'feita' if r.completo else '' }}"><b>{{ r.faltam }}</b><span>{{ 'Mês 100%' if r.completo else 'Faltam' }}</span></div>
+      {% if r.passou %}<div class="contador cancelada"><b>+{{ r.passou }}</b><span>Passou{% if r.custo_extra %} ({{ r.custo_extra|moeda }} CIA){% endif %}</span></div>{% endif %}
+      {% endif %}
     </div>
     <ul class="aulas-aluno">
       {% for l in controle.linhas %}
