@@ -132,15 +132,21 @@ def test_livre_na_all_fit_solta_a_cia(http):
     assert situacao(1, 8, "CIA") == [("Mensalidades", "livre", None), ("Pacotes", "livre", None)]
 
 
-def test_outro_aluno_no_mesmo_horario_em_outro_local_e_recusado(http):
+def agenda(dia, hora):
+    """[(cliente_id, local)] do horário fixo na Agenda (quem vale hoje)."""
+    return q("SELECT cliente_id, local FROM agenda_fixos WHERE dia=? AND hora=? AND excluido_em IS NULL ORDER BY id", dia, hora)
+
+
+def test_um_horario_a_lista_escolhida_e_a_do_horario_e_vai_para_a_agenda(http):
+    """A Agenda manda (18/11/2026): ocupar um horário na Grade grava o horário fixo na Agenda. O diálogo vem com quem já está;
+    a lista escolhida passa a ser a do horário (quem não foi escolhido sai), no local desta Grade."""
     alexei, bia = aluno("Alexei Alba"), aluno("Bia Costa")
-    slot(http, "CIA", 1, 8, "ocupado", alexei)
-    r = slot(http, ALL, 1, 8, "ocupado", bia)
-    assert "Alexei Alba" in erro(r) and "CIA" in erro(r)
-    assert situacao(1, 8, "CIA") == [("Mensalidades", "ocupado", alexei), ("Pacotes", "ocupado", alexei)]
-    assert situacao(1, 8, ALL) == [("Mensalidades", "livre", None), ("Pacotes", "livre", None)]
-    r = slot(http, ALL, 1, 8, "indisponivel")   # indisponível também não passa por cima de aluno
-    assert "Alexei Alba" in erro(r)
+    assert erro(slot(http, "CIA", 1, 8, "ocupado", alexei)) is None
+    assert agenda(1, 8) == [(alexei, "CIA")]
+    assert erro(slot(http, ALL, 1, 8, "ocupado", bia)) is None
+    assert agenda(1, 8) == [(bia, ALL)]
+    r = slot(http, ALL, 1, 8, "indisponivel")   # indisponível não passa por cima de aluno da Agenda
+    assert "Agenda" in erro(r) and agenda(1, 8) == [(bia, ALL)]
 
 
 def test_mesmo_aluno_muda_de_local(http):
@@ -227,3 +233,101 @@ def test_partes_do_preco_somam_o_custo_e_batem_com_a_grade(http):
     r = http.get("/grade", params={"local": ALL})
     assert "Por que esse preço?" in r.text and {"CIA", ALL} <= {x["local"] for x in r.context["comparar"]}
     assert r.context["celulas"][(1, 9)]["preco_aula"] == pytest.approx(allfit["preco"], abs=0.01)
+
+
+# ---------- Grade lê a Agenda; vários alunos por horário ----------
+def slot_lote(http, local, celulas, status, *cids):
+    return http.post("/grade/slot", data={"tipo": "Pacotes", "local": local, "status": status, "celulas": celulas, "cliente_id": list(cids)},
+                     follow_redirects=False)
+
+
+def test_horario_fixo_da_agenda_ocupa_a_celula_em_todos_os_locais(http):
+    ana = aluno("Ana Silva")
+    grava("INSERT INTO agenda_fixos (cliente_id, dia, hora, local) VALUES (?, 2, 18, 'CIA')", ana)
+    for local in ("CIA", ALL):
+        c = http.get("/grade", params={"local": local}).context["celulas"][(2, 18)]
+        assert (c["status"], c["cliente_nome"], c["ids"]) == ("ocupado", "Ana Silva", [ana]) and c["vagas"] == 1
+    assert c["outro_local"] == "CIA"
+
+
+def test_dois_alunos_de_uma_vez_e_o_limite(http):
+    ede, mar, bia = aluno("Edilene Souza"), aluno("Marcos Souza"), aluno("Bia Costa")
+    r = http.post("/grade/slot", data={"tipo": "Pacotes", "local": "CIA", "dia": 2, "hora": 18, "status": "ocupado",
+                                       "cliente_id": [str(ede), str(mar)]}, follow_redirects=False)
+    assert erro(r) is None and sorted(c for c, _ in agenda(2, 18)) == sorted([ede, mar])
+    c = http.get("/grade", params={"local": "CIA"}).context["celulas"][(2, 18)]
+    assert c["cliente_nome"] == "Edilene + Marcos" and c["vagas"] == 0
+    assert erro(slot_lote(http, "CIA", ["2-18"], "ocupado", bia)) is not None   # cheio (cabem 2): nada gravado
+    assert len(agenda(2, 18)) == 2
+    grava("UPDATE parametros SET valor=3 WHERE grupo='agenda' AND chave='max_alunos_horario'")
+    assert erro(slot_lote(http, "CIA", ["2-18"], "ocupado", bia)) is None   # com limite 3, o 3º entra e ninguém sai
+    assert len(agenda(2, 18)) == 3
+
+
+def test_livre_tira_da_agenda_e_pausado_libera(http):
+    ana = aluno("Ana Silva")
+    slot(http, "CIA", 3, 9, "ocupado", ana)
+    assert agenda(3, 9) == [(ana, "CIA")]
+    slot(http, "CIA", 3, 9, "livre")
+    assert agenda(3, 9) == [] and http.get("/grade", params={"local": "CIA"}).context["celulas"][(3, 9)]["status"] == "livre"
+    slot(http, "CIA", 3, 9, "ocupado", ana)
+    grava("UPDATE clientes SET status='pausado' WHERE id=?", ana)
+    assert http.get("/grade", params={"local": "CIA"}).context["celulas"][(3, 9)]["status"] == "livre"
+
+
+def test_copia_antiga_da_grade_nao_conta_mas_vira_aviso_e_passa_para_a_agenda(http):
+    ana = aluno("Ana Silva")
+    grava("""INSERT OR REPLACE INTO grade_slots (tipo_calculo, dia, local, hora, status, cliente_id, cliente_nome)
+             VALUES ('Pacotes', 4, 'CIA', 7, 'ocupado', ?, 'Ana Silva')""", ana)
+    pg = http.get("/grade", params={"local": "CIA"})
+    assert pg.context["celulas"][(4, 7)]["status"] == "livre" and 'id="so-grade"' in pg.text
+    r = http.post("/grade/passar-para-agenda", data={"tipo": "Pacotes", "local": "CIA"}, follow_redirects=False)
+    assert "msg=" in r.headers["location"] and agenda(4, 7) == [(ana, "CIA")]
+    pg = http.get("/grade", params={"local": "CIA"})
+    assert pg.context["celulas"][(4, 7)]["status"] == "ocupado" and 'id="so-grade"' not in pg.text
+
+
+def test_lead_e_indisponivel_da_grade_continuam(http):
+    grava("""INSERT OR REPLACE INTO grade_slots (tipo_calculo, dia, local, hora, status, cliente_nome)
+             VALUES ('Pacotes', 5, 'CIA', 10, 'ocupado', 'Lead da planilha')""")
+    slot(http, "CIA", 5, 11, "indisponivel")
+    cel = http.get("/grade", params={"local": ALL}).context["celulas"]
+    assert (cel[(5, 10)]["status"], cel[(5, 10)]["cliente_nome"]) == ("ocupado", "Lead da planilha")
+    assert cel[(5, 11)]["status"] == "indisponivel"
+
+
+def test_explorador_nao_oferece_horario_da_agenda(http):
+    ana = aluno("Ana Silva")
+    grava("INSERT INTO agenda_fixos (cliente_id, dia, hora, local) VALUES (?, 2, 9, 'CIA')", ana)
+    linhas = http.get("/explorador", params={"local": ALL, "tipo_servico": "Pacote de Aulas", "dia": 2}).context["linhas"]
+    assert linhas and 9 not in {l["hora"] for l in linhas}
+
+
+def test_baixar_o_limite_nao_tira_aluno_sem_pedir(http):
+    """Limite reduzido de 3 para 2 com três alunos no horário: salvar o horário na Agenda sem mudar nada mantém os três;
+    entrar um aluno novo passando do limite é recusado sem mexer em ninguém."""
+    a, b, c, d = aluno("Ana Silva"), aluno("Bia Costa"), aluno("Caio Lima"), aluno("Duda Reis")
+    for x in (a, b, c):
+        grava("INSERT INTO agenda_fixos (cliente_id, dia, hora, local) VALUES (?, 1, 7, 'CIA')", x)
+    grava("UPDATE parametros SET valor=2 WHERE grupo='agenda' AND chave='max_alunos_horario'")
+    r = http.post("/agenda/horario", data={"dia": 1, "hora": 7, "aluno1": a, "aluno2": b, "extras": str(c), "local": "CIA"},
+                  follow_redirects=False)
+    assert erro(r) is None and sorted(x for x, _ in agenda(1, 7)) == sorted([a, b, c])
+    r = http.post("/agenda/horario", data={"dia": 1, "hora": 7, "aluno1": a, "aluno2": d, "extras": f"{b},{c}", "local": "CIA"},
+                  follow_redirects=False)
+    assert "cabem 2" in erro(r) and sorted(x for x, _ in agenda(1, 7)) == sorted([a, b, c])
+
+
+def test_grade_com_limite_reduzido_nao_tira_ninguem(http):
+    a, b, c, d = aluno("Ana Silva"), aluno("Bia Costa"), aluno("Caio Lima"), aluno("Duda Reis")
+    for x in (a, b, c):
+        grava("INSERT INTO agenda_fixos (cliente_id, dia, hora, local) VALUES (?, 1, 7, 'CIA')", x)
+    grava("UPDATE parametros SET valor=2 WHERE grupo='agenda' AND chave='max_alunos_horario'")
+    cel = http.get("/grade", params={"local": "CIA"}).context["celulas"][(1, 7)]
+    assert sorted(cel["ids"]) == sorted([a, b, c])   # o diálogo recebe os três (o JS cria um seletor para cada)
+    dados = {"tipo": "Pacotes", "local": "CIA", "dia": 1, "hora": 7, "status": "ocupado", "cliente_id": [str(a), str(b), str(c)]}
+    assert erro(http.post("/grade/slot", data=dados, follow_redirects=False)) is None   # salvar sem mudar: ficam os três
+    assert sorted(x for x, _ in agenda(1, 7)) == sorted([a, b, c])
+    dados["cliente_id"] = [str(a), str(b), str(d)]   # trocar alguém por um novo passando do limite: recusa sem mexer
+    assert "cabem 2" in erro(http.post("/grade/slot", data=dados, follow_redirects=False))
+    assert sorted(x for x, _ in agenda(1, 7)) == sorted([a, b, c])

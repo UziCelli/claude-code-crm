@@ -7,7 +7,7 @@ from urllib.parse import quote
 import pytest
 from fastapi.testclient import TestClient
 
-from app import db, financeiro, main
+from app import db, financeiro, main, relogio
 from tests.test_alertas import cliente, con_temp, dia, do_aluno  # noqa: F401  (con_temp: fixture de banco temporário)
 
 
@@ -29,12 +29,9 @@ def de_renovacao(con, nome):
 
 def congelar(monkeypatch, iso):
     """Para o main, hoje é `iso` (o resto do código usa a data real)."""
-    class Data(dt.date):
-        @classmethod
-        def today(cls):
-            return cls.fromisoformat(iso)
-    ns = {k: getattr(dt, k) for k in dir(dt) if not k.startswith("__")}
-    monkeypatch.setattr(main, "dt", types.SimpleNamespace(**{**ns, "date": Data}))
+    agora = lambda: dt.datetime.combine(dt.date.fromisoformat(iso), relogio.agora().time())  # noqa: E731
+    monkeypatch.setattr(main, "relogio", types.SimpleNamespace(
+        agora=agora, hoje=lambda: agora().date(), agora_txt=lambda: agora().isoformat(sep=" ", timespec="seconds")))
 
 
 # ---------- renovação ----------

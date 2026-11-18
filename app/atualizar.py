@@ -6,7 +6,6 @@ volta para a anterior e não tenta mais aquela versão (data/atualizacao-recusad
 
 Só liga no Windows, fora da nuvem, com a pasta clonada pelo git. Para desligar: CRM_AUTOATUALIZAR=0 no .env.
 Só biblioteca padrão: o ajudante (`python -m app.atualizar reiniciar <commit>`) roda com o CRM fechado."""
-import datetime as dt
 import os
 import shutil
 import signal
@@ -16,6 +15,8 @@ import sys
 import threading
 import time
 from pathlib import Path
+
+from . import relogio   # hoje/agora no fuso do Brasil, em qualquer servidor
 
 PASTA = Path(__file__).resolve().parent.parent
 DATA = PASTA / "data"
@@ -44,7 +45,7 @@ def log(texto):
     try:
         DATA.mkdir(exist_ok=True)
         with LOG.open("a", encoding="utf-8") as f:
-            f.write(f"{dt.datetime.now():%Y-%m-%d %H:%M:%S} {texto}\n")
+            f.write(f"{relogio.agora():%Y-%m-%d %H:%M:%S} {texto}\n")
     except OSError:
         pass
 
@@ -112,7 +113,7 @@ def rodada():
     """Uma conferida. Devolve quantos segundos esperar até a próxima, ou None se já mandou reiniciar."""
     try:
         novo = conferir()
-        status.update(ultima=dt.datetime.now(), pendente=bool(novo), erro=None)
+        status.update(ultima=relogio.agora(), pendente=bool(novo), erro=None)
         if not novo:
             return INTERVALO
         if time.monotonic() - ultimo_uso < OCIOSO:
@@ -125,7 +126,7 @@ def rodada():
     except Exception as e:  # noqa: BLE001 — sem internet, sem login no GitHub etc.: tenta de novo depois
         if str(e) != status["erro"]:
             log(f"não deu para atualizar: {e}")
-        status.update(ultima=dt.datetime.now(), erro=str(e))
+        status.update(ultima=relogio.agora(), erro=str(e))
         return INTERVALO
 
 

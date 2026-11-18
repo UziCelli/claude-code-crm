@@ -83,4 +83,4 @@ def test_filtro_vazio_oferece_ver_tudo(con_temp, monkeypatch, http):
     congelar(monkeypatch, HOJE)
     lanc(con_temp, "PF", "2026-09-20", 100, "Só variável")
     pg = http.get(SEM_LIVRO + "&custo=fixo").text
-    assert "Nenhuma conta fixa nesse período" in pg and "custo=todos#t-contas" in pg
+    assert "Nenhuma conta fixa nesse período" in pg and "custo=todos&periodo=30d#t-contas" in pg

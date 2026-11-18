@@ -8,6 +8,7 @@ import unicodedata
 from urllib.parse import urlencode
 
 from . import db
+from . import relogio   # hoje/agora no fuso do Brasil, em qualquer servidor
 
 ISO_DATA = re.compile(r"\d{4}-\d{2}-\d{2}")
 
@@ -214,7 +215,7 @@ def das_competencia(con: sqlite3.Connection, mes: str) -> dict:
 def pct_das(con: sqlite3.Connection, hoje: str | None = None) -> float:
     """Alíquota efetiva do DAS do mês de hoje pela tabela do Simples, como fração (0,06 = 6%). É o número do aviso
     "Separe R$ X", do "Guardar o DAS" e dos preços."""
-    return das_competencia(con, (hoje or dt.date.today().isoformat())[:7])["efetiva"]
+    return das_competencia(con, (hoje or relogio.hoje().isoformat())[:7])["efetiva"]
 
 
 def texto_pct(fracao: float) -> str:
@@ -236,7 +237,7 @@ def imposto_mes(con: sqlite3.Connection, mes: str, hoje: str | None = None, aber
     É a única conta do imposto: o saldo_livre soma estes valores e a tela mostra o do mês de hoje.
     `abertos`: saídas em aberto (o saldo_livre já tem); sem elas, usa as dos próximos 30 dias a partir de `hoje`."""
     if abertos is None:
-        hoje = hoje or dt.date.today().isoformat()
+        hoje = hoje or relogio.hoje().isoformat()
         ate = (dt.date.fromisoformat(hoje) + dt.timedelta(days=30)).isoformat()
         abertos = [i for i in em_aberto_ate(con, ate, hoje) if i["tipo"] == "saida"]
     return round(_das_a_guardar(con, somar_meses(mes, 1), abertos, _receita_pj(con, mes), das_competencia(con, mes)["efetiva"]), 2)
@@ -418,18 +419,29 @@ def chave_conta(i: dict) -> tuple:
 
 ORDENS_CONTAS = ("urgencia", "data", "valor")   # urgencia = a fila de sempre (atrasadas, impacto, data)
 CUSTOS_CONTAS = ("todos", "fixo", "variavel")
+PERIODOS_CONTAS = ("mes", "30d", "mes_que_vem")   # até o fim do mês atual, próximos 30 dias, até o fim do mês que vem
+
+
+def ate_do_periodo(hoje: str, periodo: str) -> str:
+    """Último dia que entra em Contas a pagar: 'mes' = fim do mês atual, 'mes_que_vem' = fim do mês seguinte,
+    qualquer outro ('30d') = hoje + 30 dias (o horizonte do saldo_livre)."""
+    if periodo in ("mes", "mes_que_vem"):
+        mes = hoje[:7] if periodo == "mes" else somar_meses(hoje[:7], 1)
+        return (dt.date.fromisoformat(somar_meses(mes, 1) + "-01") - dt.timedelta(days=1)).isoformat()
+    return (dt.date.fromisoformat(hoje) + dt.timedelta(days=30)).isoformat()
 
 
 def contas_a_pagar(con: sqlite3.Connection, hoje: str, dias: int = 30, so: set | None = None,
-                   ordem: str = "urgencia", custo: str = "todos") -> dict:
+                   ordem: str = "urgencia", custo: str = "todos", ate: str | None = None) -> dict:
     """A lista única de contas a pagar: toda saída em aberto até hoje+dias (o mesmo horizonte do saldo_livre; atrasadas incluídas).
+    ate: último dia da lista no lugar de hoje+dias (o filtro de período da tela, ate_do_periodo).
     ordem: 'urgencia' (atrasadas primeiro; depois a nota de impacto: multa, essencial, urgência; depois a data),
     'data' (vencimento mais perto primeiro) ou 'valor' (maior primeiro).
     custo: 'fixo' (vem de conta recorrente marcada como fixa), 'variavel' (o resto: avulsa, DAS, locais...) ou 'todos'.
     Pagamento já agendado para o futuro não entra (já está pago). `so` = conjunto de chave_conta: mostra só essas.
     Devolve {ate, itens, total, total_fixos, total_variaveis, n_fixos, n_variaveis}; as somas por tipo de custo são da lista
     inteira (antes do filtro de custo). Cada item traz 'fixo', 'dias' (até o vencimento), 'prazo' (texto), 'custo_atraso' e 'motivo'."""
-    ate = (dt.date.fromisoformat(hoje) + dt.timedelta(days=dias)).isoformat()
+    ate = ate or (dt.date.fromisoformat(hoje) + dt.timedelta(days=dias)).isoformat()
     curto, juros = db.parametros(con, "impacto_curto"), db.parametros(con, "impacto_juros")
     itens = []
     for i in em_aberto_ate(con, ate, hoje):
@@ -905,6 +917,15 @@ def _mes_que_paga(data: str, dia: int | None) -> str:
     return seguinte if data >= _dias_antes(vencimento(dia, seguinte), ANTECEDENCIA) else mes
 
 
+def periodo_do_pagamento(con: sqlite3.Connection, cliente_id, data: str, n: int) -> tuple[str, str]:
+    """(primeiro, último) mês 'AAAA-MM' que um pagamento de n meses do aluno cobre: a mesma regra de _cobertura_adiantada
+    (começa no mês seguinte se foi pago até 7 dias antes do vencimento dele). Para a mensagem "cobre N meses (até ...)"."""
+    r = con.execute("SELECT data_renovacao FROM clientes WHERE id=?", (cliente_id,)).fetchone()
+    d = str((r[0] if r else "") or "").strip()[:10]
+    de = _mes_que_paga(str(data)[:10], int(d[8:10]) if ISO_DATA.fullmatch(d) else None)
+    return de, somar_meses(de, max(int(n), 1) - 1)
+
+
 def _cobertura_adiantada(con: sqlite3.Connection, mes: str) -> dict[int, dict]:
     """{cliente_id: {de, ate}}: alunos cujo pagamento de um mês anterior (cobre 2+ meses) vai até `mes` ou além.
     de = primeiro mês que ele paga (_mes_que_paga), ate = último mês coberto.
@@ -926,6 +947,17 @@ def _cobertura_adiantada(con: sqlite3.Connection, mes: str) -> dict[int, dict]:
         ate = somar_meses(de, n - 1) if n >= 2 else None
         if ate and ate >= mes and ate >= out.get(r["cliente_id"], {"ate": ""})["ate"]:
             out[r["cliente_id"]] = {"de": de, "ate": ate}
+    return out
+
+
+def pago_adiantado_ate(con: sqlite3.Connection, hoje: str) -> dict[int, str]:
+    """{cliente_id: 'AAAA-MM'}: quem tem um pagamento de 2+ meses (pagou adiantado, parcelou no cartão) cobrindo este mês ou os seguintes,
+    e até que mês. Inclui o pagamento feito neste mês. Para a etiqueta "Pago adiantado até" da lista de clientes e da ficha:
+    a venda nova é só mensal, e quem pagou adiantado volta a pagar por mês depois desse mês."""
+    out = {}
+    for mes in (hoje[:7], somar_meses(hoje[:7], 1)):
+        for cid, c in _cobertura_adiantada(con, mes).items():
+            out[cid] = max(out.get(cid, ""), c["ate"])
     return out
 
 
@@ -1204,7 +1236,7 @@ def usar_credito(con: sqlite3.Connection, lancamento_id: int | None, cliente_id:
     """Desconta o crédito do aluno. Com lancamento_id: pagamento da mensalidade (entrada PJ paga ligada ao aluno, menos empréstimo) de pelo menos
     90% de (mensalidade − crédito); pagamento pequeno (aula extra) não gasta o crédito. Sem lancamento_id (mês pulado): só se o crédito cobre
     a mensalidade inteira. Marca usado_em e usado_lancamento_id. Devolve o valor descontado (0 se nada)."""
-    hoje = hoje or dt.date.today().isoformat()
+    hoje = hoje or relogio.hoje().isoformat()
     if lancamento_id:
         p = con.execute("SELECT cliente_id, valor, categoria FROM lancamentos WHERE id=? AND escopo='PJ' AND tipo='entrada' AND pago_em IS NOT NULL "
                         "AND excluido_em IS NULL", (lancamento_id,)).fetchone()

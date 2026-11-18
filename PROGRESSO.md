@@ -237,7 +237,7 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 ## Editar e excluir local (PR `claude/locais-editar`, 04/11/2026)
 - Grade de um local criado pelo "+ Novo local": botões **Editar local** (mesmo pop-up, nome travado) e **Excluir local**.
 - Editar troca os custos e refaz os preços de Pacote e Mensalidade pela diferença do custo por aula (manter margem ou manter preço). A grade fica.
-- O nome não muda: está gravado em alunos, agenda, grade e contas automáticas.
+- O nome não muda: está gravado em alunos, agenda, grade e contas automáticas. (Mudou em 18/11/2026: ver "Renomear local".)
 - Excluir é recusado enquanto houver aluno não inativo, horário fixo ou célula ocupada no local; senão apaga custos, preços, grade e o nome da lista. Aulas e contas antigas ficam.
 
 ## Aviso de dois locais seguidos (PR `claude/aviso-deslocamento`, 04/11/2026)
@@ -410,3 +410,74 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - **Pendências** no topo da Agenda: aulas da semana sem marcar (tocar abre o card; no Marcar várias, pinta), "Marcar todas como feitas" (pinta tudo como Feita sem salvar), semanas anteriores com pendência (`GET /agenda/pendentes`, carregado depois da página) e reposições a fazer de todos os alunos ("a agendar" = saldo − reposições já agendadas e sem marca), com "Agendar reposição".
 - `saldos_reposicao` ganhou `sem_marca` e `a_agendar`; `aulas_da_semana(..., semanas=N)` lê várias semanas com as mesmas consultas.
 - **Bugs:** avulsa em cima da própria fixa desmarcada é recusada; reposição marcada pela ficha (sem hora) desconta do saldo; excluir avulsa marcada leva a marcação junto para a lixeira; mudar de hora no mesmo dia não esconde a aula já marcada (nesse dia vale a antiga); Pendências pintam pelo teclado; textos ("Faltou" também desconta).
+
+## Relógio do Brasil: a Agenda virava o dia às 21h no PC (PR `claude/relogio-brasil`, 18/11/2026)
+- Causa: desde 03/11 o `app/__init__.py` grava `TZ=America/Sao_Paulo`. O Linux entende, mas no **Windows** (o PC servidor) o C do Windows lê esse texto como fuso "Ame" com deslocamento 0, ou seja UTC: às 21h de Brasília o "hoje" já era amanhã. A imagem da nuvem (`python:3.13-slim`) estava certa (conferido com `docker run`: `-03`).
+- Novo `app/relogio.py`: `hoje()`, `agora()` e `agora_txt()` no fuso do Brasil pelo `zoneinfo`, sem depender do sistema. Todo `date.today()`/`datetime.now()` do app passou a usar o relógio (menos `nuvem.py`, que só mede intervalos). Pacote `tzdata` no `requirements.txt` (o Windows não traz a base de fusos; o `iniciar-crm.bat` instala sozinho quando o arquivo muda).
+- `app/__init__.py`: no Windows não define mais `TZ` (e tira um `TZ` com nome de fuso, se houver); no Linux segue igual.
+- Ficou como estava: carimbos gravados pelo SQL (`datetime('now','localtime')`), porque alguns são comparados entre si (renovação × pagamento, envio repetido). Com o `TZ` fora no Windows, o SQLite local do PC volta a gravar no horário de Brasília.
+- Testes: `tests/test_relogio.py` (21h30 continua hoje; vira só à meia-noite; Agenda das 21h30 mostra a semana certa; nenhum `date.today()` fora do relógio; ramo do Windows).
+
+## Contas a pagar: filtro de período (18/11/2026)
+- Pedido do Victor: a lista mostrava sempre até hoje + 30 dias. Agora há "Até: Fim deste mês / Próximos 30 dias / Fim do mês que vem" (`financeiro.ate_do_periodo`, `contas_a_pagar(..., ate=)`), lembrado no cookie `contas_periodo` como a ordem e o tipo de custo. O padrão continua 30 dias.
+- O link do alerta (`?vencidas=1`) ignora o período. O `saldo_livre` segue com os 30 dias.
+- Contas automáticas (DAS, CIA, locais) do mês que vem só existem depois que o mês fecha; as recorrentes aparecem.
+- Testes: `tests/test_contas_periodo.py`.
+
+## Celular: larguras proporcionais (18/11/2026)
+- Pedido do Victor: muita coisa saía da tela no celular. Novo `scripts/verificar_celular.py` (ferramenta, fora do CI): sobe o CRM num banco temporário com dados de exemplo (inclusive nomes longos), abre todas as telas e janelas em 360 e 390 px e lista o que passa da borda ou obriga a rolar de lado. Precisa do Playwright para Python.
+- Achados e correções (`style.css`): etiqueta comprida ("Sem aula nem pagamento") não quebrava a linha e vazava o cartão (Mensalidades, ficha); a célula do cartão agora quebra nos espaços e alinha à direita. Botões da célula `td.linha` descem de linha no celular. `.duas`/`.botoes-estado` passam a uma coluna quando não cabem. Larguras fixas em px dos templates viraram classes com `max-width:100%` (`.num-curto`, `input.busca`); nova `.rolavel` para tabela larga rolar dentro da própria caixa.
+- Resultado: "Tudo cabe na tela" em 360 e 390 px. Com os dados reais pode aparecer outro caso: rodar o script com uma cópia do banco (ou mandar print).
+
+## Renomear local (18/11/2026)
+- Pedido do Victor: não dava para trocar o nome de um local (ex.: o condomínio). Agora o campo Nome do "Editar local" é editável (menos na CIA). Nome diferente = `locais.renomear_local`, numa transação só (tudo ou nada), depois de uma cópia do banco (`backups/antes-renomear-*.db`).
+- Troca em: `locais_custos` (e `referencia`), `grade_slots`, `precos_base`, `clientes`, `agenda_fixos` e `agenda_avulsas` (inclusive excluídos: as contas de meses passados são refeitas delas), `propostas`, `proposta_horarios`, `lista_espera`, lista de Configurações e a chave das contas automáticas (`local:<nome>:AAAA-MM`; o texto muda só nas que estão em aberto).
+- O nome antigo de um local da lista inicial (SmartFit) fica marcado como removido para não voltar ao abrir o app.
+- Caixa "trocar também nas contas e lançamentos que citam o local" (marcada): troca o nome no texto das recorrentes e dos lançamentos manuais, em aberto e pagos (`locais.citacoes`), com a mesma regra que os reconhece (sem acento nem maiúsculas). É pelo texto que as contas automáticas sabem que a conta do mês já foi paga à mão; sem a troca, o nome novo geraria a conta de novo.
+- Recusa: nome vazio, começando por "CIA" (viraria conta da CIA), com ":" ou igual a outro local escrito de outro jeito. Trocar só maiúsculas ou espaços pode.
+- Testes: `tests/test_locais_editar.py` (seção renomear).
+
+## Venda só mensal e etiqueta "Pago adiantado até" (18/11/2026)
+- Pedido do Victor: a partir dos próximos planos não existe mais pagamento adiantado (nem na consultoria): é mensal, pela previsibilidade do caixa. Quem já pagou adiantado (ex.: Gregory no Pix, Inajara no cartão) segue coberto até o fim do que pagou.
+- O diálogo de pagamento não tem mais "Cobre quantos meses?". Um pagamento antigo adiantado ainda se ajusta na ficha (Pagamentos > Cobre N meses), e o POST com `meses` (assistente) continua valendo.
+- Nova lista `lista_formas_venda` (PIX e Cartão 1x, editável em Configurações): cadastro do aluno, Propostas e Explorador oferecem só ela. `lista_formas_pagamento` (com 3x, 6x, 12x) continua nas taxas e nos alunos antigos (a forma antiga aparece selecionada).
+- Etiqueta "Pago adiantado até MM/AAAA" na lista de clientes e na ficha (`financeiro.pago_adiantado_ate`, pela mesma cobertura das Mensalidades). Depois desse mês ela some e o aluno volta a ser cobrado por mês.
+- Ficou como estava: pagar 2 mensalidades atrasadas de uma vez continua quitando os 2 meses (é mensal, só atrasado).
+- A mensagem "cobre N meses (até ...)" passou a usar a mesma regra da cobertura (pago até 7 dias antes do vencimento começa no mês seguinte): `financeiro.periodo_do_pagamento`.
+- Testes: `tests/test_pagamento_adiantado.py`.
+
+## Agenda: aulas do mês (contratadas, previstas, feitas, faltam, passou) (18/11/2026)
+- Pedido do Victor: ver quantas aulas faltam e quantas estavam previstas no mês; saber quando o mês fechou (100%) e quando passou (mês de 5 semanas, pacote que fecha mais aulas). Na CIA a aula a mais é prejuízo (paga por aula); na Smart Fit quase não muda.
+- `main.resumo_aulas_mes` (card "Aulas de <mês>" na Agenda, uma linha por aluno e o total) e `controle_aluno` (caixinhas Contratadas, Previstas, Faltam/Mês 100% e Passou no painel do aluno):
+  - contratadas = Mensalidade Nx × `agenda.semanas_contratadas` (novo, padrão 4, em Configurações e em Cálculos) ou Pacote N; consultoria e plano sem número ficam sem meta.
+  - previstas = horários fixos da Agenda no mês, sem mês pulado e sem bloqueio; reposição e avulsa não contam.
+  - feitas = marcas Feita do mês (reposição inclusive).
+  - passou = max(previstas, feitas) − contratadas; na CIA (a maioria das aulas lá) vira custo extra = passou × taxa da aula da CIA.
+- Testes: `tests/test_aulas_mes.py`.
+
+## Horas de trabalho pela Agenda (18/11/2026)
+- Pedido do Victor: as horas (que dividem o salário/hora e os custos fixos) vinham só do plano escrito na ficha. Agora `horas_trabalho_detalhe` lê a Agenda: cada horário fixo (dia, hora) vale 4,33 aulas no mês, contado uma vez mesmo com 2 alunos juntos, e o deslocamento é o do local daquele horário. Planejamento, consultoria e avaliação continuam pelo plano de cada aluno. Aluno sem horário na Agenda (ex.: Consultoria Online) conta tudo pelo plano, como antes.
+- `main.fixos_atuais`: os horários fixos que valem hoje (alunos ativos), a mesma leitura para horas, divergências e ficha.
+- Tela Cálculos: aviso "Plano diferente da Agenda" (`main.divergencias_plano_agenda`) com quem tem plano ≠ horários por semana (ou nenhum horário), com link para a ficha.
+- A estimativa por aluno (ficha, propostas) continua pelo plano: a diferença para o total entra no "ocioso" do "O mês cobre?".
+- Testes: `tests/test_horas_agenda.py`.
+
+## Ficha: dias e horários fixos ligados à Agenda (18/11/2026)
+- Pedido do Victor: o campo "Dias e horários fixos" era texto livre (qualquer coisa), solto da Agenda. Agora a ficha tem o card "Dias e horários fixos": uma linha por horário com [dia] [hora] [local] e "+ adicionar dia e horário"; só aceita valores da Agenda (Seg a Sáb, 05h a 23h, locais da lista) e dá para editar à mão quando quiser.
+- Salvar (`POST /clientes/{id}/horarios`) grava direto na `agenda_fixos`, com as regras da Agenda: só a diferença (sai = lixeira, troca de local = exclusão + linha nova, novo = INSERT com vigência), Grade avisada, até 2 alunos por horário (horário cheio recusa tudo e não grava nada). Reposições e avulsas continuam só na Agenda.
+- Lista de clientes: mostra os horários da Agenda ("Seg 13h · Qui 17h", `main.horarios_texto`); sem horário na Agenda, o texto antigo.
+- A coluna `dias_horarios` ficou (só leitura): o cadastro não grava mais nela (`CAMPOS_CLIENTE_FICHA`), e a ficha mostra o texto antigo enquanto não houver horário na Agenda.
+- Testes: `tests/test_ficha_horarios.py`.
+
+## Grade lê a Agenda e vários alunos por horário (18/11/2026)
+- Pedido do Victor: a Grade e a Agenda têm que se atualizar juntas, e a Grade não deixava pôr 2 alunos no mesmo horário.
+- A Agenda manda. `bloqueios_gerais` (o que todas as telas leem: Grade, Explorador, Propostas, Sugestões) monta a ocupação pelos horários fixos de hoje da Agenda (`fixos_atuais`): um item por horário com todos os alunos ("Edilene + Marcos"), ids e vagas. Da `grade_slots` só vale o que a Agenda não sabe: indisponível e ocupado sem aluno (nome da planilha antiga). Célula com `cliente_id` é a cópia antiga e não é mais lida (as funções que a atualizam ficaram, como espelho).
+- Salvar na Grade (`POST /grade/slot`) grava na Agenda (`definir_horario`: vigência, lixeira, só a diferença):
+  - Ocupado num horário: a lista de alunos escolhida (o diálogo vem com quem já está; "+ outro aluno") passa a ser a do horário, no local da Grade.
+  - Ocupado em vários (seleção): soma os escolhidos a quem já está, sem tirar ninguém; cheio recusa tudo.
+  - Livre: tira da Agenda quem estiver no horário (a tela pede confirmação).
+  - Indisponível: recusa se houver aluno na Agenda.
+  - Só aluno ativo.
+- Novo `agenda.max_alunos_horario` (padrão 2, Configurações > Agenda): limite na Agenda (incluir, avulsa, restaurar da lixeira, aluno que volta a ficar ativo), na ficha e na Grade. O seletor do card da Agenda mostra 2; com limite maior, os outros do horário continuam (campo `extras`). Baixar o limite não tira ninguém: turma que já passou do limite fica como está (Agenda e Grade); só entrar aluno novo acima do limite é recusado.
+- Migração sem apagar nada: aviso "N horários só na Grade" (`so_na_grade`) com o botão "Passar para a Agenda" (`POST /grade/passar-para-agenda`), que cria na Agenda os horários fixos que a Grade antiga tinha e a Agenda não (até o limite).
+- Testes: `tests/test_grade_geral.py` (seção "Grade lê a Agenda").

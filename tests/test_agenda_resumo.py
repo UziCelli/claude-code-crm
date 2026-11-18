@@ -1,28 +1,19 @@
 """Pendências da Agenda: a_agendar/sem_marca, aulas_da_semana em várias semanas, card Pendências e /agenda/pendentes."""
 import datetime as dt
-import types
 
 import pytest
 
-from app import db, main
+from app import db, main, relogio
 from tests.test_agenda import http, aluno, grava, fixo, marcar  # noqa: F401 (http é fixture)
 
 HOJE = dt.date(2026, 10, 21)   # quarta; a semana atual começa em 2026-10-19
 SEG_ATUAL, SEG_1, SEG_2 = "2026-10-19", "2026-10-12", "2026-10-05"
 
 
-class _Data(dt.date):
-    @classmethod
-    def today(cls):
-        return cls(2026, 10, 21)
-
-
 @pytest.fixture
 def hoje_fixo(monkeypatch):
-    """O app enxerga 'hoje' como 21/10/2026."""
-    ns = types.SimpleNamespace(**{k: getattr(dt, k) for k in dir(dt) if not k.startswith("__")})
-    ns.date = _Data
-    monkeypatch.setattr(main, "dt", ns)
+    """O app enxerga 'hoje' como 21/10/2026 (meio-dia em Brasília)."""
+    monkeypatch.setattr(relogio, "_utc", lambda: dt.datetime(2026, 10, 21, 15, 0, tzinfo=dt.timezone.utc))
 
 
 def evento(cid, tipo, data, hora=7):

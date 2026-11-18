@@ -10,6 +10,7 @@ import datetime as dt
 import re
 
 from . import db, financeiro
+from . import relogio   # hoje/agora no fuso do Brasil, em qualquer servidor
 
 ORDEM = ("cobrar", "pago_sem_aula", "sem_pagar_sem_aula", "vence_logo", "sem_aula_recente", "cadastro_incompleto", "em_dia")
 ROTULO = {"cobrar": "Vencida", "pago_sem_aula": "Pagou sem aula", "sem_pagar_sem_aula": "Sem aula nem pagamento",
@@ -31,7 +32,7 @@ def _main():
 
 def _como_data(hoje) -> dt.date:
     if hoje is None:
-        return dt.date.today()
+        return relogio.hoje()
     return hoje if isinstance(hoje, dt.date) else dt.date.fromisoformat(str(hoje)[:10])
 
 

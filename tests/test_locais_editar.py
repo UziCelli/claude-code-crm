@@ -217,3 +217,122 @@ def test_rotas_editar_e_excluir(http, con):  # noqa: F811
     assert con.execute("SELECT taxa_aula FROM locais_custos WHERE local='Prédio'").fetchone()[0] == 45.5
     r = http.post("/locais/excluir", data={"nome": "Prédio"}, follow_redirects=False)
     assert r.headers["location"].startswith("/grade?msg=")
+
+
+# ---------- renomear local ----------
+def _cliente(con, nome, local):  # noqa: F811
+    with con:
+        return con.execute("INSERT INTO clientes (nome, local, status) VALUES (?, ?, 'ativo')", (nome, local)).lastrowid
+
+
+def test_renomear_troca_o_nome_em_tudo_inclusive_no_que_foi_excluido(con):  # noqa: F811
+    locais.criar_local(con, "Condominio Velho", "CIA", taxa_aula=30)
+    cid = _cliente(con, "Ana", "Condominio Velho")
+    with con:
+        con.execute("INSERT INTO agenda_fixos (cliente_id, dia, hora, local) VALUES (?, 1, 7, 'Condominio Velho')", (cid,))
+        con.execute("INSERT INTO agenda_fixos (cliente_id, dia, hora, local, excluido_em) VALUES (?, 2, 7, 'Condominio Velho', '2026-10-01')", (cid,))
+        con.execute("INSERT INTO agenda_avulsas (cliente_id, data, hora, local, excluido_em) VALUES (?, '2026-10-05', 8, 'Condominio Velho', '2026-10-02')", (cid,))
+        con.execute("INSERT INTO lista_espera (nome, local) VALUES ('Bia', 'Condominio Velho')")
+        con.execute("INSERT INTO locais_custos (local, referencia) VALUES ('Outro', 'Condominio Velho')")
+        con.execute("""INSERT INTO lancamentos (escopo, tipo, data, valor, categoria, descricao, auto)
+                       VALUES ('PJ','saida','2026-11-05',90,'Outros','Condominio Velho: aulas de 10/2026','local:Condominio Velho:2026-10')""")
+        con.execute("""INSERT INTO lancamentos (escopo, tipo, data, valor, categoria, descricao, auto, pago_em)
+                       VALUES ('PJ','saida','2026-10-05',80,'Outros','Condominio Velho: aulas de 09/2026','local:Condominio Velho:2026-09','2026-10-05')""")
+    r = locais.renomear_local(con, "Condominio Velho", "Condominio Parque")
+    assert r["linhas"] > 0
+    for t in locais.TABELAS_LOCAL:
+        assert con.execute(f"SELECT COUNT(*) FROM {t} WHERE local='Condominio Velho'").fetchone()[0] == 0, t
+    assert con.execute("SELECT COUNT(*) FROM agenda_fixos WHERE local='Condominio Parque'").fetchone()[0] == 2
+    assert con.execute("SELECT referencia FROM locais_custos WHERE local='Outro'").fetchone()[0] == "Condominio Parque"
+    assert "Condominio Parque" in db.lista(con, "lista_locais") and "Condominio Velho" not in db.lista(con, "lista_locais")
+    autos = dict(con.execute("SELECT auto, descricao FROM lancamentos WHERE auto LIKE 'local:%' ORDER BY auto").fetchall())
+    assert autos == {"local:Condominio Parque:2026-09": "Condominio Velho: aulas de 09/2026",   # paga: o texto fica como foi
+                     "local:Condominio Parque:2026-10": "Condominio Parque: aulas de 10/2026"}  # em aberto: acompanha
+
+
+def test_local_da_lista_inicial_nao_volta_depois_de_renomear(con):  # noqa: F811
+    locais.renomear_local(con, "SmartFit", "Smart Fit Brooklyn")
+    db.iniciar_banco(db.DB_PATH)
+    assert "SmartFit" not in db.lista(con, "lista_locais") and "Smart Fit Brooklyn" in db.lista(con, "lista_locais")
+
+
+def test_so_maiusculas_e_espacos_pode(con):  # noqa: F811
+    locais.criar_local(con, "Predio", "CIA")
+    locais.renomear_local(con, "Predio", "  PREDIO  ")
+    assert "PREDIO" in locais.nomes(con) and "Predio" not in locais.nomes(con)
+
+
+@pytest.mark.parametrize("novo, erro", [("", "Dê um nome"), ("CIA", "CIA"), ("Cia Centro", "CIA"), ("SmartFit", "já existe"),
+                                         ("Smart Fit", "já existe"), ("Predio: B", "':'")])
+def test_renomear_recusa(con, novo, erro):  # noqa: F811
+    locais.criar_local(con, "Predio", "CIA")
+    with pytest.raises(ValueError, match=erro):
+        locais.renomear_local(con, "Predio", novo)
+    assert "Predio" in locais.nomes(con)
+
+
+def test_cia_nao_muda_de_nome(con):  # noqa: F811
+    with pytest.raises(ValueError, match="CIA"):
+        locais.renomear_local(con, "CIA", "Academia")
+
+
+def test_erro_no_meio_desfaz_tudo(con, monkeypatch):  # noqa: F811
+    locais.criar_local(con, "Predio", "CIA")
+    cid = _cliente(con, "Ana", "Predio")
+    monkeypatch.setattr(locais, "TABELAS_LOCAL", ("locais_custos", "clientes", "tabela_que_nao_existe"))
+    with pytest.raises(Exception):
+        locais.renomear_local(con, "Predio", "Novo Predio")
+    assert con.execute("SELECT local FROM clientes WHERE id=?", (cid,)).fetchone()[0] == "Predio"
+    assert con.execute("SELECT COUNT(*) FROM locais_custos WHERE local='Predio'").fetchone()[0] == 1
+
+
+def test_contas_que_citam_o_local_so_mudam_se_pedir(con):  # noqa: F811
+    locais.criar_local(con, "Predio", "CIA")
+    with con:
+        rid = con.execute("""INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, inicio)
+                             VALUES ('PJ', 'Aluguel sala Predio', 'Outros', 300, 10, '2026-09')""").lastrowid
+    assert [c["id"] for c in locais.citacoes(con, "Predio")] == [rid]
+    locais.renomear_local(con, "Predio", "Torre")
+    assert con.execute("SELECT descricao FROM recorrencias WHERE id=?", (rid,)).fetchone()[0] == "Aluguel sala Predio"
+    r = locais.renomear_local(con, "Torre", "Edificio", atualizar_textos=False)
+    assert r["textos"] == 0
+    with con:
+        con.execute("UPDATE recorrencias SET descricao='Aluguel sala Edificio' WHERE id=?", (rid,))
+    r = locais.renomear_local(con, "Edificio", "Bloco B", atualizar_textos=True)
+    assert r["textos"] == 1 and con.execute("SELECT descricao FROM recorrencias WHERE id=?", (rid,)).fetchone()[0] == "Aluguel sala Bloco B"
+
+
+def test_rota_renomeia_e_volta_na_grade_do_nome_novo(con, http):  # noqa: F811
+    locais.criar_local(con, "Predio", "CIA", taxa_aula=30)
+    r = http.post("/locais/editar", data={"nome_original": "Predio", "nome": "Predio Novo", "taxa_aula": "35",
+                                          "atualizar_textos": "1"}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].startswith("/grade?local=Predio%20Novo")
+    assert "Nome+trocado" in r.headers["location"] or "Nome%20trocado" in r.headers["location"]
+    assert con.execute("SELECT taxa_aula FROM locais_custos WHERE local='Predio Novo'").fetchone()[0] == 35
+    pg = http.get("/grade?local=Predio%20Novo").text
+    assert 'data-nome_original="Predio Novo"' in pg and "data-so-renomear" in pg
+
+
+def test_renomear_troca_texto_que_cita_o_local_sem_acento(con):  # noqa: F811
+    locais.criar_local(con, "Estúdio", "CIA")
+    with con:
+        rid = con.execute("""INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, inicio)
+                             VALUES ('PJ', 'Aluguel estudio', 'Outros', 300, 10, '2026-09')""").lastrowid
+    r = locais.renomear_local(con, "Estúdio", "Academia Nova", atualizar_textos=True)
+    assert r["textos"] == 1
+    assert con.execute("SELECT descricao FROM recorrencias WHERE id=?", (rid,)).fetchone()[0] == "Aluguel Academia Nova"
+    assert locais._trocar_no_texto("ESTÚDIO e estudio2 e Estúdio!", "Estúdio", "X") == "X e estudio2 e X!"
+
+
+def test_renomear_mantem_reconhecida_a_conta_ja_paga_a_mao(con):  # noqa: F811
+    """Conta do local paga à mão no mês: depois de renomear, a conta automática do nome novo não pode aparecer de novo."""
+    locais.criar_local(con, "Predio", "CIA", taxa_aula=30)
+    a = aluno(con, "Ana", local="Predio")
+    marca(con, a, "2026-10-05")
+    with con:
+        lid = con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao)
+                             VALUES ('PJ','saida','2026-11-05','2026-11-05',30,'Aluguel','Aulas Predio outubro')""").lastrowid
+    assert not [x for x in contas_auto.gerar_contas_automaticas(con, "2026-11-02") if x.startswith("local:")]
+    locais.renomear_local(con, "Predio", "Torre", atualizar_textos=True)
+    assert con.execute("SELECT descricao FROM lancamentos WHERE id=?", (lid,)).fetchone()[0] == "Aulas Torre outubro"
+    assert not [x for x in contas_auto.gerar_contas_automaticas(con, "2026-11-02") if x.startswith("local:")]

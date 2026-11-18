@@ -30,6 +30,7 @@ from . import vantagens   # o leque de vantagens da indicação que cabe no loca
 from . import ofertas   # ofertas de upsell: proposta transparente, resposta do aluno e fim do valor da oferta
 from . import alunos as alu   # estado de cada aluno (um algoritmo só); 'alunos' é nome de variável em várias rotas
 from .vigencia import fixo_vale, trocada_no_dia   # a linha do horário fixo valia naquele dia?
+from . import relogio   # hoje/agora no fuso do Brasil, em qualquer servidor
 
 ROOT = Path(__file__).resolve().parent
 DIAS = {1: "Segunda", 2: "Terça", 3: "Quarta", 4: "Quinta", 5: "Sexta", 6: "Sábado", 7: "Domingo"}
@@ -68,7 +69,7 @@ async def lifespan(app):
     try:
         con = db.conectar()
         try:
-            contas_auto.garantir(con, dt.date.today().isoformat())   # DAS, CIA e locais do mês passado em Contas a pagar
+            contas_auto.garantir(con, relogio.hoje().isoformat())   # DAS, CIA e locais do mês passado em Contas a pagar
         finally:
             con.close()
     except Exception as e:  # o CRM abre mesmo se as contas automáticas falharem
@@ -190,7 +191,7 @@ def versao(arquivo):
         return 0
 
 
-templates.env.globals.update(ETAPAS=ETAPAS, DIAS=DIAS, hoje=lambda: dt.date.today().isoformat(), wa=wa, acesso=acesso, versao=versao)
+templates.env.globals.update(ETAPAS=ETAPAS, DIAS=DIAS, hoje=lambda: relogio.hoje().isoformat(), wa=wa, acesso=acesso, versao=versao)
 
 
 def get_db():
@@ -220,7 +221,7 @@ def voltar(url, msg=None, erro=None):
 
 
 def mes_atual():
-    return dt.date.today().strftime("%Y-%m")
+    return relogio.hoje().strftime("%Y-%m")
 
 
 # ---------- envio repetido (clique duplo com rede lenta) e restaurar o que já foi recriado ----------
@@ -357,7 +358,7 @@ def contas_vencendo(con, h: str) -> list:
 def alertas(con):
     """Lista única de {grav, cor, texto, url, tel, modelo, acoes}, mais grave primeiro.
     acoes = botões do alerta, em ordem: {"wa": True} (WhatsApp/cobrança do modelo), {"rotulo", "href"} ou {"rotulo", "dialogo", "dados"}."""
-    hoje = dt.date.today()
+    hoje = relogio.hoje()
     h = hoje.isoformat()
     lim7 = (hoje + dt.timedelta(days=7)).isoformat()
     out = []
@@ -459,20 +460,80 @@ def alertas(con):
 # =====================================================================
 # 6. PAINEL (tela inicial)
 # =====================================================================
+def fixos_atuais(con, ids=None) -> list[dict]:
+    """Horários fixos que valem hoje na Agenda (não excluídos), só de alunos ativos, um por (aluno, dia, hora), do mais antigo ao mais novo:
+    [{cliente_id, dia, hora, local}]. A mesma leitura serve às horas de trabalho, às divergências plano × Agenda e à ficha.
+    Reposição e avulsa não entram (não são horário fixo)."""
+    out, vistos = [], set()
+    for r in con.execute("""SELECT f.cliente_id, f.dia, f.hora, f.local FROM agenda_fixos f JOIN clientes c ON c.id=f.cliente_id
+                            WHERE f.excluido_em IS NULL AND f.dia BETWEEN 1 AND 6 AND f.hora BETWEEN 5 AND 23
+                            AND c.status='ativo' AND c.excluido_em IS NULL ORDER BY f.id"""):
+        if (ids is not None and r["cliente_id"] not in ids) or (r["cliente_id"], r["dia"], r["hora"]) in vistos:
+            continue
+        vistos.add((r["cliente_id"], r["dia"], r["hora"]))
+        out.append(dict(r))
+    return out
+
+
 def horas_trabalho_detalhe(con, p, bases=None) -> dict:
-    """Suas horas de trabalho no mês, por parte (precos.PARTES_TRABALHO) e no total: para cada aluno ativo, as aulas do plano
-    (as da "Agenda ocupada") + deslocamento + planejamento + consultoria, pela regra do tempo (precos.partes_minutos).
-    Aluno sem plano do motor conta só as aulas."""
+    """Suas horas de trabalho no mês, por parte (precos.PARTES_TRABALHO) e no total, pela regra do tempo (minutos de Configurações > Mão de obra).
+    Aulas e deslocamento vêm da Agenda (Victor, 18/11/2026): cada horário fixo (dia, hora) vale 4,33 aulas no mês, contado uma vez só
+    mesmo com 2 alunos juntos (é uma hora sua), com o deslocamento do local daquele horário.
+    Aluno com horário na Agenda soma só planejamento, consultoria e avaliação pelo plano; aluno sem horário (ex.: Consultoria Online)
+    conta tudo pelo plano (precos.partes_minutos), como antes. Aluno sem plano do motor e sem horário conta só as aulas do plano."""
     bases = bases if bases is not None else carregar_bases(con)
     out = dict.fromkeys(precos.PARTES_TRABALHO, 0.0)
+    fixos = fixos_atuais(con)
+    slots = {}
+    for f in fixos:
+        slots.setdefault((f["dia"], f["hora"]), f["local"])   # dupla no mesmo horário: uma hora de trabalho, no local do primeiro
+    min_aula = float((p.get("mo") or {}).get("min_aula", 60) or 0)
+    out["aulas"] += len(slots) * SEMANAS_MES * min_aula / 60
+    out["deslocamento"] += sum(precos.deslocamento(p, local)[1] for local in slots.values()) * SEMANAS_MES / 60
+    com_horario = {f["cliente_id"] for f in fixos}
     for c in con.execute("SELECT * FROM clientes WHERE excluido_em IS NULL AND status='ativo'"):
         base = base_do_cliente(con, c, bases)
+        if c["id"] in com_horario:
+            if base:
+                partes = precos.partes_minutos(dict(base), p, c["local"])
+                for k in ("planejamento", "consultoria", "avaliacao"):
+                    out[k] += partes[k] / 60
+            continue
         if not base:
             out["aulas"] += aulas_mes(c)
             continue
         for k, minutos in precos.partes_minutos(dict(base), p, c["local"]).items():
             out[k] += minutos / 60
     out["total"] = sum(out.values())
+    return out
+
+
+def horarios_texto(con, ids=None) -> dict:
+    """{cliente_id: "Seg 13h · Qui 17h"}: os horários fixos da Agenda de cada aluno ativo, em ordem de dia e hora (sem reposição nem avulsa)."""
+    por = {}
+    for f in sorted(fixos_atuais(con, ids), key=lambda f: (f["dia"], f["hora"])):
+        por.setdefault(f["cliente_id"], []).append(f"{DIAS_CURTO[f['dia']]} {f['hora']:02d}h")
+    return {c: " · ".join(v) for c, v in por.items()}
+
+
+def divergencias_plano_agenda(con, fixos=None) -> list[dict]:
+    """Alunos ativos cujo plano não bate com os horários fixos da Agenda, por semana: [{id, nome, plano, por_semana, agenda}].
+    Mensalidade Nx = N por semana; Pacote N = N ÷ semanas contratadas (Configurações > Agenda). Sem horário na Agenda (agenda 0) também entra:
+    as horas desse aluno saem do plano. Consultoria e plano sem número de aulas ficam de fora."""
+    fixos = fixos if fixos is not None else fixos_atuais(con)
+    por_aluno = {}
+    for f in fixos:
+        por_aluno[f["cliente_id"]] = por_aluno.get(f["cliente_id"], 0) + 1
+    semanas = float(db.parametros(con, "agenda").get("semanas_contratadas") or 4)
+    out = []
+    for c in con.execute("SELECT id, nome, plano FROM clientes WHERE excluido_em IS NULL AND status='ativo' ORDER BY nome"):
+        contr = aulas_contratadas(c, semanas)
+        if not contr:
+            continue
+        semana = contr / semanas
+        agenda = por_aluno.get(c["id"], 0)
+        if abs(agenda - semana) >= 0.5:
+            out.append({"id": c["id"], "nome": c["nome"], "plano": c["plano"], "por_semana": round(semana, 1), "agenda": agenda})
     return out
 
 
@@ -651,7 +712,7 @@ def _foto_do_mes(con, m):
 
 @app.get("/", response_class=HTMLResponse)
 def painel(request: Request, con=Depends(get_db)):
-    contas_auto.garantir(con, dt.date.today().isoformat())
+    contas_auto.garantir(con, relogio.hoje().isoformat())
     m = calcular_metricas(con)
     metas = db.parametros(con, "metas")
     ant_mes = (dt.date.fromisoformat(m["mes"] + "-01") - dt.timedelta(days=1)).strftime("%Y-%m")
@@ -676,7 +737,7 @@ def fechar_mes(con=Depends(get_db)):
         # só marca na rotina se a tarefa "fim_mes" não foi excluída
         con.execute("""INSERT OR IGNORE INTO rotina_itens (semana, item) SELECT ?, 'fim_mes'
                        WHERE EXISTS (SELECT 1 FROM rotina_tarefas WHERE chave='fim_mes' AND excluido_em IS NULL)""", (semana_atual(),))
-        con.execute("UPDATE rotina_itens SET feito=1, data_feito=? WHERE semana=? AND item='fim_mes'", (dt.date.today().isoformat(), semana_atual()))
+        con.execute("UPDATE rotina_itens SET feito=1, data_feito=? WHERE semana=? AND item='fim_mes'", (relogio.hoje().isoformat(), semana_atual()))
     return voltar("/", msg=f"Mês {m['mes'][5:]}/{m['mes'][:4]} fechado e guardado no histórico.")
 
 
@@ -685,6 +746,8 @@ def fechar_mes(con=Depends(get_db)):
 # =====================================================================
 CAMPOS_CLIENTE = ["nome", "telefone", "local", "tipo_servico", "plano", "pessoas", "dias_horarios", "valor",
                   "forma_pagamento", "status", "canal_origem", "data_inicio", "data_renovacao", "observacoes", "indicado_por"]
+# a ficha não grava dias_horarios: os horários fixos ficam na Agenda (card "Dias e horários fixos"); a coluna antiga só é lida
+CAMPOS_CLIENTE_FICHA = [k for k in CAMPOS_CLIENTE if k != "dias_horarios"]
 
 
 def _num_br(v) -> float:
@@ -747,7 +810,7 @@ def clientes(request: Request, status: str = "ativo", busca: str = "", ids: str 
             sql += " AND nome LIKE ?"
             args.append(f"%{busca}%")
     rows = con.execute(sql + " ORDER BY status='ativo' DESC, nome", args).fetchall()
-    hoje = dt.date.today()
+    hoje = relogio.hoje()
     estados = alu.estado(con, hoje, ids=[c["id"] for c in rows if c["status"] == "ativo"])   # a situação de cada aluno vem do algoritmo central
     if filtro and motivo == "sem-aula":   # quem não está indo: sem aula registrada ou o mês pago/pulado sem aula (quem virou consultoria sai: mesma regra tem_aulas)
         rows = [c for c in rows if c["id"] in estados and estados[c["id"]]["situacao"] in alu.SEM_AULA]
@@ -782,6 +845,7 @@ def clientes(request: Request, status: str = "ativo", busca: str = "", ids: str 
     totais = {r[0]: r[1] for r in con.execute("SELECT status, COUNT(*) FROM clientes WHERE excluido_em IS NULL GROUP BY status")}
     motivo_ok = motivo if motivo in MOTIVOS_LISTA else ""
     return render(request, "clientes.html", con, clientes=itens, status=status, busca=busca, totais=totais, filtrado=bool(filtro),
+                  adiantado=financeiro.pago_adiantado_ate(con, relogio.hoje().isoformat()), horarios_txt=horarios_texto(con),
                   motivo=motivo_ok, titulo_lista=MOTIVOS_LISTA.get(motivo, "Alunos selecionados"), ajuda_lista=AJUDA_LISTA.get(motivo, ""),
                   modelo_lista=MODELO_LISTA.get(motivo, ""), oferta_lista=oferta_lista,
                   voltar_lista=f"/clientes?ids={','.join(map(str, filtro))}&motivo={motivo_ok}" + (f"&oferta={oferta}" if motivo_ok == "upsell" else ""))
@@ -828,7 +892,7 @@ async def cliente_criar(request: Request, con=Depends(get_db)):
 def renovacao_e_cobranca(con, c):
     """(renovação efetiva, cobrança) do aluno, com o crédito descontado antes da multa e dos juros; quem saiu não recebe cobrança."""
     renovacao = financeiro.renovacoes(con, c["id"]).get(c["id"])
-    return renovacao, financeiro.cobranca_do_aluno(con, c, renovacao, dt.date.today().isoformat())
+    return renovacao, financeiro.cobranca_do_aluno(con, c, renovacao, relogio.hoje().isoformat())
 
 
 # ---------- menu WhatsApp da ficha: os itens e o texto enviado saem do mesmo cálculo ----------
@@ -874,7 +938,7 @@ def cobranca_atual(con, c, ctx, hoje=None, modelos=None, dados=None) -> dict | N
     efetiva = ctx.get("vence") or ctx.get("efetiva")
     if c["status"] != "ativo" or not data_iso(efetiva):
         return None
-    d = (dt.date.fromisoformat(efetiva) - (hoje or dt.date.today())).days
+    d = (dt.date.fromisoformat(efetiva) - (hoje or relogio.hoje())).days
     estagio = estagio_cobranca(d)
     if not estagio:
         return None
@@ -895,7 +959,7 @@ def cobranca_atual(con, c, ctx, hoje=None, modelos=None, dados=None) -> dict | N
             "valor": valor, "rotulo_valor": "Total atualizado" if d < 0 else "Valor", "cob": cob, "texto": texto, "credito": credito,
             "mensalidade": float(c["valor"] or 0),
             # o QR estático não expira: até o vencimento o valor vale até 23:59 dele; depois, só no dia (os juros mudam amanhã)
-            "valido_ate": efetiva if d >= 0 else (hoje or dt.date.today()).isoformat(),
+            "valido_ate": efetiva if d >= 0 else (hoje or relogio.hoje()).isoformat(),
             "codigo": pix.br_code(dados["pix"], dados["pix_nome"], dados["pix_cidade"], valor), "dados": dados}
 
 
@@ -996,7 +1060,7 @@ def wa_menu(con, c, renovacao, cob, eventos) -> dict:
     """Menu WhatsApp da ficha: itens na ordem [{modelo, rotulo, sub, destaque, pedido_em}] e se há um pedido de depoimento esperando resposta."""
     ctx = wa_contexto(con, c, renovacao, cob)
     modelos = db.parametros(con, "msg_whatsapp")
-    limite = (dt.date.today() - dt.timedelta(days=DEPOIMENTO_DIAS)).isoformat()
+    limite = (relogio.hoje() - dt.timedelta(days=DEPOIMENTO_DIAS)).isoformat()
     pedido = next((e["data"] for e in eventos if e["tipo"] == "mensagem" and e["descricao"] == "WhatsApp: " + wa_rotulo("depoimento")
                    and e["data"] >= limite), None)   # eventos vêm do mais novo para o mais antigo
     recebido = bool(pedido) and any(e["tipo"] == "depoimento" and e["data"] >= pedido for e in eventos)
@@ -1034,6 +1098,8 @@ def cliente_ficha(request: Request, cid: int, con=Depends(get_db)):
     return render(request, "cliente.html", con, c=c, eventos=eventos, estimativa=estimativa, propostas=propostas, pagamentos=pagamentos,
                   diferenca=pendencia_diferenca(c, difs, dados_mensagem(con)) if difs else None,
                   renovacao=renovacao, cobranca=cob, texto_cob=texto_cobranca(cob) if cob else None, pago_ate=pago_ate,
+                  adiantado_ate=financeiro.pago_adiantado_ate(con, relogio.hoje().isoformat()).get(cid),
+                  horarios=sorted(fixos_atuais(con, {cid}), key=lambda f: (f["dia"], f["hora"])), locais_horario=loc.nomes(con), max_alunos=max_alunos(con),
                   estado=alu.estado_aluno(con, cid), menu_wa=wa_menu(con, c, renovacao, cob, eventos),
                   indicadores=indicacoes.alunos_para_escolher(con, cid),
                   indicou=indicacoes.do_aluno(con, cid), indicado_por=indicacoes.quem_indicou(con, cid),
@@ -1053,20 +1119,20 @@ async def cliente_salvar(request: Request, cid: int, con=Depends(get_db)):
         d["data_renovacao"] = antigo["data_renovacao"]   # a ficha mostra a data que já andou com os pagamentos: salvar não mexe nela
     trocou = bool(antigo) and (d["data_renovacao"] or None) != (antigo["data_renovacao"] or None)
     with con:
-        con.execute(f"UPDATE clientes SET {','.join(k + '=:' + k for k in CAMPOS_CLIENTE)}, atualizado_em=datetime('now','localtime') WHERE id=:id", d)
+        con.execute(f"UPDATE clientes SET {','.join(k + '=:' + k for k in CAMPOS_CLIENTE_FICHA)}, atualizado_em=datetime('now','localtime') WHERE id=:id", d)
         if trocou:   # data trocada à mão: os pagamentos lançados até agora já estão nela
             con.execute("UPDATE clientes SET renovacao_em=datetime('now','localtime') WHERE id=?", (cid,))
         tirados = []
         if antigo and antigo["status"] != d["status"]:
             con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, descricao) VALUES (?, 'status', ?, ?)",
-                        (cid, dt.date.today().isoformat(), f"Status alterado para {d['status']}"))
+                        (cid, relogio.hoje().isoformat(), f"Status alterado para {d['status']}"))
             if d["status"] == "ativo":   # voltou pela ficha: o mesmo cuidado do botão de status
                 tirados = tirar_dos_lotados(con, cid)
     return voltar(f"/clientes/{cid}", msg="Salvo." + aviso_lotados(tirados))
 
 
 def tirar_dos_lotados(con, cid) -> list:
-    """O aluno voltou a ficar ativo: horário fixo dele que, enquanto estava parado, ganhou 2 outros alunos fica cheio demais (cabem 2).
+    """O aluno voltou a ficar ativo: horário fixo dele que, enquanto estava parado, encheu com outros alunos fica cheio demais (cabem max_alunos).
     Tira o aluno desses horários (exclusão, vai para a lixeira) e solta a célula dele na Grade. 1 SELECT + no máximo 1 UPDATE.
     Devolve os horários tirados, "Seg 07h", para avisar. Quem chama abre a transação."""
     meus = con.execute("SELECT id, dia, hora, local FROM agenda_fixos WHERE cliente_id=? AND excluido_em IS NULL", (cid,)).fetchall()
@@ -1078,7 +1144,8 @@ def tirar_dos_lotados(con, cid) -> list:
                              WHERE f.excluido_em IS NULL AND f.cliente_id != ? AND c.status='ativo' AND c.excluido_em IS NULL AND ({ondes})""",
                          [cid, *(v for m in meus for v in (m["dia"], m["hora"]))]):
         outros[(r["dia"], r["hora"])] = outros.get((r["dia"], r["hora"]), 0) + 1
-    sair = [m for m in meus if outros.get((m["dia"], m["hora"]), 0) >= 2]
+    cabe = max_alunos(con)
+    sair = [m for m in meus if outros.get((m["dia"], m["hora"]), 0) >= cabe]
     if not sair:
         return []
     con.execute(f"UPDATE agenda_fixos SET excluido_em=? WHERE id IN ({','.join('?' * len(sair))})", [agora_txt(), *(m["id"] for m in sair)])
@@ -1091,7 +1158,7 @@ def tirar_dos_lotados(con, cid) -> list:
 
 
 def aviso_lotados(tirados) -> str:
-    return (f" Saiu do horário fixo de {', '.join(tirados)}: já {'tem' if len(tirados) == 1 else 'têm'} 2 alunos. "
+    return (f" Saiu do horário fixo de {', '.join(tirados)}: já {'está cheio' if len(tirados) == 1 else 'estão cheios'}. "
             "Escolha outro horário na Agenda.") if tirados else ""
 
 
@@ -1102,7 +1169,7 @@ def cliente_status(cid: int, status: str = Form(...), con=Depends(get_db)):
     with con:
         con.execute("UPDATE clientes SET status=?, atualizado_em=datetime('now','localtime') WHERE id=?", (status, cid))
         con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, descricao) VALUES (?, 'status', ?, ?)",
-                    (cid, dt.date.today().isoformat(), f"Status alterado para {status}"))
+                    (cid, relogio.hoje().isoformat(), f"Status alterado para {status}"))
         if status == "ativo" and antes and antes["status"] != "ativo":
             tirados = tirar_dos_lotados(con, cid)
             _grade_reocupar(con, cid)
@@ -1137,7 +1204,7 @@ def cliente_wa(cid: int, modelo: str, con=Depends(get_db)):
         rotulo += f" ({cobranca_atual(con, c, wa_contexto(con, c))['nome']})"
     with con:
         con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, descricao) VALUES (?, 'mensagem', ?, ?)",
-                    (cid, dt.date.today().isoformat(), "WhatsApp: " + rotulo))
+                    (cid, relogio.hoje().isoformat(), "WhatsApp: " + rotulo))
     return RedirectResponse(wa(c["telefone"], texto), status_code=303)   # sempre https://wa.me/...: o destino não vem do navegador
 
 
@@ -1169,7 +1236,7 @@ def cliente_depoimento(cid: int, descricao: str = Form(""), con=Depends(get_db))
         return voltar("/clientes", erro="Cliente não encontrado.")
     with con:
         con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, descricao) VALUES (?, 'depoimento', ?, ?)",
-                    (cid, dt.date.today().isoformat(), descricao.strip() or "Depoimento recebido"))
+                    (cid, relogio.hoje().isoformat(), descricao.strip() or "Depoimento recebido"))
     return voltar(f"/clientes/{cid}", msg="Depoimento registrado. Obrigado!")
 
 
@@ -1193,7 +1260,7 @@ def registrar_evento(con, cid: int, tipo: str, data: str, valor="", descricao=""
     if tipo == "pausa":
         # pulou o mês: a renovação que estava para vencer não é cobrada; a próxima é a volta (vazio = um mês depois)
         pulada = data_iso(antes["efetiva"]) if antes else None
-        pulada = pulada or data_iso(data) or dt.date.today().isoformat()
+        pulada = pulada or data_iso(data) or relogio.hoje().isoformat()
         volta = nova or financeiro.proxima_renovacao(pulada)
         if volta <= pulada:
             return None, f"A volta precisa ser depois de {data_br(pulada)} (a renovação que foi pulada)."
@@ -1277,7 +1344,7 @@ def indicacao_presente(cid: int, iid: int, o_que: str = Form(""), custo: str = F
         v = _num_br(custo) if custo.strip() else None
     except ValueError:
         return voltar(url, erro="Custo inválido: use só números, como 35,90.")
-    msg, erro = indicacoes.registrar_presente(con, cid, iid, o_que, data_iso(data) or dt.date.today().isoformat(), v or None)
+    msg, erro = indicacoes.registrar_presente(con, cid, iid, o_que, data_iso(data) or relogio.hoje().isoformat(), v or None)
     return voltar(url, msg=msg, erro=erro)
 
 
@@ -1302,7 +1369,7 @@ def motivos_perda(con):
 def leads(request: Request, con=Depends(get_db)):
     rows = con.execute("SELECT * FROM leads WHERE excluido_em IS NULL ORDER BY data_proxima_acao IS NULL, data_proxima_acao, id DESC").fetchall()
     colunas = {e: [] for e, _ in ETAPAS}
-    hoje = dt.date.today().isoformat()
+    hoje = relogio.hoje().isoformat()
     for l in rows:
         atrasado = bool(l["data_proxima_acao"] and l["data_proxima_acao"] < hoje and l["etapa"] not in ("cliente", "perdido"))
         parado = dias_parado(con, l, hoje)
@@ -1322,7 +1389,7 @@ def lead_criar(nome: str = Form(...), telefone: str = Form(""), canal_origem: st
         cur = con.execute("""INSERT INTO leads (nome, telefone, canal_origem, interesse, proxima_acao, data_proxima_acao, observacoes, indicado_por,
                              data_entrada, data_mudanca_etapa) VALUES (?,?,?,?,?,?,?,?,?,?)""",
                           (nome, telefone or None, indicacoes.CANAL if indicador else canal_origem, interesse or None,
-                           proxima_acao or None, data_proxima_acao or None, observacoes or None, indicador, dt.date.today().isoformat(), dt.date.today().isoformat()))
+                           proxima_acao or None, data_proxima_acao or None, observacoes or None, indicador, relogio.hoje().isoformat(), relogio.hoje().isoformat()))
         con.execute("INSERT INTO lead_etapas_log (lead_id, etapa) VALUES (?, 'lead')", (cur.lastrowid,))
     return voltar("/leads", msg="Lead adicionado.")
 
@@ -1350,14 +1417,14 @@ def lead_etapa(lid: int, etapa: str = Form(...), motivo_perda: str = Form(""), c
         return voltar("/leads", erro="Etapa inválida.")
     with con:
         con.execute("UPDATE leads SET etapa=?, motivo_perda=?, data_mudanca_etapa=? WHERE id=?",
-                    (etapa, (motivo_perda or None) if etapa == "perdido" else None, dt.date.today().isoformat(), lid))
+                    (etapa, (motivo_perda or None) if etapa == "perdido" else None, relogio.hoje().isoformat(), lid))
         con.execute("INSERT INTO lead_etapas_log (lead_id, etapa) VALUES (?, ?)", (lid, etapa))
         if etapa == "cliente" and not l["cliente_id"]:
             partes = (l["interesse"] or "").split("/")
             cur = con.execute("""INSERT INTO clientes (nome, telefone, canal_origem, observacoes, lead_id, tipo_servico, local, indicado_por, data_inicio)
                                  VALUES (?,?,?,?,?,?,?,?,?)""",
                               (l["nome"], l["telefone"], l["canal_origem"], l["observacoes"], lid,
-                               partes[0].strip() or None, partes[1].strip() if len(partes) > 1 else None, l["indicado_por"], dt.date.today().isoformat()))
+                               partes[0].strip() or None, partes[1].strip() if len(partes) > 1 else None, l["indicado_por"], relogio.hoje().isoformat()))
             con.execute("UPDATE leads SET cliente_id=? WHERE id=?", (cur.lastrowid, lid))
             return voltar(f"/leads?destaque={lid}", msg=f"Novo aluno: {l['nome']}")
     return voltar(f"/leads?destaque={lid}", msg="Etapa atualizada.")
@@ -1383,25 +1450,72 @@ def plano_referencia(con, tipo_calculo, local, ref=0):
 TIPOS_GRADE = ("Pacotes", "Mensalidades")
 
 
+def max_alunos(con) -> int:
+    """Quantos alunos cabem num horário fixo (Configurações > Agenda; padrão 2). Vale na Agenda, na ficha e na Grade."""
+    try:
+        return max(int(float(db.parametros(con, "agenda").get("max_alunos_horario") or 2)), 1)
+    except (TypeError, ValueError):
+        return 2
+
+
 def bloqueios_gerais(con, pares=None) -> dict:
-    """Quem segura cada horário, em qualquer local e tipo: {(dia, hora): [{status, cliente_id, nome, local}]}, um por local,
-    ocupado antes de indisponível. O professor é um só: horário ocupado ou indisponível num local vale para todos.
-    pares = [(dia, hora)] limita a consulta (sem ele: a semana toda)."""
-    sql = "SELECT dia, hora, local, status, cliente_id, cliente_nome FROM grade_slots WHERE status IN ('ocupado','indisponivel') AND dia BETWEEN 1 AND 6"
-    args = []
+    """Quem segura cada horário, em qualquer local e tipo: {(dia, hora): [{status, cliente_id, nome, local, ...}]}, ocupado antes de indisponível.
+    O professor é um só: horário ocupado ou indisponível num local vale para todos. pares = [(dia, hora)] limita a consulta.
+    A ocupação vem da AGENDA (Victor, 18/11/2026): os horários fixos de hoje (fixos_atuais), um item por horário com todos os alunos
+    (nome "Ana + Bia", ids, vagas). Da Grade (grade_slots) só vale o que a Agenda não sabe: indisponível e ocupado sem aluno
+    (nome digitado da planilha antiga, ou só "ocupado"). Célula da Grade com cliente_id é a cópia antiga: não conta mais (a Agenda manda)."""
     if pares is not None:
         pares = list(dict.fromkeys(pares))
         if not pares:
             return {}
+    filtro = set(pares) if pares is not None else None
+    out, cabe = {}, max_alunos(con)
+    for f in fixos_atuais(con):
+        k = (f["dia"], f["hora"])
+        if filtro is not None and k not in filtro:
+            continue
+        lista = out.setdefault(k, [])
+        if not lista:
+            lista.append({"status": "ocupado", "cliente_id": f["cliente_id"], "nome": "", "local": f["local"], "ids": [], "nomes": [],
+                          "agenda": True})
+        lista[0]["ids"].append(f["cliente_id"])
+    if out:
+        ids = sorted({c for lst in out.values() for c in lst[0]["ids"]})
+        nomes = {r["id"]: r["nome"] for r in con.execute(f"SELECT id, nome FROM clientes WHERE id IN ({','.join('?' * len(ids))})", ids)}
+        for lst in out.values():
+            b = lst[0]
+            b["nomes"] = [nomes.get(c, "") for c in b["ids"]]
+            b["nome"] = " + ".join(nomes_curtos(b["nomes"])) if len(b["nomes"]) > 1 else b["nomes"][0]
+            b["vagas"] = max(cabe - len(b["ids"]), 0)
+    sql = """SELECT dia, hora, local, status, cliente_id, cliente_nome FROM grade_slots WHERE dia BETWEEN 1 AND 6
+             AND (status='indisponivel' OR (status='ocupado' AND cliente_id IS NULL))"""
+    args = []
+    if pares is not None:
         sql += " AND (" + " OR ".join(["(dia=? AND hora=?)"] * len(pares)) + ")"
         args = [v for par in pares for v in par]
-    out = {}
     for r in con.execute(sql + " ORDER BY status='indisponivel', local, tipo_calculo", args):
         lista = out.setdefault((r["dia"], r["hora"]), [])
         if not any(b["local"] == r["local"] for b in lista):
-            lista.append({"status": r["status"], "cliente_id": r["cliente_id"], "nome": r["cliente_nome"], "local": r["local"]})
-    for lista in out.values():   # ocupado vence indisponível, mesmo vindo de outro local
-        lista.sort(key=lambda b: b["status"] != "ocupado")
+            lista.append({"status": r["status"], "cliente_id": None, "nome": r["cliente_nome"], "local": r["local"], "ids": [], "nomes": [],
+                          "agenda": False})
+    for lista in out.values():   # ocupado vence indisponível, mesmo vindo de outro local; a Agenda primeiro
+        lista.sort(key=lambda b: (b["status"] != "ocupado", not b["agenda"]))
+    return out
+
+
+def so_na_grade(con) -> list[dict]:
+    """Horários que a Grade antiga dá a um aluno ativo e que a Agenda não tem (a cópia da Grade ficou para trás):
+    [{cliente_id, nome, dia, hora, local}]. Aparecem num aviso da Grade com o botão "Passar para a Agenda"."""
+    na_agenda = {(f["cliente_id"], f["dia"], f["hora"]) for f in fixos_atuais(con)}
+    out, vistos = [], set()
+    for r in con.execute("""SELECT g.dia, g.hora, g.local, g.cliente_id, c.nome FROM grade_slots g JOIN clientes c ON c.id=g.cliente_id
+                            WHERE g.status='ocupado' AND g.dia BETWEEN 1 AND 6 AND g.hora BETWEEN 5 AND 23
+                            AND c.status='ativo' AND c.excluido_em IS NULL ORDER BY g.dia, g.hora, g.local"""):
+        k = (r["cliente_id"], r["dia"], r["hora"])
+        if k in na_agenda or k in vistos:
+            continue
+        vistos.add(k)
+        out.append(dict(r))
     return out
 
 
@@ -1420,13 +1534,15 @@ def grade(request: Request, tipo: str = "Pacotes", local: str = "CIA", vale: int
     for s in slots:
         cel = dict(s)
         cel["multiplicador"] = mults.get(s["hora"], 1.0)
-        cel["preco_aula"] = cel["margem"] = cel["preco_total"] = cel["lucro"] = cel["outro_local"] = None
-        cel["apagado"] = False
-        if s["status"] == "livre":   # livre aqui, mas ocupado ou indisponível em outro local (ou no outro tipo): mostra quem segura
-            fora = next(iter(gerais.get((s["dia"], s["hora"]), [])), None)
-            if fora:
-                cel.update(status=fora["status"], cliente_id=fora["cliente_id"], cliente_nome=fora["nome"],
-                           outro_local=fora["local"] if fora["local"] != local else None)
+        cel["preco_aula"] = cel["margem"] = cel["preco_total"] = cel["lucro"] = cel["outro_local"] = cel["vagas"] = None
+        cel["apagado"], cel["ids"] = False, []
+        if s["status"] == "ocupado" and s["cliente_id"]:   # cópia antiga da Grade: quem ocupa agora vem da Agenda
+            cel.update(status="livre", cliente_id=None, cliente_nome=None)
+        fora = next(iter(gerais.get((s["dia"], s["hora"]), [])), None)
+        # a Agenda vale sempre; o resto (indisponível, nome digitado) só cobre o horário livre aqui
+        if fora and (cel["status"] == "livre" or fora["agenda"]):
+            cel.update(status=fora["status"], cliente_id=fora["cliente_id"], cliente_nome=fora["nome"], ids=fora["ids"], vagas=fora.get("vagas"),
+                       outro_local=fora["local"] if fora["local"] != local else None)
         if cel["status"] == "livre" and base:
             m = cel["multiplicador"]
             if m not in precos_hora:
@@ -1448,6 +1564,7 @@ def grade(request: Request, tipo: str = "Pacotes", local: str = "CIA", vale: int
         if b:
             comparar.append({"local": l, **precos.decompor(dict(b), p, l)})
     return render(request, "grade.html", con, celulas=celulas, minima=minima, tipo=tipo, local=local, vale=vale, locais=locais,
+                  max_alunos=max_alunos(con), so_grade=so_na_grade(con),
                   horas=precos.HORAS_GRADE, clientes=clientes_, base=base, resumo=resumo, refs=refs, ref_atual=base[col] if base else None,
                   custos_local=loc.cia_atual(con) if loc.eh_cia(local) else (p["locais"].get(local) or {}), mults=mults,
                   comparar=comparar, cia=loc.eh_cia(local), ref_grade=ref)
@@ -1509,10 +1626,14 @@ def _onde(pares, extra="") -> tuple[str, list]:
 
 @app.post("/grade/slot")
 def grade_slot(tipo: str = Form(...), local: str = Form(...), dia: int = Form(0), hora: int = Form(0), status: str = Form(""),
-               cliente_id: str = Form(""), ref: int = Form(0), celulas: list[str] = Form([]), con=Depends(get_db)):
-    """Muda a situação de um ou vários horários. Vale em todos os locais (o professor é um só):
-    livre solta o horário em todos; ocupado/indisponível grava neste local e solta nos outros.
-    Recusa (sem gravar nada) se outro aluno já tem o horário em outro local. Pacotes e Mensalidades mudam juntos."""
+               cliente_id: list[str] = Form([]), ref: int = Form(0), celulas: list[str] = Form([]), con=Depends(get_db)):
+    """Muda a situação de um ou vários horários. Vale em todos os locais (o professor é um só). A Agenda manda (Victor, 18/11/2026):
+      ocupado     = os alunos escolhidos (até max_alunos) passam a ter o horário fixo na Agenda (definir_horario: vigência, lixeira,
+                    só a diferença). Um horário: a lista escolhida é a do horário, neste local (quem não foi escolhido sai).
+                    Vários (seleção): soma os escolhidos a quem já está, sem tirar ninguém (cheio recusa tudo).
+      livre       = tira o horário fixo da Agenda de quem estiver nele (a tela pede confirmação) e solta a célula em todos os locais.
+      indisponivel = só num horário sem aluno na Agenda; grava neste local e solta nos outros.
+    Recusa (sem gravar nada) se passar do limite de alunos ou se escolher aluno inativo. Pacotes e Mensalidades mudam juntos."""
     lote = bool(celulas)
     pares = []
     for c in (celulas or [f"{dia}-{hora}"])[:300]:
@@ -1525,41 +1646,100 @@ def grade_slot(tipo: str = Form(...), local: str = Form(...), dia: int = Form(0)
     url = f"/grade?tipo={quote(tipo)}&local={quote(local)}&ref={ref}"
     if not pares or status not in ("livre", "ocupado", "indisponivel"):
         return voltar(url, erro="Nenhum horário selecionado." if not pares else "Escolha a situação do horário.")
-    cid = id_valido(cliente_id) or None
-    nome = None
-    if cid and status == "ocupado":
-        r = con.execute("SELECT nome FROM clientes WHERE id=?", (cid,)).fetchone()
-        if not r:
-            return voltar(url, erro="Aluno não encontrado.")
-        nome = r["nome"]
-    if status != "ocupado":
-        cid = None
-    gerais = bloqueios_gerais(con, pares)
-    if status != "livre":
-        for d, h in pares:
-            for b in gerais.get((d, h), []):
-                if b["local"] == local or b["status"] != "ocupado" or (status == "ocupado" and _mesma_pessoa(b, cid, nome)):
-                    continue
-                if not (b["cliente_id"] or (b["nome"] or "").strip()):
-                    continue   # "ocupado" sem ninguém: pode trocar
-                return voltar(url, erro=f"{DIAS_CURTO[d]} {h:02d}h já é de {b['nome'] or 'outro aluno'} em {b['local']}. "
-                                        "Libere o horário lá antes (ou marque como livre aqui).")
+    ids = list(dict.fromkeys(i for i in (id_valido(x) for x in cliente_id) if i))
+    cabe = max_alunos(con)
+    if status == "ocupado":
+        if not ids:
+            return voltar(url, erro="Escolha o aluno (ou marque como livre).")
+        ativos = {r["id"] for r in con.execute(f"SELECT id FROM clientes WHERE excluido_em IS NULL AND status='ativo' AND id IN ({','.join('?' * len(ids))})", ids)}
+        if len(ativos) != len(ids):
+            return voltar(url, erro="Escolha alunos ativos: só eles têm horário fixo na Agenda.")
+    agenda = {}   # (dia, hora) -> {aluno: local} de quem está no horário na Agenda
+    for d, h in pares:
+        m = {}
+        for r in fixos_do_horario(con, d, h):
+            m.setdefault(r["cliente_id"], r["local"])
+        agenda[(d, h)] = m
+    if status == "ocupado":   # passar do limite só com quem já está (limite reduzido depois): ninguém sai, ninguém novo entra
+        def passa(k):
+            junto = set(agenda[k]) | set(ids) if lote else set(ids)
+            return len(junto) > cabe and not junto <= set(agenda[k])
+        cheio = next((k for k in pares if passa(k)), None)
+        if cheio:
+            quem = ' e '.join(r['nome'] for r in fixos_do_horario(con, *cheio)) or 'ninguém'
+            return voltar(url, erro=f"{DIAS_CURTO[cheio[0]]} {cheio[1]:02d}h: cabem {cabe} alunos (hoje: {quem}). Nada foi gravado.")
+    if status == "indisponivel":
+        com = [k for k in pares if agenda[k]]
+        if com:
+            d, h = com[0]
+            return voltar(url, erro=f"{DIAS_CURTO[d]} {h:02d}h tem aula na Agenda: marque como livre (tira da Agenda) antes de deixar indisponível.")
     mults = precos.mult_horario(con)
     onde, vals = _onde(pares)
+    nomes_ids = {}
+    if ids:
+        nomes_ids = {r["id"]: r["nome"] for r in con.execute(f"SELECT id, nome FROM clientes WHERE id IN ({','.join('?' * len(ids))})", ids)}
     with con:
-        if status == "livre":   # solta em todos os locais
-            con.execute(f"UPDATE grade_slots SET status='livre', cliente_id=NULL, cliente_nome=NULL WHERE {onde}", vals)
-        else:   # só um local guarda a situação do horário: os outros ficam livres
-            con.execute(f"UPDATE grade_slots SET status='livre', cliente_id=NULL, cliente_nome=NULL "
-                        f"WHERE local != ? AND status IN ('ocupado','indisponivel') AND {onde}", [local, *vals])
-        salvar_slots(con, [(t, d, local, h, status, cid, nome, mults.get(h, 1.0)) for t in TIPOS_GRADE for d, h in pares])
-    mudou_fora = any(b["local"] != local for d, h in pares for b in gerais.get((d, h), []))
-    msg = f"{len(pares)} horários atualizados." if lote else f"{DIAS_CURTO[pares[0][0]]} {pares[0][1]:02d}h atualizado."
-    return voltar(url, msg=msg + (" Vale para todos os locais." if mudou_fora else ""))
+        # a Grade não guarda mais aluno: solta o que ela tinha nesses horários (em todos os locais)
+        con.execute(f"UPDATE grade_slots SET status='livre', cliente_id=NULL, cliente_nome=NULL WHERE {onde}", vals)
+        if status == "indisponivel":
+            salvar_slots(con, [(t, d, local, h, status, None, None, mults.get(h, 1.0)) for t in TIPOS_GRADE for d, h in pares])
+        for d, h in pares:
+            m = agenda[(d, h)]
+            if status == "ocupado":
+                if lote:   # vários horários de uma vez: soma os escolhidos a quem já está (sem tirar ninguém)
+                    junto = list(m) + [c for c in ids if c not in m]
+                    definir_horario(con, d, h, junto, {**m, **{c: local for c in ids if c not in m}})
+                else:      # um horário: o diálogo veio com quem já está; a lista escolhida é a do horário, neste local
+                    definir_horario(con, d, h, ids, {c: local for c in ids})
+            elif m:   # livre: tira da Agenda quem estava
+                definir_horario(con, d, h, [], {})
+    if status == "ocupado":
+        quem = " + ".join(nomes_curtos([nomes_ids[c] for c in ids]))
+        msg = (f"{len(pares)} horários" if lote else f"{DIAS_CURTO[pares[0][0]]} {pares[0][1]:02d}h") + f": {quem} na Agenda ({local})."
+        msg += aviso_deslocamento(con, [(d, h, local) for d, h in pares], ids[0]) if len(ids) == 1 else ""
+    elif status == "livre":
+        tirados = sum(1 for k in pares if agenda[k])
+        msg = (f"{len(pares)} horários livres." if lote else f"{DIAS_CURTO[pares[0][0]]} {pares[0][1]:02d}h livre.") + \
+            (f" Saiu da Agenda em {tirados} horário(s)." if tirados else "")
+    else:
+        msg = f"{len(pares)} horários indisponíveis." if lote else f"{DIAS_CURTO[pares[0][0]]} {pares[0][1]:02d}h indisponível."
+    return voltar(url, msg=msg + " Vale para todos os locais.")
+
+
+@app.post("/grade/passar-para-agenda")
+def grade_passar_para_agenda(tipo: str = Form("Pacotes"), local: str = Form("CIA"), ref: int = Form(0), con=Depends(get_db)):
+    """Aviso "Horários só na Grade": cria na Agenda o horário fixo de cada aluno que a Grade antiga tinha e a Agenda não
+    (até o limite de alunos por horário). Não apaga nada da Grade; depois disso a ocupação aparece pela Agenda."""
+    url = f"/grade?tipo={quote(tipo)}&local={quote(local)}&ref={ref}"
+    falta = so_na_grade(con)
+    if not falta:
+        return voltar(url, msg="A Agenda já tem todos os horários da Grade.")
+    cabe, criados, cheios = max_alunos(con), [], []
+    ocupados = {}
+    for f in fixos_atuais(con):
+        ocupados.setdefault((f["dia"], f["hora"]), set()).add(f["cliente_id"])
+    novos = []
+    for x in falta:
+        k = (x["dia"], x["hora"])
+        if len(ocupados.get(k, set())) >= cabe:
+            cheios.append(x)
+            continue
+        ocupados.setdefault(k, set()).add(x["cliente_id"])
+        novos.append((x["cliente_id"], x["dia"], x["hora"], x["local"]))
+        criados.append(x)
+    if novos:
+        with con:
+            inserir_fixos(con, novos, vigente=vigencias(con, [n[0] for n in novos]))
+    msg = f"{_plural(len(criados), 'horário passou', 'horários passaram')} para a Agenda."
+    if cheios:
+        msg += f" {_plural(len(cheios), 'ficou de fora', 'ficaram de fora')} (horário cheio): " + \
+            ", ".join(f"{x['nome']} {DIAS_CURTO[x['dia']]} {x['hora']:02d}h" for x in cheios[:5]) + "."
+    return voltar(url, msg=msg)
 
 
 # =====================================================================
-# 3b. AGENDA (horários fixos próprios + aulas avulsas; marcar a aula com 1 toque; a Agenda avisa a Grade, nunca o contrário)
+# 3b. AGENDA (horários fixos próprios + aulas avulsas; marcar a aula com 1 toque). A Agenda manda: a Grade lê a ocupação dela
+# (bloqueios_gerais) e grava nela (POST /grade/slot). A cópia em grade_slots ainda é atualizada, mas não é mais lida.
 # =====================================================================
 ESTADO_TIPO = {"feita": "aula", "faltou": "falta", "desmarcou": "desmarcou", "cancelada": "cancelada"}   # estado na tela -> tipo em cliente_eventos
 TIPO_ESTADO = {t: e for e, t in ESTADO_TIPO.items()}
@@ -1573,7 +1753,7 @@ def inicio_semana(texto="") -> dt.date:
     try:
         d = dt.date.fromisoformat(str(texto or "").strip()[:10])
     except ValueError:
-        d = dt.date.today()
+        d = relogio.hoje()
     return d - dt.timedelta(days=d.weekday())
 
 
@@ -1632,7 +1812,7 @@ def aulas_da_semana(con, segunda, hoje=None, semanas=1) -> list:
     semanas > 1: várias semanas seguidas a partir de `segunda`, com as mesmas consultas (uma de fixos, de avulsas e de marcas para o período todo);
     a regra de cada dia é aplicada semana a semana, então o resultado é o das semanas separadas, uma depois da outra.
     situacao: feita | faltou | desmarcou | cancelada | pausa (mês pulado, sem marcar) | pendente (dia passou sem marcar) | futura (hoje ou depois, sem marcar)."""
-    h = (hoje or dt.date.today()).isoformat()
+    h = (hoje or relogio.hoje()).isoformat()
     semanas = max(int(semanas), 1)
     por_semana = [{n: (segunda + dt.timedelta(days=7 * w + n - 1)).isoformat() for n in range(1, 7)} for w in range(semanas)]
     primeiro, ultimo = por_semana[0][1], por_semana[-1][6]
@@ -1802,8 +1982,8 @@ def aviso_deslocamento(con, horarios, cliente_id=0) -> str:
 
 
 def agora_txt() -> str:
-    """Data e hora de agora no fuso do app ("AAAA-MM-DD HH:MM:SS"). No Turso o SQL roda em UTC: o carimbo vai calculado aqui."""
-    return dt.datetime.now().isoformat(sep=" ", timespec="seconds")
+    """Data e hora de agora no fuso do Brasil ("AAAA-MM-DD HH:MM:SS"). No Turso o SQL roda em UTC: o carimbo vai calculado aqui."""
+    return relogio.agora_txt()
 
 
 def vigencias(con, ids, hoje=None) -> dict:
@@ -1813,7 +1993,7 @@ def vigencias(con, ids, hoje=None) -> dict:
     ids = list(dict.fromkeys(ids))
     if not ids:
         return {}
-    h = (hoje or dt.date.today()).isoformat()
+    h = (hoje or relogio.hoje()).isoformat()
     com = {r[0] for r in con.execute(f"SELECT DISTINCT cliente_id FROM agenda_fixos WHERE cliente_id IN ({','.join('?' * len(ids))})"
                                      " AND substr(criado_em,1,10) < ?", [*ids, h])}
     return {c: (h if c in com else None) for c in ids}
@@ -1888,10 +2068,10 @@ def grade_ocupar_lote(con, cid, nome, pares):
 def definir_horario(con, dia, hora, alunos, local) -> dict:
     """Deixa o horário fixo (dia, hora) com estes alunos (0 a 2 ids) e grava só a diferença: sai = exclusão (lixeira), troca de local =
     exclusão + linha nova (as semanas passadas ficam com o local antigo), entra = INSERT; quem não mudou não gera gravação. `local` é um texto (vale para todos) ou {cliente_id: local}.
-    Depois avisa a Grade, só nesse sentido: solta a célula de quem saiu ou mudou de local e ocupa a de quem entrou ou mudou
+    Depois atualiza a cópia da Grade (grade_slots; a tela lê a Agenda): solta a célula de quem saiu ou mudou de local e ocupa a de quem entrou ou mudou
     (sem mexer em célula de outro aluno ou indisponível; sem erro). Quem chama abre a transação.
     Devolve {"entrou": [ids], "saiu": [ids], "mudou": [ids]}."""
-    alunos = list(dict.fromkeys(alunos))[:2]
+    alunos = list(dict.fromkeys(alunos))   # o limite (max_alunos) é conferido por quem chama: aqui ninguém sai sem ter sido tirado
     locais = local if isinstance(local, dict) else {c: local for c in alunos}
     atual, apagar = {}, []
     for r in fixos_do_horario(con, dia, hora):
@@ -1906,7 +2086,7 @@ def definir_horario(con, dia, hora, alunos, local) -> dict:
     if apagar:
         con.execute(f"UPDATE agenda_fixos SET excluido_em=? WHERE id IN ({','.join('?' * len(apagar))})", [agora_txt(), *apagar])
     if entrou or mudou:
-        hoje = dt.date.today().isoformat()
+        hoje = relogio.hoje().isoformat()
         vig = vigencias(con, entrou)
         for c in mudou:   # linha antiga de antes de hoje: o local novo vale de hoje em diante; criada hoje (ajuste): fica com a vigência dela
             r = atual[c]
@@ -2013,7 +2193,7 @@ def saldos_reposicao(con, ids=None, hoje=None) -> dict:
     sem_marca = avulsas de reposição sem nenhuma marcação, de qualquer data (passada ou futura): cada uma já "cobre" uma reposição devida;
     a_agendar = max(saldo - sem_marca, 0): quantas reposições ainda não têm aula marcada nem aguardam marcação.
     Com ids, devolve todos eles (zerados se for o caso); sem ids, só quem tem alguma coisa."""
-    h = (hoje or dt.date.today()).isoformat()
+    h = (hoje or relogio.hoje()).isoformat()
     ids = list(dict.fromkeys(ids)) if ids is not None else None
     filtro = lambda col: f" AND {col} IN ({','.join('?' * len(ids))})" if ids is not None else ""
     out = {c: _zero_saldo() for c in (ids or [])}
@@ -2037,6 +2217,74 @@ def saldos_reposicao(con, ids=None, hoje=None) -> dict:
         d["saldo"] = max(d["devidas"] - d["usadas"], 0)
         d["a_agendar"] = max(d["saldo"] - d["sem_marca"], 0)
     return out
+
+
+def aulas_contratadas(c, semanas: float) -> int | None:
+    """Aulas que o aluno contratou no mês, pelo plano da ficha: Mensalidade Nx = N × semanas (Configurações > Agenda, padrão 4);
+    Pacote N = N. Outros (consultoria, avaliação, sem plano) = None: a Agenda só informa as aulas, sem meta."""
+    plano = c["plano"] or ""
+    m = re.search(r"Mensalidade (\d+)x", plano)
+    if m:
+        return int(round(int(m.group(1)) * semanas))
+    m = re.search(r"Pacote (?:de )?(\d+)", plano)
+    return int(m.group(1)) if m else None
+
+
+def resumo_aulas_mes(con, mes: str, hoje, ids=None) -> dict:
+    """As aulas do mês de cada aluno ativo, para ver se o mês fechou: {"alunos": [...], "total": {...}}.
+      contratadas = aulas_contratadas (None: sem meta, só informa)
+      previstas   = horários fixos da Agenda no mês (o calendário: 8, 9 ou 10), sem mês pulado e sem bloqueio; reposição e avulsa não contam
+      feitas      = aulas marcadas como Feita no mês (reposição inclusive: é aula dada)
+      faltam      = contratadas − feitas (nunca negativo); completo = feitas ≥ contratadas ("mês 100%")
+      passou      = max(previstas, feitas) − contratadas, quando passa: aula a mais que o plano não paga.
+      custo_extra = na CIA, que cobra por aula, passou × a parte dele na aula (a dupla divide a aula: a CIA cobra pelo nº de pessoas
+                    no horário); nos outros locais é só informativo (0). O total da dupla é o de uma aula, não o de duas."""
+    ano, m = int(mes[:4]), int(mes[5:7])
+    primeiro = dt.date(ano, m, 1)
+    ultimo = dt.date(ano + (m == 12), m % 12 + 1, 1) - dt.timedelta(days=1)
+    segunda = primeiro - dt.timedelta(days=primeiro.weekday())
+    semanas = (ultimo - segunda).days // 7 + 1
+    previstas, locais, juntos = {}, {}, {}
+    for a in aulas_da_semana(con, segunda, hoje, semanas=semanas):
+        if a["data"][:7] != mes or a["avulsa"] or a["pausa"] or a["bloqueio"]:
+            continue
+        previstas[a["cliente_id"]] = previstas.get(a["cliente_id"], 0) + 1
+        locais.setdefault(a["cliente_id"], []).append((a["local"], a["data"], a["hora"]))
+        juntos.setdefault((a["data"], a["hora"]), set()).add(a["cliente_id"])
+    feitas = {r[0]: r[1] for r in con.execute(
+        "SELECT cliente_id, COUNT(*) FROM cliente_eventos WHERE tipo='aula' AND excluido_em IS NULL AND substr(data,1,7)=? GROUP BY cliente_id", (mes,))}
+    semanas_plano = float(db.parametros(con, "agenda").get("semanas_contratadas") or 4)
+    taxa_cia, cia_max = precos.taxas_cia(con)
+    pessoas_de = {r[0]: max(int(r[1] or 1), 1) for r in con.execute("SELECT id, pessoas FROM clientes WHERE excluido_em IS NULL")}
+
+    def parte_da_aula(cid, aulas) -> float:
+        """R$ de uma aula da CIA que cabe a este aluno: a CIA cobra a aula pelo nº de pessoas no horário (como em contas_auto.cia_mes),
+        e a dupla divide essa aula. Média das aulas do mês dele."""
+        partes = []
+        for _, data, hora in aulas:
+            quem = juntos.get((data, hora), {cid})
+            n = sum(pessoas_de.get(x, 1) for x in quem)
+            partes.append(taxa_cia.get(min(n, cia_max or n), 0) * pessoas_de.get(cid, 1) / n)
+        return sum(partes) / len(partes) if partes else 0.0
+
+    alunos = []
+    for c in con.execute("SELECT id, nome, plano, pessoas FROM clientes WHERE excluido_em IS NULL AND status='ativo' ORDER BY nome"):
+        if ids is not None and c["id"] not in ids:
+            continue
+        contr, prev, feit = aulas_contratadas(c, semanas_plano), previstas.get(c["id"], 0), feitas.get(c["id"], 0)
+        if not (contr or prev or feit):
+            continue
+        lst = locais.get(c["id"], [])
+        na_cia = [x for x in lst if contas_auto.eh_local_cia(x[0])]
+        cia = bool(lst) and len(na_cia) * 2 > len(lst)   # a maioria das aulas é na CIA
+        passou = max(max(prev, feit) - contr, 0) if contr else 0
+        alunos.append({"id": c["id"], "nome": c["nome"], "contratadas": contr, "previstas": prev, "feitas": feit,
+                       "faltam": max(contr - feit, 0) if contr else None, "completo": bool(contr) and feit >= contr,
+                       "passou": passou, "cia": cia, "custo_extra": round(passou * parte_da_aula(c["id"], na_cia), 2) if cia else 0.0})
+    soma = lambda k: sum(a[k] or 0 for a in alunos)   # noqa: E731
+    total = {k: soma(k) for k in ("contratadas", "previstas", "feitas", "faltam", "passou", "custo_extra")}
+    total["custo_extra"] = round(total["custo_extra"], 2)
+    return {"mes": mes, "mes_txt": f"{MESES[m - 1]} de {ano}", "alunos": alunos, "total": total}
 
 
 def controle_aluno(con, cid, mes, hoje) -> dict | None:
@@ -2082,12 +2330,13 @@ def controle_aluno(con, cid, mes, hoje) -> dict | None:
             "mes_ant": ant.strftime("%Y-%m"), "mes_prox": prox.strftime("%Y-%m"), "eh_atual": mes == hoje.strftime("%Y-%m"),
             "feitas": contar("feita"), "faltou": contar("faltou"), "desmarcou": contar("desmarcou"), "canceladas": contar("cancelada"),
             "repostas": sum(1 for l in linhas if l["estado"] == "feita" and l["reposicao"]), "linhas": linhas,
+            "resumo": next(iter(resumo_aulas_mes(con, mes, hoje, ids={cid})["alunos"]), None),   # contratadas, previstas, faltam, passou
             **saldos_reposicao(con, [cid], hoje)[cid]}
 
 
 @app.get("/agenda", response_class=HTMLResponse)
 def agenda(request: Request, semana: str = "", todas: int = 0, aluno: str = "", mes: str = "", con=Depends(get_db)):
-    hoje = dt.date.today()
+    hoje = relogio.hoje()
     segunda = inicio_semana(semana)
     atual = segunda == inicio_semana(hoje.isoformat())
     fases = fases_bloqueio(con)
@@ -2144,13 +2393,15 @@ def agenda(request: Request, semana: str = "", todas: int = 0, aluno: str = "", 
                   hoje_aulas=[a for a in aulas if a["data"] == hoje.isoformat()] if atual else [],
                   multi_local=len({x["local"] for l in celulas.values() for x in l}) > 1, controle=controle, extra=extra, extra_aluno=extra_aluno,
                   hoje_segunda=inicio_semana(hoje.isoformat()).isoformat(), pendentes=pendentes, repor=repor,
+                  aulas_mes=resumo_aulas_mes(con, hoje.strftime("%Y-%m"), hoje),
+                  semanas_contratadas=float(db.parametros(con, "agenda").get("semanas_contratadas") or 4),
                   locais=locais, clientes=clientes_, com_aulas=com_aulas, data_padrao=(hoje if atual else segunda).isoformat())
 
 
 @app.get("/agenda/pendentes")
 def agenda_pendentes(con=Depends(get_db)):
     """Semanas das 4 anteriores à atual com aulas sem marcar (fora de bloqueio e de mês pulado), da mais nova à mais antiga. Uma leitura de 4 semanas."""
-    hoje = dt.date.today()
+    hoje = relogio.hoje()
     inicio = inicio_semana(hoje.isoformat()) - dt.timedelta(days=28)
     n = [0] * 4
     for a in aulas_da_semana(con, inicio, hoje, semanas=4):
@@ -2240,6 +2491,72 @@ def agenda_marcar_lote(itens: str = Form(""), semana: str = Form(""), todas: int
     return voltar(url, msg=f"{_plural(feitas, 'aula marcada', 'aulas marcadas')}: {', '.join(partes)}.")
 
 
+@app.post("/clientes/{cid}/horarios")
+def cliente_horarios(cid: int, dia: list[int] = Form([]), hora: list[int] = Form([]), local: list[str] = Form([]), con=Depends(get_db)):
+    """Card "Dias e horários fixos" da ficha: a lista inteira de horários fixos do aluno (dia, hora e local de cada um), gravada direto
+    na Agenda (a mesma tabela, com as regras dela: vigência, até 2 alunos por horário, Grade avisada). Só a diferença grava:
+    horário que saiu vai para a lixeira, troca de local é exclusão + linha nova, horário novo entra. Horário cheio recusa tudo."""
+    url = f"/clientes/{cid}#horarios"
+    c = con.execute("SELECT id, nome, status FROM clientes WHERE id=? AND excluido_em IS NULL", (cid,)).fetchone()
+    if not c:
+        return voltar("/clientes", erro="Cliente não encontrado.")
+    if c["status"] != "ativo":
+        return voltar(url, erro="Só aluno ativo tem horário fixo na Agenda. Marque como ativo antes.")
+    if not (len(dia) == len(hora) == len(local)):
+        return voltar(url, erro="Escolha o dia, a hora e o local de cada horário.")
+    if len(dia) > 12:
+        return voltar(url, erro="No máximo 12 horários.")
+    validos = set(loc.nomes(con)) | {r[0] for r in con.execute("SELECT DISTINCT local FROM agenda_fixos WHERE cliente_id=?", (cid,))}
+    desejado = {}
+    for d, h, l in zip(dia, hora, local):
+        l = l.strip()
+        if not (1 <= d <= 6 and 5 <= h <= 23):
+            return voltar(url, erro="Escolha o dia (segunda a sábado) e a hora (05h a 23h).")
+        if l not in validos:
+            return voltar(url, erro="Escolha o local da lista.")
+        if (d, h) in desejado:
+            return voltar(url, erro=f"{DIAS_CURTO[d]} {h:02d}h aparece duas vezes.")
+        desejado[(d, h)] = l
+    atual = {(f["dia"], f["hora"]): f["local"] for f in fixos_atuais(con, {cid})}
+    sai = [k for k in atual if k not in desejado]
+    muda = [k for k in desejado if k in atual and atual[k] != desejado[k]]
+    novos = [k for k in desejado if k not in atual]
+    membros = {}   # (dia, hora) -> {aluno: local} de quem já está no horário
+    for d, h in set(sai + muda + novos):
+        m = {}
+        for r in fixos_do_horario(con, d, h):
+            m.setdefault(r["cliente_id"], r["local"])
+        membros[(d, h)] = m
+    cabe = max_alunos(con)
+    cheios = [k for k in novos if len([x for x in membros[k] if x != cid]) >= cabe]
+    if cheios:
+        quem = lambda k: " e ".join(r["nome"] for r in fixos_do_horario(con, *k))   # noqa: E731
+        return voltar(url, erro=f"Horário cheio (cabem {cabe} alunos): " + "; ".join(f"{DIAS_CURTO[d]} {h:02d}h já tem {quem((d, h))}" for d, h in cheios)
+                      + ". Nada foi gravado.")
+    if not (sai or muda or novos):
+        return voltar(url, msg="Nada mudou nos horários.")
+    with con:
+        for k in sai:   # sai do horário: fica quem já estava, com o local de cada um
+            m = membros[k]
+            m.pop(cid, None)
+            definir_horario(con, k[0], k[1], list(m), m)
+        for k in muda:
+            m = membros[k]
+            m[cid] = desejado[k]
+            definir_horario(con, k[0], k[1], list(m), m)
+        if novos:
+            inserir_fixos(con, [(cid, d, h, desejado[(d, h)]) for d, h in novos], vigente=vigencias(con, [cid]))
+            por_local = {}
+            for d, h in novos:
+                por_local.setdefault(desejado[(d, h)], []).append((d, desejado[(d, h)], h))
+            for pares in por_local.values():
+                grade_ocupar_lote(con, cid, c["nome"], pares)
+    q = lambda lst: ", ".join(f"{DIAS_CURTO[d]} {h:02d}h" for d, h in sorted(lst))   # noqa: E731
+    frases = [f"Entrou em {q(novos)}." if novos else "", f"Saiu de {q(sai)}." if sai else "", f"Mudou de local em {q(muda)}." if muda else ""]
+    aviso = aviso_deslocamento(con, [(d, h, desejado[(d, h)]) for d, h in novos + muda], cid) if novos or muda else ""
+    return voltar(url, msg="Horários salvos na Agenda. " + " ".join(f for f in frases if f) + aviso)
+
+
 @app.post("/agenda/incluir")
 def agenda_incluir(cliente_id: int = Form(0), local: str = Form(""), dia: int = Form(0), hora: int = Form(0), repetir: int = Form(1),
                    data: str = Form(""), reposicao: int = Form(0), dias: list[int] = Form([]), horas: list[int] = Form([]),
@@ -2264,7 +2581,8 @@ def agenda_incluir(cliente_id: int = Form(0), local: str = Form(""), dia: int = 
         pares = [(dia, hora)]
     if not all(5 <= h <= 23 for _, h in pares):
         return voltar(url, erro="Escolha a hora (05h a 23h).")
-    if repetir:   # horário fixo: soma o aluno aos que já estão (cabem 2) e avisa a Grade
+    if repetir:   # horário fixo: soma o aluno aos que já estão (cabem max_alunos) e avisa a Grade
+        cabe = max_alunos(con)
         if not all(1 <= d <= 6 for d, _ in pares):
             return voltar(url, erro="Escolha o dia (segunda a sábado).")
         ja, cheios, mudam, novos = [], [], [], []   # lê tudo antes: sem nada a gravar, nem abre transação
@@ -2276,7 +2594,7 @@ def agenda_incluir(cliente_id: int = Form(0), local: str = Form(""), dia: int = 
                 ja.append((d, h))
             elif cliente_id in locais:
                 mudam.append((d, h, locais))
-            elif len(locais) >= 2:
+            elif len(locais) >= cabe:
                 cheios.append((d, h))
             else:
                 novos.append((d, h))
@@ -2293,7 +2611,7 @@ def agenda_incluir(cliente_id: int = Form(0), local: str = Form(""), dia: int = 
         if len(pares) == 1:
             quando = q(pares)
             if cheios:
-                return voltar(url, erro=f"{quando} já tem 2 alunos.")
+                return voltar(url, erro=f"{quando} já tem {cabe} alunos.")
             if ja:
                 return voltar(url, msg=f"{c['nome']} já está no horário fixo de {quando} ({local}).")
             acao = f"agora fica em {local} no horário fixo de {quando}" if mudam else f"entrou no horário fixo de {quando} ({local})"
@@ -2302,7 +2620,7 @@ def agenda_incluir(cliente_id: int = Form(0), local: str = Form(""), dia: int = 
         frases = [f"{primeiro} entrou em {q(novos)} ({local})." if novos else "",
                   f"{primeiro} agora fica em {local} em {q(mudam)}." if mudam else "",
                   f"{q(ja)} já {'estava' if len(ja) == 1 else 'estavam'}." if ja else "",
-                  f"{q(cheios)} já {'tem' if len(cheios) == 1 else 'têm'} 2 alunos." if cheios else ""]
+                  f"{q(cheios)} já {'tem' if len(cheios) == 1 else 'têm'} {cabe} alunos." if cheios else ""]
         texto = " ".join(f for f in frases if f) + aviso
         return voltar(url, erro=texto) if cheios and not (novos or mudam or ja) else voltar(url, msg=texto)
     try:
@@ -2330,7 +2648,7 @@ def agenda_incluir(cliente_id: int = Form(0), local: str = Form(""), dia: int = 
         return voltar(url, erro=f"{quando} é o horário fixo de {c['nome']} (marcado como {na_hora[cliente_id]['situacao']}). "
                                 "Se ele vem mesmo assim, toque no horário e marque Feita.")
     outros = [a for x, a in na_hora.items() if x != cliente_id and a["situacao"] not in ("desmarcou", "cancelada")]
-    if len(outros) >= 2:   # cabem 2 alunos por horário, como no fixo
+    if len(outros) >= max_alunos(con):   # cabem max_alunos por horário, como no fixo
         return voltar(url, erro=f"Horário cheio: {quando} já tem {' e '.join(a['nome'] for a in outros)}.")
     with con:
         con.execute("INSERT INTO agenda_avulsas (cliente_id, data, hora, local, reposicao, repoe_evento_id) VALUES (?,?,?,?,?,?)",
@@ -2342,8 +2660,10 @@ def agenda_incluir(cliente_id: int = Form(0), local: str = Form(""), dia: int = 
 
 @app.post("/agenda/horario")
 def agenda_horario(dia: int = Form(0), hora: int = Form(0), aluno1: str = Form(""), aluno2: str = Form(""), local: str = Form(""),
-                   semana: str = Form(""), todas: int = Form(0), aluno: str = Form(""), mes: str = Form(""), con=Depends(get_db)):
-    """Seletor do card: quem tem aula neste dia e hora (até 2 alunos) e em que local. Sem aluno = "sem aula"."""
+                   extras: str = Form(""), semana: str = Form(""), todas: int = Form(0), aluno: str = Form(""), mes: str = Form(""),
+                   con=Depends(get_db)):
+    """Seletor do card: quem tem aula neste dia e hora e em que local. Sem aluno = "sem aula". O seletor mostra 2 alunos; com o limite
+    maior (Configurações > Agenda), quem já está no horário além deles vem em `extras` (ids) e continua, no local dele."""
     url = url_agenda(semana, todas, aluno, mes)
     local = local.strip()
     if not 1 <= dia <= 6:
@@ -2366,8 +2686,19 @@ def agenda_horario(dia: int = Form(0), hora: int = Form(0), aluno1: str = Form("
             return voltar(url, erro="Escolha um aluno ativo.")
         if not local:
             return voltar(url, erro="Escolha o local.")
+    atuais = {}
+    for r in fixos_do_horario(con, dia, hora):
+        atuais.setdefault(r["cliente_id"], r["local"])
+    mais = [int(x) for x in extras.split(",") if x.strip().isdigit() and int(x) in atuais and int(x) not in ids] if ids else []
+    if mais:
+        nomes.update({r["id"]: r["nome"] for r in con.execute(f"SELECT id, nome FROM clientes WHERE id IN ({','.join('?' * len(mais))})", mais)})
+    locais_ = {**{c: local for c in ids}, **{c: atuais[c] for c in mais}}
+    ids = ids + mais
+    cabe = max_alunos(con)
+    if len(ids) > cabe and any(c not in atuais for c in ids):   # entrar aluno novo passando do limite: recusa sem mexer em ninguém
+        return voltar(url, erro=f"{DIAS_CURTO[dia]} {hora:02d}h: cabem {cabe} alunos (Configurações > Agenda). Nada foi gravado.")
     with con:
-        definir_horario(con, dia, hora, ids, local)
+        definir_horario(con, dia, hora, ids, locais_)
     quando = f"{DIAS_CURTO[dia]} {hora:02d}h"
     if not ids:
         return voltar(url, msg=f"{quando} ficou sem aula.")
@@ -2406,7 +2737,7 @@ def agenda_copiar_grade(semana: str = Form(""), todas: int = Form(0), aluno: str
             horarios.setdefault((g["dia"], g["hora"]), {}).setdefault(cid, []).append(g["local"])
     linhas, de_fora = [], 0
     for (dia, hora), alunos in horarios.items():
-        for cid in list(alunos)[:2]:   # a Agenda comporta 2 alunos por horário
+        for cid in list(alunos)[:max_alunos(con)]:   # a Agenda comporta max_alunos por horário
             locs = alunos[cid]
             linhas.append((cid, dia, hora, cadastro[cid] if cadastro[cid] in locs else locs[0]))   # prefere o local do cadastro
         de_fora += max(len(alunos) - 2, 0)
@@ -2421,7 +2752,7 @@ def agenda_copiar_grade(semana: str = Form(""), todas: int = Form(0), aluno: str
     if nomes:
         msg += f" {_plural(len(nomes), 'nome não reconhecido', 'nomes não reconhecidos')}: {', '.join(nomes[:5])}{'…' if len(nomes) > 5 else '.'}"
     if de_fora:
-        msg += f" {_plural(de_fora, 'aluno ficou', 'alunos ficaram')} de fora (cabem 2 por horário)."
+        msg += f" {_plural(de_fora, 'aluno ficou', 'alunos ficaram')} de fora (cabem {max_alunos(con)} por horário)."
     return voltar(url, msg=msg)
 
 
@@ -2814,7 +3145,7 @@ def proposta_salvar(plano: str = Form(...), local: str = Form("CIA"), forma: str
                            " + ".join(locais), forma, pessoas, um.get("dia") or None, um.get("hora") or None, r["desconto"], r["preco_total"],
                            r["preco_pessoa"], r["custo_total"], r["lucro"], r["margem"], r["lucro_hora"], r["preco_minimo"],
                            r["desconto_maximo"], int(r["abaixo_margem"]), observacoes or None, r["preco_cheio"],
-                           r["consultoria"] or None, dt.date.today().isoformat()))
+                           r["consultoria"] or None, relogio.hoje().isoformat()))
         con.executemany("INSERT INTO proposta_horarios (proposta_id, dia, hora, local, multiplicador) VALUES (?,?,?,?,?)",
                         [(cur.lastrowid, d["dia"] or None, d["hora"] or None, d["local"], d["mult"]) for d in r["horarios"]])
     return voltar(f"/propostas/{cur.lastrowid}", msg=f"Proposta #{cur.lastrowid} salva." + aviso_deslocamento(con, [(x["dia"], x["hora"], x["local"]) for x in horarios], int(cliente_id or 0)))
@@ -2841,9 +3172,10 @@ def explorador(request: Request, local: str = "CIA", tipo_servico: str = "", for
     if forma not in p["taxas"]:
         forma = "PIX"
     bases = [precos.base_motor(t, q, fr, local) for t, q, fr in precos.PLANOS if not tipo_servico or t == tipo_servico]
-    slots = con.execute("SELECT * FROM grade_slots WHERE local=? AND status='livre' AND dia BETWEEN 1 AND 6" + (" AND dia=?" if dia else ""),
-                        (local, dia) if dia else (local,)).fetchall()
-    gerais = bloqueios_gerais(con)   # livre aqui, mas ocupado ou indisponível em outro local: não oferece
+    # célula com cliente_id é a cópia antiga da Grade: quem ocupa vem da Agenda (bloqueios_gerais)
+    slots = con.execute("SELECT * FROM grade_slots WHERE local=? AND (status='livre' OR (status='ocupado' AND cliente_id IS NOT NULL))"
+                        " AND dia BETWEEN 1 AND 6" + (" AND dia=?" if dia else ""), (local, dia) if dia else (local,)).fetchall()
+    gerais = bloqueios_gerais(con)   # ocupado na Agenda, indisponível ou ocupado sem aluno em qualquer local: não oferece
     slots = [s for s in slots if (s["dia"], s["hora"]) not in gerais]
     mults = precos.mult_horario(con)
     linhas = []
@@ -2871,7 +3203,7 @@ def explorador(request: Request, local: str = "CIA", tipo_servico: str = "", for
 # 5. CAMPANHAS
 # =====================================================================
 def fase_atual(con):
-    hoje = dt.date.today().isoformat()
+    hoje = relogio.hoje().isoformat()
     return con.execute("SELECT * FROM campanha_fases WHERE inicio<=? AND fim>=? ORDER BY ordem", (hoje, hoje)).fetchall()
 
 
@@ -2879,7 +3211,7 @@ def fase_atual(con):
 def campanhas(request: Request, mes: str = "", con=Depends(get_db)):
     mes = mes or mes_atual()
     fases = [dict(f) for f in con.execute("SELECT * FROM campanha_fases ORDER BY ordem")]
-    hoje = dt.date.today().isoformat()
+    hoje = relogio.hoje().isoformat()
     for f in fases:
         f["itens"] = con.execute("SELECT * FROM campanha_itens WHERE fase_id=? AND excluido_em IS NULL ORDER BY ordem, id", (f["id"],)).fetchall()
         f["situacao"] = "atual" if f["inicio"] <= hoje <= f["fim"] else ("passada" if f["fim"] < hoje else "futura")
@@ -2982,7 +3314,7 @@ def campanha_item(fase_id: int = Form(...), texto: str = Form(...), con=Depends(
 @app.post("/campanhas/item/{iid}/toggle")
 def campanha_item_toggle(iid: int, con=Depends(get_db)):
     with con:
-        con.execute("UPDATE campanha_itens SET feito = 1-feito, data_feito = CASE WHEN feito=0 THEN ? ELSE NULL END WHERE id=?", (dt.date.today().isoformat(), iid))
+        con.execute("UPDATE campanha_itens SET feito = 1-feito, data_feito = CASE WHEN feito=0 THEN ? ELSE NULL END WHERE id=?", (relogio.hoje().isoformat(), iid))
     return voltar("/campanhas")
 
 
@@ -3044,7 +3376,7 @@ def campanha_checkpoint_excluir(cid: int, con=Depends(get_db)):
 # 7. ROTINA SEMANAL + LISTA DE ESPERA
 # =====================================================================
 def semana_atual():
-    y, w, _ = dt.date.today().isocalendar()
+    y, w, _ = relogio.hoje().isocalendar()
     return f"{y}-W{w:02d}"
 
 
@@ -3059,7 +3391,7 @@ def rotina_texto(t):
 @app.get("/rotina", response_class=HTMLResponse)
 def rotina(request: Request, con=Depends(get_db)):
     sem = semana_atual()
-    hoje = dt.date.today()
+    hoje = relogio.hoje()
     tarefas = tarefas_rotina(con)
     if tarefas:
         with con:
@@ -3078,7 +3410,7 @@ def rotina(request: Request, con=Depends(get_db)):
 def rotina_toggle(item: str, con=Depends(get_db)):
     with con:
         con.execute("UPDATE rotina_itens SET feito=1-feito, data_feito=CASE WHEN feito=0 THEN ? ELSE NULL END WHERE semana=? AND item=?",
-                    (dt.date.today().isoformat(), semana_atual(), item))
+                    (relogio.hoje().isoformat(), semana_atual(), item))
     return voltar("/rotina")
 
 
@@ -3107,7 +3439,7 @@ def espera_add(nome: str = Form(...), telefone: str = Form(""), dia: int = Form(
                observacao: str = Form(""), con=Depends(get_db)):
     with con:
         con.execute("INSERT INTO lista_espera (nome, telefone, dia, hora, local, observacao, data) VALUES (?,?,?,?,?,?,?)",
-                    (nome, telefone or None, dia or None, hora, local or None, observacao or None, dt.date.today().isoformat()))
+                    (nome, telefone or None, dia or None, hora, local or None, observacao or None, relogio.hoje().isoformat()))
     return voltar("/rotina", msg="Adicionado à lista de espera.")
 
 
@@ -3138,13 +3470,15 @@ def _fin_voltar(volta, msg=None, erro=None):
 
 @app.get("/financeiro", response_class=HTMLResponse)
 def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", conta: str = "", vencidas: int = 0,
-                    ordem: str = "", custo: str = "", con=Depends(get_db)):
-    h = dt.date.today().isoformat()
+                    ordem: str = "", custo: str = "", periodo: str = "", con=Depends(get_db)):
+    h = relogio.hoje().isoformat()
     # filtros de Contas a pagar: o que vier na URL vale e fica lembrado (cookie); sem nada na URL, usa o último escolhido
     ordem = ordem if ordem in financeiro.ORDENS_CONTAS else request.cookies.get("contas_ordem", "")
     ordem = ordem if ordem in financeiro.ORDENS_CONTAS else "urgencia"
     custo = custo if custo in financeiro.CUSTOS_CONTAS else request.cookies.get("contas_custo", "")
     custo = custo if custo in financeiro.CUSTOS_CONTAS else "todos"
+    periodo = periodo if periodo in financeiro.PERIODOS_CONTAS else request.cookies.get("contas_periodo", "")
+    periodo = periodo if periodo in financeiro.PERIODOS_CONTAS else "30d"
     contas_auto.garantir(con, h, forcar=True)   # abrir o Financeiro recalcula a conta automática que ainda está em aberto
     mes = mes if RE_MES.match(mes) else mes_atual()
     escopo = escopo if escopo in ("PJ", "PF") else "todos"
@@ -3169,7 +3503,9 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", cont
         p["dias"] = (dt.date.fromisoformat(h) - dt.date.fromisoformat(p["data"])).days if p["status"] == "atrasado" else 0
     # ?vencidas=1 (link do alerta): a mesma lista, só com as contas que o alerta conta (de qualquer mês)
     so = {financeiro.chave_conta(p) for p in contas_vencendo(con, h)} if vencidas else None
-    contas = financeiro.contas_a_pagar(con, h, so=so, ordem=ordem, custo=custo)
+    # o período vale para a lista normal; ?vencidas=1 mostra as vencidas e as que vencem em 3 dias, mesmo virando o mês
+    contas = financeiro.contas_a_pagar(con, h, so=so, ordem=ordem, custo=custo,
+                                       ate=None if vencidas else financeiro.ate_do_periodo(h, periodo))
     parecidas = [s for s in financeiro.saidas_parecidas(con) if s["escopo"] in lista]
     # recorrência em aberto cuja conta parece já ter sido lançada à mão naquele mês: etiqueta "talvez já pago"
     talvez = {(c["id"], s["data"][:7]) for s in parecidas for c in s["candidatos"] if not c["ja_baixada"]}
@@ -3184,27 +3520,27 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", cont
     resp = render(request, "financeiro.html", con, mes=mes, escopo=escopo, conta=conta, lancs=tabela, entradas=entradas, saidas=saidas,
                   saldo=round(entradas - saidas, 2), transferencia=round(sum(l["valor"] for l in transf if l["tipo"] == "saida"), 2),
                   emprestado=emprestado, devolvido=devolvido, pend=pend, contas=contas, so_vencidas=bool(vencidas), recs=recs, clientes_=clientes_,
-                  ordem=ordem, custo=custo,
+                  ordem=ordem, custo=custo, periodo=periodo,
                   volta=f"mes={mes}&escopo={escopo}" + ("&vencidas=1" if vencidas else ""),   # pagou uma, continua vendo as outras
                   resumo=financeiro.saldos_resumo(con, h), saldos=financeiro.saldos_atuais(con), frentes=financeiro.FRENTES,
                   salario=financeiro.salario_mes(con, h[:7], h), imposto=financeiro.imposto_mes(con, h[:7], h),
                   das_txt=financeiro.texto_pct(financeiro.pct_das(con, h)), previa=contas_auto.previa(con, h), parecidas=parecidas,
                   n_conferir=len(repetidos) + len(parecidas) + len(financeiro.recorrencias_retirada(con)) + sum(not b["bate"] for b in bancos),
                   recs_todas=con.execute("SELECT * FROM recorrencias WHERE excluido_em IS NULL ORDER BY escopo, descricao").fetchall())
-    for nome, valor in (("contas_ordem", ordem), ("contas_custo", custo)):
+    for nome, valor in (("contas_ordem", ordem), ("contas_custo", custo), ("contas_periodo", periodo)):
         resp.set_cookie(nome, valor, max_age=365 * 24 * 3600, httponly=True, samesite="lax")
     return resp
 
 
 @app.get("/financeiro/previsao", response_class=HTMLResponse)
 def financeiro_previsao(request: Request, con=Depends(get_db)):
-    return render(request, "financeiro_previsao.html", con, prev=financeiro.previsao(con, dt.date.today().isoformat()))
+    return render(request, "financeiro_previsao.html", con, prev=financeiro.previsao(con, relogio.hoje().isoformat()))
 
 
 def _ja_aconteceu(data: str) -> bool:
     """Data ISO válida e não no futuro: pagamento e saldo só valem para o que já aconteceu."""
     try:
-        return dt.date.fromisoformat(data) <= dt.date.today()
+        return dt.date.fromisoformat(data) <= relogio.hoje()
     except (TypeError, ValueError):
         return False
 
@@ -3227,7 +3563,7 @@ async def financeiro_saldos(request: Request, con=Depends(get_db)):
     """Foto semanal dos saldos: uma linha por conta (conta_i, saldo_i, frente_i). Saldo vazio = não mexe naquela conta."""
     f = await request.form()
     volta = f.get("volta", "")
-    data = f.get("data") or dt.date.today().isoformat()
+    data = f.get("data") or relogio.hoje().isoformat()
     valores, frentes = {}, {}
     contas = set(db.lista(con, "lista_contas"))
     if not _ja_aconteceu(data):   # foto no futuro venceria todas as outras e esconderia o que for pago até lá
@@ -3388,7 +3724,7 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
     except sqlite3.IntegrityError:
         return _fin_voltar(volta, erro="Não foi possível salvar: confira o aluno e os campos.")
     if meses and pago_em:
-        aviso += f"Cobre {meses} meses (até {_mm_aaaa(financeiro.somar_meses(f['data'][:7], meses - 1))}). "
+        aviso += f"Cobre {meses} meses (até {_mm_aaaa(financeiro.periodo_do_pagamento(con, cliente_id, f['data'], meses)[1])}). "
     if f["escopo"] == "PJ" and f["tipo"] == "entrada" and pago_em and cliente_id:
         with con:
             if desconto := financeiro.usar_credito(con, lid):   # o crédito do aluno foi descontado neste pagamento
@@ -3397,7 +3733,7 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
         return _fin_voltar(volta, msg=(aviso or "Lançamento salvo. ") + "É empréstimo: não paga DAS e não conta como receita.")
     if f["escopo"] == "PJ" and f["tipo"] == "entrada" and pago_em:
         # dinheiro que entrou na PJ: diz na hora quanto separar para o imposto
-        if separe := financeiro.aviso_imposto(con, valor, dt.date.today().isoformat()):
+        if separe := financeiro.aviso_imposto(con, valor, relogio.hoje().isoformat()):
             return _fin_voltar(volta, msg=(aviso or "Lançamento salvo. ") + separe)
     return _fin_voltar(volta, msg=aviso.strip() or "Lançamento salvo.")
 
@@ -3407,7 +3743,7 @@ def financeiro_baixa(lid: int, volta: str = Form(""), voltar_a: str = Form("", a
                      con=Depends(get_db)):
     """Dar baixa: 'pago_em' (vazio = hoje; não pode ser futura) e 'conta' (vazio mantém a do lançamento)."""
     volta = _caminho_seguro(voltar_a) or volta
-    pago_em = pago_em.strip() or dt.date.today().isoformat()
+    pago_em = pago_em.strip() or relogio.hoje().isoformat()
     if not _ja_aconteceu(pago_em):
         return _fin_voltar(volta, erro="Confira a data do pagamento: não pode ser no futuro.")
     with con:
@@ -3445,7 +3781,7 @@ def financeiro_meses(lid: int, meses: str = Form(""), cliente_id: int = Form(0),
         con.execute("UPDATE lancamentos SET meses=? WHERE id=?", (n, lid))
     if n is None:
         return _fin_voltar(volta, msg=f"Pagamento de {moeda(p['valor'])} volta a valer o normal.")
-    return _fin_voltar(volta, msg=f"Pagamento de {moeda(p['valor'])} agora cobre {n} meses (até {_mm_aaaa(financeiro.somar_meses(p['data'][:7], n - 1))}).")
+    return _fin_voltar(volta, msg=f"Pagamento de {moeda(p['valor'])} agora cobre {n} meses (até {_mm_aaaa(financeiro.periodo_do_pagamento(con, p['cliente_id'], p['data'], n)[1])}).")
 
 
 @app.post("/financeiro/lancamento/{lid}/emprestimo")
@@ -3482,7 +3818,7 @@ def financeiro_linha_do_tempo(request: Request, dias: int = 30, conta: str = "",
     """O que aconteceu nas contas nos últimos 7, 30 ou 90 dias, dia a dia."""
     dias = dias if dias in (7, 30, 90) else 30
     conta = conta if conta in db.lista(con, "lista_contas") else None
-    return render(request, "financeiro_linha.html", con, linha=financeiro.linha_do_tempo(con, dt.date.today().isoformat(), dias, conta))
+    return render(request, "financeiro_linha.html", con, linha=financeiro.linha_do_tempo(con, relogio.hoje().isoformat(), dias, conta))
 
 
 @app.post("/financeiro/duplicados/manter")
@@ -3645,7 +3981,7 @@ def financeiro_painel(request: Request, mes: str = "", con=Depends(get_db)):
     maximo = max([s["receita"] for s in serie] + [s["custos_fixos"] + s["custos_variaveis"] for s in serie] + [abs(s["lucro"]) for s in serie] + [1])
     das_pct = financeiro.texto_pct(financeiro.das_competencia(con, mes)["efetiva"])
     return render(request, "financeiro_painel.html", con, mes=mes, r=serie[-1], serie=serie, maximo=maximo, das_pct=das_pct,
-                  salario=financeiro.salario_mes(con, mes, dt.date.today().isoformat()), colchao=financeiro.colchao(con, mes),
+                  salario=financeiro.salario_mes(con, mes, relogio.hoje().isoformat()), colchao=financeiro.colchao(con, mes),
                   saude=sugestoes.painel(con, limite=sugestoes.LIMITE), voltar_saude=f"/financeiro/painel?mes={mes}", mes_atual=mes_atual())
 
 
@@ -3726,6 +4062,8 @@ GRUPOS_CONFIG = [("taxa_pagamento", "Taxas por forma de pagamento", "pct"),
                               "trabalho (aula, planejamento por pacote e por mês de mensalidade, consultoria por mês, avaliação; "
                               "0 = usa a planilha). O deslocamento vem de cada local (o da CIA fica em 'Deslocamento até a CIA'). "
                               "O lucro é o que sobra depois disso", "num"),
+                 ("agenda", "Agenda: semanas contratadas por mês na Mensalidade (aulas do mês = vezes por semana × isto; "
+                            "a aula a mais num mês de 5 semanas aparece como 'passou') e máximo de alunos no mesmo horário fixo", "num"),
                  ("lead_parado_dias", "Limite de dias parado por etapa", "num"),
                  ("funil_chance", "Chance de fechar por etapa do funil", "pct"),
                  ("fiscal", "Fiscal: salário mínimo (R$), pró-labore e INSS (frações, ex.: 0,28 = 28%)", "num"),
@@ -3761,12 +4099,14 @@ def configuracoes(request: Request, con=Depends(get_db)):
                   vantagens_cfg=leque, vantagens_previa=previa, vantagens_max=vantagens.MAX_LEQUE,
                   planilha=str(db.PLANILHA), planilha_existe=db.PLANILHA.exists(), assistente=assistente.info(),
                   salario_hora=precos.carregar_parametros(con)["salario_hora"],
-                  das=financeiro.das_competencia(con, mes_atual()), das_txt=financeiro.texto_pct(financeiro.pct_das(con, dt.date.today().isoformat())))
+                  das=financeiro.das_competencia(con, mes_atual()), das_txt=financeiro.texto_pct(financeiro.pct_das(con, relogio.hoje().isoformat())))
 
 
-CALCULOS_GRUPOS = ["mao_obra", "metas", "margem_minima", "margem_alvo", "taxa_pagamento", "grupo_mao_obra_extra"]
+CALCULOS_GRUPOS = ["mao_obra", "metas", "agenda", "margem_minima", "margem_alvo", "taxa_pagamento", "grupo_mao_obra_extra"]
 CALCULOS_METAS = {"horas_vendaveis"}   # das metas, só as que entram no cálculo
 ROTULOS = {
+    "semanas_contratadas": "Semanas contratadas por mês (Mensalidade 2x = 2 × isto aulas no mês)",
+    "max_alunos_horario": "Máximo de alunos no mesmo horário fixo (Agenda, ficha e Grade)",
     "valor_hora": "Valor da hora fixo (R$), usado sem gastos da PF; 0 desliga a regra do tempo",
     "valor_hora_auto": "Salário automático pelos gastos da PF (0 = usa o valor fixo acima; 1 = gastos da PF ÷ horas, "
                        "costuma inflar os preços)",
@@ -3790,6 +4130,7 @@ def calculos(request: Request, con=Depends(get_db)):
             grupos.append({"grupo": g, "titulo": "Agenda cheia" if g == "metas" else t.split(":")[0], "fmt": f, "itens": rows})
     p = precos.carregar_parametros(con)
     return render(request, "calculos.html", con, grupos=grupos, rotulos=ROTULOS, salario_hora=p["salario_hora"], rateio=p["rateio"],
+                  divergencias=divergencias_plano_agenda(con),
                   cobre=cobre_custos(con, p), das_txt=financeiro.texto_pct(p["das"]))
 
 
@@ -3908,17 +4249,29 @@ def locais_novo(nome: str = Form(...), referencia: str = Form("CIA"), taxa_aula:
 
 @app.post("/locais/editar")
 async def locais_editar(request: Request, con=Depends(get_db)):
-    """Botão "Editar local" da Grade, igual para todo local (CIA inclusive): o pop-up do "+ Novo local" com o nome travado.
+    """Botão "Editar local" da Grade, igual para todo local (CIA inclusive): o pop-up do "+ Novo local".
+    Nome diferente do original (nome_original) = renomear o local em tudo antes de gravar os custos (loc.renomear_local; a CIA não muda de nome).
     Na CIA, a pessoa a mais vira o preço da aula com 2 e 3 pessoas (taxa_2, taxa_3). Os preços acompanham os custos."""
     form = await request.form()
-    nome = str(form.get("nome") or "").strip()
-    url = "/grade?local=" + quote(nome)
+    nome = " ".join(str(form.get("nome") or "").split())
+    original = str(form.get("nome_original") or "").strip() or nome
+    url = "/grade?local=" + quote(original)
+    renomeado = ""
     try:
+        if nome != original:
+            try:   # cópia local do banco antes de trocar o nome em todas as tabelas (sem cópia, renomeia igual: é tudo ou nada)
+                await run_in_threadpool(db.fazer_backup, "antes-renomear")
+            except Exception:
+                traceback.print_exc()
+            r = await run_in_threadpool(loc.renomear_local, con, original, nome, bool(form.get("atualizar_textos")))
+            url = "/grade?local=" + quote(nome)
+            renomeado = f" Nome trocado de {original} para {nome} em {r['linhas']} registro(s)" + \
+                (f" e em {r['textos']} conta(s) que citavam o local." if r["textos"] else ".")
         r = await run_in_threadpool(loc.editar_local, con, nome, _taxas_cia_form(form), **_custos_form(form))
     except ValueError as e:
         return voltar(url, erro=_erro_numero(e))
     grade = f" {r['horarios']} horários livres na grade (copiados da CIA)." if r["horarios"] else ""
-    return voltar(url, msg=f"Local {nome} atualizado: os preços já usam os custos novos.{grade}")
+    return voltar(url, msg=f"Local {nome} atualizado: os preços já usam os custos novos.{grade}{renomeado}")
 
 
 def _erro_numero(e: ValueError) -> str:
@@ -4021,7 +4374,7 @@ def encerrar(request: Request):
 
 @app.get("/dados", response_class=HTMLResponse)
 def dados(request: Request, con=Depends(get_db)):
-    lim = (dt.datetime.now() - dt.timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+    lim = (relogio.agora() - dt.timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
     lixo = []
     for tabela, rotulo, campo in LIXEIRA:
         for r in con.execute(f"SELECT id, {campo} AS nome, excluido_em FROM {tabela} WHERE excluido_em >= ?{LIXEIRA_FILTRO.get(tabela, '')} "
@@ -4072,8 +4425,8 @@ def lixeira_restaurar(tabela: str = Form(...), rid: int = Form(...), forcar: str
                               WHERE f.id=?""", (rid,)).fetchone()
         if fixo:
             quem = {r["cliente_id"] for r in fixos_do_horario(con, fixo["dia"], fixo["hora"])}
-            if fixo["cliente_id"] not in quem and len(quem) >= 2:
-                return voltar("/dados", erro=f"{DIAS_CURTO[fixo['dia']]} {fixo['hora']:02d}h já tem 2 alunos. Tire um deles antes de restaurar.")
+            if fixo["cliente_id"] not in quem and len(quem) >= max_alunos(con):
+                return voltar("/dados", erro=f"{DIAS_CURTO[fixo['dia']]} {fixo['hora']:02d}h já está cheio. Tire um aluno antes de restaurar.")
             if fixo["cliente_id"] in quem:
                 return voltar("/dados", erro=f"{fixo['nome']} já está no horário {DIAS_CURTO[fixo['dia']]} {fixo['hora']:02d}h.")
     if tabela == "cliente_eventos":   # uma aula só tem uma marcação: restaurar não pode duplicar a que está valendo
@@ -4088,7 +4441,7 @@ def lixeira_restaurar(tabela: str = Form(...), rid: int = Form(...), forcar: str
             return voltar("/dados", erro="Esse indicado já tem o presente registrado. Exclua o que está valendo antes de restaurar.")
     tirados = []
     with con:
-        if fixo and str(fixo["excluido_em"] or "")[:10] < dt.date.today().isoformat():
+        if fixo and str(fixo["excluido_em"] or "")[:10] < relogio.hoje().isoformat():
             # excluído antes de hoje: volta a valer de hoje em diante (cópia nova); a linha antiga fica como estava,
             # então as semanas em que ele não tinha esse horário (ou tinha outro local) continuam iguais
             inserir_fixos(con, [(fixo["cliente_id"], fixo["dia"], fixo["hora"], fixo["local"])], vigente=vigencias(con, [fixo["cliente_id"]]))
@@ -4116,7 +4469,7 @@ def exportar_arquivo(nome: str, fmt: str, con=Depends(get_db)):
             cab, linhas = exportar.tabela(con, nome)
         except ValueError:
             return voltar("/dados", erro="Exportação desconhecida.")
-    arquivo = f"vfitcoach-{nome}-{dt.date.today():%Y-%m-%d}.{fmt}"
+    arquivo = f"vfitcoach-{nome}-{relogio.hoje():%Y-%m-%d}.{fmt}"
     if fmt == "csv":
         buf = io.StringIO()
         w = csv.writer(buf, delimiter=";", lineterminator="\n")

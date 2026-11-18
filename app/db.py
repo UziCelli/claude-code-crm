@@ -5,6 +5,7 @@ import sqlite3
 from pathlib import Path
 
 from . import nuvem
+from . import relogio   # hoje/agora no fuso do Brasil, em qualquer servidor
 
 ROOT = Path(__file__).resolve().parent.parent
 DB_LOCAL = ROOT / "data" / "crm.db"
@@ -103,6 +104,9 @@ PARAMETROS_INICIAIS = [
     ("metas", "clientes_dez26", 14, None, 1),
     ("metas", "clientes_mar27", 18, None, 2),
     ("metas", "horas_vendaveis", 97, None, 3),
+    # Agenda: aulas contratadas no mês da Mensalidade = vezes por semana × semanas_contratadas (a 9ª aula num mês de 5 semanas "passou")
+    ("agenda", "semanas_contratadas", 4, None, 1),
+    ("agenda", "max_alunos_horario", 2, None, 2),   # quantos alunos cabem num horário fixo (Agenda, ficha e Grade)
     ("metas", "horas_dez26", 82, None, 4),
     ("metas", "horas_mar27", 90, None, 5),
     ("metas", "lucro_hora_dez26", 30, None, 6),
@@ -171,6 +175,8 @@ LISTAS_INICIAIS = {
     "lista_tipos_servico": ["Pacote de Aulas", "Mensalidade", "Consultoria Online", "Consultoria Híbrida",
                             "Avaliação Física"],
     "lista_formas_pagamento": ["PIX", "Cartão 1x", "Cartão 3x", "Cartão 6x", "Cartão 12x"],
+    # venda nova é só mensal (Victor, 18/11/2026): cadastro, Propostas e Explorador oferecem só estas; as de cima seguem nas taxas e nos antigos
+    "lista_formas_venda": ["PIX", "Cartão 1x"],
     # financeiro (lista_formas_pagamento acima é de preço; não reaproveitar)
     "lista_categorias_pj": ["Pacotes de Aulas", "Mensalidade (Aulas Presenciais)", "Consultoria Online",
                             "Consultoria Híbrida", "Empréstimo", "Retirada", "Empréstimo (devolução)", "Aluguel",
@@ -347,7 +353,7 @@ def pasta_backup() -> Path:
 def fazer_backup(prefixo: str = "crm", arquivo: Path = None) -> Path:
     """Cópia consistente do banco (API de backup do SQLite). Mantém os últimos MANTER_BACKUPS."""
     pasta = pasta_backup()
-    destino = pasta / f"{prefixo}-{dt.datetime.now():%Y-%m-%d_%H%M%S}.db"
+    destino = pasta / f"{prefixo}-{relogio.agora():%Y-%m-%d_%H%M%S}.db"
     origem = sqlite3.connect(arquivo or DB_PATH)   # a réplica do Turso também é um arquivo SQLite comum
     copia = sqlite3.connect(destino)
     with copia:
@@ -361,7 +367,7 @@ def fazer_backup(prefixo: str = "crm", arquivo: Path = None) -> Path:
 
 def backup_diario() -> Path | None:
     """Um backup por dia, feito ao abrir o CRM."""
-    hoje = dt.date.today().isoformat()
+    hoje = relogio.hoje().isoformat()
     if any(pasta_backup().glob(f"crm-{hoje}_*.db")):
         return None
     return fazer_backup()

@@ -14,7 +14,7 @@
       <div><label>Nº de aulas (pacote personalizado)</label><input name="aulas" type="number" min="{{ pacote_min }}" max="{{ pacote_max }}" step="1" value="{{ f.aulas }}" placeholder="ex.: 7"></div>
       <div><label>Aulas por semana (opcional)</label><input name="por_semana" type="number" min="0" max="7" step="1" value="{{ f.por_semana }}" placeholder="—"></div>
       <div class="largo"><label>Consultoria</label><select name="consultoria"><option value="">Sem consultoria (pacote avulso)</option>{% for c in consultorias %}<option value="{{ c }}" {{ 'selected' if c == f.consultoria }}>+ {{ c }} (acompanhamento completo)</option>{% endfor %}</select></div>
-      <div><label>Forma de pagamento</label><select name="forma">{% for fp in listas.lista_formas_pagamento %}<option {{ 'selected' if fp == f.forma }}>{{ fp }}</option>{% endfor %}</select></div>
+      <div><label>Forma de pagamento</label><select name="forma">{% for fp in listas.lista_formas_venda %}<option {{ 'selected' if fp == f.forma }}>{{ fp }}</option>{% endfor %}{% if f.forma and f.forma not in listas.lista_formas_venda %}<option selected>{{ f.forma }}</option>{% endif %}</select></div>
       <div><label>Nº de pessoas (CIA: máx. 3)</label><select name="pessoas">{% for n in [1,2,3,4] %}<option {{ 'selected' if n == f.pessoas }}>{{ n }}</option>{% endfor %}</select></div>
 
       <div class="largo">

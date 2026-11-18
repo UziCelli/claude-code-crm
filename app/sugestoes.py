@@ -11,6 +11,7 @@ import math
 
 from . import marcadores, ofertas
 from .marcadores import _lista, _m, _pct
+from . import relogio   # hoje/agora no fuso do Brasil, em qualquer servidor
 
 GRAV = {"vermelho": 1, "amarelo": 2, "azul": 3}
 ADIAR_DIAS = 30
@@ -19,7 +20,7 @@ GRUPO_ADIADA = "sugestao_adiada"
 
 
 def _hoje() -> str:
-    return dt.date.today().isoformat()
+    return relogio.hoje().isoformat()
 
 
 def _arredondar_50(valor) -> int:

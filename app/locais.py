@@ -7,6 +7,7 @@ Um local da lista sem custos ganha a linha em locais_custos no primeiro "Editar 
 Grade: um local novo copia os horários da referência, todos livres (sem grade na referência: Seg-Sáb, 05h-23h). O multiplicador de cada hora
 e a situação de cada horário (ocupado, indisponível) valem para todos os locais: ficam em Grade > Multiplicadores e na Grade.
 """
+import re
 import sqlite3
 import unicodedata
 
@@ -99,7 +100,7 @@ def editar_local(con, nome: str, grupo: dict | None = None, **custos) -> dict:
     """Troca os custos de qualquer local e devolve {"horarios": n criados}. Os preços acompanham sozinhos
     (o motor lê os custos na hora). Local da lista sem custos (SmartFit) ganha a linha agora; sem grade, copia a da CIA.
     A CIA usa os mesmos campos e grava nos parâmetros dela (editar_cia; grupo = preço da aula com 2, 3 pessoas).
-    O nome não muda: ele está gravado nos alunos, na agenda, na grade e nas contas. A grade que já existe fica como está."""
+    O nome muda à parte, em renomear_local (troca em todas as tabelas). A grade que já existe fica como está."""
     if eh_cia(nome):
         editar_cia(con, grupo, **custos)
         return {"horarios": 0}
@@ -111,6 +112,92 @@ def editar_local(con, nome: str, grupo: dict | None = None, **custos) -> dict:
         _na_lista(con, nome)
         tem_grade = con.execute("SELECT COUNT(*) FROM grade_slots WHERE local=?", (nome,)).fetchone()[0]
         return {"horarios": 0 if tem_grade else _copiar_grade(con, nome, "CIA")}
+
+
+# tabelas que guardam o nome do local como texto (inclusive linhas excluídas: as contas de meses passados são refeitas delas)
+TABELAS_LOCAL = ("locais_custos", "grade_slots", "precos_base", "clientes", "agenda_fixos", "agenda_avulsas",
+                 "propostas", "proposta_horarios", "lista_espera")
+
+
+def citacoes(con, nome: str) -> list[dict]:
+    """Contas recorrentes e lançamentos lançados à mão (em aberto ou já pagos) cujo texto cita o local, pela regra das contas
+    automáticas (contas_auto.eh_do_local). Ao renomear, o texto deles muda junto: é por ele que as contas automáticas sabem
+    que a conta do mês já foi lançada ou paga à mão (contas_auto._ja_lancada_a_mao); sem isso, o nome novo geraria a conta de novo."""
+    from .contas_auto import eh_do_local
+    recs = con.execute("SELECT 'recorrencia' AS origem, id, descricao, NULL AS contraparte FROM recorrencias WHERE excluido_em IS NULL")
+    lancs = con.execute("""SELECT 'lancamento' AS origem, id, descricao, contraparte FROM lancamentos
+                           WHERE excluido_em IS NULL AND auto IS NULL""")
+    return [dict(r) for r in [*recs, *lancs] if eh_do_local(r["descricao"], nome) or eh_do_local(r["contraparte"], nome)]
+
+
+def _trocar_no_texto(texto: str | None, antigo: str, novo: str) -> str | None:
+    """Troca o nome antigo pelo novo no texto pela mesma regra que achou a citação (contas_auto.eh_do_local): palavra inteira,
+    sem diferenciar maiúsculas nem acentos ('Aluguel estudio' cita 'Estúdio'). O resto do texto fica como estava."""
+    if not texto:
+        return texto
+    alvo = _chave_nome(antigo)
+    if not alvo:
+        return texto
+    plano, origem = [], []   # texto sem acento e minúsculo, e de que caractere do original veio cada letra
+    for i, ch in enumerate(texto):
+        for x in unicodedata.normalize("NFKD", ch).encode("ascii", "ignore").decode().lower():
+            plano.append(x)
+            origem.append(i)
+    plano = "".join(plano)
+    pedacos, fim = [], 0
+    for m in re.finditer(rf"(?<![a-z0-9]){re.escape(alvo)}(?![a-z0-9])", plano):
+        ini, ult = origem[m.start()], origem[m.end() - 1] + 1
+        pedacos.append(texto[fim:ini] + novo)
+        fim = ult
+    return "".join(pedacos) + texto[fim:] if pedacos else texto
+
+
+def renomear_local(con, antigo: str, novo: str, atualizar_textos: bool = False) -> dict:
+    """Troca o nome de um local (não a CIA) em tudo que o guarda como texto, numa transação só (ou tudo ou nada):
+    custos, grade, preços, alunos, agenda (inclusive horários e avulsas excluídos), propostas, lista de espera,
+    a lista de Configurações e a chave das contas automáticas ('local:<nome>:AAAA-MM'), com o texto das que estão em aberto.
+    atualizar_textos: troca também o nome no texto das contas recorrentes e lançamentos em aberto que citam o local (citacoes).
+    Devolve {"linhas": n alterado, "textos": n de textos trocados}. ValueError com a frase para a tela."""
+    from .contas_auto import eh_local_cia
+    antigo = _editavel(con, antigo)
+    novo = " ".join((novo or "").split())
+    if not novo:
+        raise ValueError("Dê um nome ao local")
+    if novo == antigo:
+        return {"linhas": 0, "textos": 0}
+    if eh_cia(novo) or eh_local_cia(novo) or eh_local_cia(antigo):
+        raise ValueError("Um local com nome começando por 'CIA' é tratado como a CIA nas contas: escolha outro nome")
+    if ":" in novo:
+        raise ValueError("O nome do local não pode ter ':'")
+    usados = nomes(con) + [r[0] for r in con.execute("SELECT DISTINCT local FROM clientes WHERE local IS NOT NULL")] \
+        + [r[0] for r in con.execute("SELECT DISTINCT local FROM agenda_fixos")]
+    outro = next((x for x in usados if x and x != antigo and _sem_espaco(x) == _sem_espaco(novo)), None)
+    if outro:
+        raise ValueError(f"'{outro}' já existe: escolha outro nome")
+    textos = citacoes(con, antigo) if atualizar_textos else []
+    linhas = 0
+    with con:
+        for t in TABELAS_LOCAL:
+            linhas += con.execute(f"UPDATE {t} SET local=? WHERE local=?", (novo, antigo)).rowcount
+        con.execute("UPDATE locais_custos SET referencia=? WHERE referencia=?", (novo, antigo))
+        con.execute("UPDATE parametros SET chave=?, valor_texto=? WHERE grupo='lista_locais' AND (chave=? OR valor_texto=?)",
+                    (novo, novo, antigo, antigo))
+        _na_lista(con, novo)
+        db.marcar_removido(con, "lista_locais", antigo)   # o nome antigo de um local da lista inicial não volta ao abrir o app
+        con.execute("DELETE FROM parametros WHERE grupo='removido_lista' AND chave=?", (f"lista_locais|{novo}",))
+        prefixo, prefixo_novo = f"local:{antigo}:", f"local:{novo}:"
+        abertos = con.execute("SELECT id, descricao FROM lancamentos WHERE substr(auto, 1, ?)=?", (len(prefixo), prefixo)).fetchall()
+        con.execute("UPDATE lancamentos SET auto=?||substr(auto, ?) WHERE substr(auto, 1, ?)=?",
+                    (prefixo_novo, len(prefixo) + 1, len(prefixo), prefixo))
+        for r in abertos:   # o texto da conta automática ainda em aberto ('SmartFit: aulas de 10/2026') acompanha o nome
+            if (r["descricao"] or "").startswith(antigo + ":"):
+                con.execute("UPDATE lancamentos SET descricao=? WHERE id=? AND pago_em IS NULL", (novo + r["descricao"][len(antigo):], r["id"]))
+        for c in textos:
+            tabela = "recorrencias" if c["origem"] == "recorrencia" else "lancamentos"
+            con.execute(f"UPDATE {tabela} SET descricao=? WHERE id=?", (_trocar_no_texto(c["descricao"], antigo, novo), c["id"]))
+            if c["contraparte"]:
+                con.execute("UPDATE lancamentos SET contraparte=? WHERE id=?", (_trocar_no_texto(c["contraparte"], antigo, novo), c["id"]))
+    return {"linhas": linhas, "textos": len(textos)}
 
 
 def excluir_local(con, nome: str) -> None:

@@ -11,7 +11,7 @@
 {% set nota_pgto = ('Crédito de ' ~ (cred|moeda) ~ ' descontado') if cred else '' %}
 {% if cobranca and (cobranca.multa or cobranca.juros) %}{% set nota_pgto = (nota_pgto ~ ' · ' if nota_pgto else '') ~ 'multa de ' ~ (cobranca.multa|moeda) ~ ' e juros de ' ~ (cobranca.juros|moeda) ~ ' incluídos' %}{% endif %}
 <div class="linha topo">
-  <h1 style="margin:0">{{ c.nome if c else 'Novo cliente' }}</h1>
+  <h1 style="margin:0">{{ c.nome if c else 'Novo cliente' }}{% if adiantado_ate %} <a class="tag azul" href="#pagamentos" style="font-size:12px;vertical-align:middle">Pago adiantado até {{ adiantado_ate[5:] }}/{{ adiantado_ate[:4] }}</a>{% endif %}</h1>
   {% if c %}
   <div class="linha">
     {% for s in ['ativo','pausado','inativo'] if s != c.status %}
@@ -140,9 +140,8 @@
       <div><label>Tipo de serviço</label><select name="tipo_servico"><option value="">—</option>{% for t in listas.lista_tipos_servico %}<option {{ 'selected' if c and c.tipo_servico == t }}>{{ t }}</option>{% endfor %}</select></div>
       <div><label>Plano (ex.: Pacote 8 aulas, Mensalidade 2x/semana)</label><input name="plano" value="{{ c.plano or '' if c else '' }}" list="planos"><datalist id="planos"><option>Pacote 4 aulas</option><option>Pacote 8 aulas</option><option>Pacote 12 aulas</option><option>Pacote 16 aulas</option><option>Pacote 20 aulas</option><option>Mensalidade 1x/semana</option><option>Mensalidade 2x/semana</option><option>Mensalidade 3x/semana</option><option>Mensalidade 4x/semana</option><option>Mensalidade 5x/semana</option><option>Consultoria Online</option><option>Consultoria Híbrida</option><option>Avaliação Física</option></datalist></div>
       <div><label>Nº de pessoas no horário</label><input name="pessoas" type="number" min="1" max="4" value="{{ c.pessoas or 1 if c else 1 }}"></div>
-      <div class="largo"><label>Dias e horários fixos (ex.: Seg 07:00; Qua 07:00)</label><input name="dias_horarios" value="{{ c.dias_horarios or '' if c else '' }}"></div>
       <div><label>Valor (R$ por mês, ou do pacote)</label><input name="valor" value="{{ c.valor if c else '' }}"></div>
-      <div><label>Forma de pagamento</label><select name="forma_pagamento"><option value="">—</option>{% for f in listas.lista_formas_pagamento %}<option {{ 'selected' if c and c.forma_pagamento == f }}>{{ f }}</option>{% endfor %}{% if c and c.forma_pagamento and c.forma_pagamento not in listas.lista_formas_pagamento %}<option selected>{{ c.forma_pagamento }}</option>{% endif %}</select></div>
+      <div><label>Forma de pagamento</label><select name="forma_pagamento"><option value="">—</option>{% for f in listas.lista_formas_venda %}<option {{ 'selected' if c and c.forma_pagamento == f }}>{{ f }}</option>{% endfor %}{% if c and c.forma_pagamento and c.forma_pagamento not in listas.lista_formas_venda %}<option selected>{{ c.forma_pagamento }}</option>{% endif %}</select></div>
       <div><label>Status</label><select name="status">{% for s in ['ativo','pausado','inativo'] %}<option {{ 'selected' if c and c.status == s }}>{{ s }}</option>{% endfor %}</select></div>
       <div><label>Canal de origem</label><select name="canal_origem"><option value="">—</option>{% for k in listas.lista_canais %}<option {{ 'selected' if c and c.canal_origem == k }}>{{ k }}</option>{% endfor %}</select></div>
       <div><label>Indicado por (se alguém indicou)</label><select name="indicado_por" onchange="if (this.value) this.form.elements['canal_origem'].value = 'Indicação'"><option value="">—</option>{% for a in indicadores %}<option value="{{ a.id }}" {{ 'selected' if c and c.indicado_por == a.id }}>{{ a.nome }}{{ ' (' ~ a.status ~ ')' if a.status != 'ativo' }}</option>{% endfor %}</select></div>
@@ -152,6 +151,53 @@
       <div class="largo"><button>Salvar</button> <a class="btn claro" href="/clientes">Voltar</a></div>
     </form>
   </div>
+  {% if c %}
+  {# Dias e horários fixos: a lista é a da Agenda (mesma tabela); salvar grava só a diferença. Reposições e avulsas ficam na Agenda. #}
+  {% set DCURTO = {1: 'Seg', 2: 'Ter', 3: 'Qua', 4: 'Qui', 5: 'Sex', 6: 'Sáb'} %}
+  <div class="card mt" id="horarios">
+    <h2>Dias e horários fixos</h2>
+    {% if c.status != 'ativo' %}<p class="muted">Só aluno ativo tem horário fixo na Agenda.</p>{% endif %}
+    <form method="post" action="/clientes/{{ c.id }}/horarios">
+      <div class="horarios-lista" data-horarios>
+        {% for f in horarios %}
+        <div class="horario-linha">
+          <select name="dia" aria-label="Dia">{% for n in range(1, 7) %}<option value="{{ n }}" {{ 'selected' if n == f.dia }}>{{ DCURTO[n] }}</option>{% endfor %}</select>
+          <select name="hora" aria-label="Hora">{% for h in range(5, 24) %}<option value="{{ h }}" {{ 'selected' if h == f.hora }}>{{ '%02d'|format(h) }}h</option>{% endfor %}</select>
+          <select name="local" aria-label="Local">{% for l in locais_horario %}<option {{ 'selected' if l == f.local }}>{{ l }}</option>{% endfor %}{% if f.local not in locais_horario %}<option selected>{{ f.local }}</option>{% endif %}</select>
+          <button type="button" class="claro pequeno" data-tirar-horario aria-label="Remover este horário" title="Remover">✕</button>
+        </div>
+        {% endfor %}
+      </div>
+      <template data-modelo-horario>
+        <div class="horario-linha">
+          <select name="dia" aria-label="Dia">{% for n in range(1, 7) %}<option value="{{ n }}">{{ DCURTO[n] }}</option>{% endfor %}</select>
+          <select name="hora" aria-label="Hora">{% for h in range(5, 24) %}<option value="{{ h }}" {{ 'selected' if h == 7 }}>{{ '%02d'|format(h) }}h</option>{% endfor %}</select>
+          <select name="local" aria-label="Local">{% for l in locais_horario %}<option {{ 'selected' if l == c.local }}>{{ l }}</option>{% endfor %}</select>
+          <button type="button" class="claro pequeno" data-tirar-horario aria-label="Remover este horário" title="Remover">✕</button>
+        </div>
+      </template>
+      {% if not horarios %}<p class="muted" data-sem-horario>Sem horário fixo na Agenda.{% if c.dias_horarios %} Texto antigo: "{{ c.dias_horarios }}".{% endif %}</p>{% endif %}
+      <div class="linha mt">
+        <button type="button" class="claro" data-mais-horario {{ 'disabled' if c.status != 'ativo' }}>+ adicionar dia e horário</button>
+        <button {{ 'disabled' if c.status != 'ativo' }}>Salvar horários</button>
+      </div>
+      <p class="muted" style="margin:6px 0 0">Grava direto na Agenda (e a Grade acompanha). Cabem {{ max_alunos }} alunos por horário (Configurações &gt; Agenda). Reposições e aulas avulsas ficam na Agenda.</p>
+    </form>
+    <script>
+    (function () {
+      var card = document.getElementById("horarios"), lista = card.querySelector("[data-horarios]");
+      card.addEventListener("click", function (e) {
+        if (e.target.closest("[data-mais-horario]")) {
+          lista.appendChild(card.querySelector("[data-modelo-horario]").content.cloneNode(true));
+          var vazio = card.querySelector("[data-sem-horario]"); if (vazio) vazio.hidden = true;
+        } else if (e.target.closest("[data-tirar-horario]")) {
+          e.target.closest(".horario-linha").remove();
+        }
+      });
+    })();
+    </script>
+  </div>
+  {% endif %}
   </div>
 
   {% if c %}
@@ -194,6 +240,7 @@
     <div class="card mt" id="pagamentos">
       <div class="linha topo" style="margin-bottom:8px"><h2 style="margin:0">Pagamentos</h2>
         <button class="verde pequeno" data-abrir="dlg-pgto" data-titulo="Registrar pagamento de {{ c.nome }}" data-cliente_id="{{ c.id }}" data-valor="{{ ('%.2f'|format(a_pagar))|replace('.', ',') if a_pagar else '' }}" data-mensal="{{ ('%.2f'|format((c.valor or 0)|float))|replace('.', ',') }}"{% if nota_pgto %} data-nota="{{ nota_pgto }}"{% endif %} data-descricao="Mensalidade {{ hoje()[5:7] }}/{{ hoje()[:4] }}" data-voltar="/clientes/{{ c.id }}">Registrar pagamento</button></div>
+      {% if adiantado_ate %}<p style="margin:0 0 8px"><span class="tag azul">Pago adiantado até {{ adiantado_ate[5:] }}/{{ adiantado_ate[:4] }}</span> <span class="muted">Pagou vários meses de uma vez. Depois disso volta a pagar por mês (venda nova é só mensal).</span></p>{% endif %}
       <p style="margin:0 0 8px">{% if pago_ate %}Pago até <strong>{{ pago_ate }}</strong>{% else %}<span class="muted">Sem pagamento registrado</span>{% endif %}{% if renovacao and data_iso(renovacao.efetiva) %} · próxima renovação <strong>{{ renovacao.efetiva|data }}</strong>{% endif %}</p>
       {% for p in pagamentos %}
       <div style="padding:4px 0">
