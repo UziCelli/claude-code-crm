@@ -234,7 +234,7 @@ def test_post_de_outro_site_continua_recusado_na_nuvem(na_internet, monkeypatch)
         assert acesso.motivo_bloqueio("POST", "/backup", cab, {}) == "origem", origem
 
 
-def test_dockerfile_libera_o_endereco_da_reserva():
+def test_dockerfile_libera_o_endereco_do_crm():
     import pathlib
     texto = (pathlib.Path(__file__).parent.parent / "Dockerfile").read_text(encoding="utf-8")
-    assert "CRM_ENDERECOS=crm-reserva.vfitcoachapp.com" in texto
+    assert "CRM_ENDERECOS=crm.vfitcoachapp.com" in texto

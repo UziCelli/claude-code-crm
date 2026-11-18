@@ -38,43 +38,32 @@ Com o Turso ligado, os dados ficam no banco da nuvem (plano grátis) e o CRM tra
 - **Desligar:** apague ou renomeie o `.env`. O CRM volta a usar o `crm.db`, que não recebe o que foi lançado no Turso nesse período.
 - O `.env` contém a chave do banco e nunca vai para o GitHub (está no `.gitignore`).
 
-## CRM no celular (túnel no PC + reserva no Google Cloud Run)
-- **Principal: o próprio PC.** O Cloudflare Tunnel (grátis) leva `https://crm.vfitcoachapp.com` até o CRM deste PC. Abre rápido.
-  O PC precisa ficar ligado, na tomada e com a sua conta do Windows aberta (pode bloquear a tela com Windows+L).
-- **Reserva: Google Cloud Run**, em `https://crm-reserva.vfitcoachapp.com`. Funciona com o PC desligado.
-  Sem uso, o servidor dorme, mas acorda em poucos segundos (o Render levava cerca de 1 minuto). Cabe na cota grátis do Google.
-- **Portaria:** nos dois endereços o Cloudflare Access pede o seu e-mail e manda um código. O CRM confere o token do Cloudflare
+## CRM no celular (Google Cloud Run é o principal)
+- **Principal: Google Cloud Run**, em `https://crm.vfitcoachapp.com`. Funciona com o PC desligado, sem tomada e sem bateria.
+  Sem uso, o servidor dorme, mas acorda em poucos segundos. Cabe na cota grátis do Google.
+- **Portaria:** o Cloudflare Access pede o seu e-mail e manda um código. O CRM confere o token do Cloudflare
   em cada pedido que vem da internet (`app/acesso.py`). Sem `CF_ACCESS_TEAM_DOMAIN` e `CF_ACCESS_AUD`, nada aparece pela internet.
   No próprio PC, `http://localhost:8765` entra direto, como sempre.
-- PC, celular e reserva usam o mesmo banco (Turso). O que é lançado num aparelho aparece no outro em até 30 segundos.
-- **Encerrar** só aparece no PC e desliga também o acesso pelo celular. Para religar, abra o CRM pelo atalho.
-- Se o CRM cair, o vigia religa sozinho em até 2 minutos (o botão Encerrar desliga de verdade; o atalho ou reiniciar o PC liga de novo).
+- **O PC deixou de ser servidor.** Ele só abre o CRM quando você quiser, pelo atalho. Não precisa ficar ligado nem na tomada.
+  PC e nuvem usam o mesmo banco (Turso): o que é lançado num aparece no outro em até 30 segundos.
+- **Encerrar** só aparece no PC e desliga só o CRM do PC. A nuvem continua no ar.
 
 ### Configurar (uma vez só)
 Os nomes dos botões no Cloudflare e no Google Cloud podem mudar um pouco.
 
-**1. Liberar o nome `crm` (Cloudflare › DNS)**
-1. Em dash.cloudflare.com, abra `vfitcoachapp.com` › **DNS** › **Records**.
-2. Apague o CNAME `crm` (aponta para `claude-code-crm.onrender.com`). O túnel precisa desse nome.
+**1. Liberar o nome `crm` (Cloudflare)**
+1. Em dash.cloudflare.com, abra `vfitcoachapp.com` › **DNS** › **Records** e apague o registro `crm`
+   (CNAME antigo para `claude-code-crm.onrender.com`, ou o do túnel do PC).
+2. Se o túnel `pc-crm` ainda existir: Zero Trust › **Networks** › **Tunnels** › `pc-crm` › **Public Hostname** › apague o `crm`.
+   Isso evita brigar com o Worker no passo 4. O túnel e o `cloudflared` do PC não são mais necessários.
 
-**2. Criar o túnel (Cloudflare Zero Trust)**
-1. **Networks** › **Tunnels** › **Create a tunnel** › **Cloudflared**. Nome: `pc-crm`. Salve.
-2. Escolha **Windows** e baixe o instalador do cloudflared (64-bit, `.msi`). Instale no PC.
-3. Copie o comando que aparece: `cloudflared.exe service install <token>`.
-4. No PC, abra o PowerShell **como Administrador** (botão direito no Iniciar › Terminal (Administrador)). Cole o comando e aperte Enter.
-   Abra o PowerShell só depois de instalar (se já estava aberto, feche e abra de novo).
-   Se disser que não acha o `cloudflared.exe`, use o caminho completo:
-   `& 'C:\Program Files (x86)\cloudflared\cloudflared.exe' service install <token>` (ou `C:\Program Files\cloudflared\`).
-5. Volte ao painel: o conector aparece como conectado. Clique em **Next**.
-6. Em **Public Hostname**: subdomínio `crm`, domínio `vfitcoachapp.com`, tipo `HTTP`, URL `localhost:8765`. **Save**.
-
-**3. Ajustar a portaria (Zero Trust › Access › Applications › CRM › Configure)**
-1. Acrescente o domínio `crm-reserva.vfitcoachapp.com` no mesmo app. Assim o AUD não muda.
+**2. Ajustar a portaria (Zero Trust › Access › Applications › CRM › Configure)**
+1. Confira que o app cobre `crm.vfitcoachapp.com`. O AUD não muda.
 2. **Session Duration**: `1 month`. Assim o celular não pede o código todo dia.
 3. Salve.
 
-**4. Reserva: Google Cloud Run**
-A imagem sai do `Dockerfile` deste repositório. Ele já deixa fixos o fuso, a portaria (`CRM_NUVEM=1`) e o endereço `crm-reserva`.
+**3. Google Cloud Run**
+A imagem sai do `Dockerfile` deste repositório. Ele já deixa fixos o fuso, a portaria (`CRM_NUVEM=1`) e o endereço `crm`.
 1. **Conta:** em console.cloud.google.com, crie um projeto (ex.: `vfitcoach-crm`) e ative o faturamento (pede cartão).
    Em **Faturamento › Orçamentos e alertas**, crie um orçamento de **US$ 1** com aviso por e-mail. Assim nenhuma cobrança passa despercebida.
 2. **Criar o serviço:** Cloud Run › **Implantar contêiner** › **Implantar continuamente a partir de um repositório (GitHub)**.
@@ -83,49 +72,34 @@ A imagem sai do `Dockerfile` deste repositório. Ele já deixa fixos o fuso, a p
    - **Autenticação:** "Permitir acesso público" (quem barra é o Cloudflare Access e o próprio CRM).
    - **Faturamento:** "Com base em solicitações". **Escalonamento:** mínimo `0`, máximo **`1`** instância.
    - **Contêiner › Recursos:** memória `512 MiB`, CPU `1`, e marque **Aumento de CPU na inicialização**.
-   - **Variáveis e secrets:** `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `CF_ACCESS_TEAM_DOMAIN` e `CF_ACCESS_AUD`. São os mesmos valores do `.env` do PC.
+   - **Variáveis e secrets:** `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `CF_ACCESS_TEAM_DOMAIN` e `CF_ACCESS_AUD`.
+     Os valores estão no `.env` do PC ou nas variáveis do serviço no Render (Environment). O Turso tem que ser o mesmo banco de hoje.
    - **Criar.** No topo do serviço aparece a URL (`https://vfitcoach-crm-....run.app`). Abrir essa URL direto tem que mostrar "Acesso restrito": está certo.
 3. **Limpar imagens velhas:** Artifact Registry › repositório `cloud-run-source-deploy` › **Editar** › **Políticas de limpeza**:
    "Manter as versões mais recentes", contagem `2`. Sem isso, as imagens se acumulam e passam da cota grátis de armazenamento.
-4. **Endereço `crm-reserva` (Cloudflare › Workers e Pages)**
-   - **Criar** › **Worker** › nome `crm-reserva` › **Implantar**. Depois, **Editar código**: cole o conteúdo de `cloudflare/worker-reserva.js`,
-     troque `COLE-AQUI-A-URL.run.app` pela URL do passo 2 e clique em **Implantar**.
-   - Worker › **Configurações › Domínios e rotas › Adicionar › Domínio personalizado**: `crm-reserva.vfitcoachapp.com`. O Cloudflare cria o DNS sozinho.
-     Se reclamar que o nome já existe, apague antes o registro `crm-reserva` antigo em DNS › Records.
-   - O app do Access (passo 3) já cobre `crm-reserva.vfitcoachapp.com`. Abra o endereço no celular: ele pede o código e mostra o CRM.
-5. Depois que funcionar, apague o serviço antigo no Render (dashboard.render.com › serviço › Settings › Delete).
 
-**5. Preparar o PC**
-1. Na pasta do CRM: `git pull`.
-2. Abra o `.env` no Bloco de Notas e acrescente as duas linhas (os mesmos das variáveis do Cloud Run):
-   ```
-   CF_ACCESS_TEAM_DOMAIN=SEU-TIME.cloudflareaccess.com
-   CF_ACCESS_AUD=cole-aqui-o-AUD
-   ```
-   O AUD é o "Application Audience (AUD) Tag" do app CRM no Zero Trust.
-3. No PowerShell (normal), na pasta do CRM, rode uma vez:
-   ```
-   powershell -ExecutionPolicy Bypass -File .\configurar-pc-servidor.ps1
-   ```
-   Ele faz o CRM ligar sozinho ao entrar no Windows (sem abrir o navegador), tira a suspensão na tomada,
-   confere o `.env` e o túnel e reinicia o CRM. Em notebook, ele mostra como deixar "Ao fechar a tampa: Não fazer nada" na tomada.
-   Para desfazer: o mesmo comando com `-Desfazer` no fim.
+**4. Endereço `crm` (Cloudflare › Workers e Pages)**
+1. **Criar** › **Worker** › nome `crm` › **Implantar**. Depois, **Editar código**: cole o conteúdo de `cloudflare/worker-crm.js`,
+   troque `COLE-AQUI-A-URL.run.app` pela URL do passo 3 e clique em **Implantar**.
+2. Worker › **Configurações › Domínios e rotas › Adicionar › Domínio personalizado**: `crm.vfitcoachapp.com`. O Cloudflare cria o DNS sozinho.
+   Se reclamar que o nome já existe, volte ao passo 1 e apague o registro `crm`.
+3. Abra `https://crm.vfitcoachapp.com` no celular: ele pede o código e mostra o CRM.
+
+**5. Depois que funcionar**
+1. Apague o serviço antigo no Render (dashboard.render.com › serviço › Settings › Delete).
+2. No PC (opcional): `configurar-pc-servidor.ps1` não é mais necessário. Para o CRM do PC não ligar sozinho, rode-o com `-Desfazer` no fim.
 
 **6. iPhone**
 1. Abra `crm.vfitcoachapp.com` no Safari e entre com o código do e-mail.
 2. Toque em **Compartilhar** › **Adicionar à Tela de Início**. Vira um ícone de app.
 
 ### Se o celular não abrir
-- **Erro 1033 ou erro de "tunnel"**: o PC está desligado ou o cloudflared parou. Use `https://crm-reserva.vfitcoachapp.com`.
-  No PC, confira no PowerShell: `Get-Service cloudflared` (deve dizer `Running`). Se não, no PowerShell como Administrador: `Start-Service cloudflared`.
-- **Erro 502 (Bad gateway)**: o PC está ligado, mas o CRM não. Abra o CRM pelo atalho.
-  Acontece se o Windows reiniciou e ninguém entrou na conta, ou se alguém clicou em Encerrar.
-- **"A portaria do Cloudflare Access ainda não foi configurada"**: faltam as linhas `CF_ACCESS_*` no `.env`.
-  Preencha e rode `configurar-pc-servidor.ps1` de novo.
-- **Reserva com "Acesso restrito"** depois de entrar com o código: confira as variáveis `CF_ACCESS_*` no Cloud Run (serviço › **Editar e implantar nova revisão**).
-- **Reserva com erro 1101 ou 5xx do Worker**: a URL do Cloud Run no Worker está errada. Confira o `CLOUD_RUN` no código do Worker.
-- **Reserva demorando sempre**: Cloud Run › serviço › **Registros**. Confira se o banco sincroniza (procure "AVISO") e a região perto do Turso.
-- Cada mudança juntada na `main` do GitHub vai sozinha para a reserva (Cloud Run) e para o PC (veja "Como atualizar o CRM").
+- **Erro 1033 ou erro de "tunnel"**: o nome `crm` ainda aponta para o túnel antigo do PC. Refaça o passo 1 (apague o registro e o Public Hostname) e o passo 4.
+- **"Acesso restrito"** depois de entrar com o código: confira as variáveis `CF_ACCESS_*` no Cloud Run (serviço › **Editar e implantar nova revisão**).
+- **Erro 1101 ou 5xx do Worker**: a URL do Cloud Run no Worker está errada. Confira o `CLOUD_RUN` no código do Worker.
+- **Formulário recusado (erro de origem)**: a variável `CRM_ENDERECOS` do Dockerfile tem que ser `crm.vfitcoachapp.com`.
+- **Demorando sempre**: Cloud Run › serviço › **Registros**. Confira se o banco sincroniza (procure "AVISO") e a região perto do Turso.
+- Cada mudança juntada na `main` do GitHub vai sozinha para o Cloud Run (e para o PC, veja "Como atualizar o CRM").
 
 ## Repositório público: o que nunca vai para o GitHub
 

@@ -1,4 +1,6 @@
-# Prepara este PC para ser o servidor do CRM no celular (Cloudflare Tunnel -> http://localhost:8765).
+# ATENCAO: o CRM do celular agora roda no Google Cloud Run (crm.vfitcoachapp.com); este PC nao precisa mais ser servidor.
+# Use este arquivo so se quiser o CRM do PC ligando sozinho ao entrar no Windows (ou -Desfazer para tirar isso).
+# Antes: prepara este PC para ser o servidor do CRM no celular (Cloudflare Tunnel -> http://localhost:8765).
 # Rode uma vez, na pasta do CRM, num PowerShell normal (nao precisa ser Administrador):
 #   powershell -ExecutionPolicy Bypass -File .\configurar-pc-servidor.ps1
 # Para tirar o inicio automatico:
@@ -143,14 +145,12 @@ if ($turso) {
     Ok 'Turso configurado (PC, celular e reserva usam o mesmo banco).'
 }
 
-Titulo '4. Tunel do Cloudflare (cloudflared)'
+Titulo '4. Tunel do Cloudflare (cloudflared) - so se o celular ainda usar o PC'
 $servico = Get-Service -Name cloudflared -ErrorAction SilentlyContinue
 if (-not $servico) {
-    Aviso 'O cloudflared ainda nao esta instalado neste PC.'
-    Linha 'Siga o README, parte "CRM no celular" > "Criar o tunel".'
+    Ok 'Sem cloudflared neste PC: certo, o celular usa o Google Cloud Run.'
 } elseif ($servico.Status -ne 'Running') {
-    Aviso "O servico cloudflared esta parado ($($servico.Status))."
-    Linha 'Abra o PowerShell como Administrador e rode: Start-Service cloudflared'
+    Linha "O servico cloudflared esta parado ($($servico.Status)). Nao e mais necessario: o celular usa o Google Cloud Run."
 } else {
     Ok 'Servico cloudflared rodando.'
 }
@@ -200,10 +200,8 @@ if (CrmRodando) {
 
 Titulo 'Pronto. Confira:'
 Linha '1. No PC: abra http://localhost:8765 (ou o atalho da Area de Trabalho).'
-Linha '2. No celular, fora do Wi-Fi: abra https://crm.vfitcoachapp.com e entre com o codigo do e-mail.'
-Linha '3. Deixe o PC ligado, na tomada e com a sua conta do Windows aberta.'
-Linha '   Pode bloquear a tela (Windows+L). So nao saia da conta.'
-Linha '4. Nao clique em Encerrar se for usar o celular. Se clicar, abra o CRM de novo pelo atalho.'
-Linha '5. Celular deu erro do Cloudflare (1033 ou 502)? Use a reserva: https://crm-reserva.vfitcoachapp.com'
+Linha '2. No celular: abra https://crm.vfitcoachapp.com e entre com o codigo do e-mail (roda no Google Cloud Run, com o PC desligado).'
+Linha '3. O PC nao precisa ficar ligado nem na tomada para o celular funcionar.'
+Linha '4. Celular deu erro do Cloudflare (1033)? O nome crm ainda aponta para o tunel antigo: veja o README, "Se o celular nao abrir".'
 Linha "Para desfazer: $comando -Desfazer"
 Fim 0

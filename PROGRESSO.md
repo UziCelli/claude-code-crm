@@ -393,6 +393,11 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - `acesso._origem_estranha`: atrás do Worker o Host chega como `*.run.app`. O Origin/Referer de um POST também vale se estiver em `CRM_ENDERECOS`; sem isso, todo formulário seria recusado.
 - Passo a passo no README (passo 4 da seção "CRM no celular"). Pendente: acrescentar `crm-reserva` ao `saude.yml` quando o endereço estiver no ar.
 
+## Google Cloud Run vira o CRM principal (18/11/2026)
+- O PC desligou (bateria) e o `crm.vfitcoachapp.com` deu erro 1033 do Cloudflare. O Victor decidiu tirar o PC do papel de servidor: o Google Cloud Run passa a ser o principal, em `crm.vfitcoachapp.com`, e o Render sai.
+- `Dockerfile` (`CRM_ENDERECOS=crm.vfitcoachapp.com`), `cloudflare/worker-reserva.js` virou `worker-crm.js` e o README foi reescrito sem o túnel (seção "CRM no celular"). `configurar-pc-servidor.ps1` só ajustou textos. `saude.yml` já cobria `crm.vfitcoachapp.com`.
+- Pendente (só o Victor faz): apagar o DNS/Public Hostname antigo `crm`, criar o serviço no Cloud Run com as variáveis do Turso e do Cloudflare, criar o Worker `crm` e depois apagar o Render.
+
 ## A fazer: preço próprio para cada local novo (pedido do Victor, 04/11/2026)
 - Hoje o "+ Novo local" copia a grade e os preços da CIA (ou de outro local) e só ajusta a diferença de custo por aula (`app/locais.py`: `criar_local`, `_gravar`). Os locais novos ficam presos aos preços da CIA.
 - Exemplo: Allp Fit (sem taxa; 33 min de deslocamento ida e volta; R$ 10,60 de passagem) ficou com margens ruins.

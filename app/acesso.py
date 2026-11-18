@@ -28,7 +28,7 @@ LIVRES = {"/saude", "/health", "/healthz"}   # checagem de saúde da nuvem (qual
 LOCAIS = {"localhost", "127.0.0.1", "::1"}   # nomes do próprio PC (o uvicorn só escuta em 127.0.0.1)
 # o Cloudflare (e o túnel) sempre acrescenta cf-ray e cf-connecting-ip; os outros denunciam qualquer proxy no caminho
 # endereços públicos que valem como "o próprio CRM" no Origin/Referer de um POST, além do Host que chegou.
-# Na nuvem o Worker repassa para o *.run.app, então o Host não bate com o endereço do navegador (crm-reserva...).
+# Na nuvem o Worker repassa para o *.run.app, então o Host não bate com o endereço do navegador (crm.vfitcoachapp.com).
 ENDERECOS = {e.strip().lower() for e in os.environ.get("CRM_ENDERECOS", "").split(",") if e.strip()}
 CABECALHOS_PROXY = ("cf-ray", "cf-connecting-ip", "cf-visitor", "cdn-loop", "x-forwarded-for", "forwarded")
 _jwks = None

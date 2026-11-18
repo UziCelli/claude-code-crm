@@ -1,4 +1,4 @@
-# Imagem do CRM para o Google Cloud Run (a reserva do celular). Passo a passo no README ("Reserva: Google Cloud Run").
+# Imagem do CRM para o Google Cloud Run (o CRM principal, em crm.vfitcoachapp.com). Passo a passo no README ("CRM no celular").
 # O Cloud Run lê este arquivo sozinho a cada mudança na main (implantação contínua).
 FROM python:3.13-slim
 
@@ -8,7 +8,7 @@ FROM python:3.13-slim
 #   e sem isto a proteção contra CSRF (app/acesso.py) recusaria todo formulário.
 ENV TZ=America/Sao_Paulo \
     CRM_NUVEM=1 \
-    CRM_ENDERECOS=crm-reserva.vfitcoachapp.com \
+    CRM_ENDERECOS=crm.vfitcoachapp.com \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 

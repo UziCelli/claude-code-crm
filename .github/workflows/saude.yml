@@ -1,6 +1,6 @@
 name: Saúde do CRM
 
-# Log de tráfego: a cada hora abre os dois endereços do CRM e confere se a portaria (Cloudflare Access) responde.
+# Log de tráfego: a cada hora abre o endereço do CRM e confere se a portaria (Cloudflare Access) responde.
 # A portaria responde mesmo com o PC desligado: isto confere DNS, HTTPS e portaria, não o CRM por trás dela.
 # Cada execução (Actions > Saúde do CRM) mostra o código e o tempo de resposta de cada endereço.
 # Fora do ar = uma Issue com @UziCelli (e-mail e push do GitHub), sem repetir; quando volta, a Issue fecha sozinha.
@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # endereço|código esperado|texto que precisa aparecer na resposta (cabeçalho ou página)
-      # crm-reserva fica de fora até existir o CNAME no Cloudflare (README, passo 4 da reserva); depois, acrescente aqui.
+      # crm.vfitcoachapp.com é o Worker do Cloudflare na frente do Cloud Run (README, "CRM no celular").
       ENDERECOS: |
         https://crm.vfitcoachapp.com|302|cloudflareaccess.com
     steps:
