@@ -460,20 +460,72 @@ def alertas(con):
 # =====================================================================
 # 6. PAINEL (tela inicial)
 # =====================================================================
+def fixos_atuais(con, ids=None) -> list[dict]:
+    """Horários fixos que valem hoje na Agenda (não excluídos), só de alunos ativos, um por (aluno, dia, hora), do mais antigo ao mais novo:
+    [{cliente_id, dia, hora, local}]. A mesma leitura serve às horas de trabalho, às divergências plano × Agenda e à ficha.
+    Reposição e avulsa não entram (não são horário fixo)."""
+    out, vistos = [], set()
+    for r in con.execute("""SELECT f.cliente_id, f.dia, f.hora, f.local FROM agenda_fixos f JOIN clientes c ON c.id=f.cliente_id
+                            WHERE f.excluido_em IS NULL AND f.dia BETWEEN 1 AND 6 AND f.hora BETWEEN 5 AND 23
+                            AND c.status='ativo' AND c.excluido_em IS NULL ORDER BY f.id"""):
+        if (ids is not None and r["cliente_id"] not in ids) or (r["cliente_id"], r["dia"], r["hora"]) in vistos:
+            continue
+        vistos.add((r["cliente_id"], r["dia"], r["hora"]))
+        out.append(dict(r))
+    return out
+
+
 def horas_trabalho_detalhe(con, p, bases=None) -> dict:
-    """Suas horas de trabalho no mês, por parte (precos.PARTES_TRABALHO) e no total: para cada aluno ativo, as aulas do plano
-    (as da "Agenda ocupada") + deslocamento + planejamento + consultoria, pela regra do tempo (precos.partes_minutos).
-    Aluno sem plano do motor conta só as aulas."""
+    """Suas horas de trabalho no mês, por parte (precos.PARTES_TRABALHO) e no total, pela regra do tempo (minutos de Configurações > Mão de obra).
+    Aulas e deslocamento vêm da Agenda (Victor, 18/11/2026): cada horário fixo (dia, hora) vale 4,33 aulas no mês, contado uma vez só
+    mesmo com 2 alunos juntos (é uma hora sua), com o deslocamento do local daquele horário.
+    Aluno com horário na Agenda soma só planejamento, consultoria e avaliação pelo plano; aluno sem horário (ex.: Consultoria Online)
+    conta tudo pelo plano (precos.partes_minutos), como antes. Aluno sem plano do motor e sem horário conta só as aulas do plano."""
     bases = bases if bases is not None else carregar_bases(con)
     out = dict.fromkeys(precos.PARTES_TRABALHO, 0.0)
+    fixos = fixos_atuais(con)
+    slots = {}
+    for f in fixos:
+        slots.setdefault((f["dia"], f["hora"]), f["local"])   # dupla no mesmo horário: uma hora de trabalho, no local do primeiro
+    min_aula = float((p.get("mo") or {}).get("min_aula", 60) or 0)
+    out["aulas"] += len(slots) * SEMANAS_MES * min_aula / 60
+    out["deslocamento"] += sum(precos.deslocamento(p, local)[1] for local in slots.values()) * SEMANAS_MES / 60
+    com_horario = {f["cliente_id"] for f in fixos}
     for c in con.execute("SELECT * FROM clientes WHERE excluido_em IS NULL AND status='ativo'"):
         base = base_do_cliente(con, c, bases)
+        if c["id"] in com_horario:
+            if base:
+                partes = precos.partes_minutos(dict(base), p, c["local"])
+                for k in ("planejamento", "consultoria", "avaliacao"):
+                    out[k] += partes[k] / 60
+            continue
         if not base:
             out["aulas"] += aulas_mes(c)
             continue
         for k, minutos in precos.partes_minutos(dict(base), p, c["local"]).items():
             out[k] += minutos / 60
     out["total"] = sum(out.values())
+    return out
+
+
+def divergencias_plano_agenda(con, fixos=None) -> list[dict]:
+    """Alunos ativos cujo plano não bate com os horários fixos da Agenda, por semana: [{id, nome, plano, por_semana, agenda}].
+    Mensalidade Nx = N por semana; Pacote N = N ÷ semanas contratadas (Configurações > Agenda). Sem horário na Agenda (agenda 0) também entra:
+    as horas desse aluno saem do plano. Consultoria e plano sem número de aulas ficam de fora."""
+    fixos = fixos if fixos is not None else fixos_atuais(con)
+    por_aluno = {}
+    for f in fixos:
+        por_aluno[f["cliente_id"]] = por_aluno.get(f["cliente_id"], 0) + 1
+    semanas = float(db.parametros(con, "agenda").get("semanas_contratadas") or 4)
+    out = []
+    for c in con.execute("SELECT id, nome, plano FROM clientes WHERE excluido_em IS NULL AND status='ativo' ORDER BY nome"):
+        contr = aulas_contratadas(c, semanas)
+        if not contr:
+            continue
+        semana = contr / semanas
+        agenda = por_aluno.get(c["id"], 0)
+        if abs(agenda - semana) >= 0.5:
+            out.append({"id": c["id"], "nome": c["nome"], "plano": c["plano"], "por_semana": round(semana, 1), "agenda": agenda})
     return out
 
 
@@ -3857,6 +3909,7 @@ def calculos(request: Request, con=Depends(get_db)):
             grupos.append({"grupo": g, "titulo": "Agenda cheia" if g == "metas" else t.split(":")[0], "fmt": f, "itens": rows})
     p = precos.carregar_parametros(con)
     return render(request, "calculos.html", con, grupos=grupos, rotulos=ROTULOS, salario_hora=p["salario_hora"], rateio=p["rateio"],
+                  divergencias=divergencias_plano_agenda(con),
                   cobre=cobre_custos(con, p), das_txt=financeiro.texto_pct(p["das"]))
 
 

@@ -42,10 +42,18 @@
   {% set nomes = {'aulas': 'de aula', 'deslocamento': 'de deslocamento', 'planejamento': 'de planejamento', 'consultoria': 'de consultoria', 'avaliacao': 'de avaliação'} %}
   <p class="muted" id="horas-trabalho">{{ sh.horas|num(0) }} h de trabalho =
     {% for k, v in sh.partes.items() if v >= 0.05 %}{{ ' + ' if not loop.first }}<span style="white-space:nowrap">{{ v|num(0 if v >= 10 or (v - v|round)|abs < 0.05 else 1) }} h {{ nomes[k] }}</span>{% endfor %}
-    (os minutos de cada coisa estão em Mão de obra, abaixo).</p>
+    (aulas e deslocamento pelos horários fixos da Agenda; os minutos de cada coisa estão em Mão de obra, abaixo).</p>
   {% if sh.piso %}<p class="muted">Hoje você trabalha {{ sh.horas|num(0) }} h, menos que a agenda cheia ({{ sh.horas_cheia|num(0) }} h): divide por
     {{ sh.horas_cheia|num(0) }} h para os poucos alunos de agora não pagarem o salário inteiro. O que faltar aparece no quadro acima.</p>{% endif %}
   {% else %}{% include "_salario_hora.html" %}{% endif %}
+  {% if divergencias %}
+  <div class="aviso atencao" id="divergencias" style="margin-top:8px">
+    <p style="margin:0 0 4px"><strong>Plano diferente da Agenda ({{ divergencias|length }})</strong>: as horas vêm da Agenda; confira o plano ou os horários.</p>
+    <ul style="margin:0;padding-left:18px">
+      {% for d in divergencias %}<li><a href="/clientes/{{ d.id }}">{{ d.nome }}</a>: plano {{ d.plano }} ({{ d.por_semana|num(1) }} por semana), Agenda {{ d.agenda }} horário{{ 's' if d.agenda != 1 }} por semana{% if not d.agenda %} (as horas dele saem do plano){% endif %}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
 </div>
 
 {% set ra = rateio %}

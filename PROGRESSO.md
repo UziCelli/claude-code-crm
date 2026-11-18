@@ -454,3 +454,10 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
   - feitas = marcas Feita do mês (reposição inclusive).
   - passou = max(previstas, feitas) − contratadas; na CIA (a maioria das aulas lá) vira custo extra = passou × taxa da aula da CIA.
 - Testes: `tests/test_aulas_mes.py`.
+
+## Horas de trabalho pela Agenda (18/11/2026)
+- Pedido do Victor: as horas (que dividem o salário/hora e os custos fixos) vinham só do plano escrito na ficha. Agora `horas_trabalho_detalhe` lê a Agenda: cada horário fixo (dia, hora) vale 4,33 aulas no mês, contado uma vez mesmo com 2 alunos juntos, e o deslocamento é o do local daquele horário. Planejamento, consultoria e avaliação continuam pelo plano de cada aluno. Aluno sem horário na Agenda (ex.: Consultoria Online) conta tudo pelo plano, como antes.
+- `main.fixos_atuais`: os horários fixos que valem hoje (alunos ativos), a mesma leitura para horas, divergências e ficha.
+- Tela Cálculos: aviso "Plano diferente da Agenda" (`main.divergencias_plano_agenda`) com quem tem plano ≠ horários por semana (ou nenhum horário), com link para a ficha.
+- A estimativa por aluno (ficha, propostas) continua pelo plano: a diferença para o total entra no "ocioso" do "O mês cobre?".
+- Testes: `tests/test_horas_agenda.py`.
