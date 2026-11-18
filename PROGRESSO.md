@@ -237,7 +237,7 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 ## Editar e excluir local (PR `claude/locais-editar`, 04/11/2026)
 - Grade de um local criado pelo "+ Novo local": botões **Editar local** (mesmo pop-up, nome travado) e **Excluir local**.
 - Editar troca os custos e refaz os preços de Pacote e Mensalidade pela diferença do custo por aula (manter margem ou manter preço). A grade fica.
-- O nome não muda: está gravado em alunos, agenda, grade e contas automáticas.
+- O nome não muda: está gravado em alunos, agenda, grade e contas automáticas. (Mudou em 18/11/2026: ver "Renomear local".)
 - Excluir é recusado enquanto houver aluno não inativo, horário fixo ou célula ocupada no local; senão apaga custos, preços, grade e o nome da lista. Aulas e contas antigas ficam.
 
 ## Aviso de dois locais seguidos (PR `claude/aviso-deslocamento`, 04/11/2026)
@@ -428,3 +428,11 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Pedido do Victor: muita coisa saía da tela no celular. Novo `scripts/verificar_celular.py` (ferramenta, fora do CI): sobe o CRM num banco temporário com dados de exemplo (inclusive nomes longos), abre todas as telas e janelas em 360 e 390 px e lista o que passa da borda ou obriga a rolar de lado. Precisa do Playwright para Python.
 - Achados e correções (`style.css`): etiqueta comprida ("Sem aula nem pagamento") não quebrava a linha e vazava o cartão (Mensalidades, ficha); a célula do cartão agora quebra nos espaços e alinha à direita. Botões da célula `td.linha` descem de linha no celular. `.duas`/`.botoes-estado` passam a uma coluna quando não cabem. Larguras fixas em px dos templates viraram classes com `max-width:100%` (`.num-curto`, `input.busca`); nova `.rolavel` para tabela larga rolar dentro da própria caixa.
 - Resultado: "Tudo cabe na tela" em 360 e 390 px. Com os dados reais pode aparecer outro caso: rodar o script com uma cópia do banco (ou mandar print).
+
+## Renomear local (18/11/2026)
+- Pedido do Victor: não dava para trocar o nome de um local (ex.: o condomínio). Agora o campo Nome do "Editar local" é editável (menos na CIA). Nome diferente = `locais.renomear_local`, numa transação só (tudo ou nada), depois de uma cópia do banco (`backups/antes-renomear-*.db`).
+- Troca em: `locais_custos` (e `referencia`), `grade_slots`, `precos_base`, `clientes`, `agenda_fixos` e `agenda_avulsas` (inclusive excluídos: as contas de meses passados são refeitas delas), `propostas`, `proposta_horarios`, `lista_espera`, lista de Configurações e a chave das contas automáticas (`local:<nome>:AAAA-MM`; o texto muda só nas que estão em aberto).
+- O nome antigo de um local da lista inicial (SmartFit) fica marcado como removido para não voltar ao abrir o app.
+- Caixa "trocar também nas contas e lançamentos em aberto que citam o local" (marcada): troca o nome no texto das recorrentes e lançamentos manuais em aberto (`locais.citacoes`), para continuarem ligados ao local.
+- Recusa: nome vazio, começando por "CIA" (viraria conta da CIA), com ":" ou igual a outro local escrito de outro jeito. Trocar só maiúsculas ou espaços pode.
+- Testes: `tests/test_locais_editar.py` (seção renomear).

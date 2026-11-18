@@ -18,9 +18,11 @@ document.addEventListener("click", function (e) {
   if (titulo && b.dataset.titulo) titulo.textContent = b.dataset.titulo;
   var nota = d.querySelector("[data-nota]");   // aviso opcional (ex.: "Crédito de R$ 100,00 descontado")
   if (nota) { nota.textContent = b.dataset.nota || ""; nota.hidden = !b.dataset.nota; }
-  if (d.id === "dlg-local") {   // o mesmo pop-up cria e edita todo local: na edição o nome trava e a referência some
+  if (d.id === "dlg-local") {   // o mesmo pop-up cria e edita todo local: na edição a referência some; o nome só trava na CIA
     var editar = !!b.dataset.acao, cia = editar && !!b.dataset.cia, nome = d.querySelector("[name=nome]"), bt = d.querySelector("[data-botao]");
-    nome.readOnly = editar;
+    nome.readOnly = cia;
+    if (!editar) d.querySelector("[name=nome_original]").value = "";
+    d.querySelectorAll("[data-so-renomear]").forEach(function (x) { x.hidden = !editar || cia; });
     if (!editar && titulo) titulo.textContent = "Novo local";
     if (bt) bt.textContent = editar ? "Salvar e refazer preços" : "Criar local";
     d.querySelectorAll("[data-so-novo]").forEach(function (x) { x.hidden = editar; });

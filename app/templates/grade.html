@@ -12,7 +12,7 @@
   <button type="button" class="claro" data-abrir="dlg-mult">Multiplicadores</button>
   <button type="button" class="claro" data-abrir="dlg-local" data-voltar="/grade">+ Novo local</button>
   {% set c = custos_local or {} %}{# o mesmo pop-up para todo local; a CIA troca a pessoa a mais pelo preço da aula com 2, 3 pessoas #}
-  <button type="button" class="claro" data-abrir="dlg-local" data-acao="/locais/editar" data-titulo="Editar {{ local }}" data-nome="{{ local }}"
+  <button type="button" class="claro" data-abrir="dlg-local" data-acao="/locais/editar" data-titulo="Editar {{ local }}" data-nome="{{ local }}" data-nome_original="{{ local }}"
     data-taxa_aula="{{ ('%.2f'|format(c.taxa_aula or 0))|replace('.', ',') }}" data-taxa_pessoa_extra="{{ ('%.2f'|format(c.taxa_pessoa_extra or 0))|replace('.', ',') }}" data-max_pessoas="{{ c.max_pessoas or 0 }}"
     {% if cia %}data-cia="1" {% for n, v in c.grupo.items() %}data-taxa_{{ n }}="{{ ('%.2f'|format(v or 0))|replace('.', ',') }}" {% endfor %}{% endif %}
     data-deslocamento="{{ ('%.2f'|format(c.deslocamento or 0))|replace('.', ',') }}" data-tempo_deslocamento="{{ (c.tempo_deslocamento or 0)|int }}" data-taxa_mensal="{{ ('%.2f'|format(c.taxa_mensal or 0))|replace('.', ',') }}"

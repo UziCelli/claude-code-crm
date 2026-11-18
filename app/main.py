@@ -3913,17 +3913,29 @@ def locais_novo(nome: str = Form(...), referencia: str = Form("CIA"), taxa_aula:
 
 @app.post("/locais/editar")
 async def locais_editar(request: Request, con=Depends(get_db)):
-    """Botão "Editar local" da Grade, igual para todo local (CIA inclusive): o pop-up do "+ Novo local" com o nome travado.
+    """Botão "Editar local" da Grade, igual para todo local (CIA inclusive): o pop-up do "+ Novo local".
+    Nome diferente do original (nome_original) = renomear o local em tudo antes de gravar os custos (loc.renomear_local; a CIA não muda de nome).
     Na CIA, a pessoa a mais vira o preço da aula com 2 e 3 pessoas (taxa_2, taxa_3). Os preços acompanham os custos."""
     form = await request.form()
-    nome = str(form.get("nome") or "").strip()
-    url = "/grade?local=" + quote(nome)
+    nome = " ".join(str(form.get("nome") or "").split())
+    original = str(form.get("nome_original") or "").strip() or nome
+    url = "/grade?local=" + quote(original)
+    renomeado = ""
     try:
+        if nome != original:
+            try:   # cópia local do banco antes de trocar o nome em todas as tabelas (sem cópia, renomeia igual: é tudo ou nada)
+                await run_in_threadpool(db.fazer_backup, "antes-renomear")
+            except Exception:
+                traceback.print_exc()
+            r = await run_in_threadpool(loc.renomear_local, con, original, nome, bool(form.get("atualizar_textos")))
+            url = "/grade?local=" + quote(nome)
+            renomeado = f" Nome trocado de {original} para {nome} em {r['linhas']} registro(s)" + \
+                (f" e em {r['textos']} conta(s) que citavam o local." if r["textos"] else ".")
         r = await run_in_threadpool(loc.editar_local, con, nome, _taxas_cia_form(form), **_custos_form(form))
     except ValueError as e:
         return voltar(url, erro=_erro_numero(e))
     grade = f" {r['horarios']} horários livres na grade (copiados da CIA)." if r["horarios"] else ""
-    return voltar(url, msg=f"Local {nome} atualizado: os preços já usam os custos novos.{grade}")
+    return voltar(url, msg=f"Local {nome} atualizado: os preços já usam os custos novos.{grade}{renomeado}")
 
 
 def _erro_numero(e: ValueError) -> str:
