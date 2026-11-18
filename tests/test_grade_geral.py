@@ -316,3 +316,18 @@ def test_baixar_o_limite_nao_tira_aluno_sem_pedir(http):
     r = http.post("/agenda/horario", data={"dia": 1, "hora": 7, "aluno1": a, "aluno2": d, "extras": f"{b},{c}", "local": "CIA"},
                   follow_redirects=False)
     assert "cabem 2" in erro(r) and sorted(x for x, _ in agenda(1, 7)) == sorted([a, b, c])
+
+
+def test_grade_com_limite_reduzido_nao_tira_ninguem(http):
+    a, b, c, d = aluno("Ana Silva"), aluno("Bia Costa"), aluno("Caio Lima"), aluno("Duda Reis")
+    for x in (a, b, c):
+        grava("INSERT INTO agenda_fixos (cliente_id, dia, hora, local) VALUES (?, 1, 7, 'CIA')", x)
+    grava("UPDATE parametros SET valor=2 WHERE grupo='agenda' AND chave='max_alunos_horario'")
+    cel = http.get("/grade", params={"local": "CIA"}).context["celulas"][(1, 7)]
+    assert sorted(cel["ids"]) == sorted([a, b, c])   # o diálogo recebe os três (o JS cria um seletor para cada)
+    dados = {"tipo": "Pacotes", "local": "CIA", "dia": 1, "hora": 7, "status": "ocupado", "cliente_id": [str(a), str(b), str(c)]}
+    assert erro(http.post("/grade/slot", data=dados, follow_redirects=False)) is None   # salvar sem mudar: ficam os três
+    assert sorted(x for x, _ in agenda(1, 7)) == sorted([a, b, c])
+    dados["cliente_id"] = [str(a), str(b), str(d)]   # trocar alguém por um novo passando do limite: recusa sem mexer
+    assert "cabem 2" in erro(http.post("/grade/slot", data=dados, follow_redirects=False))
+    assert sorted(x for x, _ in agenda(1, 7)) == sorted([a, b, c])

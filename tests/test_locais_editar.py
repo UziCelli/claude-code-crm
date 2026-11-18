@@ -322,3 +322,17 @@ def test_renomear_troca_texto_que_cita_o_local_sem_acento(con):  # noqa: F811
     assert r["textos"] == 1
     assert con.execute("SELECT descricao FROM recorrencias WHERE id=?", (rid,)).fetchone()[0] == "Aluguel Academia Nova"
     assert locais._trocar_no_texto("ESTÚDIO e estudio2 e Estúdio!", "Estúdio", "X") == "X e estudio2 e X!"
+
+
+def test_renomear_mantem_reconhecida_a_conta_ja_paga_a_mao(con):  # noqa: F811
+    """Conta do local paga à mão no mês: depois de renomear, a conta automática do nome novo não pode aparecer de novo."""
+    locais.criar_local(con, "Predio", "CIA", taxa_aula=30)
+    a = aluno(con, "Ana", local="Predio")
+    marca(con, a, "2026-10-05")
+    with con:
+        lid = con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao)
+                             VALUES ('PJ','saida','2026-11-05','2026-11-05',30,'Aluguel','Aulas Predio outubro')""").lastrowid
+    assert not [x for x in contas_auto.gerar_contas_automaticas(con, "2026-11-02") if x.startswith("local:")]
+    locais.renomear_local(con, "Predio", "Torre", atualizar_textos=True)
+    assert con.execute("SELECT descricao FROM lancamentos WHERE id=?", (lid,)).fetchone()[0] == "Aulas Torre outubro"
+    assert not [x for x in contas_auto.gerar_contas_automaticas(con, "2026-11-02") if x.startswith("local:")]

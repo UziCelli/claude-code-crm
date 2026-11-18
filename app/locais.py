@@ -120,12 +120,13 @@ TABELAS_LOCAL = ("locais_custos", "grade_slots", "precos_base", "clientes", "age
 
 
 def citacoes(con, nome: str) -> list[dict]:
-    """Contas recorrentes e lançamentos lançados à mão, ainda em aberto, cujo texto cita o local (como as contas automáticas
-    reconhecem: contas_auto.eh_do_local). Ao renomear, o texto deles pode mudar junto para continuarem ligados ao local."""
+    """Contas recorrentes e lançamentos lançados à mão (em aberto ou já pagos) cujo texto cita o local, pela regra das contas
+    automáticas (contas_auto.eh_do_local). Ao renomear, o texto deles muda junto: é por ele que as contas automáticas sabem
+    que a conta do mês já foi lançada ou paga à mão (contas_auto._ja_lancada_a_mao); sem isso, o nome novo geraria a conta de novo."""
     from .contas_auto import eh_do_local
     recs = con.execute("SELECT 'recorrencia' AS origem, id, descricao, NULL AS contraparte FROM recorrencias WHERE excluido_em IS NULL")
     lancs = con.execute("""SELECT 'lancamento' AS origem, id, descricao, contraparte FROM lancamentos
-                           WHERE excluido_em IS NULL AND auto IS NULL AND pago_em IS NULL""")
+                           WHERE excluido_em IS NULL AND auto IS NULL""")
     return [dict(r) for r in [*recs, *lancs] if eh_do_local(r["descricao"], nome) or eh_do_local(r["contraparte"], nome)]
 
 

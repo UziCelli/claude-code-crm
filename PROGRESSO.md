@@ -433,7 +433,7 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Pedido do Victor: não dava para trocar o nome de um local (ex.: o condomínio). Agora o campo Nome do "Editar local" é editável (menos na CIA). Nome diferente = `locais.renomear_local`, numa transação só (tudo ou nada), depois de uma cópia do banco (`backups/antes-renomear-*.db`).
 - Troca em: `locais_custos` (e `referencia`), `grade_slots`, `precos_base`, `clientes`, `agenda_fixos` e `agenda_avulsas` (inclusive excluídos: as contas de meses passados são refeitas delas), `propostas`, `proposta_horarios`, `lista_espera`, lista de Configurações e a chave das contas automáticas (`local:<nome>:AAAA-MM`; o texto muda só nas que estão em aberto).
 - O nome antigo de um local da lista inicial (SmartFit) fica marcado como removido para não voltar ao abrir o app.
-- Caixa "trocar também nas contas e lançamentos em aberto que citam o local" (marcada): troca o nome no texto das recorrentes e lançamentos manuais em aberto (`locais.citacoes`), para continuarem ligados ao local.
+- Caixa "trocar também nas contas e lançamentos que citam o local" (marcada): troca o nome no texto das recorrentes e dos lançamentos manuais, em aberto e pagos (`locais.citacoes`), com a mesma regra que os reconhece (sem acento nem maiúsculas). É pelo texto que as contas automáticas sabem que a conta do mês já foi paga à mão; sem a troca, o nome novo geraria a conta de novo.
 - Recusa: nome vazio, começando por "CIA" (viraria conta da CIA), com ":" ou igual a outro local escrito de outro jeito. Trocar só maiúsculas ou espaços pode.
 - Testes: `tests/test_locais_editar.py` (seção renomear).
 
@@ -478,6 +478,6 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
   - Livre: tira da Agenda quem estiver no horário (a tela pede confirmação).
   - Indisponível: recusa se houver aluno na Agenda.
   - Só aluno ativo.
-- Novo `agenda.max_alunos_horario` (padrão 2, Configurações > Agenda): limite na Agenda (incluir, avulsa, restaurar da lixeira, aluno que volta a ficar ativo), na ficha e na Grade. O seletor do card da Agenda mostra 2; com limite maior, os outros do horário continuam (campo `extras`).
+- Novo `agenda.max_alunos_horario` (padrão 2, Configurações > Agenda): limite na Agenda (incluir, avulsa, restaurar da lixeira, aluno que volta a ficar ativo), na ficha e na Grade. O seletor do card da Agenda mostra 2; com limite maior, os outros do horário continuam (campo `extras`). Baixar o limite não tira ninguém: turma que já passou do limite fica como está (Agenda e Grade); só entrar aluno novo acima do limite é recusado.
 - Migração sem apagar nada: aviso "N horários só na Grade" (`so_na_grade`) com o botão "Passar para a Agenda" (`POST /grade/passar-para-agenda`), que cria na Agenda os horários fixos que a Grade antiga tinha e a Agenda não (até o limite).
 - Testes: `tests/test_grade_geral.py` (seção "Grade lê a Agenda").

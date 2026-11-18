@@ -1651,8 +1651,6 @@ def grade_slot(tipo: str = Form(...), local: str = Form(...), dia: int = Form(0)
     if status == "ocupado":
         if not ids:
             return voltar(url, erro="Escolha o aluno (ou marque como livre).")
-        if len(ids) > cabe:
-            return voltar(url, erro=f"Cabem {cabe} alunos por horário (Configurações > Agenda).")
         ativos = {r["id"] for r in con.execute(f"SELECT id FROM clientes WHERE excluido_em IS NULL AND status='ativo' AND id IN ({','.join('?' * len(ids))})", ids)}
         if len(ativos) != len(ids):
             return voltar(url, erro="Escolha alunos ativos: só eles têm horário fixo na Agenda.")
@@ -1662,11 +1660,14 @@ def grade_slot(tipo: str = Form(...), local: str = Form(...), dia: int = Form(0)
         for r in fixos_do_horario(con, d, h):
             m.setdefault(r["cliente_id"], r["local"])
         agenda[(d, h)] = m
-    if status == "ocupado" and lote:
-        cheio = next((k for k in pares if len(set(agenda[k]) | set(ids)) > cabe), None)
+    if status == "ocupado":   # passar do limite só com quem já está (limite reduzido depois): ninguém sai, ninguém novo entra
+        def passa(k):
+            junto = set(agenda[k]) | set(ids) if lote else set(ids)
+            return len(junto) > cabe and not junto <= set(agenda[k])
+        cheio = next((k for k in pares if passa(k)), None)
         if cheio:
-            return voltar(url, erro=f"{DIAS_CURTO[cheio[0]]} {cheio[1]:02d}h já tem {' e '.join(r['nome'] for r in fixos_do_horario(con, *cheio))}: "
-                                    f"cabem {cabe} alunos. Nada foi gravado.")
+            quem = ' e '.join(r['nome'] for r in fixos_do_horario(con, *cheio)) or 'ninguém'
+            return voltar(url, erro=f"{DIAS_CURTO[cheio[0]]} {cheio[1]:02d}h: cabem {cabe} alunos (hoje: {quem}). Nada foi gravado.")
     if status == "indisponivel":
         com = [k for k in pares if agenda[k]]
         if com:

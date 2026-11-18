@@ -197,6 +197,11 @@
     if (!c || modo || e.ctrlKey || e.metaKey) return;
     setTimeout(function () {   // depois que o app.js preencheu o diálogo
       var ids = (c.dataset.alunos || "").split(",").filter(Boolean);
+      while (sels.length < ids.length) {   // limite reduzido com a turma maior: um seletor para cada um, ninguém some ao salvar
+        var novo = sels[0].cloneNode(true);
+        novo.setAttribute("aria-label", (sels.length + 1) + "º aluno");
+        sels[sels.length - 1].after(novo); sels.push(novo);
+      }
       sels.forEach(function (s, i) { s.value = ids[i] || ""; });
       mostraSels(ids.length);
       f.dataset.quem = c.dataset.alunos ? c.dataset.quem : "";
