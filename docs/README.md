@@ -14,6 +14,7 @@ Leia somente o assunto necessário. Planos, relatórios e histórico não são c
 | Evidências e ações externas | [security/REMEDIATION_PLAN.md](security/REMEDIATION_PLAN.md) |
 | Instruções anteriores, históricas | [agentes-historico.md](agentes-historico.md) |
 | Plano e progresso datados | [PLANO.md](../PLANO.md), [PROGRESSO.md](../PROGRESSO.md) |
+| Agenda como fonte dos horários (Grade, horas, ficha, aulas do mês) | [mapa-agenda.md](mapa-agenda.md) |
 | Mapas específicos | [Financeiro](mapa-financeiro.md), [rodada 1](mapa-rodada1.md) |
 
 Localize relações com busca direcionada ou Graphify existente, confirmando no código. Não duplique inventário do grafo neste índice.
