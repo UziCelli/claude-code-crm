@@ -100,3 +100,15 @@ def test_agenda_mostra_o_card_e_o_painel_do_aluno(http):
     assert "<span>Contratadas</span>" in pg and "<span>Previstas</span>" in pg
     cfg = http.get("/configuracoes").text
     assert "semanas contratadas por mês" in cfg
+
+
+def test_dupla_na_cia_divide_o_custo_da_aula_extra(http):
+    """A CIA cobra a aula pelo nº de pessoas no horário: a dupla divide a aula, e o total é o de uma aula a mais, não o de duas."""
+    a, b = aluno("Ana", "Mensalidade 1x/semana"), aluno("Bia", "Mensalidade 1x/semana")
+    fixo(a, 2, 7), fixo(b, 2, 7)   # 5 terças em dezembro: passou +1 cada
+    r = resumo()
+    con = db.conectar()
+    taxa2 = db.parametros(con, "taxa_cia")["2"]
+    con.close()
+    assert r["Ana"]["passou"] == r["Bia"]["passou"] == 1
+    assert abs(r["Ana"]["custo_extra"] + r["Bia"]["custo_extra"] - taxa2) <= 0.01   # uma aula a mais (centavo do arredondamento)

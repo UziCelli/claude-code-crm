@@ -130,10 +130,25 @@ def citacoes(con, nome: str) -> list[dict]:
 
 
 def _trocar_no_texto(texto: str | None, antigo: str, novo: str) -> str | None:
-    """Troca o nome antigo pelo novo no texto, sem diferenciar maiúsculas e só como palavra inteira; o resto fica igual."""
+    """Troca o nome antigo pelo novo no texto pela mesma regra que achou a citação (contas_auto.eh_do_local): palavra inteira,
+    sem diferenciar maiúsculas nem acentos ('Aluguel estudio' cita 'Estúdio'). O resto do texto fica como estava."""
     if not texto:
         return texto
-    return re.sub(rf"(?<![^\W_]){re.escape(antigo)}(?![^\W_])", lambda _: novo, texto, flags=re.I)
+    alvo = _chave_nome(antigo)
+    if not alvo:
+        return texto
+    plano, origem = [], []   # texto sem acento e minúsculo, e de que caractere do original veio cada letra
+    for i, ch in enumerate(texto):
+        for x in unicodedata.normalize("NFKD", ch).encode("ascii", "ignore").decode().lower():
+            plano.append(x)
+            origem.append(i)
+    plano = "".join(plano)
+    pedacos, fim = [], 0
+    for m in re.finditer(rf"(?<![a-z0-9]){re.escape(alvo)}(?![a-z0-9])", plano):
+        ini, ult = origem[m.start()], origem[m.end() - 1] + 1
+        pedacos.append(texto[fim:ini] + novo)
+        fim = ult
+    return "".join(pedacos) + texto[fim:] if pedacos else texto
 
 
 def renomear_local(con, antigo: str, novo: str, atualizar_textos: bool = False) -> dict:

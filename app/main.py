@@ -2236,22 +2236,36 @@ def resumo_aulas_mes(con, mes: str, hoje, ids=None) -> dict:
       feitas      = aulas marcadas como Feita no mês (reposição inclusive: é aula dada)
       faltam      = contratadas − feitas (nunca negativo); completo = feitas ≥ contratadas ("mês 100%")
       passou      = max(previstas, feitas) − contratadas, quando passa: aula a mais que o plano não paga.
-      custo_extra = na CIA, que cobra por aula, passou × a taxa da aula (R$); nos outros locais é só informativo (0)."""
+      custo_extra = na CIA, que cobra por aula, passou × a parte dele na aula (a dupla divide a aula: a CIA cobra pelo nº de pessoas
+                    no horário); nos outros locais é só informativo (0). O total da dupla é o de uma aula, não o de duas."""
     ano, m = int(mes[:4]), int(mes[5:7])
     primeiro = dt.date(ano, m, 1)
     ultimo = dt.date(ano + (m == 12), m % 12 + 1, 1) - dt.timedelta(days=1)
     segunda = primeiro - dt.timedelta(days=primeiro.weekday())
     semanas = (ultimo - segunda).days // 7 + 1
-    previstas, locais = {}, {}
+    previstas, locais, juntos = {}, {}, {}
     for a in aulas_da_semana(con, segunda, hoje, semanas=semanas):
         if a["data"][:7] != mes or a["avulsa"] or a["pausa"] or a["bloqueio"]:
             continue
         previstas[a["cliente_id"]] = previstas.get(a["cliente_id"], 0) + 1
-        locais.setdefault(a["cliente_id"], []).append(a["local"])
+        locais.setdefault(a["cliente_id"], []).append((a["local"], a["data"], a["hora"]))
+        juntos.setdefault((a["data"], a["hora"]), set()).add(a["cliente_id"])
     feitas = {r[0]: r[1] for r in con.execute(
         "SELECT cliente_id, COUNT(*) FROM cliente_eventos WHERE tipo='aula' AND excluido_em IS NULL AND substr(data,1,7)=? GROUP BY cliente_id", (mes,))}
     semanas_plano = float(db.parametros(con, "agenda").get("semanas_contratadas") or 4)
-    taxa_cia = precos.taxas_cia(con)[0]
+    taxa_cia, cia_max = precos.taxas_cia(con)
+    pessoas_de = {r[0]: max(int(r[1] or 1), 1) for r in con.execute("SELECT id, pessoas FROM clientes WHERE excluido_em IS NULL")}
+
+    def parte_da_aula(cid, aulas) -> float:
+        """R$ de uma aula da CIA que cabe a este aluno: a CIA cobra a aula pelo nº de pessoas no horário (como em contas_auto.cia_mes),
+        e a dupla divide essa aula. Média das aulas do mês dele."""
+        partes = []
+        for _, data, hora in aulas:
+            quem = juntos.get((data, hora), {cid})
+            n = sum(pessoas_de.get(x, 1) for x in quem)
+            partes.append(taxa_cia.get(min(n, cia_max or n), 0) * pessoas_de.get(cid, 1) / n)
+        return sum(partes) / len(partes) if partes else 0.0
+
     alunos = []
     for c in con.execute("SELECT id, nome, plano, pessoas FROM clientes WHERE excluido_em IS NULL AND status='ativo' ORDER BY nome"):
         if ids is not None and c["id"] not in ids:
@@ -2260,12 +2274,12 @@ def resumo_aulas_mes(con, mes: str, hoje, ids=None) -> dict:
         if not (contr or prev or feit):
             continue
         lst = locais.get(c["id"], [])
-        cia = bool(lst) and sum(contas_auto.eh_local_cia(x) for x in lst) * 2 > len(lst)   # a maioria das aulas é na CIA
+        na_cia = [x for x in lst if contas_auto.eh_local_cia(x[0])]
+        cia = bool(lst) and len(na_cia) * 2 > len(lst)   # a maioria das aulas é na CIA
         passou = max(max(prev, feit) - contr, 0) if contr else 0
-        pessoas = min(max(int(c["pessoas"] or 1), 1), max(taxa_cia) if taxa_cia else 1)
         alunos.append({"id": c["id"], "nome": c["nome"], "contratadas": contr, "previstas": prev, "feitas": feit,
                        "faltam": max(contr - feit, 0) if contr else None, "completo": bool(contr) and feit >= contr,
-                       "passou": passou, "cia": cia, "custo_extra": round(passou * taxa_cia.get(pessoas, 0), 2) if cia else 0.0})
+                       "passou": passou, "cia": cia, "custo_extra": round(passou * parte_da_aula(c["id"], na_cia), 2) if cia else 0.0})
     soma = lambda k: sum(a[k] or 0 for a in alunos)   # noqa: E731
     total = {k: soma(k) for k in ("contratadas", "previstas", "feitas", "faltam", "passou", "custo_extra")}
     total["custo_extra"] = round(total["custo_extra"], 2)

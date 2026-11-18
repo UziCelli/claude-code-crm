@@ -311,3 +311,14 @@ def test_rota_renomeia_e_volta_na_grade_do_nome_novo(con, http):  # noqa: F811
     assert con.execute("SELECT taxa_aula FROM locais_custos WHERE local='Predio Novo'").fetchone()[0] == 35
     pg = http.get("/grade?local=Predio%20Novo").text
     assert 'data-nome_original="Predio Novo"' in pg and "data-so-renomear" in pg
+
+
+def test_renomear_troca_texto_que_cita_o_local_sem_acento(con):  # noqa: F811
+    locais.criar_local(con, "Estúdio", "CIA")
+    with con:
+        rid = con.execute("""INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, inicio)
+                             VALUES ('PJ', 'Aluguel estudio', 'Outros', 300, 10, '2026-09')""").lastrowid
+    r = locais.renomear_local(con, "Estúdio", "Academia Nova", atualizar_textos=True)
+    assert r["textos"] == 1
+    assert con.execute("SELECT descricao FROM recorrencias WHERE id=?", (rid,)).fetchone()[0] == "Aluguel Academia Nova"
+    assert locais._trocar_no_texto("ESTÚDIO e estudio2 e Estúdio!", "Estúdio", "X") == "X e estudio2 e X!"
