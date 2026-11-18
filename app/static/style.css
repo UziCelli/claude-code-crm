@@ -84,7 +84,10 @@ main { padding: 20px 24px 60px; max-width: 1400px; margin: 0 auto; }
 /* larguras proporcionais: o campo encolhe junto com a tela em vez de empurrar a página para o lado */
 .num-curto { width: 120px; max-width: 100%; }
 input.busca { flex: 1 1 180px; width: 220px; max-width: 100%; }
-.rolavel { overflow-x: auto; max-width: 100%; }   /* tabela larga rola dentro da própria caixa, nunca a página */
+.rolavel { overflow-x: auto; max-width: 100%; }
+/* ficha > Dias e horários fixos: dia, hora, local e remover numa linha só, proporcional à tela */
+.horario-linha { display: grid; grid-template-columns: minmax(70px, 1fr) minmax(70px, 1fr) minmax(0, 2fr) auto; gap: 6px; align-items: center; margin-bottom: 6px; }
+.horario-linha select { width: 100%; min-width: 0; padding-left: 8px; padding-right: 4px; }   /* tabela larga rola dentro da própria caixa, nunca a página */
 img, video, pre { max-width: 100%; }
 .tag.verde, .status-ativo { background: var(--verde-f); color: #14663a; }
 .tag.amarelo, .status-pausado { background: var(--amarelo-f); color: #7a5300; }

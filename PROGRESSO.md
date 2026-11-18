@@ -461,3 +461,10 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Tela Cálculos: aviso "Plano diferente da Agenda" (`main.divergencias_plano_agenda`) com quem tem plano ≠ horários por semana (ou nenhum horário), com link para a ficha.
 - A estimativa por aluno (ficha, propostas) continua pelo plano: a diferença para o total entra no "ocioso" do "O mês cobre?".
 - Testes: `tests/test_horas_agenda.py`.
+
+## Ficha: dias e horários fixos ligados à Agenda (18/11/2026)
+- Pedido do Victor: o campo "Dias e horários fixos" era texto livre (qualquer coisa), solto da Agenda. Agora a ficha tem o card "Dias e horários fixos": uma linha por horário com [dia] [hora] [local] e "+ adicionar dia e horário"; só aceita valores da Agenda (Seg a Sáb, 05h a 23h, locais da lista) e dá para editar à mão quando quiser.
+- Salvar (`POST /clientes/{id}/horarios`) grava direto na `agenda_fixos`, com as regras da Agenda: só a diferença (sai = lixeira, troca de local = exclusão + linha nova, novo = INSERT com vigência), Grade avisada, até 2 alunos por horário (horário cheio recusa tudo e não grava nada). Reposições e avulsas continuam só na Agenda.
+- Lista de clientes: mostra os horários da Agenda ("Seg 13h · Qui 17h", `main.horarios_texto`); sem horário na Agenda, o texto antigo.
+- A coluna `dias_horarios` ficou (só leitura): o cadastro não grava mais nela (`CAMPOS_CLIENTE_FICHA`), e a ficha mostra o texto antigo enquanto não houver horário na Agenda.
+- Testes: `tests/test_ficha_horarios.py`.

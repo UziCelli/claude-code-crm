@@ -508,6 +508,14 @@ def horas_trabalho_detalhe(con, p, bases=None) -> dict:
     return out
 
 
+def horarios_texto(con, ids=None) -> dict:
+    """{cliente_id: "Seg 13h · Qui 17h"}: os horários fixos da Agenda de cada aluno ativo, em ordem de dia e hora (sem reposição nem avulsa)."""
+    por = {}
+    for f in sorted(fixos_atuais(con, ids), key=lambda f: (f["dia"], f["hora"])):
+        por.setdefault(f["cliente_id"], []).append(f"{DIAS_CURTO[f['dia']]} {f['hora']:02d}h")
+    return {c: " · ".join(v) for c, v in por.items()}
+
+
 def divergencias_plano_agenda(con, fixos=None) -> list[dict]:
     """Alunos ativos cujo plano não bate com os horários fixos da Agenda, por semana: [{id, nome, plano, por_semana, agenda}].
     Mensalidade Nx = N por semana; Pacote N = N ÷ semanas contratadas (Configurações > Agenda). Sem horário na Agenda (agenda 0) também entra:
@@ -738,6 +746,8 @@ def fechar_mes(con=Depends(get_db)):
 # =====================================================================
 CAMPOS_CLIENTE = ["nome", "telefone", "local", "tipo_servico", "plano", "pessoas", "dias_horarios", "valor",
                   "forma_pagamento", "status", "canal_origem", "data_inicio", "data_renovacao", "observacoes", "indicado_por"]
+# a ficha não grava dias_horarios: os horários fixos ficam na Agenda (card "Dias e horários fixos"); a coluna antiga só é lida
+CAMPOS_CLIENTE_FICHA = [k for k in CAMPOS_CLIENTE if k != "dias_horarios"]
 
 
 def _num_br(v) -> float:
@@ -835,7 +845,7 @@ def clientes(request: Request, status: str = "ativo", busca: str = "", ids: str 
     totais = {r[0]: r[1] for r in con.execute("SELECT status, COUNT(*) FROM clientes WHERE excluido_em IS NULL GROUP BY status")}
     motivo_ok = motivo if motivo in MOTIVOS_LISTA else ""
     return render(request, "clientes.html", con, clientes=itens, status=status, busca=busca, totais=totais, filtrado=bool(filtro),
-                  adiantado=financeiro.pago_adiantado_ate(con, relogio.hoje().isoformat()),
+                  adiantado=financeiro.pago_adiantado_ate(con, relogio.hoje().isoformat()), horarios_txt=horarios_texto(con),
                   motivo=motivo_ok, titulo_lista=MOTIVOS_LISTA.get(motivo, "Alunos selecionados"), ajuda_lista=AJUDA_LISTA.get(motivo, ""),
                   modelo_lista=MODELO_LISTA.get(motivo, ""), oferta_lista=oferta_lista,
                   voltar_lista=f"/clientes?ids={','.join(map(str, filtro))}&motivo={motivo_ok}" + (f"&oferta={oferta}" if motivo_ok == "upsell" else ""))
@@ -1089,6 +1099,7 @@ def cliente_ficha(request: Request, cid: int, con=Depends(get_db)):
                   diferenca=pendencia_diferenca(c, difs, dados_mensagem(con)) if difs else None,
                   renovacao=renovacao, cobranca=cob, texto_cob=texto_cobranca(cob) if cob else None, pago_ate=pago_ate,
                   adiantado_ate=financeiro.pago_adiantado_ate(con, relogio.hoje().isoformat()).get(cid),
+                  horarios=sorted(fixos_atuais(con, {cid}), key=lambda f: (f["dia"], f["hora"])), locais_horario=loc.nomes(con),
                   estado=alu.estado_aluno(con, cid), menu_wa=wa_menu(con, c, renovacao, cob, eventos),
                   indicadores=indicacoes.alunos_para_escolher(con, cid),
                   indicou=indicacoes.do_aluno(con, cid), indicado_por=indicacoes.quem_indicou(con, cid),
@@ -1108,7 +1119,7 @@ async def cliente_salvar(request: Request, cid: int, con=Depends(get_db)):
         d["data_renovacao"] = antigo["data_renovacao"]   # a ficha mostra a data que já andou com os pagamentos: salvar não mexe nela
     trocou = bool(antigo) and (d["data_renovacao"] or None) != (antigo["data_renovacao"] or None)
     with con:
-        con.execute(f"UPDATE clientes SET {','.join(k + '=:' + k for k in CAMPOS_CLIENTE)}, atualizado_em=datetime('now','localtime') WHERE id=:id", d)
+        con.execute(f"UPDATE clientes SET {','.join(k + '=:' + k for k in CAMPOS_CLIENTE_FICHA)}, atualizado_em=datetime('now','localtime') WHERE id=:id", d)
         if trocou:   # data trocada à mão: os pagamentos lançados até agora já estão nela
             con.execute("UPDATE clientes SET renovacao_em=datetime('now','localtime') WHERE id=?", (cid,))
         tirados = []
@@ -2350,6 +2361,71 @@ def agenda_marcar_lote(itens: str = Form(""), semana: str = Form(""), todas: int
     if not feitas:
         return voltar(url, msg=f"{_plural(len(marcas), 'marcação desfeita', 'marcações desfeitas')}.")
     return voltar(url, msg=f"{_plural(feitas, 'aula marcada', 'aulas marcadas')}: {', '.join(partes)}.")
+
+
+@app.post("/clientes/{cid}/horarios")
+def cliente_horarios(cid: int, dia: list[int] = Form([]), hora: list[int] = Form([]), local: list[str] = Form([]), con=Depends(get_db)):
+    """Card "Dias e horários fixos" da ficha: a lista inteira de horários fixos do aluno (dia, hora e local de cada um), gravada direto
+    na Agenda (a mesma tabela, com as regras dela: vigência, até 2 alunos por horário, Grade avisada). Só a diferença grava:
+    horário que saiu vai para a lixeira, troca de local é exclusão + linha nova, horário novo entra. Horário cheio recusa tudo."""
+    url = f"/clientes/{cid}#horarios"
+    c = con.execute("SELECT id, nome, status FROM clientes WHERE id=? AND excluido_em IS NULL", (cid,)).fetchone()
+    if not c:
+        return voltar("/clientes", erro="Cliente não encontrado.")
+    if c["status"] != "ativo":
+        return voltar(url, erro="Só aluno ativo tem horário fixo na Agenda. Marque como ativo antes.")
+    if not (len(dia) == len(hora) == len(local)):
+        return voltar(url, erro="Escolha o dia, a hora e o local de cada horário.")
+    if len(dia) > 12:
+        return voltar(url, erro="No máximo 12 horários.")
+    validos = set(loc.nomes(con)) | {r[0] for r in con.execute("SELECT DISTINCT local FROM agenda_fixos WHERE cliente_id=?", (cid,))}
+    desejado = {}
+    for d, h, l in zip(dia, hora, local):
+        l = l.strip()
+        if not (1 <= d <= 6 and 5 <= h <= 23):
+            return voltar(url, erro="Escolha o dia (segunda a sábado) e a hora (05h a 23h).")
+        if l not in validos:
+            return voltar(url, erro="Escolha o local da lista.")
+        if (d, h) in desejado:
+            return voltar(url, erro=f"{DIAS_CURTO[d]} {h:02d}h aparece duas vezes.")
+        desejado[(d, h)] = l
+    atual = {(f["dia"], f["hora"]): f["local"] for f in fixos_atuais(con, {cid})}
+    sai = [k for k in atual if k not in desejado]
+    muda = [k for k in desejado if k in atual and atual[k] != desejado[k]]
+    novos = [k for k in desejado if k not in atual]
+    membros = {}   # (dia, hora) -> {aluno: local} de quem já está no horário
+    for d, h in set(sai + muda + novos):
+        m = {}
+        for r in fixos_do_horario(con, d, h):
+            m.setdefault(r["cliente_id"], r["local"])
+        membros[(d, h)] = m
+    cheios = [k for k in novos if len([x for x in membros[k] if x != cid]) >= 2]
+    if cheios:
+        quem = lambda k: " e ".join(r["nome"] for r in fixos_do_horario(con, *k))   # noqa: E731
+        return voltar(url, erro="Horário cheio (cabem 2 alunos): " + "; ".join(f"{DIAS_CURTO[d]} {h:02d}h já tem {quem((d, h))}" for d, h in cheios)
+                      + ". Nada foi gravado.")
+    if not (sai or muda or novos):
+        return voltar(url, msg="Nada mudou nos horários.")
+    with con:
+        for k in sai:   # sai do horário: fica quem já estava, com o local de cada um
+            m = membros[k]
+            m.pop(cid, None)
+            definir_horario(con, k[0], k[1], list(m), m)
+        for k in muda:
+            m = membros[k]
+            m[cid] = desejado[k]
+            definir_horario(con, k[0], k[1], list(m), m)
+        if novos:
+            inserir_fixos(con, [(cid, d, h, desejado[(d, h)]) for d, h in novos], vigente=vigencias(con, [cid]))
+            por_local = {}
+            for d, h in novos:
+                por_local.setdefault(desejado[(d, h)], []).append((d, desejado[(d, h)], h))
+            for pares in por_local.values():
+                grade_ocupar_lote(con, cid, c["nome"], pares)
+    q = lambda lst: ", ".join(f"{DIAS_CURTO[d]} {h:02d}h" for d, h in sorted(lst))   # noqa: E731
+    frases = [f"Entrou em {q(novos)}." if novos else "", f"Saiu de {q(sai)}." if sai else "", f"Mudou de local em {q(muda)}." if muda else ""]
+    aviso = aviso_deslocamento(con, [(d, h, desejado[(d, h)]) for d, h in novos + muda], cid) if novos or muda else ""
+    return voltar(url, msg="Horários salvos na Agenda. " + " ".join(f for f in frases if f) + aviso)
 
 
 @app.post("/agenda/incluir")
