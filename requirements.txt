@@ -1,7 +1,7 @@
 fastapi>=0.115
 uvicorn>=0.30
 jinja2>=3.1
-python-multipart>=0.0.9
+python-multipart>=0.0.33
 openpyxl>=3.1.5
 # libsql = Turso. No Windows ele ainda não tem pacote para o Python 3.14: lá o CRM usa o Python 3.13 (ver README).
 libsql>=0.1.11; python_version < "3.14" or sys_platform != "win32"
