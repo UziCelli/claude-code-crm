@@ -2,7 +2,10 @@ name: Dependabot junta atualização pequena
 
 # Junta sozinho o PR do Dependabot, sem gastar IA, só quando TUDO abaixo for verdade:
 #  1. o PR é do Dependabot e todos os commits são dele;
-#  2. toda atualização é minor ou patch (major e versão sem número, como SHA, ficam para o Victor);
+#  2. toda atualização é minor ou patch: pelo "update-type" que o Dependabot grava no commit ou, quando ele
+#     não grava (correção de segurança do npm, "requirement" do pip), pelo título "de A para B" de um PR de
+#     1 commit e 1 dependência, conferido com o dependency-version. Major, 0.x com salto no número do meio,
+#     versão sem número (SHA) e o que não der para classificar ficam para o Victor;
 #  3. toda verificação do commit atual terminou com sucesso real: check-runs (Actions e apps
 #     externos, como o Cloudflare) e commit statuses. Pulada ou neutra NÃO conta como aprovação.
 # Roda quando uma verificação termina: Actions (workflow_run) ou commit status (status); a última
@@ -67,11 +70,38 @@ jobs:
           estranhos=$(gh api --paginate "$commits" --jq '.[] | select(.author.login != "dependabot[bot]") | .sha')
           [ -z "$estranhos" ] || parar "há commit que não é do Dependabot."
           mensagens=$(gh api --paginate "$commits" --jq '.[].commit.message')
+          ncommits=$(gh api --paginate "$commits" --jq '.[].sha' | wc -l)
           total=$(grep -c -E '^[[:space:]]*-?[[:space:]]*dependency-name:' <<<"$mensagens" || true)
           pequenas=$(grep -c -E '^[[:space:]]*update-type: version-update:semver-(minor|patch)[[:space:]]*$' <<<"$mensagens" || true)
-          echo "Atualizações no PR: $total; minor ou patch: $pequenas."
-          { [ "$total" -gt 0 ] && [ "$total" -eq "$pequenas" ]; } \
-            || parar "tem versão grande (major) ou sem número (SHA): fica para o Victor."
+          tipadas=$(grep -c -E '^[[:space:]]*update-type:' <<<"$mensagens" || true)
+          echo "Atualizações no PR: $total; minor ou patch: $pequenas; com tipo informado: $tipadas."
+
+          # Sem "update-type": vale só PR de 1 commit e 1 dependência. Lê "de A para B" do título e confere B
+          # com o dependency-version. Pequena = mesma versão grande, B maior que A e, em 0.x, mesmo número do meio.
+          pequena_pelo_titulo() {
+            local assunto re de para meta a1 a2 b1 b2 resto
+            assunto=$(head -n 1 <<<"$mensagens")
+            re='^(Bump|Update) [^ ]+( requirement)? from [>=<~^v]*([0-9]+(\.[0-9]+){0,3}) to [>=<~^v]*([0-9]+(\.[0-9]+){0,3})$'
+            [[ "$assunto" =~ $re ]] || return 1
+            de=${BASH_REMATCH[3]}
+            para=${BASH_REMATCH[5]}
+            meta=$(sed -n -E 's/^[[:space:]]*dependency-version:[[:space:]]*([^[:space:]]+)[[:space:]]*$/\1/p' <<<"$mensagens")
+            [ "$meta" = "$para" ] || return 1
+            [ "$de" != "$para" ] || return 1
+            [ "$(printf '%s\n%s\n' "$de" "$para" | sort -V | tail -n 1)" = "$para" ] || return 1
+            IFS=. read -r a1 a2 resto <<<"$de"
+            IFS=. read -r b1 b2 resto <<<"$para"
+            [ "$((10#$a1))" -eq "$((10#$b1))" ] || return 1
+            [ "$((10#$a1))" -ne 0 ] || [ "$((10#${a2:-0}))" -eq "$((10#${b2:-0}))" ]
+          }
+
+          if [ "$total" -gt 0 ] && [ "$total" -eq "$pequenas" ]; then
+            echo "Todas as atualizações são minor ou patch (update-type)."
+          elif [ "$total" -eq 1 ] && [ "$tipadas" -eq 0 ] && [ "$ncommits" -eq 1 ] && pequena_pelo_titulo; then
+            echo "Sem update-type; o título confere e a versão grande não mudou: pequena."
+          else
+            parar "versão grande (major), sem número (SHA) ou que não consigo classificar: fica para o Victor."
+          fi
 
           # Verificações (check-runs): instantâneo a cada tentativa. Do Actions pendente: sai na hora.
           # Externa pendente (ex.: Cloudflare): espera até 4 min, porque o fim dela não dispara este workflow.
