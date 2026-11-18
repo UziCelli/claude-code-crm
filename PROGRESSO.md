@@ -436,3 +436,12 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Caixa "trocar também nas contas e lançamentos em aberto que citam o local" (marcada): troca o nome no texto das recorrentes e lançamentos manuais em aberto (`locais.citacoes`), para continuarem ligados ao local.
 - Recusa: nome vazio, começando por "CIA" (viraria conta da CIA), com ":" ou igual a outro local escrito de outro jeito. Trocar só maiúsculas ou espaços pode.
 - Testes: `tests/test_locais_editar.py` (seção renomear).
+
+## Venda só mensal e etiqueta "Pago adiantado até" (18/11/2026)
+- Pedido do Victor: a partir dos próximos planos não existe mais pagamento adiantado (nem na consultoria): é mensal, pela previsibilidade do caixa. Quem já pagou adiantado (ex.: Gregory no Pix, Inajara no cartão) segue coberto até o fim do que pagou.
+- O diálogo de pagamento não tem mais "Cobre quantos meses?". Um pagamento antigo adiantado ainda se ajusta na ficha (Pagamentos > Cobre N meses), e o POST com `meses` (assistente) continua valendo.
+- Nova lista `lista_formas_venda` (PIX e Cartão 1x, editável em Configurações): cadastro do aluno, Propostas e Explorador oferecem só ela. `lista_formas_pagamento` (com 3x, 6x, 12x) continua nas taxas e nos alunos antigos (a forma antiga aparece selecionada).
+- Etiqueta "Pago adiantado até MM/AAAA" na lista de clientes e na ficha (`financeiro.pago_adiantado_ate`, pela mesma cobertura das Mensalidades). Depois desse mês ela some e o aluno volta a ser cobrado por mês.
+- Ficou como estava: pagar 2 mensalidades atrasadas de uma vez continua quitando os 2 meses (é mensal, só atrasado).
+- A mensagem "cobre N meses (até ...)" passou a usar a mesma regra da cobertura (pago até 7 dias antes do vencimento começa no mês seguinte): `financeiro.periodo_do_pagamento`.
+- Testes: `tests/test_pagamento_adiantado.py`.

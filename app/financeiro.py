@@ -917,6 +917,15 @@ def _mes_que_paga(data: str, dia: int | None) -> str:
     return seguinte if data >= _dias_antes(vencimento(dia, seguinte), ANTECEDENCIA) else mes
 
 
+def periodo_do_pagamento(con: sqlite3.Connection, cliente_id, data: str, n: int) -> tuple[str, str]:
+    """(primeiro, último) mês 'AAAA-MM' que um pagamento de n meses do aluno cobre: a mesma regra de _cobertura_adiantada
+    (começa no mês seguinte se foi pago até 7 dias antes do vencimento dele). Para a mensagem "cobre N meses (até ...)"."""
+    r = con.execute("SELECT data_renovacao FROM clientes WHERE id=?", (cliente_id,)).fetchone()
+    d = str((r[0] if r else "") or "").strip()[:10]
+    de = _mes_que_paga(str(data)[:10], int(d[8:10]) if ISO_DATA.fullmatch(d) else None)
+    return de, somar_meses(de, max(int(n), 1) - 1)
+
+
 def _cobertura_adiantada(con: sqlite3.Connection, mes: str) -> dict[int, dict]:
     """{cliente_id: {de, ate}}: alunos cujo pagamento de um mês anterior (cobre 2+ meses) vai até `mes` ou além.
     de = primeiro mês que ele paga (_mes_que_paga), ate = último mês coberto.
@@ -938,6 +947,17 @@ def _cobertura_adiantada(con: sqlite3.Connection, mes: str) -> dict[int, dict]:
         ate = somar_meses(de, n - 1) if n >= 2 else None
         if ate and ate >= mes and ate >= out.get(r["cliente_id"], {"ate": ""})["ate"]:
             out[r["cliente_id"]] = {"de": de, "ate": ate}
+    return out
+
+
+def pago_adiantado_ate(con: sqlite3.Connection, hoje: str) -> dict[int, str]:
+    """{cliente_id: 'AAAA-MM'}: quem tem um pagamento de 2+ meses (pagou adiantado, parcelou no cartão) cobrindo este mês ou os seguintes,
+    e até que mês. Inclui o pagamento feito neste mês. Para a etiqueta "Pago adiantado até" da lista de clientes e da ficha:
+    a venda nova é só mensal, e quem pagou adiantado volta a pagar por mês depois desse mês."""
+    out = {}
+    for mes in (hoje[:7], somar_meses(hoje[:7], 1)):
+        for cid, c in _cobertura_adiantada(con, mes).items():
+            out[cid] = max(out.get(cid, ""), c["ate"])
     return out
 
 

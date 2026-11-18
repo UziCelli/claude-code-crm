@@ -187,11 +187,13 @@ def test_rota_meses_valida_aluno_tipo_e_limites(cliente_http):
     con.close()
 
 
-def test_dialogo_tem_o_campo_e_o_post_grava_meses(cliente_http):
+def test_dialogo_novo_nao_vende_adiantado_mas_o_post_ainda_grava_meses(cliente_http):
+    """Venda só mensal (18/11/2026): o diálogo de pagamento não oferece mais "Cobre quantos meses?". O POST com meses
+    (assistente, ajuste de um pagamento antigo) continua valendo."""
     http, cid = cliente_http
     ficha = http.get(f"/clientes/{cid}").text
-    assert 'name="meses"' in ficha and "Cobre quantos meses?" in ficha and "Pagou adiantado ou parcelou no cartão?" in ficha
-    assert '<option value="12">12 meses</option>' in ficha and '<option value="1">1 mês</option>' in ficha
+    dlg = ficha.split('id="dlg-pgto"')[1].split("</dialog>")[0]
+    assert 'name="meses"' not in dlg and "Cobre quantos meses?" not in dlg
     assert 'id="pagamentos"' in ficha
     hoje = dt.date.today().isoformat()
     con = db.conectar()
@@ -259,3 +261,43 @@ def test_pagou_longe_do_vencimento_seguinte_cobre_o_proprio_mes(con_temp):
     pagar(con_temp, cid, 1200, data="2026-10-20", meses=3)
     assert mes_do_aluno(con_temp, cid, "2026-12")["situacao"] == "pago adiantado"
     assert mes_do_aluno(con_temp, cid, "2027-01")["situacao"] == "em aberto"
+
+
+def test_etiqueta_pago_adiantado_ate_na_lista_e_na_ficha(cliente_http):
+    http, cid = cliente_http
+    con = db.conectar()
+    hoje = dt.date.today()
+    with con:
+        con.execute("UPDATE clientes SET valor=400, status='ativo', data_renovacao=? WHERE id=?", (hoje.isoformat(), cid))
+    mes = hoje.strftime("%Y-%m")
+    assert financeiro.pago_adiantado_ate(con, hoje.isoformat()) == {}
+    pagar(con, cid, 2400, data=f"{mes}-01", meses=6)   # pagou 6 meses neste mês
+    ate = financeiro.pago_adiantado_ate(con, hoje.isoformat())[cid]
+    assert ate >= financeiro.somar_meses(mes, 4)
+    rotulo = f"Pago adiantado até {ate[5:]}/{ate[:4]}"
+    assert rotulo in http.get("/clientes").text and rotulo in http.get(f"/clientes/{cid}").text
+    # depois que a cobertura acaba, a etiqueta some (volta a pagar por mês)
+    depois = financeiro.somar_meses(ate, 1) + "-15"
+    assert cid not in financeiro.pago_adiantado_ate(con, depois)
+    con.close()
+
+
+def test_cadastro_e_propostas_so_oferecem_pix_e_cartao_1x(cliente_http):
+    http, cid = cliente_http
+    novo = http.get("/clientes/novo").text
+    sel = novo.split('name="forma_pagamento"')[1].split("</select>")[0]
+    assert "PIX" in sel and "Cartão 1x" in sel and "Cartão 6x" not in sel
+    con = db.conectar()
+    with con:   # aluno antigo que parcelou: a forma dele continua aparecendo selecionada
+        con.execute("UPDATE clientes SET forma_pagamento='Cartão 6x' WHERE id=?", (cid,))
+    con.close()
+    ficha = http.get(f"/clientes/{cid}").text.split('name="forma_pagamento"')[1].split("</select>")[0]
+    assert "<option selected>Cartão 6x</option>" in ficha
+    prop = http.get("/propostas").text.split('name="forma"')[1].split("</select>")[0]
+    assert "Cartão 12x" not in prop and "PIX" in prop
+
+
+def test_mensagem_cobre_ate_conta_o_mes_seguinte_quando_pagou_antes_do_vencimento(con_temp):
+    cid = aluno(con_temp, renova="2026-11-05")   # vence dia 5
+    assert financeiro.periodo_do_pagamento(con_temp, cid, "2026-10-30", 3) == ("2026-11", "2027-01")   # pagou 30/10 (até 7 dias antes): nov a jan
+    assert financeiro.periodo_do_pagamento(con_temp, cid, "2026-10-10", 3) == ("2026-10", "2026-12")

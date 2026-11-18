@@ -4,7 +4,7 @@
 <form method="get" class="card linha">
   <div><label>Local</label><select name="local">{% for l in listas.lista_locais %}<option {{ 'selected' if l == f.local }}>{{ l }}</option>{% endfor %}</select></div>
   <div><label>Tipo</label><select name="tipo_servico"><option value="">Todos</option>{% for t in tipos %}<option {{ 'selected' if t == f.tipo_servico }}>{{ t }}</option>{% endfor %}</select></div>
-  <div><label>Pagamento</label><select name="forma">{% for fp in listas.lista_formas_pagamento %}<option {{ 'selected' if fp == f.forma }}>{{ fp }}</option>{% endfor %}</select></div>
+  <div><label>Pagamento</label><select name="forma">{% for fp in listas.lista_formas_venda %}<option {{ 'selected' if fp == f.forma }}>{{ fp }}</option>{% endfor %}{% if f.forma and f.forma not in listas.lista_formas_venda %}<option selected>{{ f.forma }}</option>{% endif %}</select></div>
   <div><label>Pessoas</label><select name="pessoas">{% for n in [1,2,3,4] %}<option {{ 'selected' if n == f.pessoas }}>{{ n }}</option>{% endfor %}</select></div>
   <div><label>Dia</label><select name="dia"><option value="0">Todos</option>{% for d in range(1,7) %}<option value="{{ d }}" {{ 'selected' if d == f.dia }}>{{ d|dia }}</option>{% endfor %}</select></div>
   <div><label>Ordenar por</label><select name="ordem">{% for k, r in [('lucro_hora','Lucro por hora'),('lucro','Lucro'),('margem','Margem'),('preco_total','Preço (menor)')] %}<option value="{{ k }}" {{ 'selected' if k == f.ordem }}>{{ r }}</option>{% endfor %}</select></div>

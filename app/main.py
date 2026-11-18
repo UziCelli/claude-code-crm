@@ -783,6 +783,7 @@ def clientes(request: Request, status: str = "ativo", busca: str = "", ids: str 
     totais = {r[0]: r[1] for r in con.execute("SELECT status, COUNT(*) FROM clientes WHERE excluido_em IS NULL GROUP BY status")}
     motivo_ok = motivo if motivo in MOTIVOS_LISTA else ""
     return render(request, "clientes.html", con, clientes=itens, status=status, busca=busca, totais=totais, filtrado=bool(filtro),
+                  adiantado=financeiro.pago_adiantado_ate(con, relogio.hoje().isoformat()),
                   motivo=motivo_ok, titulo_lista=MOTIVOS_LISTA.get(motivo, "Alunos selecionados"), ajuda_lista=AJUDA_LISTA.get(motivo, ""),
                   modelo_lista=MODELO_LISTA.get(motivo, ""), oferta_lista=oferta_lista,
                   voltar_lista=f"/clientes?ids={','.join(map(str, filtro))}&motivo={motivo_ok}" + (f"&oferta={oferta}" if motivo_ok == "upsell" else ""))
@@ -1035,6 +1036,7 @@ def cliente_ficha(request: Request, cid: int, con=Depends(get_db)):
     return render(request, "cliente.html", con, c=c, eventos=eventos, estimativa=estimativa, propostas=propostas, pagamentos=pagamentos,
                   diferenca=pendencia_diferenca(c, difs, dados_mensagem(con)) if difs else None,
                   renovacao=renovacao, cobranca=cob, texto_cob=texto_cobranca(cob) if cob else None, pago_ate=pago_ate,
+                  adiantado_ate=financeiro.pago_adiantado_ate(con, relogio.hoje().isoformat()).get(cid),
                   estado=alu.estado_aluno(con, cid), menu_wa=wa_menu(con, c, renovacao, cob, eventos),
                   indicadores=indicacoes.alunos_para_escolher(con, cid),
                   indicou=indicacoes.do_aluno(con, cid), indicado_por=indicacoes.quem_indicou(con, cid),
@@ -3393,7 +3395,7 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
     except sqlite3.IntegrityError:
         return _fin_voltar(volta, erro="Não foi possível salvar: confira o aluno e os campos.")
     if meses and pago_em:
-        aviso += f"Cobre {meses} meses (até {_mm_aaaa(financeiro.somar_meses(f['data'][:7], meses - 1))}). "
+        aviso += f"Cobre {meses} meses (até {_mm_aaaa(financeiro.periodo_do_pagamento(con, cliente_id, f['data'], meses)[1])}). "
     if f["escopo"] == "PJ" and f["tipo"] == "entrada" and pago_em and cliente_id:
         with con:
             if desconto := financeiro.usar_credito(con, lid):   # o crédito do aluno foi descontado neste pagamento
@@ -3450,7 +3452,7 @@ def financeiro_meses(lid: int, meses: str = Form(""), cliente_id: int = Form(0),
         con.execute("UPDATE lancamentos SET meses=? WHERE id=?", (n, lid))
     if n is None:
         return _fin_voltar(volta, msg=f"Pagamento de {moeda(p['valor'])} volta a valer o normal.")
-    return _fin_voltar(volta, msg=f"Pagamento de {moeda(p['valor'])} agora cobre {n} meses (até {_mm_aaaa(financeiro.somar_meses(p['data'][:7], n - 1))}).")
+    return _fin_voltar(volta, msg=f"Pagamento de {moeda(p['valor'])} agora cobre {n} meses (até {_mm_aaaa(financeiro.periodo_do_pagamento(con, p['cliente_id'], p['data'], n)[1])}).")
 
 
 @app.post("/financeiro/lancamento/{lid}/emprestimo")

@@ -172,6 +172,8 @@ LISTAS_INICIAIS = {
     "lista_tipos_servico": ["Pacote de Aulas", "Mensalidade", "Consultoria Online", "Consultoria Híbrida",
                             "Avaliação Física"],
     "lista_formas_pagamento": ["PIX", "Cartão 1x", "Cartão 3x", "Cartão 6x", "Cartão 12x"],
+    # venda nova é só mensal (Victor, 18/11/2026): cadastro, Propostas e Explorador oferecem só estas; as de cima seguem nas taxas e nos antigos
+    "lista_formas_venda": ["PIX", "Cartão 1x"],
     # financeiro (lista_formas_pagamento acima é de preço; não reaproveitar)
     "lista_categorias_pj": ["Pacotes de Aulas", "Mensalidade (Aulas Presenciais)", "Consultoria Online",
                             "Consultoria Híbrida", "Empréstimo", "Retirada", "Empréstimo (devolução)", "Aluguel",
