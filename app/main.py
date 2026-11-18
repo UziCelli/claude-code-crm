@@ -3139,13 +3139,15 @@ def _fin_voltar(volta, msg=None, erro=None):
 
 @app.get("/financeiro", response_class=HTMLResponse)
 def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", conta: str = "", vencidas: int = 0,
-                    ordem: str = "", custo: str = "", con=Depends(get_db)):
+                    ordem: str = "", custo: str = "", periodo: str = "", con=Depends(get_db)):
     h = relogio.hoje().isoformat()
     # filtros de Contas a pagar: o que vier na URL vale e fica lembrado (cookie); sem nada na URL, usa o último escolhido
     ordem = ordem if ordem in financeiro.ORDENS_CONTAS else request.cookies.get("contas_ordem", "")
     ordem = ordem if ordem in financeiro.ORDENS_CONTAS else "urgencia"
     custo = custo if custo in financeiro.CUSTOS_CONTAS else request.cookies.get("contas_custo", "")
     custo = custo if custo in financeiro.CUSTOS_CONTAS else "todos"
+    periodo = periodo if periodo in financeiro.PERIODOS_CONTAS else request.cookies.get("contas_periodo", "")
+    periodo = periodo if periodo in financeiro.PERIODOS_CONTAS else "30d"
     contas_auto.garantir(con, h, forcar=True)   # abrir o Financeiro recalcula a conta automática que ainda está em aberto
     mes = mes if RE_MES.match(mes) else mes_atual()
     escopo = escopo if escopo in ("PJ", "PF") else "todos"
@@ -3170,7 +3172,9 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", cont
         p["dias"] = (dt.date.fromisoformat(h) - dt.date.fromisoformat(p["data"])).days if p["status"] == "atrasado" else 0
     # ?vencidas=1 (link do alerta): a mesma lista, só com as contas que o alerta conta (de qualquer mês)
     so = {financeiro.chave_conta(p) for p in contas_vencendo(con, h)} if vencidas else None
-    contas = financeiro.contas_a_pagar(con, h, so=so, ordem=ordem, custo=custo)
+    # o período vale para a lista normal; ?vencidas=1 mostra as vencidas e as que vencem em 3 dias, mesmo virando o mês
+    contas = financeiro.contas_a_pagar(con, h, so=so, ordem=ordem, custo=custo,
+                                       ate=None if vencidas else financeiro.ate_do_periodo(h, periodo))
     parecidas = [s for s in financeiro.saidas_parecidas(con) if s["escopo"] in lista]
     # recorrência em aberto cuja conta parece já ter sido lançada à mão naquele mês: etiqueta "talvez já pago"
     talvez = {(c["id"], s["data"][:7]) for s in parecidas for c in s["candidatos"] if not c["ja_baixada"]}
@@ -3185,14 +3189,14 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", cont
     resp = render(request, "financeiro.html", con, mes=mes, escopo=escopo, conta=conta, lancs=tabela, entradas=entradas, saidas=saidas,
                   saldo=round(entradas - saidas, 2), transferencia=round(sum(l["valor"] for l in transf if l["tipo"] == "saida"), 2),
                   emprestado=emprestado, devolvido=devolvido, pend=pend, contas=contas, so_vencidas=bool(vencidas), recs=recs, clientes_=clientes_,
-                  ordem=ordem, custo=custo,
+                  ordem=ordem, custo=custo, periodo=periodo,
                   volta=f"mes={mes}&escopo={escopo}" + ("&vencidas=1" if vencidas else ""),   # pagou uma, continua vendo as outras
                   resumo=financeiro.saldos_resumo(con, h), saldos=financeiro.saldos_atuais(con), frentes=financeiro.FRENTES,
                   salario=financeiro.salario_mes(con, h[:7], h), imposto=financeiro.imposto_mes(con, h[:7], h),
                   das_txt=financeiro.texto_pct(financeiro.pct_das(con, h)), previa=contas_auto.previa(con, h), parecidas=parecidas,
                   n_conferir=len(repetidos) + len(parecidas) + len(financeiro.recorrencias_retirada(con)) + sum(not b["bate"] for b in bancos),
                   recs_todas=con.execute("SELECT * FROM recorrencias WHERE excluido_em IS NULL ORDER BY escopo, descricao").fetchall())
-    for nome, valor in (("contas_ordem", ordem), ("contas_custo", custo)):
+    for nome, valor in (("contas_ordem", ordem), ("contas_custo", custo), ("contas_periodo", periodo)):
         resp.set_cookie(nome, valor, max_age=365 * 24 * 3600, httponly=True, samesite="lax")
     return resp
 

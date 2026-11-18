@@ -417,3 +417,9 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - `app/__init__.py`: no Windows não define mais `TZ` (e tira um `TZ` com nome de fuso, se houver); no Linux segue igual.
 - Ficou como estava: carimbos gravados pelo SQL (`datetime('now','localtime')`), porque alguns são comparados entre si (renovação × pagamento, envio repetido). Com o `TZ` fora no Windows, o SQLite local do PC volta a gravar no horário de Brasília.
 - Testes: `tests/test_relogio.py` (21h30 continua hoje; vira só à meia-noite; Agenda das 21h30 mostra a semana certa; nenhum `date.today()` fora do relógio; ramo do Windows).
+
+## Contas a pagar: filtro de período (18/11/2026)
+- Pedido do Victor: a lista mostrava sempre até hoje + 30 dias. Agora há "Até: Fim deste mês / Próximos 30 dias / Fim do mês que vem" (`financeiro.ate_do_periodo`, `contas_a_pagar(..., ate=)`), lembrado no cookie `contas_periodo` como a ordem e o tipo de custo. O padrão continua 30 dias.
+- O link do alerta (`?vencidas=1`) ignora o período. O `saldo_livre` segue com os 30 dias.
+- Contas automáticas (DAS, CIA, locais) do mês que vem só existem depois que o mês fecha; as recorrentes aparecem.
+- Testes: `tests/test_contas_periodo.py`.

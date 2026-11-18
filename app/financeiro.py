@@ -419,18 +419,29 @@ def chave_conta(i: dict) -> tuple:
 
 ORDENS_CONTAS = ("urgencia", "data", "valor")   # urgencia = a fila de sempre (atrasadas, impacto, data)
 CUSTOS_CONTAS = ("todos", "fixo", "variavel")
+PERIODOS_CONTAS = ("mes", "30d", "mes_que_vem")   # até o fim do mês atual, próximos 30 dias, até o fim do mês que vem
+
+
+def ate_do_periodo(hoje: str, periodo: str) -> str:
+    """Último dia que entra em Contas a pagar: 'mes' = fim do mês atual, 'mes_que_vem' = fim do mês seguinte,
+    qualquer outro ('30d') = hoje + 30 dias (o horizonte do saldo_livre)."""
+    if periodo in ("mes", "mes_que_vem"):
+        mes = hoje[:7] if periodo == "mes" else somar_meses(hoje[:7], 1)
+        return (dt.date.fromisoformat(somar_meses(mes, 1) + "-01") - dt.timedelta(days=1)).isoformat()
+    return (dt.date.fromisoformat(hoje) + dt.timedelta(days=30)).isoformat()
 
 
 def contas_a_pagar(con: sqlite3.Connection, hoje: str, dias: int = 30, so: set | None = None,
-                   ordem: str = "urgencia", custo: str = "todos") -> dict:
+                   ordem: str = "urgencia", custo: str = "todos", ate: str | None = None) -> dict:
     """A lista única de contas a pagar: toda saída em aberto até hoje+dias (o mesmo horizonte do saldo_livre; atrasadas incluídas).
+    ate: último dia da lista no lugar de hoje+dias (o filtro de período da tela, ate_do_periodo).
     ordem: 'urgencia' (atrasadas primeiro; depois a nota de impacto: multa, essencial, urgência; depois a data),
     'data' (vencimento mais perto primeiro) ou 'valor' (maior primeiro).
     custo: 'fixo' (vem de conta recorrente marcada como fixa), 'variavel' (o resto: avulsa, DAS, locais...) ou 'todos'.
     Pagamento já agendado para o futuro não entra (já está pago). `so` = conjunto de chave_conta: mostra só essas.
     Devolve {ate, itens, total, total_fixos, total_variaveis, n_fixos, n_variaveis}; as somas por tipo de custo são da lista
     inteira (antes do filtro de custo). Cada item traz 'fixo', 'dias' (até o vencimento), 'prazo' (texto), 'custo_atraso' e 'motivo'."""
-    ate = (dt.date.fromisoformat(hoje) + dt.timedelta(days=dias)).isoformat()
+    ate = ate or (dt.date.fromisoformat(hoje) + dt.timedelta(days=dias)).isoformat()
     curto, juros = db.parametros(con, "impacto_curto"), db.parametros(con, "impacto_juros")
     itens = []
     for i in em_aberto_ate(con, ate, hoje):
