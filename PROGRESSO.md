@@ -468,3 +468,16 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Lista de clientes: mostra os horários da Agenda ("Seg 13h · Qui 17h", `main.horarios_texto`); sem horário na Agenda, o texto antigo.
 - A coluna `dias_horarios` ficou (só leitura): o cadastro não grava mais nela (`CAMPOS_CLIENTE_FICHA`), e a ficha mostra o texto antigo enquanto não houver horário na Agenda.
 - Testes: `tests/test_ficha_horarios.py`.
+
+## Grade lê a Agenda e vários alunos por horário (18/11/2026)
+- Pedido do Victor: a Grade e a Agenda têm que se atualizar juntas, e a Grade não deixava pôr 2 alunos no mesmo horário.
+- A Agenda manda. `bloqueios_gerais` (o que todas as telas leem: Grade, Explorador, Propostas, Sugestões) monta a ocupação pelos horários fixos de hoje da Agenda (`fixos_atuais`): um item por horário com todos os alunos ("Edilene + Marcos"), ids e vagas. Da `grade_slots` só vale o que a Agenda não sabe: indisponível e ocupado sem aluno (nome da planilha antiga). Célula com `cliente_id` é a cópia antiga e não é mais lida (as funções que a atualizam ficaram, como espelho).
+- Salvar na Grade (`POST /grade/slot`) grava na Agenda (`definir_horario`: vigência, lixeira, só a diferença):
+  - Ocupado num horário: a lista de alunos escolhida (o diálogo vem com quem já está; "+ outro aluno") passa a ser a do horário, no local da Grade.
+  - Ocupado em vários (seleção): soma os escolhidos a quem já está, sem tirar ninguém; cheio recusa tudo.
+  - Livre: tira da Agenda quem estiver no horário (a tela pede confirmação).
+  - Indisponível: recusa se houver aluno na Agenda.
+  - Só aluno ativo.
+- Novo `agenda.max_alunos_horario` (padrão 2, Configurações > Agenda): limite na Agenda (incluir, avulsa, restaurar da lixeira, aluno que volta a ficar ativo), na ficha e na Grade. O seletor do card da Agenda mostra 2; com limite maior, os outros do horário continuam (campo `extras`).
+- Migração sem apagar nada: aviso "N horários só na Grade" (`so_na_grade`) com o botão "Passar para a Agenda" (`POST /grade/passar-para-agenda`), que cria na Agenda os horários fixos que a Grade antiga tinha e a Agenda não (até o limite).
+- Testes: `tests/test_grade_geral.py` (seção "Grade lê a Agenda").

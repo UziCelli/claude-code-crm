@@ -181,7 +181,7 @@
         <button type="button" class="claro" data-mais-horario {{ 'disabled' if c.status != 'ativo' }}>+ adicionar dia e horário</button>
         <button {{ 'disabled' if c.status != 'ativo' }}>Salvar horários</button>
       </div>
-      <p class="muted" style="margin:6px 0 0">Grava direto na Agenda (e na Grade). Cabem 2 alunos por horário. Reposições e aulas avulsas ficam na Agenda.</p>
+      <p class="muted" style="margin:6px 0 0">Grava direto na Agenda (e a Grade acompanha). Cabem {{ max_alunos }} alunos por horário (Configurações &gt; Agenda). Reposições e aulas avulsas ficam na Agenda.</p>
     </form>
     <script>
     (function () {

@@ -254,7 +254,7 @@ CREATE TABLE IF NOT EXISTS agenda_avulsas (   -- aula só num dia (reposição, 
     excluido_em TEXT
 );
 
-CREATE TABLE IF NOT EXISTS agenda_fixos (   -- horário fixo da Agenda: até 2 alunos ativos por (dia, hora), controlado no app; a Agenda avisa a Grade, nunca o contrário
+CREATE TABLE IF NOT EXISTS agenda_fixos (   -- horário fixo da Agenda: até agenda.max_alunos_horario alunos ativos por (dia, hora), controlado no app; a Grade lê a ocupação daqui
     id INTEGER PRIMARY KEY,
     cliente_id INTEGER NOT NULL REFERENCES clientes(id),
     dia INTEGER NOT NULL,            -- 1..6 (segunda a sábado)

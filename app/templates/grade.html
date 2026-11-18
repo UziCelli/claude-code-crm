@@ -32,6 +32,16 @@
 </div>
 <p class="muted" style="margin:6px 0 0"><b>Em cada horário livre:</b> número grande = preço por aula · Total = valor do {{ 'pacote' if tipo == 'Pacotes' else 'mês' }} de referência · Lucro = quanto sobra desse total (R$ e %) · x0,90 = multiplicador do horário (abaixo de 1 = vale; muda em <b>Multiplicadores</b>)<br>
 <b>Vale para todos os locais:</b> horário ocupado ou indisponível em outro local aparece aqui com o nome dele.</p>
+{% if so_grade %}
+<div class="aviso atencao mt" id="so-grade">
+  <p style="margin:0 0 6px"><strong>{{ so_grade|length }} horário{{ 's' if so_grade|length > 1 }} só na Grade</strong>: a Grade agora mostra a ocupação da Agenda,
+    e estes alunos estão na Grade antiga mas não têm o horário na Agenda.</p>
+  <p class="muted" style="margin:0 0 6px">{% for x in so_grade[:8] %}{{ x.nome }} {{ x.dia|dia }} {{ '%02d'|format(x.hora) }}h ({{ x.local }}){{ ', ' if not loop.last }}{% endfor %}{% if so_grade|length > 8 %} e mais {{ so_grade|length - 8 }}{% endif %}.</p>
+  <form method="post" action="/grade/passar-para-agenda" style="margin:0" data-confirmar="Criar na Agenda o horário fixo desses alunos? Nada é apagado.">
+    <input type="hidden" name="tipo" value="{{ tipo }}"><input type="hidden" name="local" value="{{ local }}"><input type="hidden" name="ref" value="{{ ref_atual|int if ref_atual else 0 }}">
+    <button class="pequeno">Passar para a Agenda</button></form>
+</div>
+{% endif %}
 <div class="rolagem mt">
 <table class="grade">
   <tr><th></th>{% for d in range(1,7) %}<th>{{ d|dia }}</th>{% endfor %}</tr>
@@ -42,9 +52,9 @@
     <td>
       {% if c %}
       <button class="cel {{ c.status if c.status != 'livre' else (c.margem|cor(minima)) }} {{ 'apagado' if c.apagado }} {{ 'vale' if c.status == 'livre' and c.multiplicador < 1 }}"
-        data-abrir="dlg-slot" data-titulo="{{ d|dia }} {{ '%02d'|format(h) }}h — {{ local }}" data-dia="{{ d }}" data-hora="{{ h }}" data-status="{{ c.status }}" data-cliente_id="{{ c.cliente_id or '' }}"
+        data-abrir="dlg-slot" data-titulo="{{ d|dia }} {{ '%02d'|format(h) }}h — {{ local }}" data-dia="{{ d }}" data-hora="{{ h }}" data-status="{{ c.status }}" data-cliente_id="{{ c.cliente_id or '' }}" data-alunos="{{ c.ids|join(',') }}" data-quem="{{ c.cliente_nome or '' }}"
         {% if c.outro_local %}data-nota="Hoje esse horário está em {{ c.outro_local }}. Salvar como ocupado ou indisponível passa ele para {{ local }}; Livre solta em todos os locais."{% endif %}>
-        {% if c.status == 'ocupado' %}<span class="t">{{ c.cliente_nome or 'Ocupado' }}</span>
+        {% if c.status == 'ocupado' %}<span class="t">{{ c.cliente_nome or 'Ocupado' }}</span>{% if c.vagas %}<small class="miudo">{{ c.vagas }} vaga{{ 's' if c.vagas > 1 }}</small>{% endif %}
         {% elif c.status == 'indisponivel' %}<span class="t">Indisponível</span>{% if not c.outro_local %}<br>{{ c.bloqueio or '' }}{% endif %}
         {% elif c.preco_aula %}<span class="t">{{ c.preco_aula|moeda }}</span>
         <small class="miudo">Total {{ c.preco_total|moeda }}<br>Lucro {{ c.lucro|moeda }} · {{ c.margem|pct }}{% if c.multiplicador != 1 %} · x{{ c.multiplicador|num(2) }}{% endif %}</small>
@@ -95,8 +105,12 @@
     <input type="hidden" name="dia"><input type="hidden" name="hora">
     <p class="nota-grade" data-nota hidden></p>
     <div class="campo"><label>Situação</label><select name="status" required><option value="" hidden>Escolha a situação</option><option value="livre">Livre</option><option value="ocupado">Ocupado</option><option value="indisponivel">Indisponível</option></select></div>
-    <div class="campo"><label>Cliente (se ocupado)</label><select name="cliente_id"><option value="">—</option>{% for cl in clientes %}<option value="{{ cl.id }}">{{ cl.nome }}</option>{% endfor %}</select></div>
-    <p class="muted" style="margin:0 0 8px">Vale para todos os locais, em Pacotes e Mensalidades.
+    <div class="campo" data-alunos-grade><label>Aluno{{ 's' if max_alunos > 1 }} (se ocupado; até {{ max_alunos }} no mesmo horário)</label>
+      {% for n in range(max_alunos) %}<select name="cliente_id" aria-label="{{ n + 1 }}º aluno" {{ 'hidden' if n }} style="margin-bottom:6px"><option value="">{{ '—' if not n else '— ninguém —' }}</option>{% for cl in clientes %}<option value="{{ cl.id }}">{{ cl.nome }}</option>{% endfor %}</select>{% endfor %}
+      {% if max_alunos > 1 %}<button type="button" class="claro pequeno" data-mais-aluno>+ outro aluno</button>{% endif %}
+    </div>
+    <p class="muted" style="margin:0 0 8px">Ocupado grava o horário fixo na Agenda (é ela que manda); Livre tira da Agenda quem estiver no horário.
+      Vale para todos os locais, em Pacotes e Mensalidades.
       Preço do horário: <button type="button" class="claro pequeno" data-abrir="dlg-mult" onclick="this.closest('dialog').close()">Multiplicadores</button></p>
     <div class="linha"><button>Salvar</button><button type="button" class="claro" data-fechar>Cancelar</button></div>
   </form>
@@ -168,6 +182,29 @@
   });
   dlg.addEventListener("close", function () {
     f.querySelectorAll('input[name="celulas"]').forEach(function (i) { i.remove(); });
+  });
+  // vários alunos no horário: um seletor por aluno (o 1º sempre; os outros com "+ outro aluno"), preenchidos com quem já está
+  var sels = Array.prototype.slice.call(f.querySelectorAll('select[name="cliente_id"]')), mais = f.querySelector("[data-mais-aluno]");
+  function mostraSels(n) {
+    sels.forEach(function (s, i) { s.hidden = i >= Math.max(n, 1); });
+    if (mais) mais.hidden = n >= sels.length;
+  }
+  if (mais) mais.addEventListener("click", function () {
+    var n = sels.filter(function (s) { return !s.hidden; }).length; mostraSels(n + 1);
+  });
+  tb.addEventListener("click", function (e) {
+    var c = e.target.closest("button.cel");
+    if (!c || modo || e.ctrlKey || e.metaKey) return;
+    setTimeout(function () {   // depois que o app.js preencheu o diálogo
+      var ids = (c.dataset.alunos || "").split(",").filter(Boolean);
+      sels.forEach(function (s, i) { s.value = ids[i] || ""; });
+      mostraSels(ids.length);
+      f.dataset.quem = c.dataset.alunos ? c.dataset.quem : "";
+    }, 0);
+  });
+  document.getElementById("sel-editar").addEventListener("click", function () { mostraSels(1); f.dataset.quem = ""; });
+  f.addEventListener("submit", function (e) {   // Livre num horário com aluno na Agenda tira o horário dele: confirma antes
+    if (f.status.value === "livre" && f.dataset.quem && !confirm("Tirar " + f.dataset.quem + " da Agenda nesse horário?")) e.preventDefault();
   });
 })();
 </script>

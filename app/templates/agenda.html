@@ -264,6 +264,8 @@
         <select name="aluno1" id="h-aluno1"><option value="">— sem aula —</option>{% for c in clientes %}<option value="{{ c.id }}" data-local="{{ c.local or '' }}">{{ c.nome }}</option>{% endfor %}</select></div>
       <div class="campo"><label for="h-aluno2">2º aluno (opcional)</label>
         <select name="aluno2" id="h-aluno2"><option value="">— ninguém —</option>{% for c in clientes %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}</select></div>
+      <input type="hidden" name="extras" id="h-extras" value="">
+      <p class="muted" id="h-extras-txt" hidden></p>
       <div class="campo"><label for="h-local">Local</label>
         <select name="local" id="h-local"><option value="">Escolha o local</option>{% for l in locais %}<option>{{ l }}</option>{% endfor %}</select></div>
       <div class="linha"><button>Salvar</button><button type="button" class="claro" data-fechar>Fechar</button></div>
@@ -437,6 +439,10 @@
     var fx = info.fixos || [];
     a1.value = fx[0] ? String(fx[0].cliente_id) : "";
     a2.value = fx[1] ? String(fx[1].cliente_id) : "";
+    var resto = fx.slice(2), ex = document.getElementById("h-extras-txt");   // limite maior que 2: os outros continuam no horário
+    fh.elements.extras.value = resto.map(function (x) { return x.cliente_id; }).join(",");
+    ex.hidden = !resto.length;
+    ex.textContent = resto.length ? "Também neste horário (continua): " + resto.map(function (x) { return x.nome; }).join(", ") + "." : "";
     defineLocal(fx[0] ? fx[0].local : "");
     localMexido = false;
     ajustar();

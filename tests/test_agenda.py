@@ -758,7 +758,7 @@ def test_restaurar_horario_fixo_respeita_o_limite_de_2_alunos(http):
     rid = consulta("SELECT id FROM agenda_fixos")[0][0]
     horario(http, 1, 7, bia, caio)   # a Ana sai, entram os dois
     r = http.post("/lixeira/restaurar", data={"tabela": "agenda_fixos", "rid": rid}, follow_redirects=False)
-    assert erro(r) == "Seg 07h já tem 2 alunos. Tire um deles antes de restaurar."
+    assert erro(r) == "Seg 07h já está cheio. Tire um aluno antes de restaurar."
     assert sorted(n for n, *_ in fixos_ativos()) == ["Bia Costa", "Caio Santos"]
     horario(http, 1, 7, ana)         # a Ana volta pelo seletor; a linha antiga da lixeira não pode duplicar
     r = http.post("/lixeira/restaurar", data={"tabela": "agenda_fixos", "rid": rid}, follow_redirects=False)
