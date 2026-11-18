@@ -17,7 +17,7 @@
   <a class="btn {{ 'claro' if status != s }}" href="/clientes?status={{ s }}&busca={{ busca }}">{{ r }} {% if s != 'todos' %}({{ totais.get(s, 0) }}){% endif %}</a>
   {% endfor %}
   <input type="hidden" name="status" value="{{ status }}">
-  <input name="busca" value="{{ busca }}" placeholder="Buscar por nome" style="width:220px">
+  <input name="busca" value="{{ busca }}" placeholder="Buscar por nome" class="busca">
   <button class="claro">Buscar</button>
 </form>
 {% endif %}

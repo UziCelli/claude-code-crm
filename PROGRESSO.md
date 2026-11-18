@@ -423,3 +423,8 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - O link do alerta (`?vencidas=1`) ignora o período. O `saldo_livre` segue com os 30 dias.
 - Contas automáticas (DAS, CIA, locais) do mês que vem só existem depois que o mês fecha; as recorrentes aparecem.
 - Testes: `tests/test_contas_periodo.py`.
+
+## Celular: larguras proporcionais (18/11/2026)
+- Pedido do Victor: muita coisa saía da tela no celular. Novo `scripts/verificar_celular.py` (ferramenta, fora do CI): sobe o CRM num banco temporário com dados de exemplo (inclusive nomes longos), abre todas as telas e janelas em 360 e 390 px e lista o que passa da borda ou obriga a rolar de lado. Precisa do Playwright para Python.
+- Achados e correções (`style.css`): etiqueta comprida ("Sem aula nem pagamento") não quebrava a linha e vazava o cartão (Mensalidades, ficha); a célula do cartão agora quebra nos espaços e alinha à direita. Botões da célula `td.linha` descem de linha no celular. `.duas`/`.botoes-estado` passam a uma coluna quando não cabem. Larguras fixas em px dos templates viraram classes com `max-width:100%` (`.num-curto`, `input.busca`); nova `.rolavel` para tabela larga rolar dentro da própria caixa.
+- Resultado: "Tudo cabe na tela" em 360 e 390 px. Com os dados reais pode aparecer outro caso: rodar o script com uma cópia do banco (ou mandar print).
