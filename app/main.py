@@ -30,6 +30,7 @@ from . import vantagens   # o leque de vantagens da indicação que cabe no loca
 from . import ofertas   # ofertas de upsell: proposta transparente, resposta do aluno e fim do valor da oferta
 from . import alunos as alu   # estado de cada aluno (um algoritmo só); 'alunos' é nome de variável em várias rotas
 from .vigencia import fixo_vale, trocada_no_dia   # a linha do horário fixo valia naquele dia?
+from . import relogio   # hoje/agora no fuso do Brasil, em qualquer servidor
 
 ROOT = Path(__file__).resolve().parent
 DIAS = {1: "Segunda", 2: "Terça", 3: "Quarta", 4: "Quinta", 5: "Sexta", 6: "Sábado", 7: "Domingo"}
@@ -68,7 +69,7 @@ async def lifespan(app):
     try:
         con = db.conectar()
         try:
-            contas_auto.garantir(con, dt.date.today().isoformat())   # DAS, CIA e locais do mês passado em Contas a pagar
+            contas_auto.garantir(con, relogio.hoje().isoformat())   # DAS, CIA e locais do mês passado em Contas a pagar
         finally:
             con.close()
     except Exception as e:  # o CRM abre mesmo se as contas automáticas falharem
@@ -190,7 +191,7 @@ def versao(arquivo):
         return 0
 
 
-templates.env.globals.update(ETAPAS=ETAPAS, DIAS=DIAS, hoje=lambda: dt.date.today().isoformat(), wa=wa, acesso=acesso, versao=versao)
+templates.env.globals.update(ETAPAS=ETAPAS, DIAS=DIAS, hoje=lambda: relogio.hoje().isoformat(), wa=wa, acesso=acesso, versao=versao)
 
 
 def get_db():
@@ -220,7 +221,7 @@ def voltar(url, msg=None, erro=None):
 
 
 def mes_atual():
-    return dt.date.today().strftime("%Y-%m")
+    return relogio.hoje().strftime("%Y-%m")
 
 
 # ---------- envio repetido (clique duplo com rede lenta) e restaurar o que já foi recriado ----------
@@ -357,7 +358,7 @@ def contas_vencendo(con, h: str) -> list:
 def alertas(con):
     """Lista única de {grav, cor, texto, url, tel, modelo, acoes}, mais grave primeiro.
     acoes = botões do alerta, em ordem: {"wa": True} (WhatsApp/cobrança do modelo), {"rotulo", "href"} ou {"rotulo", "dialogo", "dados"}."""
-    hoje = dt.date.today()
+    hoje = relogio.hoje()
     h = hoje.isoformat()
     lim7 = (hoje + dt.timedelta(days=7)).isoformat()
     out = []
@@ -651,7 +652,7 @@ def _foto_do_mes(con, m):
 
 @app.get("/", response_class=HTMLResponse)
 def painel(request: Request, con=Depends(get_db)):
-    contas_auto.garantir(con, dt.date.today().isoformat())
+    contas_auto.garantir(con, relogio.hoje().isoformat())
     m = calcular_metricas(con)
     metas = db.parametros(con, "metas")
     ant_mes = (dt.date.fromisoformat(m["mes"] + "-01") - dt.timedelta(days=1)).strftime("%Y-%m")
@@ -676,7 +677,7 @@ def fechar_mes(con=Depends(get_db)):
         # só marca na rotina se a tarefa "fim_mes" não foi excluída
         con.execute("""INSERT OR IGNORE INTO rotina_itens (semana, item) SELECT ?, 'fim_mes'
                        WHERE EXISTS (SELECT 1 FROM rotina_tarefas WHERE chave='fim_mes' AND excluido_em IS NULL)""", (semana_atual(),))
-        con.execute("UPDATE rotina_itens SET feito=1, data_feito=? WHERE semana=? AND item='fim_mes'", (dt.date.today().isoformat(), semana_atual()))
+        con.execute("UPDATE rotina_itens SET feito=1, data_feito=? WHERE semana=? AND item='fim_mes'", (relogio.hoje().isoformat(), semana_atual()))
     return voltar("/", msg=f"Mês {m['mes'][5:]}/{m['mes'][:4]} fechado e guardado no histórico.")
 
 
@@ -747,7 +748,7 @@ def clientes(request: Request, status: str = "ativo", busca: str = "", ids: str 
             sql += " AND nome LIKE ?"
             args.append(f"%{busca}%")
     rows = con.execute(sql + " ORDER BY status='ativo' DESC, nome", args).fetchall()
-    hoje = dt.date.today()
+    hoje = relogio.hoje()
     estados = alu.estado(con, hoje, ids=[c["id"] for c in rows if c["status"] == "ativo"])   # a situação de cada aluno vem do algoritmo central
     if filtro and motivo == "sem-aula":   # quem não está indo: sem aula registrada ou o mês pago/pulado sem aula (quem virou consultoria sai: mesma regra tem_aulas)
         rows = [c for c in rows if c["id"] in estados and estados[c["id"]]["situacao"] in alu.SEM_AULA]
@@ -828,7 +829,7 @@ async def cliente_criar(request: Request, con=Depends(get_db)):
 def renovacao_e_cobranca(con, c):
     """(renovação efetiva, cobrança) do aluno, com o crédito descontado antes da multa e dos juros; quem saiu não recebe cobrança."""
     renovacao = financeiro.renovacoes(con, c["id"]).get(c["id"])
-    return renovacao, financeiro.cobranca_do_aluno(con, c, renovacao, dt.date.today().isoformat())
+    return renovacao, financeiro.cobranca_do_aluno(con, c, renovacao, relogio.hoje().isoformat())
 
 
 # ---------- menu WhatsApp da ficha: os itens e o texto enviado saem do mesmo cálculo ----------
@@ -874,7 +875,7 @@ def cobranca_atual(con, c, ctx, hoje=None, modelos=None, dados=None) -> dict | N
     efetiva = ctx.get("vence") or ctx.get("efetiva")
     if c["status"] != "ativo" or not data_iso(efetiva):
         return None
-    d = (dt.date.fromisoformat(efetiva) - (hoje or dt.date.today())).days
+    d = (dt.date.fromisoformat(efetiva) - (hoje or relogio.hoje())).days
     estagio = estagio_cobranca(d)
     if not estagio:
         return None
@@ -895,7 +896,7 @@ def cobranca_atual(con, c, ctx, hoje=None, modelos=None, dados=None) -> dict | N
             "valor": valor, "rotulo_valor": "Total atualizado" if d < 0 else "Valor", "cob": cob, "texto": texto, "credito": credito,
             "mensalidade": float(c["valor"] or 0),
             # o QR estático não expira: até o vencimento o valor vale até 23:59 dele; depois, só no dia (os juros mudam amanhã)
-            "valido_ate": efetiva if d >= 0 else (hoje or dt.date.today()).isoformat(),
+            "valido_ate": efetiva if d >= 0 else (hoje or relogio.hoje()).isoformat(),
             "codigo": pix.br_code(dados["pix"], dados["pix_nome"], dados["pix_cidade"], valor), "dados": dados}
 
 
@@ -996,7 +997,7 @@ def wa_menu(con, c, renovacao, cob, eventos) -> dict:
     """Menu WhatsApp da ficha: itens na ordem [{modelo, rotulo, sub, destaque, pedido_em}] e se há um pedido de depoimento esperando resposta."""
     ctx = wa_contexto(con, c, renovacao, cob)
     modelos = db.parametros(con, "msg_whatsapp")
-    limite = (dt.date.today() - dt.timedelta(days=DEPOIMENTO_DIAS)).isoformat()
+    limite = (relogio.hoje() - dt.timedelta(days=DEPOIMENTO_DIAS)).isoformat()
     pedido = next((e["data"] for e in eventos if e["tipo"] == "mensagem" and e["descricao"] == "WhatsApp: " + wa_rotulo("depoimento")
                    and e["data"] >= limite), None)   # eventos vêm do mais novo para o mais antigo
     recebido = bool(pedido) and any(e["tipo"] == "depoimento" and e["data"] >= pedido for e in eventos)
@@ -1059,7 +1060,7 @@ async def cliente_salvar(request: Request, cid: int, con=Depends(get_db)):
         tirados = []
         if antigo and antigo["status"] != d["status"]:
             con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, descricao) VALUES (?, 'status', ?, ?)",
-                        (cid, dt.date.today().isoformat(), f"Status alterado para {d['status']}"))
+                        (cid, relogio.hoje().isoformat(), f"Status alterado para {d['status']}"))
             if d["status"] == "ativo":   # voltou pela ficha: o mesmo cuidado do botão de status
                 tirados = tirar_dos_lotados(con, cid)
     return voltar(f"/clientes/{cid}", msg="Salvo." + aviso_lotados(tirados))
@@ -1102,7 +1103,7 @@ def cliente_status(cid: int, status: str = Form(...), con=Depends(get_db)):
     with con:
         con.execute("UPDATE clientes SET status=?, atualizado_em=datetime('now','localtime') WHERE id=?", (status, cid))
         con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, descricao) VALUES (?, 'status', ?, ?)",
-                    (cid, dt.date.today().isoformat(), f"Status alterado para {status}"))
+                    (cid, relogio.hoje().isoformat(), f"Status alterado para {status}"))
         if status == "ativo" and antes and antes["status"] != "ativo":
             tirados = tirar_dos_lotados(con, cid)
             _grade_reocupar(con, cid)
@@ -1137,7 +1138,7 @@ def cliente_wa(cid: int, modelo: str, con=Depends(get_db)):
         rotulo += f" ({cobranca_atual(con, c, wa_contexto(con, c))['nome']})"
     with con:
         con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, descricao) VALUES (?, 'mensagem', ?, ?)",
-                    (cid, dt.date.today().isoformat(), "WhatsApp: " + rotulo))
+                    (cid, relogio.hoje().isoformat(), "WhatsApp: " + rotulo))
     return RedirectResponse(wa(c["telefone"], texto), status_code=303)   # sempre https://wa.me/...: o destino não vem do navegador
 
 
@@ -1169,7 +1170,7 @@ def cliente_depoimento(cid: int, descricao: str = Form(""), con=Depends(get_db))
         return voltar("/clientes", erro="Cliente não encontrado.")
     with con:
         con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, descricao) VALUES (?, 'depoimento', ?, ?)",
-                    (cid, dt.date.today().isoformat(), descricao.strip() or "Depoimento recebido"))
+                    (cid, relogio.hoje().isoformat(), descricao.strip() or "Depoimento recebido"))
     return voltar(f"/clientes/{cid}", msg="Depoimento registrado. Obrigado!")
 
 
@@ -1193,7 +1194,7 @@ def registrar_evento(con, cid: int, tipo: str, data: str, valor="", descricao=""
     if tipo == "pausa":
         # pulou o mês: a renovação que estava para vencer não é cobrada; a próxima é a volta (vazio = um mês depois)
         pulada = data_iso(antes["efetiva"]) if antes else None
-        pulada = pulada or data_iso(data) or dt.date.today().isoformat()
+        pulada = pulada or data_iso(data) or relogio.hoje().isoformat()
         volta = nova or financeiro.proxima_renovacao(pulada)
         if volta <= pulada:
             return None, f"A volta precisa ser depois de {data_br(pulada)} (a renovação que foi pulada)."
@@ -1277,7 +1278,7 @@ def indicacao_presente(cid: int, iid: int, o_que: str = Form(""), custo: str = F
         v = _num_br(custo) if custo.strip() else None
     except ValueError:
         return voltar(url, erro="Custo inválido: use só números, como 35,90.")
-    msg, erro = indicacoes.registrar_presente(con, cid, iid, o_que, data_iso(data) or dt.date.today().isoformat(), v or None)
+    msg, erro = indicacoes.registrar_presente(con, cid, iid, o_que, data_iso(data) or relogio.hoje().isoformat(), v or None)
     return voltar(url, msg=msg, erro=erro)
 
 
@@ -1302,7 +1303,7 @@ def motivos_perda(con):
 def leads(request: Request, con=Depends(get_db)):
     rows = con.execute("SELECT * FROM leads WHERE excluido_em IS NULL ORDER BY data_proxima_acao IS NULL, data_proxima_acao, id DESC").fetchall()
     colunas = {e: [] for e, _ in ETAPAS}
-    hoje = dt.date.today().isoformat()
+    hoje = relogio.hoje().isoformat()
     for l in rows:
         atrasado = bool(l["data_proxima_acao"] and l["data_proxima_acao"] < hoje and l["etapa"] not in ("cliente", "perdido"))
         parado = dias_parado(con, l, hoje)
@@ -1322,7 +1323,7 @@ def lead_criar(nome: str = Form(...), telefone: str = Form(""), canal_origem: st
         cur = con.execute("""INSERT INTO leads (nome, telefone, canal_origem, interesse, proxima_acao, data_proxima_acao, observacoes, indicado_por,
                              data_entrada, data_mudanca_etapa) VALUES (?,?,?,?,?,?,?,?,?,?)""",
                           (nome, telefone or None, indicacoes.CANAL if indicador else canal_origem, interesse or None,
-                           proxima_acao or None, data_proxima_acao or None, observacoes or None, indicador, dt.date.today().isoformat(), dt.date.today().isoformat()))
+                           proxima_acao or None, data_proxima_acao or None, observacoes or None, indicador, relogio.hoje().isoformat(), relogio.hoje().isoformat()))
         con.execute("INSERT INTO lead_etapas_log (lead_id, etapa) VALUES (?, 'lead')", (cur.lastrowid,))
     return voltar("/leads", msg="Lead adicionado.")
 
@@ -1350,14 +1351,14 @@ def lead_etapa(lid: int, etapa: str = Form(...), motivo_perda: str = Form(""), c
         return voltar("/leads", erro="Etapa inválida.")
     with con:
         con.execute("UPDATE leads SET etapa=?, motivo_perda=?, data_mudanca_etapa=? WHERE id=?",
-                    (etapa, (motivo_perda or None) if etapa == "perdido" else None, dt.date.today().isoformat(), lid))
+                    (etapa, (motivo_perda or None) if etapa == "perdido" else None, relogio.hoje().isoformat(), lid))
         con.execute("INSERT INTO lead_etapas_log (lead_id, etapa) VALUES (?, ?)", (lid, etapa))
         if etapa == "cliente" and not l["cliente_id"]:
             partes = (l["interesse"] or "").split("/")
             cur = con.execute("""INSERT INTO clientes (nome, telefone, canal_origem, observacoes, lead_id, tipo_servico, local, indicado_por, data_inicio)
                                  VALUES (?,?,?,?,?,?,?,?,?)""",
                               (l["nome"], l["telefone"], l["canal_origem"], l["observacoes"], lid,
-                               partes[0].strip() or None, partes[1].strip() if len(partes) > 1 else None, l["indicado_por"], dt.date.today().isoformat()))
+                               partes[0].strip() or None, partes[1].strip() if len(partes) > 1 else None, l["indicado_por"], relogio.hoje().isoformat()))
             con.execute("UPDATE leads SET cliente_id=? WHERE id=?", (cur.lastrowid, lid))
             return voltar(f"/leads?destaque={lid}", msg=f"Novo aluno: {l['nome']}")
     return voltar(f"/leads?destaque={lid}", msg="Etapa atualizada.")
@@ -1573,7 +1574,7 @@ def inicio_semana(texto="") -> dt.date:
     try:
         d = dt.date.fromisoformat(str(texto or "").strip()[:10])
     except ValueError:
-        d = dt.date.today()
+        d = relogio.hoje()
     return d - dt.timedelta(days=d.weekday())
 
 
@@ -1632,7 +1633,7 @@ def aulas_da_semana(con, segunda, hoje=None, semanas=1) -> list:
     semanas > 1: várias semanas seguidas a partir de `segunda`, com as mesmas consultas (uma de fixos, de avulsas e de marcas para o período todo);
     a regra de cada dia é aplicada semana a semana, então o resultado é o das semanas separadas, uma depois da outra.
     situacao: feita | faltou | desmarcou | cancelada | pausa (mês pulado, sem marcar) | pendente (dia passou sem marcar) | futura (hoje ou depois, sem marcar)."""
-    h = (hoje or dt.date.today()).isoformat()
+    h = (hoje or relogio.hoje()).isoformat()
     semanas = max(int(semanas), 1)
     por_semana = [{n: (segunda + dt.timedelta(days=7 * w + n - 1)).isoformat() for n in range(1, 7)} for w in range(semanas)]
     primeiro, ultimo = por_semana[0][1], por_semana[-1][6]
@@ -1802,8 +1803,8 @@ def aviso_deslocamento(con, horarios, cliente_id=0) -> str:
 
 
 def agora_txt() -> str:
-    """Data e hora de agora no fuso do app ("AAAA-MM-DD HH:MM:SS"). No Turso o SQL roda em UTC: o carimbo vai calculado aqui."""
-    return dt.datetime.now().isoformat(sep=" ", timespec="seconds")
+    """Data e hora de agora no fuso do Brasil ("AAAA-MM-DD HH:MM:SS"). No Turso o SQL roda em UTC: o carimbo vai calculado aqui."""
+    return relogio.agora_txt()
 
 
 def vigencias(con, ids, hoje=None) -> dict:
@@ -1813,7 +1814,7 @@ def vigencias(con, ids, hoje=None) -> dict:
     ids = list(dict.fromkeys(ids))
     if not ids:
         return {}
-    h = (hoje or dt.date.today()).isoformat()
+    h = (hoje or relogio.hoje()).isoformat()
     com = {r[0] for r in con.execute(f"SELECT DISTINCT cliente_id FROM agenda_fixos WHERE cliente_id IN ({','.join('?' * len(ids))})"
                                      " AND substr(criado_em,1,10) < ?", [*ids, h])}
     return {c: (h if c in com else None) for c in ids}
@@ -1906,7 +1907,7 @@ def definir_horario(con, dia, hora, alunos, local) -> dict:
     if apagar:
         con.execute(f"UPDATE agenda_fixos SET excluido_em=? WHERE id IN ({','.join('?' * len(apagar))})", [agora_txt(), *apagar])
     if entrou or mudou:
-        hoje = dt.date.today().isoformat()
+        hoje = relogio.hoje().isoformat()
         vig = vigencias(con, entrou)
         for c in mudou:   # linha antiga de antes de hoje: o local novo vale de hoje em diante; criada hoje (ajuste): fica com a vigência dela
             r = atual[c]
@@ -2013,7 +2014,7 @@ def saldos_reposicao(con, ids=None, hoje=None) -> dict:
     sem_marca = avulsas de reposição sem nenhuma marcação, de qualquer data (passada ou futura): cada uma já "cobre" uma reposição devida;
     a_agendar = max(saldo - sem_marca, 0): quantas reposições ainda não têm aula marcada nem aguardam marcação.
     Com ids, devolve todos eles (zerados se for o caso); sem ids, só quem tem alguma coisa."""
-    h = (hoje or dt.date.today()).isoformat()
+    h = (hoje or relogio.hoje()).isoformat()
     ids = list(dict.fromkeys(ids)) if ids is not None else None
     filtro = lambda col: f" AND {col} IN ({','.join('?' * len(ids))})" if ids is not None else ""
     out = {c: _zero_saldo() for c in (ids or [])}
@@ -2087,7 +2088,7 @@ def controle_aluno(con, cid, mes, hoje) -> dict | None:
 
 @app.get("/agenda", response_class=HTMLResponse)
 def agenda(request: Request, semana: str = "", todas: int = 0, aluno: str = "", mes: str = "", con=Depends(get_db)):
-    hoje = dt.date.today()
+    hoje = relogio.hoje()
     segunda = inicio_semana(semana)
     atual = segunda == inicio_semana(hoje.isoformat())
     fases = fases_bloqueio(con)
@@ -2150,7 +2151,7 @@ def agenda(request: Request, semana: str = "", todas: int = 0, aluno: str = "", 
 @app.get("/agenda/pendentes")
 def agenda_pendentes(con=Depends(get_db)):
     """Semanas das 4 anteriores à atual com aulas sem marcar (fora de bloqueio e de mês pulado), da mais nova à mais antiga. Uma leitura de 4 semanas."""
-    hoje = dt.date.today()
+    hoje = relogio.hoje()
     inicio = inicio_semana(hoje.isoformat()) - dt.timedelta(days=28)
     n = [0] * 4
     for a in aulas_da_semana(con, inicio, hoje, semanas=4):
@@ -2814,7 +2815,7 @@ def proposta_salvar(plano: str = Form(...), local: str = Form("CIA"), forma: str
                            " + ".join(locais), forma, pessoas, um.get("dia") or None, um.get("hora") or None, r["desconto"], r["preco_total"],
                            r["preco_pessoa"], r["custo_total"], r["lucro"], r["margem"], r["lucro_hora"], r["preco_minimo"],
                            r["desconto_maximo"], int(r["abaixo_margem"]), observacoes or None, r["preco_cheio"],
-                           r["consultoria"] or None, dt.date.today().isoformat()))
+                           r["consultoria"] or None, relogio.hoje().isoformat()))
         con.executemany("INSERT INTO proposta_horarios (proposta_id, dia, hora, local, multiplicador) VALUES (?,?,?,?,?)",
                         [(cur.lastrowid, d["dia"] or None, d["hora"] or None, d["local"], d["mult"]) for d in r["horarios"]])
     return voltar(f"/propostas/{cur.lastrowid}", msg=f"Proposta #{cur.lastrowid} salva." + aviso_deslocamento(con, [(x["dia"], x["hora"], x["local"]) for x in horarios], int(cliente_id or 0)))
@@ -2871,7 +2872,7 @@ def explorador(request: Request, local: str = "CIA", tipo_servico: str = "", for
 # 5. CAMPANHAS
 # =====================================================================
 def fase_atual(con):
-    hoje = dt.date.today().isoformat()
+    hoje = relogio.hoje().isoformat()
     return con.execute("SELECT * FROM campanha_fases WHERE inicio<=? AND fim>=? ORDER BY ordem", (hoje, hoje)).fetchall()
 
 
@@ -2879,7 +2880,7 @@ def fase_atual(con):
 def campanhas(request: Request, mes: str = "", con=Depends(get_db)):
     mes = mes or mes_atual()
     fases = [dict(f) for f in con.execute("SELECT * FROM campanha_fases ORDER BY ordem")]
-    hoje = dt.date.today().isoformat()
+    hoje = relogio.hoje().isoformat()
     for f in fases:
         f["itens"] = con.execute("SELECT * FROM campanha_itens WHERE fase_id=? AND excluido_em IS NULL ORDER BY ordem, id", (f["id"],)).fetchall()
         f["situacao"] = "atual" if f["inicio"] <= hoje <= f["fim"] else ("passada" if f["fim"] < hoje else "futura")
@@ -2982,7 +2983,7 @@ def campanha_item(fase_id: int = Form(...), texto: str = Form(...), con=Depends(
 @app.post("/campanhas/item/{iid}/toggle")
 def campanha_item_toggle(iid: int, con=Depends(get_db)):
     with con:
-        con.execute("UPDATE campanha_itens SET feito = 1-feito, data_feito = CASE WHEN feito=0 THEN ? ELSE NULL END WHERE id=?", (dt.date.today().isoformat(), iid))
+        con.execute("UPDATE campanha_itens SET feito = 1-feito, data_feito = CASE WHEN feito=0 THEN ? ELSE NULL END WHERE id=?", (relogio.hoje().isoformat(), iid))
     return voltar("/campanhas")
 
 
@@ -3044,7 +3045,7 @@ def campanha_checkpoint_excluir(cid: int, con=Depends(get_db)):
 # 7. ROTINA SEMANAL + LISTA DE ESPERA
 # =====================================================================
 def semana_atual():
-    y, w, _ = dt.date.today().isocalendar()
+    y, w, _ = relogio.hoje().isocalendar()
     return f"{y}-W{w:02d}"
 
 
@@ -3059,7 +3060,7 @@ def rotina_texto(t):
 @app.get("/rotina", response_class=HTMLResponse)
 def rotina(request: Request, con=Depends(get_db)):
     sem = semana_atual()
-    hoje = dt.date.today()
+    hoje = relogio.hoje()
     tarefas = tarefas_rotina(con)
     if tarefas:
         with con:
@@ -3078,7 +3079,7 @@ def rotina(request: Request, con=Depends(get_db)):
 def rotina_toggle(item: str, con=Depends(get_db)):
     with con:
         con.execute("UPDATE rotina_itens SET feito=1-feito, data_feito=CASE WHEN feito=0 THEN ? ELSE NULL END WHERE semana=? AND item=?",
-                    (dt.date.today().isoformat(), semana_atual(), item))
+                    (relogio.hoje().isoformat(), semana_atual(), item))
     return voltar("/rotina")
 
 
@@ -3107,7 +3108,7 @@ def espera_add(nome: str = Form(...), telefone: str = Form(""), dia: int = Form(
                observacao: str = Form(""), con=Depends(get_db)):
     with con:
         con.execute("INSERT INTO lista_espera (nome, telefone, dia, hora, local, observacao, data) VALUES (?,?,?,?,?,?,?)",
-                    (nome, telefone or None, dia or None, hora, local or None, observacao or None, dt.date.today().isoformat()))
+                    (nome, telefone or None, dia or None, hora, local or None, observacao or None, relogio.hoje().isoformat()))
     return voltar("/rotina", msg="Adicionado à lista de espera.")
 
 
@@ -3139,7 +3140,7 @@ def _fin_voltar(volta, msg=None, erro=None):
 @app.get("/financeiro", response_class=HTMLResponse)
 def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", conta: str = "", vencidas: int = 0,
                     ordem: str = "", custo: str = "", con=Depends(get_db)):
-    h = dt.date.today().isoformat()
+    h = relogio.hoje().isoformat()
     # filtros de Contas a pagar: o que vier na URL vale e fica lembrado (cookie); sem nada na URL, usa o último escolhido
     ordem = ordem if ordem in financeiro.ORDENS_CONTAS else request.cookies.get("contas_ordem", "")
     ordem = ordem if ordem in financeiro.ORDENS_CONTAS else "urgencia"
@@ -3198,13 +3199,13 @@ def financeiro_tela(request: Request, mes: str = "", escopo: str = "todos", cont
 
 @app.get("/financeiro/previsao", response_class=HTMLResponse)
 def financeiro_previsao(request: Request, con=Depends(get_db)):
-    return render(request, "financeiro_previsao.html", con, prev=financeiro.previsao(con, dt.date.today().isoformat()))
+    return render(request, "financeiro_previsao.html", con, prev=financeiro.previsao(con, relogio.hoje().isoformat()))
 
 
 def _ja_aconteceu(data: str) -> bool:
     """Data ISO válida e não no futuro: pagamento e saldo só valem para o que já aconteceu."""
     try:
-        return dt.date.fromisoformat(data) <= dt.date.today()
+        return dt.date.fromisoformat(data) <= relogio.hoje()
     except (TypeError, ValueError):
         return False
 
@@ -3227,7 +3228,7 @@ async def financeiro_saldos(request: Request, con=Depends(get_db)):
     """Foto semanal dos saldos: uma linha por conta (conta_i, saldo_i, frente_i). Saldo vazio = não mexe naquela conta."""
     f = await request.form()
     volta = f.get("volta", "")
-    data = f.get("data") or dt.date.today().isoformat()
+    data = f.get("data") or relogio.hoje().isoformat()
     valores, frentes = {}, {}
     contas = set(db.lista(con, "lista_contas"))
     if not _ja_aconteceu(data):   # foto no futuro venceria todas as outras e esconderia o que for pago até lá
@@ -3397,7 +3398,7 @@ async def financeiro_lancamento(request: Request, con=Depends(get_db)):
         return _fin_voltar(volta, msg=(aviso or "Lançamento salvo. ") + "É empréstimo: não paga DAS e não conta como receita.")
     if f["escopo"] == "PJ" and f["tipo"] == "entrada" and pago_em:
         # dinheiro que entrou na PJ: diz na hora quanto separar para o imposto
-        if separe := financeiro.aviso_imposto(con, valor, dt.date.today().isoformat()):
+        if separe := financeiro.aviso_imposto(con, valor, relogio.hoje().isoformat()):
             return _fin_voltar(volta, msg=(aviso or "Lançamento salvo. ") + separe)
     return _fin_voltar(volta, msg=aviso.strip() or "Lançamento salvo.")
 
@@ -3407,7 +3408,7 @@ def financeiro_baixa(lid: int, volta: str = Form(""), voltar_a: str = Form("", a
                      con=Depends(get_db)):
     """Dar baixa: 'pago_em' (vazio = hoje; não pode ser futura) e 'conta' (vazio mantém a do lançamento)."""
     volta = _caminho_seguro(voltar_a) or volta
-    pago_em = pago_em.strip() or dt.date.today().isoformat()
+    pago_em = pago_em.strip() or relogio.hoje().isoformat()
     if not _ja_aconteceu(pago_em):
         return _fin_voltar(volta, erro="Confira a data do pagamento: não pode ser no futuro.")
     with con:
@@ -3482,7 +3483,7 @@ def financeiro_linha_do_tempo(request: Request, dias: int = 30, conta: str = "",
     """O que aconteceu nas contas nos últimos 7, 30 ou 90 dias, dia a dia."""
     dias = dias if dias in (7, 30, 90) else 30
     conta = conta if conta in db.lista(con, "lista_contas") else None
-    return render(request, "financeiro_linha.html", con, linha=financeiro.linha_do_tempo(con, dt.date.today().isoformat(), dias, conta))
+    return render(request, "financeiro_linha.html", con, linha=financeiro.linha_do_tempo(con, relogio.hoje().isoformat(), dias, conta))
 
 
 @app.post("/financeiro/duplicados/manter")
@@ -3645,7 +3646,7 @@ def financeiro_painel(request: Request, mes: str = "", con=Depends(get_db)):
     maximo = max([s["receita"] for s in serie] + [s["custos_fixos"] + s["custos_variaveis"] for s in serie] + [abs(s["lucro"]) for s in serie] + [1])
     das_pct = financeiro.texto_pct(financeiro.das_competencia(con, mes)["efetiva"])
     return render(request, "financeiro_painel.html", con, mes=mes, r=serie[-1], serie=serie, maximo=maximo, das_pct=das_pct,
-                  salario=financeiro.salario_mes(con, mes, dt.date.today().isoformat()), colchao=financeiro.colchao(con, mes),
+                  salario=financeiro.salario_mes(con, mes, relogio.hoje().isoformat()), colchao=financeiro.colchao(con, mes),
                   saude=sugestoes.painel(con, limite=sugestoes.LIMITE), voltar_saude=f"/financeiro/painel?mes={mes}", mes_atual=mes_atual())
 
 
@@ -3761,7 +3762,7 @@ def configuracoes(request: Request, con=Depends(get_db)):
                   vantagens_cfg=leque, vantagens_previa=previa, vantagens_max=vantagens.MAX_LEQUE,
                   planilha=str(db.PLANILHA), planilha_existe=db.PLANILHA.exists(), assistente=assistente.info(),
                   salario_hora=precos.carregar_parametros(con)["salario_hora"],
-                  das=financeiro.das_competencia(con, mes_atual()), das_txt=financeiro.texto_pct(financeiro.pct_das(con, dt.date.today().isoformat())))
+                  das=financeiro.das_competencia(con, mes_atual()), das_txt=financeiro.texto_pct(financeiro.pct_das(con, relogio.hoje().isoformat())))
 
 
 CALCULOS_GRUPOS = ["mao_obra", "metas", "margem_minima", "margem_alvo", "taxa_pagamento", "grupo_mao_obra_extra"]
@@ -4021,7 +4022,7 @@ def encerrar(request: Request):
 
 @app.get("/dados", response_class=HTMLResponse)
 def dados(request: Request, con=Depends(get_db)):
-    lim = (dt.datetime.now() - dt.timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+    lim = (relogio.agora() - dt.timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
     lixo = []
     for tabela, rotulo, campo in LIXEIRA:
         for r in con.execute(f"SELECT id, {campo} AS nome, excluido_em FROM {tabela} WHERE excluido_em >= ?{LIXEIRA_FILTRO.get(tabela, '')} "
@@ -4088,7 +4089,7 @@ def lixeira_restaurar(tabela: str = Form(...), rid: int = Form(...), forcar: str
             return voltar("/dados", erro="Esse indicado já tem o presente registrado. Exclua o que está valendo antes de restaurar.")
     tirados = []
     with con:
-        if fixo and str(fixo["excluido_em"] or "")[:10] < dt.date.today().isoformat():
+        if fixo and str(fixo["excluido_em"] or "")[:10] < relogio.hoje().isoformat():
             # excluído antes de hoje: volta a valer de hoje em diante (cópia nova); a linha antiga fica como estava,
             # então as semanas em que ele não tinha esse horário (ou tinha outro local) continuam iguais
             inserir_fixos(con, [(fixo["cliente_id"], fixo["dia"], fixo["hora"], fixo["local"])], vigente=vigencias(con, [fixo["cliente_id"]]))
@@ -4116,7 +4117,7 @@ def exportar_arquivo(nome: str, fmt: str, con=Depends(get_db)):
             cab, linhas = exportar.tabela(con, nome)
         except ValueError:
             return voltar("/dados", erro="Exportação desconhecida.")
-    arquivo = f"vfitcoach-{nome}-{dt.date.today():%Y-%m-%d}.{fmt}"
+    arquivo = f"vfitcoach-{nome}-{relogio.hoje():%Y-%m-%d}.{fmt}"
     if fmt == "csv":
         buf = io.StringIO()
         w = csv.writer(buf, delimiter=";", lineterminator="\n")

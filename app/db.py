@@ -5,6 +5,7 @@ import sqlite3
 from pathlib import Path
 
 from . import nuvem
+from . import relogio   # hoje/agora no fuso do Brasil, em qualquer servidor
 
 ROOT = Path(__file__).resolve().parent.parent
 DB_LOCAL = ROOT / "data" / "crm.db"
@@ -347,7 +348,7 @@ def pasta_backup() -> Path:
 def fazer_backup(prefixo: str = "crm", arquivo: Path = None) -> Path:
     """Cópia consistente do banco (API de backup do SQLite). Mantém os últimos MANTER_BACKUPS."""
     pasta = pasta_backup()
-    destino = pasta / f"{prefixo}-{dt.datetime.now():%Y-%m-%d_%H%M%S}.db"
+    destino = pasta / f"{prefixo}-{relogio.agora():%Y-%m-%d_%H%M%S}.db"
     origem = sqlite3.connect(arquivo or DB_PATH)   # a réplica do Turso também é um arquivo SQLite comum
     copia = sqlite3.connect(destino)
     with copia:
@@ -361,7 +362,7 @@ def fazer_backup(prefixo: str = "crm", arquivo: Path = None) -> Path:
 
 def backup_diario() -> Path | None:
     """Um backup por dia, feito ao abrir o CRM."""
-    hoje = dt.date.today().isoformat()
+    hoje = relogio.hoje().isoformat()
     if any(pasta_backup().glob(f"crm-{hoje}_*.db")):
         return None
     return fazer_backup()

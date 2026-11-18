@@ -8,6 +8,7 @@ Telas (Campanhas, ficha, lista de Clientes), alertas e sugestões leem daqui: ne
 import datetime as dt
 
 from . import alunos, db, financeiro
+from . import relogio   # hoje/agora no fuso do Brasil, em qualquer servidor
 
 SITUACOES_ELEGIVEIS = ("em_dia", "vence_logo")   # só quem está em dia recebe a proposta; quem deve ou sumiu tem outra solução
 MAX_MESES = 36
@@ -22,7 +23,7 @@ def _main():
 
 def _iso(hoje=None) -> str:
     if hoje is None:
-        return dt.date.today().isoformat()
+        return relogio.hoje().isoformat()
     return hoje.isoformat() if isinstance(hoje, dt.date) else str(hoje)[:10]
 
 

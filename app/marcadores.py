@@ -14,6 +14,7 @@ import re
 
 from . import alunos, db, financeiro
 from . import ofertas   # ofertas de upsell: quem ainda não recebeu cada uma (sugestão)
+from . import relogio   # hoje/agora no fuso do Brasil, em qualquer servidor
 
 try:
     from .migrar_financeiro import INICIO   # mês em que fixo/variável passam a existir
@@ -64,7 +65,7 @@ def _main():
 # ---------- pequenas contas ----------
 def _hoje(hoje) -> str:
     if hoje is None:
-        return dt.date.today().isoformat()
+        return relogio.hoje().isoformat()
     return hoje.isoformat() if isinstance(hoje, dt.date) else str(hoje)[:10]
 
 

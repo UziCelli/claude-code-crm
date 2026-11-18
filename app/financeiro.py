@@ -8,6 +8,7 @@ import unicodedata
 from urllib.parse import urlencode
 
 from . import db
+from . import relogio   # hoje/agora no fuso do Brasil, em qualquer servidor
 
 ISO_DATA = re.compile(r"\d{4}-\d{2}-\d{2}")
 
@@ -214,7 +215,7 @@ def das_competencia(con: sqlite3.Connection, mes: str) -> dict:
 def pct_das(con: sqlite3.Connection, hoje: str | None = None) -> float:
     """Alíquota efetiva do DAS do mês de hoje pela tabela do Simples, como fração (0,06 = 6%). É o número do aviso
     "Separe R$ X", do "Guardar o DAS" e dos preços."""
-    return das_competencia(con, (hoje or dt.date.today().isoformat())[:7])["efetiva"]
+    return das_competencia(con, (hoje or relogio.hoje().isoformat())[:7])["efetiva"]
 
 
 def texto_pct(fracao: float) -> str:
@@ -236,7 +237,7 @@ def imposto_mes(con: sqlite3.Connection, mes: str, hoje: str | None = None, aber
     É a única conta do imposto: o saldo_livre soma estes valores e a tela mostra o do mês de hoje.
     `abertos`: saídas em aberto (o saldo_livre já tem); sem elas, usa as dos próximos 30 dias a partir de `hoje`."""
     if abertos is None:
-        hoje = hoje or dt.date.today().isoformat()
+        hoje = hoje or relogio.hoje().isoformat()
         ate = (dt.date.fromisoformat(hoje) + dt.timedelta(days=30)).isoformat()
         abertos = [i for i in em_aberto_ate(con, ate, hoje) if i["tipo"] == "saida"]
     return round(_das_a_guardar(con, somar_meses(mes, 1), abertos, _receita_pj(con, mes), das_competencia(con, mes)["efetiva"]), 2)
@@ -1204,7 +1205,7 @@ def usar_credito(con: sqlite3.Connection, lancamento_id: int | None, cliente_id:
     """Desconta o crédito do aluno. Com lancamento_id: pagamento da mensalidade (entrada PJ paga ligada ao aluno, menos empréstimo) de pelo menos
     90% de (mensalidade − crédito); pagamento pequeno (aula extra) não gasta o crédito. Sem lancamento_id (mês pulado): só se o crédito cobre
     a mensalidade inteira. Marca usado_em e usado_lancamento_id. Devolve o valor descontado (0 se nada)."""
-    hoje = hoje or dt.date.today().isoformat()
+    hoje = hoje or relogio.hoje().isoformat()
     if lancamento_id:
         p = con.execute("SELECT cliente_id, valor, categoria FROM lancamentos WHERE id=? AND escopo='PJ' AND tipo='entrada' AND pago_em IS NOT NULL "
                         "AND excluido_em IS NULL", (lancamento_id,)).fetchone()

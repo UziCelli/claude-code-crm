@@ -25,6 +25,7 @@ from contextlib import closing, contextmanager
 from markupsafe import Markup, escape
 
 from . import alunos, db, financeiro, sugestoes
+from . import relogio   # hoje/agora no fuso do Brasil, em qualquer servidor
 
 MODELO_PADRAO = "claude-haiku-5-5"
 ESFORCOS = ("low", "medium", "high", "xhigh", "max")
@@ -322,7 +323,7 @@ def _main():
 
 
 def _hoje() -> str:
-    return dt.date.today().isoformat()
+    return relogio.hoje().isoformat()
 
 
 def _texto(a, k, obrigatorio=False, maximo=300):
@@ -540,7 +541,7 @@ def _contas_a_pagar(con, a):
                             "motivo": i["motivo"]} for i in fila[f]["itens"]],
                   "sobra_depois_da_fila": fila[f]["sobra"]}
     out["reserva"] = livre["reserva"]
-    lim = (dt.date.today() + dt.timedelta(days=30)).isoformat()
+    lim = (relogio.hoje() + dt.timedelta(days=30)).isoformat()
     out["a_receber"] = [{"id": r["id"], "escopo": r["escopo"], "data": r["data"], "valor": r["valor"],
                          "descricao": r["descricao"] or r["categoria"], "situacao": "atrasado" if r["data"] < hoje else "em aberto"}
                         for r in con.execute("""SELECT * FROM lancamentos WHERE tipo='entrada' AND pago_em IS NULL AND excluido_em IS NULL
@@ -655,7 +656,7 @@ def _ver_aluno(con, a):
 
 def _ver_tarefas(con, a):
     m = _main()
-    hoje = dt.date.today()
+    hoje = relogio.hoje()
     h = hoje.isoformat()
     semana = m.semana_atual()
     feitos = {r["item"]: r for r in con.execute("SELECT * FROM rotina_itens WHERE semana=?", (semana,))}
@@ -1292,7 +1293,7 @@ def custo_conversa(con, cid) -> float | None:
 
 
 def _com_data(texto, agora=None) -> str:
-    agora = agora or dt.datetime.now()
+    agora = agora or relogio.agora()
     return f"(Hoje: {DIAS_SEMANA[agora.weekday()]}, {agora:%d/%m/%Y}, {agora:%H:%M})\n\n{texto}"
 
 
