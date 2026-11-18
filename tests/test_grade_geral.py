@@ -301,3 +301,18 @@ def test_explorador_nao_oferece_horario_da_agenda(http):
     grava("INSERT INTO agenda_fixos (cliente_id, dia, hora, local) VALUES (?, 2, 9, 'CIA')", ana)
     linhas = http.get("/explorador", params={"local": ALL, "tipo_servico": "Pacote de Aulas", "dia": 2}).context["linhas"]
     assert linhas and 9 not in {l["hora"] for l in linhas}
+
+
+def test_baixar_o_limite_nao_tira_aluno_sem_pedir(http):
+    """Limite reduzido de 3 para 2 com três alunos no horário: salvar o horário na Agenda sem mudar nada mantém os três;
+    entrar um aluno novo passando do limite é recusado sem mexer em ninguém."""
+    a, b, c, d = aluno("Ana Silva"), aluno("Bia Costa"), aluno("Caio Lima"), aluno("Duda Reis")
+    for x in (a, b, c):
+        grava("INSERT INTO agenda_fixos (cliente_id, dia, hora, local) VALUES (?, 1, 7, 'CIA')", x)
+    grava("UPDATE parametros SET valor=2 WHERE grupo='agenda' AND chave='max_alunos_horario'")
+    r = http.post("/agenda/horario", data={"dia": 1, "hora": 7, "aluno1": a, "aluno2": b, "extras": str(c), "local": "CIA"},
+                  follow_redirects=False)
+    assert erro(r) is None and sorted(x for x, _ in agenda(1, 7)) == sorted([a, b, c])
+    r = http.post("/agenda/horario", data={"dia": 1, "hora": 7, "aluno1": a, "aluno2": d, "extras": f"{b},{c}", "local": "CIA"},
+                  follow_redirects=False)
+    assert "cabem 2" in erro(r) and sorted(x for x, _ in agenda(1, 7)) == sorted([a, b, c])

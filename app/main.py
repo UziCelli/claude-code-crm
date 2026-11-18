@@ -2070,7 +2070,7 @@ def definir_horario(con, dia, hora, alunos, local) -> dict:
     Depois atualiza a cópia da Grade (grade_slots; a tela lê a Agenda): solta a célula de quem saiu ou mudou de local e ocupa a de quem entrou ou mudou
     (sem mexer em célula de outro aluno ou indisponível; sem erro). Quem chama abre a transação.
     Devolve {"entrou": [ids], "saiu": [ids], "mudou": [ids]}."""
-    alunos = list(dict.fromkeys(alunos))[:max_alunos(con)]
+    alunos = list(dict.fromkeys(alunos))   # o limite (max_alunos) é conferido por quem chama: aqui ninguém sai sem ter sido tirado
     locais = local if isinstance(local, dict) else {c: local for c in alunos}
     atual, apagar = {}, []
     for r in fixos_do_horario(con, dia, hora):
@@ -2693,6 +2693,9 @@ def agenda_horario(dia: int = Form(0), hora: int = Form(0), aluno1: str = Form("
         nomes.update({r["id"]: r["nome"] for r in con.execute(f"SELECT id, nome FROM clientes WHERE id IN ({','.join('?' * len(mais))})", mais)})
     locais_ = {**{c: local for c in ids}, **{c: atuais[c] for c in mais}}
     ids = ids + mais
+    cabe = max_alunos(con)
+    if len(ids) > cabe and any(c not in atuais for c in ids):   # entrar aluno novo passando do limite: recusa sem mexer em ninguém
+        return voltar(url, erro=f"{DIAS_CURTO[dia]} {hora:02d}h: cabem {cabe} alunos (Configurações > Agenda). Nada foi gravado.")
     with con:
         definir_horario(con, dia, hora, ids, locais_)
     quando = f"{DIAS_CURTO[dia]} {hora:02d}h"
