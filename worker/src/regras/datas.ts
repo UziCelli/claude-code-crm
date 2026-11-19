@@ -38,9 +38,20 @@ export function civil(z: number): [number, number, number] {
 
 const RE_ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-/** date.fromisoformat estrito: o número do dia de uma "AAAA-MM-DD" válida, senão null. */
+const memoDias = new Map<string, number | null>();
+
+/** date.fromisoformat estrito: o número do dia de uma "AAAA-MM-DD" válida, senão null. Guarda as já lidas (caminho quente). */
 export function numeroDoDia(s: unknown): number | null {
   if (typeof s !== "string" || s.length !== 10) return null;
+  const m = memoDias.get(s);
+  if (m !== undefined) return m;
+  if (memoDias.size > 20_000) memoDias.clear();
+  const z = lerNumeroDoDia(s);
+  memoDias.set(s, z);
+  return z;
+}
+
+function lerNumeroDoDia(s: string): number | null {
   const m = RE_ISO.exec(s);
   if (!m) return null;
   const a = +m[1], me = +m[2], d = +m[3];

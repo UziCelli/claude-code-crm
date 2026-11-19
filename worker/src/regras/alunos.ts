@@ -394,3 +394,25 @@ export function frase(e: Estado): string {
 }
 
 export { RE_MES as RE_MES_ALUNO, somarMeses };
+
+/**
+ * Crédito do mês pago e não usado (dar_credito): vira desconto no próximo pagamento. valor vazio = o sugerido; não passa da
+ * mensalidade. mes = 'AAAA-MM' (vazio = o ciclo analisado, senão o mês passado). [mensagem, erro].
+ */
+export async function darCredito(b: Banco, cid: number, valorBruto: number | null, mesBruto: string | null, hoje: string): Promise<[string | null, string | null]> {
+  const c = await b.um("SELECT nome, valor FROM clientes WHERE id=? AND excluido_em IS NULL", [cid]);
+  if (!c) return [null, "Aluno não encontrado."];
+  const e = await estadoAluno(b, cid, hoje);
+  const mes = mesBruto || ((e && e.uso.ciclo ? e.uso.ciclo.mes : null) || somarMeses(hoje.slice(0, 7), -1));
+  if (!RE_MES.test(mes)) return [null, "Mês inválido."];
+  let valor = valorBruto === null || valorBruto === undefined ? (e ? e.credito_sugerido : null) : valorBruto;
+  if (!valor || valor <= 0) return [null, "Informe o valor do crédito (maior que zero)."];
+  valor = arred(valor, 2);
+  const teto = flt(c.valor);
+  if (teto > 0) valor = Math.min(valor, teto);
+  if (await b.um("SELECT 1 AS ja FROM cliente_eventos WHERE cliente_id=? AND tipo='credito' AND excluido_em IS NULL AND substr(data,1,7)=?", [cid, mes]))
+    return [null, `${c.nome} já tem crédito de ${mmAaaa(mes + "-01")}: veja o histórico.`];
+  await b.run("INSERT INTO cliente_eventos (cliente_id, tipo, data, valor, descricao) VALUES (?, 'credito', ?, ?, ?)",
+    [cid, mes + "-01", valor, `Crédito: não usou ${mmAaaa(mes + "-01")}`]);
+  return [`Crédito de ${moeda(valor)} para ${c.nome}: será descontado no próximo pagamento.`, null];
+}

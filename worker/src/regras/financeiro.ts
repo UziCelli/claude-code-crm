@@ -51,7 +51,11 @@ export function mesQuePaga(data: string, dia: number | null | undefined): string
 }
 
 /** {cliente_id: {de, ate}}: alunos cujo pagamento de um mês anterior (cobre 2+ meses) vai até `mes` ou além. */
-export async function coberturaAdiantada(b: Banco, mes: string): Promise<Map<number, { de: string; ate: string }>> {
+export function coberturaAdiantada(b: Banco, mes: string): Promise<Map<number, { de: string; ate: string }>> {
+  return b.memo(`coberturaAdiantada|${mes}`, () => calcularCobertura(b, mes));
+}
+
+async function calcularCobertura(b: Banco, mes: string): Promise<Map<number, { de: string; ate: string }>> {
   const [clientes, pagos] = await Promise.all([
     b.query("SELECT id, COALESCE(valor, 0) AS valor, data_renovacao FROM clientes WHERE excluido_em IS NULL AND status='ativo'"),
     b.query(`SELECT cliente_id, data, valor, meses FROM lancamentos WHERE escopo='PJ' AND tipo='entrada' AND pago_em IS NOT NULL
@@ -308,7 +312,11 @@ export function mesesDaVenda(c: Linha, renovacao: Renovacao | null | undefined):
 export interface Credito { id: number; mes: string; valor: number }
 
 /** Créditos ainda não descontados: {cliente_id: [{id, mes, valor}]}, o mais antigo primeiro. */
-export async function creditos(b: Banco, clienteId: number | null = null): Promise<Map<number, Credito[]>> {
+export function creditos(b: Banco, clienteId: number | null = null): Promise<Map<number, Credito[]>> {
+  return b.memo(`creditos|${clienteId ?? ""}`, () => calcularCreditos(b, clienteId));
+}
+
+async function calcularCreditos(b: Banco, clienteId: number | null): Promise<Map<number, Credito[]>> {
   const [filtro, args] = clienteId ? ["AND cliente_id=?", [clienteId]] : ["", []];
   const out = new Map<number, Credito[]>();
   for (const r of await b.query(`SELECT id, cliente_id, data, valor FROM cliente_eventos WHERE tipo='credito' AND excluido_em IS NULL
@@ -336,7 +344,11 @@ export interface Mensalidade { id: number; nome: string; previsto: number; receb
   abertos: Linha[]; aberto: number; quitado: boolean; coberto_ate: string | null; pago_em_mes: string | null; falta: number; entra: number }
 
 /** Alunos ativos no mês: previsto, recebido, situação (recebido, em aberto, pago adiantado, pulou o mês), crédito e o que falta. */
-export async function mensalidades(b: Banco, mes: string, ren?: Map<number, Renovacao> | null): Promise<Mensalidade[]> {
+export function mensalidades(b: Banco, mes: string, ren?: Map<number, Renovacao> | null): Promise<Mensalidade[]> {
+  return b.memo(`mensalidades|${mes}`, () => calcularMensalidades(b, mes, ren));
+}
+
+async function calcularMensalidades(b: Banco, mes: string, ren?: Map<number, Renovacao> | null): Promise<Mensalidade[]> {
   const [abertosRows, puladosRows, livres, descRows, adiantados, alunos] = await Promise.all([
     b.query(`SELECT id, cliente_id, data, valor, descricao, categoria, conta FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
       AND excluido_em IS NULL AND pago_em IS NULL AND cliente_id IS NOT NULL AND substr(data,1,7)=? ORDER BY data, id`, [mes]),
@@ -397,7 +409,11 @@ export interface Renovacao { gravada: unknown; efetiva: unknown; vence: unknown;
  * Renovação efetiva de cada aluno (não grava nada): parte da data do cadastro e anda um mês a cada pagamento, Renovação marcada
  * perto do vencimento ou mês pulado. Regras completas em app/financeiro.py (renovacoes e _renovacao).
  */
-export async function renovacoes(b: Banco, clienteId: number | null = null): Promise<Map<number, Renovacao>> {
+export function renovacoes(b: Banco, clienteId: number | null = null): Promise<Map<number, Renovacao>> {
+  return b.memo(`renovacoes|${clienteId ?? ""}`, () => calcularRenovacoes(b, clienteId));
+}
+
+async function calcularRenovacoes(b: Banco, clienteId: number | null): Promise<Map<number, Renovacao>> {
   const [f1, a1] = clienteId ? ["AND id=?", [clienteId]] : ["", []];
   const f2 = clienteId ? "AND cliente_id=?" : "AND cliente_id IS NOT NULL";
   const [alunos, descRows, pagosRows, evRows] = await Promise.all([

@@ -33,6 +33,21 @@ export class Banco {
   private fila: Pendente[] = [];
   private agendado = false;
   private lidas = new Map<string, Promise<Linha[]>>();
+  private memos = new Map<string, Promise<unknown>>();
+
+  /**
+   * Cálculo feito uma vez por pedido (ex.: renovações, mensalidades do mês): quem pedir de novo recebe o mesmo resultado.
+   * O resultado é compartilhado: quem chama não altera. Gravar limpa, como as leituras guardadas.
+   */
+  memo<T>(chave: string, fazer: () => Promise<T>): Promise<T> {
+    let p = this.memos.get(chave) as Promise<T> | undefined;
+    if (!p) {
+      p = fazer();
+      this.memos.set(chave, p);
+      p.catch(() => this.memos.delete(chave));
+    }
+    return p;
+  }
 
   constructor(private driver: Driver, private teto = TETO_IDAS) {}
 
@@ -80,11 +95,13 @@ export class Banco {
     if (!cmds.length) return [];
     await this.esvaziar();
     this.lidas.clear();
+    this.memos.clear();
     this.contar(cmds.length);
     try {
       return await this.driver.gravar(cmds);
     } finally {
       this.lidas.clear();
+      this.memos.clear();
     }
   }
 

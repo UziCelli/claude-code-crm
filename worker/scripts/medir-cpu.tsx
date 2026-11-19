@@ -12,10 +12,23 @@ import { app } from "../src/index.ts";
 import { definirAgora } from "../src/relogio.ts";
 
 const TETO_MS = 7; // limite grátis: 10 ms por pedido; o resto é folga
-const TELAS = ["/configuracoes"];
+/** [tela, cenário 3x]: financeiro (1.290 lançamentos) ou clientes (70 alunos com histórico, pagamentos e ofertas). */
+const TELAS: [string, string][] = process.env.SO_TELA ? [[process.env.SO_TELA, process.env.CENARIO ?? "cenario-clientes"]] : [
+  ["/configuracoes", "cenario-financeiro"], ["/clientes", "cenario-clientes"], ["/clientes?status=todos", "cenario-clientes"],
+  ["/clientes/1", "cenario-clientes"], ["/clientes/9", "cenario-clientes"], ["/leads", "cenario-clientes"],
+];
 
-const db = new DatabaseSync(":memory:");
-for (const f of ["migrations/0001_inicial.sql", "test/dados/semente.sql", "test/dados/cenario-financeiro.sql"]) db.exec(readFileSync(f, "utf8"));
+const bancos = new Map<string, DatabaseSync>();
+let db!: DatabaseSync;
+function usar(cenario: string) {
+  if (!bancos.has(cenario)) {
+    const novo = new DatabaseSync(":memory:");
+    for (const f of ["migrations/0001_inicial.sql", "test/dados/semente.sql", `test/dados/${cenario}.sql`]) novo.exec(readFileSync(f, "utf8"));
+    bancos.set(cenario, novo);
+  }
+  db = bancos.get(cenario)!;
+  guardadas.clear();
+}
 
 type Params = (string | number | null)[];
 /** D1 de mentira sobre o SQLite do Node, com as leituras guardadas em texto (o Worker paga para ler a resposta). */
@@ -53,19 +66,20 @@ async function pedir(caminho: string): Promise<[number, number]> {
 
 let estourou = false;
 console.log(`CPU por pedido, cenário 3x (teto ${TETO_MS} ms; limite grátis 10 ms):`);
-for (const tela of TELAS) {
+for (const [tela, cenario] of TELAS) {
+  usar(cenario);
   const [status, tamanho] = await pedir(tela);
   if (status !== 200) throw new Error(`${tela} respondeu ${status}`);
-  for (let i = 0; i < 5; i++) await pedir(tela);
+  for (let i = 0; i < 25; i++) await pedir(tela); // aquecer: o V8 otimiza o código quente
   const t: number[] = [];
-  for (let i = 0; i < 30; i++) {
-    const c0 = process.cpuUsage();
+  for (let i = 0; i < 51; i++) {
+    const c0 = process.threadCpuUsage(); // só a linha de execução do pedido (sem as auxiliares do V8)
     await pedir(tela);
-    const c = process.cpuUsage(c0);
+    const c = process.threadCpuUsage(c0);
     t.push((c.user + c.system) / 1000);
   }
   t.sort((a, b) => a - b);
-  const med = t[15];
+  const med = t[25];
   const ok = med <= TETO_MS;
   estourou ||= !ok;
   console.log(`  ${ok ? "ok " : "ESTOUROU"} ${tela.padEnd(24)} ${med.toFixed(2).padStart(6)} ms  (HTML ${(tamanho / 1024).toFixed(0)} KB)`);

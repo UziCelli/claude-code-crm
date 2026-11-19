@@ -68,3 +68,17 @@ export function aviso(r: Response): { destino: string; msg: string | null; erro:
   const u = new URL(r.headers.get("location") ?? "", `https://${HOST}`);
   return { destino: u.pathname + u.hash, msg: u.searchParams.get("msg"), erro: u.searchParams.get("erro") };
 }
+
+/** Roteiro gerado pelo Python (paridade/gerar.py: telas_e_roteiro): telas iguais, mesmas respostas e as tabelas iguais no fim. */
+export interface Roteiro { telas: Record<string, string>; respostas: [string, string, Record<string, string>, number, string | null][]; tabelas: Record<string, Record<string, unknown>[]> }
+
+export async function pedido(metodo: string, url: string, dados: Record<string, string> = {}): Promise<Response> {
+  return metodo === "GET" ? abrir(url) : enviar(url, dados);
+}
+
+/** Como normalizar_tabela do gerar.py: carimbo de agora (relógio do servidor) vira '<agora>'. */
+export function normalizarTabela(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  const limite = new Date(Date.now() - 2 * 86_400_000).toISOString().slice(0, 10);
+  return rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) =>
+    [k, typeof v === "string" && v.length === 19 && v[10] === " " && v.slice(0, 10) >= limite ? "<agora>" : v])));
+}

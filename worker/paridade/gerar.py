@@ -424,6 +424,116 @@ def semear_ofertas_indicacoes(caminho: Path) -> None:
     fixar_carimbos(caminho)
 
 
+def semear_leads(caminho: Path) -> None:
+    """Leads em todas as etapas: atrasados, parados, com indicação, perdidos com motivo e um que já virou aluno."""
+    con = sqlite3.connect(caminho)
+    with con:
+        ids = [r[0] for r in con.execute("SELECT id FROM clientes ORDER BY id LIMIT 3")]
+        leads = [("Lia", "11911112222", "Instagram orgânico", "Mensalidade / CIA", "mandar mensagem", "2026-11-10", "lead", None, None, "2026-11-01", None),
+                 ("Mel", None, "Indicação", "Pacote de Aulas / SmartFit", None, None, "lead", None, ids[0], "2026-10-01", None),
+                 ("Nil", "11933334444", "Google", None, "marcar avaliação", "2026-11-25", "conversa", None, None, "2026-11-18", None),
+                 ("Oto", "11955556666", "WhatsApp", "Mensalidade / Condomínio", None, None, "avaliacao", None, None, "2026-09-01", None),
+                 ("Pri", "11977778888", "Stadami", None, None, None, "perdido", "Preço", None, "2026-10-10", None),
+                 ("Quim", None, "Outro", None, None, None, "perdido", "  preço ", None, "2026-10-12", None),
+                 ("Rui", "11999990001", "Indicação", "Mensalidade / CIA", None, None, "cliente", None, None, "2026-10-20", ids[1])]
+        for nome, tel, canal, interesse, prox, dprox, etapa, motivo, ind, mud, cid in leads:
+            con.execute("""INSERT INTO leads (nome, telefone, canal_origem, interesse, proxima_acao, data_proxima_acao, etapa, motivo_perda,
+                           indicado_por, data_entrada, data_mudanca_etapa, cliente_id, atualizado_em) VALUES (?,?,?,?,?,?,?,?,?,?,?,?, ?)""",
+                        (nome, tel, canal, interesse, prox, dprox, etapa, motivo, ind, mud, mud, cid, mud + " 10:00:00"))
+        con.execute("INSERT INTO propostas (cliente_id, tipo_servico, qtd_aulas, local, forma_pagamento, preco_total, preco_pessoa, lucro, margem, status)"
+                    " VALUES (?, 'Mensalidade', 8, 'CIA', 'PIX', 640, 640, 120, 0.1875, 'enviada')", (ids[0],))
+    con.close()
+    fixar_carimbos(caminho)
+
+
+def normalizar_tabela(rows):
+    """Linhas para comparar com o Worker: carimbo de agora (relógio do servidor) vira '<agora>'."""
+    import datetime as dt
+    hoje_real = dt.date.today()
+    out = []
+    for r in rows:
+        linha = {}
+        for k, v in r.items():
+            if isinstance(v, str) and len(v) == 19 and v[10] == " " and v[:10] >= (hoje_real - dt.timedelta(days=2)).isoformat():
+                v = "<agora>"
+            linha[k] = v
+        out.append(linha)
+    return out
+
+
+def telas_e_roteiro(caminho: Path, nome: str, urls: list, passos: list, tabelas: list) -> None:
+    """Grava o HTML do Python de cada tela e o resultado de um roteiro de POSTs (status, Location e as tabelas no fim)."""
+    import shutil
+    db.DB_PATH = caminho
+    http = cliente_python_como_nuvem()
+    telas = {u: http.get(u, follow_redirects=False).text for u in urls}
+    respostas = []
+    for metodo, url, dados in passos:
+        r = http.request(metodo, url, data=dados, follow_redirects=False)
+        respostas.append([metodo, url, dados, r.status_code, r.headers.get("location")])
+    con = sqlite3.connect(caminho)
+    con.row_factory = sqlite3.Row
+    estado_final = {t: normalizar_tabela([dict(x) for x in con.execute(f'SELECT * FROM "{t}" ORDER BY rowid')]) for t in tabelas}
+    con.close()
+    salvar(nome, {"telas": telas, "respostas": respostas, "tabelas": estado_final})
+
+
+def casos_clientes():
+    from app import alunos
+    caminho = banco_novo()
+    semear_alunos(caminho)
+    semear_ofertas_indicacoes(caminho)
+    semear_leads(caminho)
+    dump(caminho, ["parametros", "clientes", "agenda_fixos", "cliente_eventos", "lancamentos", "ofertas", "oferta_respostas", "leads", "propostas"],
+         "cenario-clientes.sql")
+    con = db.conectar(caminho)
+    est = alunos.estado(con, HOJE)
+    por_sit = {}
+    for cid, e in est.items():
+        por_sit.setdefault(e["situacao"], []).append(cid)
+    ativos = sorted(est)
+    inativo = con.execute("SELECT id FROM clientes WHERE status!='ativo' ORDER BY id LIMIT 1").fetchone()[0]
+    difs = sorted(__import__("app").financeiro.diferencas(con))
+    indicador = con.execute("SELECT indicado_por FROM clientes WHERE indicado_por IS NOT NULL ORDER BY id LIMIT 1").fetchone()[0]
+    sem_tel = con.execute("SELECT id FROM clientes WHERE status='ativo' AND (telefone IS NULL OR telefone='') ORDER BY id LIMIT 1").fetchone()[0]
+    con.close()
+    fichas = sorted({*[v[0] for v in por_sit.values()], *[v[-1] for v in por_sit.values()], inativo, *difs[:2], indicador, ativos[0], ativos[1], ativos[4], sem_tel})
+    lista_ids = ",".join(map(str, ativos[:40] + [inativo]))
+    urls = ["/clientes", "/clientes?status=todos", "/clientes?status=inativo&busca=Aluno 1", "/clientes?status=pausado", "/clientes?busca=zzz",
+            *[f"/clientes?ids={lista_ids}&motivo={m}" for m in ("cobrar", "sem-aula", "incompleto", "indicacao", "reativar", "dupla", "reajuste", "outro")],
+            f"/clientes?ids={lista_ids}&motivo=upsell&oferta=1", f"/clientes?ids={lista_ids}&motivo=upsell&oferta=3", "/clientes?ids=x,0",
+            "/clientes/novo", *[f"/clientes/{c}" for c in fichas], "/clientes/99999", "/leads", "/leads?destaque=3"]
+    cobrar = por_sit["cobrar"][0]
+    sem_aula = (por_sit.get("pago_sem_aula") or por_sit["sem_pagar_sem_aula"])[0]
+    passos = [
+        ("POST", "/clientes", {"nome": "Novo Ana", "telefone": "11912345678", "valor": "650,50", "status": "ativo", "tipo_servico": "Mensalidade",
+                               "plano": "Mensalidade 2x", "local": "CIA", "pessoas": "2", "indicado_por": str(ativos[2]), "data_inicio": "2026-11-10"}),
+        ("POST", "/clientes", {"nome": "Novo Ana", "telefone": "11912345678", "valor": "650,50"}),
+        ("POST", "/clientes", {"nome": ""}),
+        ("POST", "/clientes", {"nome": "Beto", "indicado_por": "abc"}),
+        ("POST", f"/clientes/{ativos[0]}/wa/renovacao", {}), ("POST", f"/clientes/{cobrar}/wa/cobranca", {}),
+        ("POST", f"/clientes/{ativos[1]}/wa/indicacao", {}), ("POST", f"/clientes/{ativos[1]}/wa/falta", {}),
+        ("POST", f"/clientes/{ativos[0]}/wa/xyz", {}), ("POST", f"/clientes/{sem_tel}/wa/renovacao", {}), ("POST", "/clientes/99999/wa/renovacao", {}),
+        ("POST", f"/clientes/{ativos[0]}/depoimento", {"descricao": "  Adorei  "}), ("POST", f"/clientes/{ativos[0]}/depoimento", {}),
+        ("POST", f"/alunos/{sem_aula}/credito", {"valor": "", "mes": ""}), ("POST", f"/alunos/{sem_aula}/credito", {"valor": "", "mes": ""}),
+        ("POST", f"/alunos/{ativos[3]}/credito", {"valor": "x"}), ("POST", f"/alunos/{ativos[3]}/credito", {"valor": "99999", "mes": "2026-08", "voltar": "/clientes"}),
+        ("POST", f"/alunos/{ativos[3]}/credito", {"valor": "10", "mes": "2026-13"}),
+        ("POST", f"/clientes/{ativos[5]}/consultoria", {"tipo_servico": "Consultoria Online", "voltar": f"/clientes?ids={lista_ids}&motivo=sem-aula"}),
+        ("POST", f"/clientes/{ativos[5]}/consultoria", {"tipo_servico": "Mensalidade"}),
+        ("POST", f"/clientes/{indicador}/indicacao/{ativos[5] if False else 0}/presente", {"o_que": "x"}),
+        ("POST", f"/clientes/{ativos[0]}/oferta/1/enviar", {}), ("POST", f"/clientes/{ativos[0]}/oferta/1/aceitou", {"atualizar": "1"}),
+        ("POST", f"/clientes/{ativos[2]}/oferta/2/recusou", {}), ("POST", f"/clientes/{ativos[1]}/oferta/1/encerrar-desconto", {}),
+        ("POST", f"/clientes/{ativos[6]}/oferta/2/aceitou", {}), ("POST", f"/clientes/{ativos[6]}/oferta/3/enviar", {"voltar": "/clientes"}),
+        ("POST", "/leads", {"nome": "Sol", "telefone": "", "canal_origem": "Google", "indicado_por": str(ativos[0]), "interesse": "Mensalidade / CIA"}),
+        ("POST", "/leads", {"nome": "Tom", "canal_origem": "Google", "indicado_por": "999999"}),
+        ("POST", "/leads/1", {"nome": "Lia B", "canal_origem": "Instagram Ads", "observacoes": "volta dia 30"}),
+        ("POST", "/leads/1/etapa", {"etapa": "conversa"}), ("POST", "/leads/4/etapa", {"etapa": "cliente"}),
+        ("POST", "/leads/3/etapa", {"etapa": "perdido", "motivo_perda": "Horário"}), ("POST", "/leads/3/etapa", {"etapa": "xx"}),
+        ("POST", "/leads/2/excluir", {}), ("POST", f"/clientes/{ativos[7]}/excluir", {}),
+    ]
+    telas_e_roteiro(caminho, "clientes", urls, passos, ["clientes", "cliente_eventos", "leads", "lead_etapas_log", "oferta_respostas"])
+
+
 def casos_alunos():
     from app import alunos, financeiro, main, pix
     caminho = banco_novo()
@@ -560,4 +670,5 @@ if __name__ == "__main__":
     casos_financeiro_prototipo()
     casos_motor()
     casos_alunos()
+    casos_clientes()
     print("paridade gerada em worker/")

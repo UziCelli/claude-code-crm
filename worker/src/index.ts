@@ -1,11 +1,15 @@
 import { criarApp } from "./app.ts";
 import { acordarRender } from "./repasse.ts";
+import { rotasClientes } from "./rotas/clientes.tsx";
 import { rotasConfiguracoes } from "./rotas/configuracoes.tsx";
+import { rotasLeads } from "./rotas/leads.tsx";
 import type { Env } from "./tipos.ts";
 
 /** Telas migradas: cada fase acrescenta as suas aqui. */
 export const app = criarApp((a) => {
   rotasConfiguracoes(a);
+  rotasClientes(a);
+  rotasLeads(a);
 });
 
 export default {

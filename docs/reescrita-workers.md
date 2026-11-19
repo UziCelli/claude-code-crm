@@ -23,17 +23,21 @@ Fonte única da reescrita (Python no Render → TypeScript no Cloudflare Workers
   o mesmo resultado, centavo por centavo (`arred` = `round`), e o mesmo HTML (`test/html.ts`).
 - **Relógio:** `relogio.ts` (Brasília). SQL com `'localtime'` segue igual (UTC no Turso/D1, como hoje no Render).
 - **CPU** (Victor, 19/11: ficar no Cloudflare e otimizar): soma ou filtro em laço vai para o SQL, que roda fora da CPU do
-  Worker; listas grandes com `html`. `npm run cpu` (também no CI) mede o pedido inteiro de cada tela no cenário 3× e falha acima de **7 ms**.
+  Worker; listas grandes com `html`; cálculo repetido no pedido guardado (`Banco.memo`). `npm run cpu` (também no CI) mede a CPU
+  da linha principal no pedido inteiro de cada tela, no cenário 3×, e falha acima de **7 ms**.
+- **Roteiros:** `gerar.py` grava o HTML das telas e uma sequência de cliques no Python; o teste refaz no Worker e exige as
+  mesmas respostas e tabelas.
 
-## Medições
-- Fase 0 (3× o volume): HTML de 330 KB custa 8 ms com JSX e 1,6 ms com `html`. Telas pesadas, estimativa: 3,5–5,5 ms hoje, 10–16 ms com 3× sem as regras.
-- Fase 1: `/configuracoes` 4,8–5,0 ms (3×).
+## Medições (cenário 3×)
+`/configuracoes` 4,1–4,5 ms; `/clientes` 4,6–4,8; ficha 3,3–3,9; `/leads` 1,4–2,0. HTML de 330 KB: 8 ms em JSX, 1,6 ms com `html`.
 
 ## Fases (todas na mesma PR)
 0. Fundação: banco, portaria, repasse ao Render, layout, Crons, testes. **Feita.**
 1. Configurações: motor de preços, DAS e horas de trabalho; o POST grava só o que mudou, numa ida, e confere as margens
    antes (fim do 503). Importar planilha, `/locais/*` e `/calculos` seguem no Render. **Feita.**
-2. Clientes, ficha e leads · 3. Agenda e grade · 4. Propostas, ofertas e cálculos · 5. Financeiro · 6. Assistente ·
+2. Clientes, ficha e leads: estado do aluno, cobrança, cartão com QR Pix, ofertas e indicações. Salvar a ficha, status,
+   evento, pular mês e horários mexem na Agenda/Grade: vão com a Fase 3. **Feita.**
+3. Agenda e grade · 4. Propostas, ofertas e cálculos · 5. Financeiro · 6. Assistente ·
 7. Painel, campanhas, rotina, explorador, dados, importar e exportar · 8. D1, remoção do Python e do código do PC.
 
 Alertas do topo entram com as regras de alunos e do financeiro (até lá, vazios nas telas novas).
