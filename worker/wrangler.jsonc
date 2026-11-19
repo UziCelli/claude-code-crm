@@ -1,0 +1,23 @@
+// Worker do CRM. Passo a passo da publicação: docs/reescrita-workers.md (ida ao ar).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "vfitcoach-crm",
+  "main": "src/index.ts",
+  // Só pelo endereço do CRM (rota com o Access na frente): sem *.workers.dev nem URLs de prévia.
+  "workers_dev": false,
+  "preview_urls": false,
+  "compatibility_date": "2026-11-01",
+  // Estáticos (/static/style.css, app.js, fontes): copiados de app/static por scripts/copiar-estaticos.mjs.
+  // O Worker roda primeiro só fora de /static (o resto da URL é do CRM).
+  "assets": { "directory": "public", "binding": "ASSETS", "run_worker_first": ["/*", "!/static/*"] },
+  // Variáveis (BANCO, RENDER_URL, CF_ACCESS_*, CRM_ENDERECOS) e segredos ficam no painel do Cloudflare: a publicação não apaga.
+  "keep_vars": true,
+  "triggers": {
+    // */10: acorda o Render enquanto ele existir (RENDER_URL). 7 9 * * *: tarefas do dia às 06:07 de Brasília.
+    "crons": ["*/10 * * * *", "7 9 * * *"]
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "vfitcoach-crm", "migrations_dir": "migrations" }
+  ],
+  "observability": { "enabled": true }
+}

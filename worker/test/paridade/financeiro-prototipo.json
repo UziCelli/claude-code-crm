@@ -1,0 +1,5454 @@
+{
+"cobertura": {
+"2026-08": {
+"25": {
+"de": "2026-06",
+"ate": "2026-08"
+},
+"33": {
+"de": "2026-03",
+"ate": "2026-08"
+},
+"16": {
+"de": "2026-07",
+"ate": "2026-09"
+},
+"43": {
+"de": "2026-03",
+"ate": "2026-08"
+},
+"15": {
+"de": "2026-04",
+"ate": "2026-09"
+},
+"31": {
+"de": "2026-04",
+"ate": "2026-09"
+},
+"30": {
+"de": "2026-07",
+"ate": "2026-12"
+},
+"20": {
+"de": "2026-07",
+"ate": "2026-12"
+},
+"35": {
+"de": "2026-05",
+"ate": "2026-10"
+},
+"14": {
+"de": "2026-05",
+"ate": "2026-10"
+},
+"6": {
+"de": "2026-06",
+"ate": "2026-08"
+},
+"18": {
+"de": "2026-07",
+"ate": "2026-09"
+},
+"9": {
+"de": "2026-07",
+"ate": "2026-12"
+},
+"27": {
+"de": "2026-07",
+"ate": "2026-08"
+},
+"17": {
+"de": "2026-07",
+"ate": "2026-09"
+}
+},
+"2026-09": {
+"15": {
+"de": "2026-08",
+"ate": "2026-10"
+},
+"31": {
+"de": "2026-04",
+"ate": "2026-09"
+},
+"30": {
+"de": "2026-08",
+"ate": "2027-01"
+},
+"20": {
+"de": "2026-07",
+"ate": "2026-12"
+},
+"35": {
+"de": "2026-08",
+"ate": "2026-10"
+},
+"14": {
+"de": "2026-05",
+"ate": "2026-10"
+},
+"18": {
+"de": "2026-07",
+"ate": "2026-09"
+},
+"16": {
+"de": "2026-07",
+"ate": "2026-09"
+},
+"9": {
+"de": "2026-07",
+"ate": "2026-12"
+},
+"17": {
+"de": "2026-08",
+"ate": "2027-01"
+},
+"23": {
+"de": "2026-08",
+"ate": "2026-10"
+},
+"26": {
+"de": "2026-08",
+"ate": "2026-09"
+},
+"2": {
+"de": "2026-08",
+"ate": "2026-09"
+},
+"11": {
+"de": "2026-08",
+"ate": "2027-01"
+},
+"29": {
+"de": "2026-08",
+"ate": "2026-10"
+}
+},
+"2026-10": {
+"20": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"35": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"14": {
+"de": "2026-05",
+"ate": "2026-10"
+},
+"9": {
+"de": "2026-07",
+"ate": "2026-12"
+},
+"30": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"23": {
+"de": "2026-08",
+"ate": "2026-10"
+},
+"15": {
+"de": "2026-08",
+"ate": "2026-10"
+},
+"17": {
+"de": "2026-08",
+"ate": "2027-01"
+},
+"11": {
+"de": "2026-08",
+"ate": "2027-01"
+},
+"29": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"40": {
+"de": "2026-09",
+"ate": "2026-11"
+},
+"32": {
+"de": "2026-09",
+"ate": "2026-10"
+},
+"43": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"5": {
+"de": "2026-09",
+"ate": "2026-11"
+},
+"12": {
+"de": "2026-09",
+"ate": "2026-10"
+},
+"2": {
+"de": "2026-09",
+"ate": "2026-11"
+},
+"3": {
+"de": "2026-09",
+"ate": "2026-11"
+},
+"21": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"44": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"24": {
+"de": "2026-10",
+"ate": "2026-11"
+},
+"39": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"33": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"42": {
+"de": "2026-09",
+"ate": "2027-02"
+}
+},
+"2026-11": {
+"9": {
+"de": "2026-07",
+"ate": "2026-12"
+},
+"30": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"20": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"17": {
+"de": "2026-08",
+"ate": "2027-01"
+},
+"11": {
+"de": "2026-08",
+"ate": "2027-01"
+},
+"43": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"5": {
+"de": "2026-09",
+"ate": "2026-11"
+},
+"29": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"40": {
+"de": "2026-09",
+"ate": "2026-11"
+},
+"3": {
+"de": "2026-09",
+"ate": "2026-11"
+},
+"21": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"35": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"44": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"2": {
+"de": "2026-09",
+"ate": "2026-11"
+},
+"24": {
+"de": "2026-10",
+"ate": "2026-11"
+},
+"39": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"33": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"42": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"32": {
+"de": "2026-10",
+"ate": "2027-03"
+},
+"23": {
+"de": "2026-10",
+"ate": "2026-11"
+},
+"27": {
+"de": "2026-10",
+"ate": "2027-03"
+},
+"4": {
+"de": "2026-10",
+"ate": "2026-11"
+},
+"7": {
+"de": "2026-10",
+"ate": "2027-03"
+}
+},
+"2026-12": {
+"9": {
+"de": "2026-07",
+"ate": "2026-12"
+},
+"30": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"20": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"17": {
+"de": "2026-08",
+"ate": "2027-01"
+},
+"11": {
+"de": "2026-08",
+"ate": "2027-01"
+},
+"43": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"29": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"21": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"35": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"44": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"39": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"33": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"42": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"32": {
+"de": "2026-10",
+"ate": "2027-03"
+},
+"27": {
+"de": "2026-10",
+"ate": "2027-03"
+},
+"7": {
+"de": "2026-10",
+"ate": "2027-03"
+},
+"2": {
+"de": "2026-11",
+"ate": "2027-01"
+},
+"45": {
+"de": "2026-11",
+"ate": "2026-12"
+},
+"5": {
+"de": "2026-11",
+"ate": "2027-01"
+}
+},
+"2027-01": {
+"30": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"17": {
+"de": "2026-08",
+"ate": "2027-01"
+},
+"11": {
+"de": "2026-08",
+"ate": "2027-01"
+},
+"43": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"29": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"20": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"21": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"35": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"44": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"39": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"33": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"42": {
+"de": "2026-09",
+"ate": "2027-02"
+},
+"32": {
+"de": "2026-10",
+"ate": "2027-03"
+},
+"27": {
+"de": "2026-10",
+"ate": "2027-03"
+},
+"7": {
+"de": "2026-10",
+"ate": "2027-03"
+},
+"2": {
+"de": "2026-11",
+"ate": "2027-01"
+},
+"5": {
+"de": "2026-11",
+"ate": "2027-01"
+}
+}
+},
+"ja_avisadas": [],
+"duplicados": [
+{
+"ids": [
+609,
+1249
+],
+"manter": 609,
+"certeza": "quase certo",
+"valor": 1917.08,
+"escopo": "PJ",
+"tipo": "saida",
+"itens": [
+{
+"id": 609,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2027-01-01",
+"pago_em": null,
+"valor": 1917.08,
+"categoria": "Alimentação",
+"descricao": "Mercado São João",
+"contraparte": null,
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2027-01-01",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1249,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2027-01-01",
+"pago_em": null,
+"valor": 1917.08,
+"categoria": "Alimentação",
+"descricao": "Mercado São João",
+"contraparte": null,
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2027-01-01",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+726,
+1290
+],
+"manter": 726,
+"certeza": "quase certo",
+"valor": 1840.5,
+"escopo": "PF",
+"tipo": "saida",
+"itens": [
+{
+"id": 726,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-05-16",
+"pago_em": "2026-05-16",
+"valor": 1840.5,
+"categoria": "Alimentação",
+"descricao": "Desc 25",
+"contraparte": null,
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-05-16",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1290,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-05-16",
+"pago_em": "2026-05-16",
+"valor": 1840.5,
+"categoria": "Alimentação",
+"descricao": "Desc 25",
+"contraparte": null,
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-05-16",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+724,
+1224
+],
+"manter": 724,
+"certeza": "quase certo",
+"valor": 973.45,
+"escopo": "PJ",
+"tipo": "saida",
+"itens": [
+{
+"id": 724,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2026-05-14",
+"pago_em": "2026-05-14",
+"valor": 973.45,
+"categoria": "Outros",
+"descricao": "Mercado São João",
+"contraparte": null,
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-05-14",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1224,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2026-05-14",
+"pago_em": "2026-05-14",
+"valor": 973.45,
+"categoria": "Outros",
+"descricao": "Mercado São João",
+"contraparte": null,
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-05-14",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+971,
+1221
+],
+"manter": 971,
+"certeza": "quase certo",
+"valor": 1527.92,
+"escopo": "PF",
+"tipo": "entrada",
+"itens": [
+{
+"id": 971,
+"escopo": "PF",
+"tipo": "entrada",
+"data": "2026-02-14",
+"pago_em": "2026-02-14",
+"valor": 1527.92,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Mercado São João",
+"contraparte": "",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-02-14",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1221,
+"escopo": "PF",
+"tipo": "entrada",
+"data": "2026-02-14",
+"pago_em": "2026-02-14",
+"valor": 1527.92,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Mercado São João",
+"contraparte": "",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-02-14",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+313,
+1214
+],
+"manter": 313,
+"certeza": "quase certo",
+"valor": 498.42,
+"escopo": "PF",
+"tipo": "entrada",
+"itens": [
+{
+"id": 313,
+"escopo": "PF",
+"tipo": "entrada",
+"data": "2026-01-26",
+"pago_em": "2026-01-26",
+"valor": 498.42,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Mercado São João",
+"contraparte": "Pessoa 12",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-01-26",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1214,
+"escopo": "PF",
+"tipo": "entrada",
+"data": "2026-01-26",
+"pago_em": "2026-01-26",
+"valor": 498.42,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Mercado São João",
+"contraparte": "Pessoa 12",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-01-26",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+142,
+1276
+],
+"manter": 142,
+"certeza": "quase certo",
+"valor": 1200.0,
+"escopo": "PJ",
+"tipo": "entrada",
+"itens": [
+{
+"id": 142,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2025-09-24",
+"pago_em": "2025-09-24",
+"valor": 1200.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Mercado São João",
+"contraparte": "",
+"cliente_id": 39,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-09-24",
+"aluno": "Aluno 38 Ção",
+"manter": true
+},
+{
+"id": 1276,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2025-09-24",
+"pago_em": "2025-09-24",
+"valor": 1200.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Mercado São João",
+"contraparte": "",
+"cliente_id": 39,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-09-24",
+"aluno": "Aluno 38 Ção",
+"manter": false
+}
+]
+},
+{
+"ids": [
+104,
+1277
+],
+"manter": 104,
+"certeza": "quase certo",
+"valor": 300.0,
+"escopo": "PJ",
+"tipo": "entrada",
+"itens": [
+{
+"id": 104,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2025-07-23",
+"pago_em": "2025-07-23",
+"valor": 300.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Mercado São João",
+"contraparte": "Pessoa 3",
+"cliente_id": 9,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-07-23",
+"aluno": "Aluno 8 Ção",
+"manter": true
+},
+{
+"id": 1277,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2025-07-23",
+"pago_em": "2025-07-23",
+"valor": 300.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Mercado São João",
+"contraparte": "Pessoa 3",
+"cliente_id": 9,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-07-23",
+"aluno": "Aluno 8 Ção",
+"manter": false
+}
+]
+},
+{
+"ids": [
+779,
+1257
+],
+"manter": 779,
+"certeza": "quase certo",
+"valor": 1879.32,
+"escopo": "PF",
+"tipo": "saida",
+"itens": [
+{
+"id": 779,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2025-06-07",
+"pago_em": "2025-06-07",
+"valor": 1879.32,
+"categoria": "Outros",
+"descricao": "Mercado São João",
+"contraparte": "Pessoa 28",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-06-07",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1257,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2025-06-07",
+"pago_em": "2025-06-07",
+"valor": 1879.32,
+"categoria": "Outros",
+"descricao": "Mercado São João",
+"contraparte": "Pessoa 28",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-06-07",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+683,
+1231
+],
+"manter": 683,
+"certeza": "talvez",
+"valor": 1328.68,
+"escopo": "PF",
+"tipo": "saida",
+"itens": [
+{
+"id": 683,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2027-01-14",
+"pago_em": null,
+"valor": 1328.68,
+"categoria": "Outros",
+"descricao": "",
+"contraparte": "",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2027-01-14",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1231,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2027-01-14",
+"pago_em": null,
+"valor": 1328.68,
+"categoria": "Outros",
+"descricao": "",
+"contraparte": "",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2027-01-14",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+417,
+1234
+],
+"manter": 417,
+"certeza": "talvez",
+"valor": 602.85,
+"escopo": "PJ",
+"tipo": "saida",
+"itens": [
+{
+"id": 417,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2027-01-03",
+"pago_em": null,
+"valor": 602.85,
+"categoria": "Alimentação",
+"descricao": "Desc 66",
+"contraparte": "",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2027-01-03",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1234,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2027-01-04",
+"pago_em": null,
+"valor": 602.85,
+"categoria": "Alimentação",
+"descricao": "Desc 66",
+"contraparte": "",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2027-01-04",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+66,
+1266
+],
+"manter": 66,
+"certeza": "talvez",
+"valor": 1946.45,
+"escopo": "PF",
+"tipo": "saida",
+"itens": [
+{
+"id": 66,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-12-18",
+"pago_em": null,
+"valor": 1946.45,
+"categoria": "Outros",
+"descricao": "",
+"contraparte": "Pessoa 15",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-12-18",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1266,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-12-19",
+"pago_em": null,
+"valor": 1946.45,
+"categoria": "Outros",
+"descricao": "",
+"contraparte": "Pessoa 15",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-12-19",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+959,
+1286
+],
+"manter": 959,
+"certeza": "talvez",
+"valor": 615.0,
+"escopo": "PJ",
+"tipo": "entrada",
+"itens": [
+{
+"id": 959,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-12-12",
+"pago_em": null,
+"valor": 615.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Desc 48",
+"contraparte": "",
+"cliente_id": 25,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-12-12",
+"aluno": "Aluno 24 Ção",
+"manter": true
+},
+{
+"id": 1286,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-12-14",
+"pago_em": null,
+"valor": 615.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Desc 48",
+"contraparte": "",
+"cliente_id": 25,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-12-14",
+"aluno": "Aluno 24 Ção",
+"manter": false
+}
+]
+},
+{
+"ids": [
+470,
+1270,
+1245
+],
+"manter": 470,
+"certeza": "talvez",
+"valor": 404.88,
+"escopo": "PF",
+"tipo": "saida",
+"itens": [
+{
+"id": 470,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-12-11",
+"pago_em": null,
+"valor": 404.88,
+"categoria": "Alimentação",
+"descricao": "Desc 49",
+"contraparte": null,
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-12-11",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1270,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-12-13",
+"pago_em": null,
+"valor": 404.88,
+"categoria": "Alimentação",
+"descricao": "Desc 49",
+"contraparte": null,
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-12-13",
+"aluno": null,
+"manter": false
+},
+{
+"id": 1245,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-12-16",
+"pago_em": null,
+"valor": 404.88,
+"categoria": "Alimentação",
+"descricao": "Desc 49",
+"contraparte": null,
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-12-16",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+1156,
+1205
+],
+"manter": 1156,
+"certeza": "talvez",
+"valor": 1800.0,
+"escopo": "PJ",
+"tipo": "entrada",
+"itens": [
+{
+"id": 1156,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-11-25",
+"pago_em": null,
+"valor": 1800.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Mercado São João",
+"contraparte": "",
+"cliente_id": 32,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": 3,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-11-25",
+"aluno": "Aluno 31 Ção",
+"manter": true
+},
+{
+"id": 1205,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-11-26",
+"pago_em": null,
+"valor": 1800.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Mercado São João",
+"contraparte": "",
+"cliente_id": 32,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-11-26",
+"aluno": "Aluno 31 Ção",
+"manter": false
+}
+]
+},
+{
+"ids": [
+847,
+1247
+],
+"manter": 847,
+"certeza": "talvez",
+"valor": 1057.42,
+"escopo": "PF",
+"tipo": "saida",
+"itens": [
+{
+"id": 847,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-11-04",
+"pago_em": "2026-11-04",
+"valor": 1057.42,
+"categoria": "Alimentação",
+"descricao": "",
+"contraparte": "",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-11-04",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1247,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-11-05",
+"pago_em": "2026-11-05",
+"valor": 1057.42,
+"categoria": "Alimentação",
+"descricao": "",
+"contraparte": "",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-11-05",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+273,
+1278
+],
+"manter": 273,
+"certeza": "talvez",
+"valor": 1518.42,
+"escopo": "PJ",
+"tipo": "saida",
+"itens": [
+{
+"id": 273,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2026-10-20",
+"pago_em": "2026-10-20",
+"valor": 1518.42,
+"categoria": "Alimentação",
+"descricao": "",
+"contraparte": "Pessoa 22",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-10-20",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1278,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2026-10-20",
+"pago_em": "2026-10-20",
+"valor": 1518.42,
+"categoria": "Alimentação",
+"descricao": "",
+"contraparte": "Pessoa 22",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-10-20",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+695,
+1258
+],
+"manter": 695,
+"certeza": "talvez",
+"valor": 300.0,
+"escopo": "PJ",
+"tipo": "entrada",
+"itens": [
+{
+"id": 695,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-10-08",
+"pago_em": "2026-10-08",
+"valor": 300.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": null,
+"contraparte": "Pessoa 44",
+"cliente_id": 36,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-10-08",
+"aluno": "Aluno 35 Ção",
+"manter": true
+},
+{
+"id": 1258,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-10-10",
+"pago_em": "2026-10-10",
+"valor": 300.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": null,
+"contraparte": "Pessoa 44",
+"cliente_id": 36,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-10-10",
+"aluno": "Aluno 35 Ção",
+"manter": false
+}
+]
+},
+{
+"ids": [
+1157,
+1252
+],
+"manter": 1157,
+"certeza": "talvez",
+"valor": 978.51,
+"escopo": "PF",
+"tipo": "saida",
+"itens": [
+{
+"id": 1157,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-09-16",
+"pago_em": "2026-09-16",
+"valor": 978.51,
+"categoria": "Outros",
+"descricao": "",
+"contraparte": null,
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-09-16",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1252,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-09-18",
+"pago_em": "2026-09-18",
+"valor": 978.51,
+"categoria": "Outros",
+"descricao": "",
+"contraparte": null,
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-09-18",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+97,
+1229
+],
+"manter": 97,
+"certeza": "talvez",
+"valor": 1563.78,
+"escopo": "PJ",
+"tipo": "entrada",
+"itens": [
+{
+"id": 97,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-09-08",
+"pago_em": "2026-09-08",
+"valor": 1563.78,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Desc 26",
+"contraparte": "Pessoa 46",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-09-08",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1229,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-09-09",
+"pago_em": "2026-09-09",
+"valor": 1563.78,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Desc 26",
+"contraparte": "Pessoa 46",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-09-09",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+532,
+1230
+],
+"manter": 532,
+"certeza": "talvez",
+"valor": 615.0,
+"escopo": "PJ",
+"tipo": "entrada",
+"itens": [
+{
+"id": 532,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-09-03",
+"pago_em": "2026-09-03",
+"valor": 615.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": null,
+"contraparte": null,
+"cliente_id": 28,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-09-03",
+"aluno": "Aluno 27 Ção",
+"manter": true
+},
+{
+"id": 1230,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-09-03",
+"pago_em": "2026-09-03",
+"valor": 615.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": null,
+"contraparte": null,
+"cliente_id": 28,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-09-03",
+"aluno": "Aluno 27 Ção",
+"manter": false
+}
+]
+},
+{
+"ids": [
+929,
+1206
+],
+"manter": 929,
+"certeza": "talvez",
+"valor": 615.0,
+"escopo": "PJ",
+"tipo": "entrada",
+"itens": [
+{
+"id": 929,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-08-27",
+"pago_em": "2026-08-27",
+"valor": 615.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "",
+"contraparte": "",
+"cliente_id": 3,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-08-27",
+"aluno": "Aluno 2 Ção",
+"manter": true
+},
+{
+"id": 1206,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-08-27",
+"pago_em": "2026-08-27",
+"valor": 615.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "",
+"contraparte": "",
+"cliente_id": 3,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-08-27",
+"aluno": "Aluno 2 Ção",
+"manter": false
+}
+]
+},
+{
+"ids": [
+709,
+1243
+],
+"manter": 709,
+"certeza": "talvez",
+"valor": 1006.31,
+"escopo": "PJ",
+"tipo": "saida",
+"itens": [
+{
+"id": 709,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2026-08-24",
+"pago_em": "2026-08-24",
+"valor": 1006.31,
+"categoria": "Outros",
+"descricao": null,
+"contraparte": "Pessoa 8",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-08-24",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1243,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2026-08-24",
+"pago_em": "2026-08-24",
+"valor": 1006.31,
+"categoria": "Outros",
+"descricao": null,
+"contraparte": "Pessoa 8",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-08-24",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+288,
+1281
+],
+"manter": 288,
+"certeza": "talvez",
+"valor": 600.0,
+"escopo": "PJ",
+"tipo": "entrada",
+"itens": [
+{
+"id": 288,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-08-12",
+"pago_em": "2026-08-12",
+"valor": 600.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Mercado São João",
+"contraparte": "Pessoa 37",
+"cliente_id": 28,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": 6,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-08-12",
+"aluno": "Aluno 27 Ção",
+"manter": true
+},
+{
+"id": 1281,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-08-14",
+"pago_em": "2026-08-14",
+"valor": 600.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Mercado São João",
+"contraparte": "Pessoa 37",
+"cliente_id": 28,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-08-14",
+"aluno": "Aluno 27 Ção",
+"manter": false
+}
+]
+},
+{
+"ids": [
+100,
+1210
+],
+"manter": 100,
+"certeza": "talvez",
+"valor": 862.66,
+"escopo": "PF",
+"tipo": "saida",
+"itens": [
+{
+"id": 100,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-07-23",
+"pago_em": "2026-07-23",
+"valor": 862.66,
+"categoria": "Outros",
+"descricao": "Mercado São João",
+"contraparte": "",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-07-23",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1210,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-07-24",
+"pago_em": "2026-07-24",
+"valor": 862.66,
+"categoria": "Outros",
+"descricao": "Mercado São João",
+"contraparte": "",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-07-24",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+1138,
+1246
+],
+"manter": 1138,
+"certeza": "talvez",
+"valor": 1649.78,
+"escopo": "PF",
+"tipo": "entrada",
+"itens": [
+{
+"id": 1138,
+"escopo": "PF",
+"tipo": "entrada",
+"data": "2026-07-02",
+"pago_em": "2026-07-02",
+"valor": 1649.78,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "",
+"contraparte": "Pessoa 37",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-07-02",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1246,
+"escopo": "PF",
+"tipo": "entrada",
+"data": "2026-07-03",
+"pago_em": "2026-07-03",
+"valor": 1649.78,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "",
+"contraparte": "Pessoa 37",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-07-03",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+1062,
+1263
+],
+"manter": 1062,
+"certeza": "talvez",
+"valor": 1800.0,
+"escopo": "PJ",
+"tipo": "entrada",
+"itens": [
+{
+"id": 1062,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-07-01",
+"pago_em": "2026-07-01",
+"valor": 1800.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": null,
+"contraparte": null,
+"cliente_id": 18,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": 3,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-07-01",
+"aluno": "Aluno 17 Ção",
+"manter": true
+},
+{
+"id": 1263,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-07-03",
+"pago_em": "2026-07-03",
+"valor": 1800.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": null,
+"contraparte": null,
+"cliente_id": 18,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-07-03",
+"aluno": "Aluno 17 Ção",
+"manter": false
+}
+]
+},
+{
+"ids": [
+337,
+711
+],
+"manter": 337,
+"certeza": "talvez",
+"valor": 600.0,
+"escopo": "PJ",
+"tipo": "entrada",
+"itens": [
+{
+"id": 337,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-06-19",
+"pago_em": "2026-06-19",
+"valor": 600.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Mercado São João",
+"contraparte": null,
+"cliente_id": 25,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-06-19",
+"aluno": "Aluno 24 Ção",
+"manter": true
+},
+{
+"id": 711,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-06-16",
+"pago_em": "2026-06-16",
+"valor": 600.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Mercado São João",
+"contraparte": "",
+"cliente_id": 25,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": 3,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-06-16",
+"aluno": "Aluno 24 Ção",
+"manter": false
+}
+]
+},
+{
+"ids": [
+1058,
+1218
+],
+"manter": 1058,
+"certeza": "talvez",
+"valor": 615.0,
+"escopo": "PJ",
+"tipo": "entrada",
+"itens": [
+{
+"id": 1058,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-06-18",
+"pago_em": "2026-06-18",
+"valor": 615.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": null,
+"contraparte": "Pessoa 7",
+"cliente_id": 9,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-06-18",
+"aluno": "Aluno 8 Ção",
+"manter": true
+},
+{
+"id": 1218,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-06-19",
+"pago_em": "2026-06-19",
+"valor": 615.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": null,
+"contraparte": "Pessoa 7",
+"cliente_id": 9,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-06-19",
+"aluno": "Aluno 8 Ção",
+"manter": false
+}
+]
+},
+{
+"ids": [
+775,
+1282
+],
+"manter": 775,
+"certeza": "talvez",
+"valor": 408.24,
+"escopo": "PJ",
+"tipo": "saida",
+"itens": [
+{
+"id": 775,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2026-06-13",
+"pago_em": "2026-06-13",
+"valor": 408.24,
+"categoria": "Outros",
+"descricao": "Mercado São João",
+"contraparte": null,
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-06-13",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1282,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2026-06-14",
+"pago_em": "2026-06-14",
+"valor": 408.24,
+"categoria": "Outros",
+"descricao": "Mercado São João",
+"contraparte": null,
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-06-14",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+992,
+1201
+],
+"manter": 992,
+"certeza": "talvez",
+"valor": 1200.0,
+"escopo": "PJ",
+"tipo": "entrada",
+"itens": [
+{
+"id": 992,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-06-09",
+"pago_em": "2026-06-09",
+"valor": 1200.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": null,
+"contraparte": null,
+"cliente_id": 21,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-06-09",
+"aluno": "Aluno 20 Ção",
+"manter": true
+},
+{
+"id": 1201,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-06-09",
+"pago_em": "2026-06-09",
+"valor": 1200.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": null,
+"contraparte": null,
+"cliente_id": 21,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-06-09",
+"aluno": "Aluno 20 Ção",
+"manter": false
+}
+]
+},
+{
+"ids": [
+953,
+1211
+],
+"manter": 953,
+"certeza": "talvez",
+"valor": 409.28,
+"escopo": "PF",
+"tipo": "saida",
+"itens": [
+{
+"id": 953,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-06-06",
+"pago_em": "2026-06-06",
+"valor": 409.28,
+"categoria": "Alimentação",
+"descricao": "",
+"contraparte": null,
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-06-06",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1211,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-06-08",
+"pago_em": "2026-06-08",
+"valor": 409.28,
+"categoria": "Alimentação",
+"descricao": "",
+"contraparte": null,
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-06-08",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+580,
+1225
+],
+"manter": 580,
+"certeza": "talvez",
+"valor": 708.91,
+"escopo": "PF",
+"tipo": "saida",
+"itens": [
+{
+"id": 580,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-06-01",
+"pago_em": "2026-06-01",
+"valor": 708.91,
+"categoria": "Alimentação",
+"descricao": "",
+"contraparte": "Pessoa 29",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-06-01",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1225,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-06-01",
+"pago_em": "2026-06-01",
+"valor": 708.91,
+"categoria": "Alimentação",
+"descricao": "",
+"contraparte": "Pessoa 29",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-06-01",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+1084,
+909,
+1237,
+1287
+],
+"manter": 1084,
+"certeza": "talvez",
+"valor": 615.0,
+"escopo": "PJ",
+"tipo": "entrada",
+"itens": [
+{
+"id": 1084,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-05-19",
+"pago_em": "2026-05-19",
+"valor": 615.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Mercado São João",
+"contraparte": null,
+"cliente_id": 20,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-05-19",
+"aluno": "Aluno 19 Ção",
+"manter": true
+},
+{
+"id": 909,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-05-14",
+"pago_em": "2026-05-14",
+"valor": 615.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "",
+"contraparte": null,
+"cliente_id": 20,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": 6,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-05-14",
+"aluno": "Aluno 19 Ção",
+"manter": false
+},
+{
+"id": 1237,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-05-14",
+"pago_em": "2026-05-14",
+"valor": 615.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "",
+"contraparte": null,
+"cliente_id": 20,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-05-14",
+"aluno": "Aluno 19 Ção",
+"manter": false
+},
+{
+"id": 1287,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-05-16",
+"pago_em": "2026-05-16",
+"valor": 615.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "",
+"contraparte": null,
+"cliente_id": 20,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-05-16",
+"aluno": "Aluno 19 Ção",
+"manter": false
+}
+]
+},
+{
+"ids": [
+222,
+1275
+],
+"manter": 222,
+"certeza": "talvez",
+"valor": 39.19,
+"escopo": "PF",
+"tipo": "saida",
+"itens": [
+{
+"id": 222,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-05-02",
+"pago_em": "2026-05-02",
+"valor": 39.19,
+"categoria": "Outros",
+"descricao": "Mercado São João",
+"contraparte": null,
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-05-02",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1275,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-05-03",
+"pago_em": "2026-05-03",
+"valor": 39.19,
+"categoria": "Outros",
+"descricao": "Mercado São João",
+"contraparte": null,
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-05-03",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+644,
+1217
+],
+"manter": 644,
+"certeza": "talvez",
+"valor": 845.37,
+"escopo": "PF",
+"tipo": "saida",
+"itens": [
+{
+"id": 644,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-04-21",
+"pago_em": "2026-04-21",
+"valor": 845.37,
+"categoria": "Alimentação",
+"descricao": "Desc 13",
+"contraparte": null,
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-04-21",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1217,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-04-22",
+"pago_em": "2026-04-22",
+"valor": 845.37,
+"categoria": "Alimentação",
+"descricao": "Desc 13",
+"contraparte": null,
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-04-22",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+616,
+1207
+],
+"manter": 616,
+"certeza": "talvez",
+"valor": 1768.88,
+"escopo": "PJ",
+"tipo": "saida",
+"itens": [
+{
+"id": 616,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2026-04-19",
+"pago_em": "2026-04-19",
+"valor": 1768.88,
+"categoria": "Outros",
+"descricao": "Mercado São João",
+"contraparte": "",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-04-19",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1207,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2026-04-20",
+"pago_em": "2026-04-20",
+"valor": 1768.88,
+"categoria": "Outros",
+"descricao": "Mercado São João",
+"contraparte": "",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-04-20",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+534,
+1264
+],
+"manter": 534,
+"certeza": "talvez",
+"valor": 140.99,
+"escopo": "PJ",
+"tipo": "saida",
+"itens": [
+{
+"id": 534,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2026-04-10",
+"pago_em": "2026-04-10",
+"valor": 140.99,
+"categoria": "Outros",
+"descricao": null,
+"contraparte": "",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-04-10",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1264,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2026-04-10",
+"pago_em": "2026-04-10",
+"valor": 140.99,
+"categoria": "Outros",
+"descricao": null,
+"contraparte": "",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-04-10",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+462,
+1220
+],
+"manter": 462,
+"certeza": "talvez",
+"valor": 1602.27,
+"escopo": "PJ",
+"tipo": "saida",
+"itens": [
+{
+"id": 462,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2026-03-31",
+"pago_em": "2026-03-31",
+"valor": 1602.27,
+"categoria": "Outros",
+"descricao": "",
+"contraparte": "",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-03-31",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1220,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2026-03-31",
+"pago_em": "2026-03-31",
+"valor": 1602.27,
+"categoria": "Outros",
+"descricao": "",
+"contraparte": "",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-03-31",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+753,
+1227
+],
+"manter": 753,
+"certeza": "talvez",
+"valor": 1511.55,
+"escopo": "PF",
+"tipo": "saida",
+"itens": [
+{
+"id": 753,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-03-26",
+"pago_em": "2026-03-26",
+"valor": 1511.55,
+"categoria": "Alimentação",
+"descricao": "Mercado São João",
+"contraparte": "",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-03-26",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1227,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-03-28",
+"pago_em": "2026-03-28",
+"valor": 1511.55,
+"categoria": "Alimentação",
+"descricao": "Mercado São João",
+"contraparte": "",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-03-28",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+571,
+1259
+],
+"manter": 571,
+"certeza": "talvez",
+"valor": 944.0,
+"escopo": "PJ",
+"tipo": "saida",
+"itens": [
+{
+"id": 571,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2026-03-24",
+"pago_em": "2026-03-24",
+"valor": 944.0,
+"categoria": "Alimentação",
+"descricao": "",
+"contraparte": null,
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-03-24",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1259,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2026-03-26",
+"pago_em": "2026-03-26",
+"valor": 944.0,
+"categoria": "Alimentação",
+"descricao": "",
+"contraparte": null,
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-03-26",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+611,
+1260
+],
+"manter": 611,
+"certeza": "talvez",
+"valor": 1853.44,
+"escopo": "PJ",
+"tipo": "entrada",
+"itens": [
+{
+"id": 611,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-03-04",
+"pago_em": "2026-03-04",
+"valor": 1853.44,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "",
+"contraparte": "Pessoa 10",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-03-04",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1260,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2026-03-04",
+"pago_em": "2026-03-04",
+"valor": 1853.44,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "",
+"contraparte": "Pessoa 10",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-03-04",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+614,
+1239
+],
+"manter": 614,
+"certeza": "talvez",
+"valor": 851.62,
+"escopo": "PF",
+"tipo": "saida",
+"itens": [
+{
+"id": 614,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-01-10",
+"pago_em": "2026-01-10",
+"valor": 851.62,
+"categoria": "Outros",
+"descricao": "Desc 53",
+"contraparte": null,
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-01-10",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1239,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-01-12",
+"pago_em": "2026-01-12",
+"valor": 851.62,
+"categoria": "Outros",
+"descricao": "Desc 53",
+"contraparte": null,
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-01-12",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+109,
+1268
+],
+"manter": 109,
+"certeza": "talvez",
+"valor": 1046.94,
+"escopo": "PF",
+"tipo": "saida",
+"itens": [
+{
+"id": 109,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-01-04",
+"pago_em": "2026-01-04",
+"valor": 1046.94,
+"categoria": "Outros",
+"descricao": null,
+"contraparte": "Pessoa 8",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-01-04",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1268,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2026-01-04",
+"pago_em": "2026-01-04",
+"valor": 1046.94,
+"categoria": "Outros",
+"descricao": null,
+"contraparte": "Pessoa 8",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2026-01-04",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+716,
+1272
+],
+"manter": 716,
+"certeza": "talvez",
+"valor": 1025.7,
+"escopo": "PF",
+"tipo": "saida",
+"itens": [
+{
+"id": 716,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2025-12-29",
+"pago_em": "2025-12-29",
+"valor": 1025.7,
+"categoria": "Outros",
+"descricao": "",
+"contraparte": "Pessoa 15",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-12-29",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1272,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2025-12-31",
+"pago_em": "2025-12-31",
+"valor": 1025.7,
+"categoria": "Outros",
+"descricao": "",
+"contraparte": "Pessoa 15",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-12-31",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+705,
+1213
+],
+"manter": 705,
+"certeza": "talvez",
+"valor": 809.04,
+"escopo": "PJ",
+"tipo": "saida",
+"itens": [
+{
+"id": 705,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2025-12-11",
+"pago_em": "2025-12-11",
+"valor": 809.04,
+"categoria": "Outros",
+"descricao": "",
+"contraparte": "Pessoa 4",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-12-11",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1213,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2025-12-11",
+"pago_em": "2025-12-11",
+"valor": 809.04,
+"categoria": "Outros",
+"descricao": "",
+"contraparte": "Pessoa 4",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-12-11",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+732,
+1235
+],
+"manter": 732,
+"certeza": "talvez",
+"valor": 114.35,
+"escopo": "PJ",
+"tipo": "entrada",
+"itens": [
+{
+"id": 732,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2025-12-06",
+"pago_em": "2025-12-06",
+"valor": 114.35,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "",
+"contraparte": "",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-12-06",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1235,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2025-12-08",
+"pago_em": "2025-12-08",
+"valor": 114.35,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "",
+"contraparte": "",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-12-08",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+435,
+1238
+],
+"manter": 435,
+"certeza": "talvez",
+"valor": 1842.09,
+"escopo": "PJ",
+"tipo": "saida",
+"itens": [
+{
+"id": 435,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2025-11-25",
+"pago_em": "2025-11-25",
+"valor": 1842.09,
+"categoria": "Alimentação",
+"descricao": null,
+"contraparte": "",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-11-25",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1238,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2025-11-25",
+"pago_em": "2025-11-25",
+"valor": 1842.09,
+"categoria": "Alimentação",
+"descricao": null,
+"contraparte": "",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-11-25",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+1008,
+1202
+],
+"manter": 1008,
+"certeza": "talvez",
+"valor": 349.88,
+"escopo": "PF",
+"tipo": "entrada",
+"itens": [
+{
+"id": 1008,
+"escopo": "PF",
+"tipo": "entrada",
+"data": "2025-09-30",
+"pago_em": "2025-09-30",
+"valor": 349.88,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Mercado São João",
+"contraparte": null,
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-09-30",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1202,
+"escopo": "PF",
+"tipo": "entrada",
+"data": "2025-10-01",
+"pago_em": "2025-10-01",
+"valor": 349.88,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Mercado São João",
+"contraparte": null,
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-10-01",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+834,
+1216
+],
+"manter": 834,
+"certeza": "talvez",
+"valor": 615.0,
+"escopo": "PJ",
+"tipo": "entrada",
+"itens": [
+{
+"id": 834,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2025-09-25",
+"pago_em": "2025-09-25",
+"valor": 615.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "",
+"contraparte": null,
+"cliente_id": 8,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": 3,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-09-25",
+"aluno": "Aluno 7 Ção",
+"manter": true
+},
+{
+"id": 1216,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2025-09-27",
+"pago_em": "2025-09-27",
+"valor": 615.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "",
+"contraparte": null,
+"cliente_id": 8,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-09-27",
+"aluno": "Aluno 7 Ção",
+"manter": false
+}
+]
+},
+{
+"ids": [
+158,
+1215
+],
+"manter": 158,
+"certeza": "talvez",
+"valor": 736.53,
+"escopo": "PJ",
+"tipo": "saida",
+"itens": [
+{
+"id": 158,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2025-09-10",
+"pago_em": "2025-09-10",
+"valor": 736.53,
+"categoria": "Alimentação",
+"descricao": "",
+"contraparte": null,
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-09-10",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1215,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2025-09-11",
+"pago_em": "2025-09-11",
+"valor": 736.53,
+"categoria": "Alimentação",
+"descricao": "",
+"contraparte": null,
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-09-11",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+930,
+1251
+],
+"manter": 930,
+"certeza": "talvez",
+"valor": 674.34,
+"escopo": "PF",
+"tipo": "saida",
+"itens": [
+{
+"id": 930,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2025-09-07",
+"pago_em": "2025-09-07",
+"valor": 674.34,
+"categoria": "Alimentação",
+"descricao": "Desc 19",
+"contraparte": "",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-09-07",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1251,
+"escopo": "PF",
+"tipo": "saida",
+"data": "2025-09-09",
+"pago_em": "2025-09-09",
+"valor": 674.34,
+"categoria": "Alimentação",
+"descricao": "Desc 19",
+"contraparte": "",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-09-09",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+912,
+1209
+],
+"manter": 912,
+"certeza": "talvez",
+"valor": 1820.13,
+"escopo": "PJ",
+"tipo": "saida",
+"itens": [
+{
+"id": 912,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2025-08-15",
+"pago_em": "2025-08-15",
+"valor": 1820.13,
+"categoria": "Outros",
+"descricao": "Mercado São João",
+"contraparte": null,
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-08-15",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1209,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2025-08-17",
+"pago_em": "2025-08-17",
+"valor": 1820.13,
+"categoria": "Outros",
+"descricao": "Mercado São João",
+"contraparte": null,
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-08-17",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+306,
+802
+],
+"manter": 306,
+"certeza": "talvez",
+"valor": 600.0,
+"escopo": "PJ",
+"tipo": "entrada",
+"itens": [
+{
+"id": 306,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2025-08-05",
+"pago_em": "2025-08-05",
+"valor": 600.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Mercado São João",
+"contraparte": null,
+"cliente_id": 7,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": 3,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-08-05",
+"aluno": "Aluno 6 Ção",
+"manter": true
+},
+{
+"id": 802,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2025-08-06",
+"pago_em": "2025-08-06",
+"valor": 600.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Desc 31",
+"contraparte": "",
+"cliente_id": 7,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": 3,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-08-06",
+"aluno": "Aluno 6 Ção",
+"manter": false
+}
+]
+},
+{
+"ids": [
+300,
+1284
+],
+"manter": 300,
+"certeza": "talvez",
+"valor": 301.92,
+"escopo": "PJ",
+"tipo": "entrada",
+"itens": [
+{
+"id": 300,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2025-07-17",
+"pago_em": "2025-07-17",
+"valor": 301.92,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "",
+"contraparte": null,
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-07-17",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1284,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2025-07-18",
+"pago_em": "2025-07-18",
+"valor": 301.92,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "",
+"contraparte": null,
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-07-18",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+569,
+1254,
+1250
+],
+"manter": 569,
+"certeza": "talvez",
+"valor": 287.28,
+"escopo": "PF",
+"tipo": "entrada",
+"itens": [
+{
+"id": 569,
+"escopo": "PF",
+"tipo": "entrada",
+"data": "2025-07-09",
+"pago_em": "2025-07-09",
+"valor": 287.28,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": null,
+"contraparte": "",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-07-09",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1254,
+"escopo": "PF",
+"tipo": "entrada",
+"data": "2025-07-09",
+"pago_em": "2025-07-09",
+"valor": 287.28,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": null,
+"contraparte": "",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-07-09",
+"aluno": null,
+"manter": false
+},
+{
+"id": 1250,
+"escopo": "PF",
+"tipo": "entrada",
+"data": "2025-07-10",
+"pago_em": "2025-07-10",
+"valor": 287.28,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": null,
+"contraparte": "",
+"cliente_id": null,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-07-10",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+854,
+1269
+],
+"manter": 854,
+"certeza": "talvez",
+"valor": 300.0,
+"escopo": "PJ",
+"tipo": "entrada",
+"itens": [
+{
+"id": 854,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2025-06-22",
+"pago_em": "2025-06-22",
+"valor": 300.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": null,
+"contraparte": "",
+"cliente_id": 36,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-06-22",
+"aluno": "Aluno 35 Ção",
+"manter": true
+},
+{
+"id": 1269,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2025-06-24",
+"pago_em": "2025-06-24",
+"valor": 300.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": null,
+"contraparte": "",
+"cliente_id": 36,
+"conta": "Contabilizei Bank",
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-06-24",
+"aluno": "Aluno 35 Ção",
+"manter": false
+}
+]
+},
+{
+"ids": [
+153,
+1208
+],
+"manter": 153,
+"certeza": "talvez",
+"valor": 1076.17,
+"escopo": "PJ",
+"tipo": "saida",
+"itens": [
+{
+"id": 153,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2025-06-20",
+"pago_em": "2025-06-20",
+"valor": 1076.17,
+"categoria": "Outros",
+"descricao": "",
+"contraparte": "",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-06-20",
+"aluno": null,
+"manter": true
+},
+{
+"id": 1208,
+"escopo": "PJ",
+"tipo": "saida",
+"data": "2025-06-22",
+"pago_em": "2025-06-22",
+"valor": 1076.17,
+"categoria": "Outros",
+"descricao": "",
+"contraparte": "",
+"cliente_id": null,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-06-22",
+"aluno": null,
+"manter": false
+}
+]
+},
+{
+"ids": [
+332,
+1226
+],
+"manter": 332,
+"certeza": "talvez",
+"valor": 1800.0,
+"escopo": "PJ",
+"tipo": "entrada",
+"itens": [
+{
+"id": 332,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2025-06-06",
+"pago_em": "2025-06-06",
+"valor": 1800.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Desc 51",
+"contraparte": "Pessoa 31",
+"cliente_id": 39,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": 6,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-06-06",
+"aluno": "Aluno 38 Ção",
+"manter": true
+},
+{
+"id": 1226,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2025-06-08",
+"pago_em": "2025-06-08",
+"valor": 1800.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Desc 51",
+"contraparte": "Pessoa 31",
+"cliente_id": 39,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-06-08",
+"aluno": "Aluno 38 Ção",
+"manter": false
+}
+]
+},
+{
+"ids": [
+778,
+1233
+],
+"manter": 778,
+"certeza": "talvez",
+"valor": 1200.0,
+"escopo": "PJ",
+"tipo": "entrada",
+"itens": [
+{
+"id": 778,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2025-06-02",
+"pago_em": "2025-06-02",
+"valor": 1200.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Desc 7",
+"contraparte": "Pessoa 27",
+"cliente_id": 29,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-06-02",
+"aluno": "Aluno 28 Ção",
+"manter": true
+},
+{
+"id": 1233,
+"escopo": "PJ",
+"tipo": "entrada",
+"data": "2025-06-03",
+"pago_em": "2025-06-03",
+"valor": 1200.0,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"descricao": "Desc 7",
+"contraparte": "Pessoa 27",
+"cliente_id": 29,
+"conta": null,
+"forma": "PIX",
+"parcela_num": null,
+"parcela_total": null,
+"recorrencia_id": null,
+"competencia": null,
+"meses": null,
+"sem_recorrencia": null,
+"nfse": null,
+"observacao": null,
+"origem": null,
+"auto": null,
+"criado_em": "2026-11-19 07:16:30",
+"excluido_em": null,
+"quando": "2025-06-03",
+"aluno": "Aluno 28 Ção",
+"manter": false
+}
+]
+}
+],
+"somar_meses": [
+[
+"2026-01",
+-25,
+"2023-12"
+],
+[
+"2026-01",
+-13,
+"2024-12"
+],
+[
+"2026-01",
+-1,
+"2025-12"
+],
+[
+"2026-01",
+0,
+"2026-01"
+],
+[
+"2026-01",
+1,
+"2026-02"
+],
+[
+"2026-01",
+11,
+"2026-12"
+],
+[
+"2026-01",
+12,
+"2027-01"
+],
+[
+"2026-01",
+25,
+"2028-02"
+],
+[
+"2026-12",
+-25,
+"2024-11"
+],
+[
+"2026-12",
+-13,
+"2025-11"
+],
+[
+"2026-12",
+-1,
+"2026-11"
+],
+[
+"2026-12",
+0,
+"2026-12"
+],
+[
+"2026-12",
+1,
+"2027-01"
+],
+[
+"2026-12",
+11,
+"2027-11"
+],
+[
+"2026-12",
+12,
+"2027-12"
+],
+[
+"2026-12",
+25,
+"2029-01"
+],
+[
+"0001-01",
+-25,
+"-002-12"
+],
+[
+"0001-01",
+-13,
+"-001-12"
+],
+[
+"0001-01",
+-1,
+"0000-12"
+],
+[
+"0001-01",
+0,
+"0001-01"
+],
+[
+"0001-01",
+1,
+"0001-02"
+],
+[
+"0001-01",
+11,
+"0001-12"
+],
+[
+"0001-01",
+12,
+"0002-01"
+],
+[
+"0001-01",
+25,
+"0003-02"
+],
+[
+"2024-02",
+-25,
+"2022-01"
+],
+[
+"2024-02",
+-13,
+"2023-01"
+],
+[
+"2024-02",
+-1,
+"2024-01"
+],
+[
+"2024-02",
+0,
+"2024-02"
+],
+[
+"2024-02",
+1,
+"2024-03"
+],
+[
+"2024-02",
+11,
+"2025-01"
+],
+[
+"2024-02",
+12,
+"2025-02"
+],
+[
+"2024-02",
+25,
+"2026-03"
+]
+],
+"vencimento": [
+[
+1,
+"2024-02",
+"2024-02-01"
+],
+[
+1,
+"2026-02",
+"2026-02-01"
+],
+[
+1,
+"2026-04",
+"2026-04-01"
+],
+[
+1,
+"2026-12",
+"2026-12-01"
+],
+[
+28,
+"2024-02",
+"2024-02-28"
+],
+[
+28,
+"2026-02",
+"2026-02-28"
+],
+[
+28,
+"2026-04",
+"2026-04-28"
+],
+[
+28,
+"2026-12",
+"2026-12-28"
+],
+[
+29,
+"2024-02",
+"2024-02-29"
+],
+[
+29,
+"2026-02",
+"2026-02-28"
+],
+[
+29,
+"2026-04",
+"2026-04-29"
+],
+[
+29,
+"2026-12",
+"2026-12-29"
+],
+[
+30,
+"2024-02",
+"2024-02-29"
+],
+[
+30,
+"2026-02",
+"2026-02-28"
+],
+[
+30,
+"2026-04",
+"2026-04-30"
+],
+[
+30,
+"2026-12",
+"2026-12-30"
+],
+[
+31,
+"2024-02",
+"2024-02-29"
+],
+[
+31,
+"2026-02",
+"2026-02-28"
+],
+[
+31,
+"2026-04",
+"2026-04-30"
+],
+[
+31,
+"2026-12",
+"2026-12-31"
+]
+],
+"meses_do_pagamento": [
+[
+0,
+0,
+null,
+0
+],
+[
+0,
+0,
+0,
+0
+],
+[
+0,
+0,
+3,
+3
+],
+[
+0,
+600,
+null,
+0
+],
+[
+0,
+600,
+0,
+0
+],
+[
+0,
+600,
+3,
+3
+],
+[
+0,
+null,
+null,
+0
+],
+[
+0,
+null,
+0,
+0
+],
+[
+0,
+null,
+3,
+3
+],
+[
+539.99,
+0,
+null,
+0
+],
+[
+539.99,
+0,
+0,
+0
+],
+[
+539.99,
+0,
+3,
+3
+],
+[
+539.99,
+600,
+null,
+0
+],
+[
+539.99,
+600,
+0,
+0
+],
+[
+539.99,
+600,
+3,
+3
+],
+[
+539.99,
+null,
+null,
+0
+],
+[
+539.99,
+null,
+0,
+0
+],
+[
+539.99,
+null,
+3,
+3
+],
+[
+540,
+0,
+null,
+0
+],
+[
+540,
+0,
+0,
+0
+],
+[
+540,
+0,
+3,
+3
+],
+[
+540,
+600,
+null,
+1
+],
+[
+540,
+600,
+0,
+1
+],
+[
+540,
+600,
+3,
+3
+],
+[
+540,
+null,
+null,
+0
+],
+[
+540,
+null,
+0,
+0
+],
+[
+540,
+null,
+3,
+3
+],
+[
+600,
+0,
+null,
+0
+],
+[
+600,
+0,
+0,
+0
+],
+[
+600,
+0,
+3,
+3
+],
+[
+600,
+600,
+null,
+1
+],
+[
+600,
+600,
+0,
+1
+],
+[
+600,
+600,
+3,
+3
+],
+[
+600,
+null,
+null,
+0
+],
+[
+600,
+null,
+0,
+0
+],
+[
+600,
+null,
+3,
+3
+],
+[
+1199,
+0,
+null,
+0
+],
+[
+1199,
+0,
+0,
+0
+],
+[
+1199,
+0,
+3,
+3
+],
+[
+1199,
+600,
+null,
+2
+],
+[
+1199,
+600,
+0,
+2
+],
+[
+1199,
+600,
+3,
+3
+],
+[
+1199,
+null,
+null,
+0
+],
+[
+1199,
+null,
+0,
+0
+],
+[
+1199,
+null,
+3,
+3
+],
+[
+1800.5,
+0,
+null,
+0
+],
+[
+1800.5,
+0,
+0,
+0
+],
+[
+1800.5,
+0,
+3,
+3
+],
+[
+1800.5,
+600,
+null,
+3
+],
+[
+1800.5,
+600,
+0,
+3
+],
+[
+1800.5,
+600,
+3,
+3
+],
+[
+1800.5,
+null,
+null,
+0
+],
+[
+1800.5,
+null,
+0,
+0
+],
+[
+1800.5,
+null,
+3,
+3
+],
+[
+null,
+0,
+null,
+0
+],
+[
+null,
+0,
+0,
+0
+],
+[
+null,
+0,
+3,
+3
+],
+[
+null,
+600,
+null,
+0
+],
+[
+null,
+600,
+0,
+0
+],
+[
+null,
+600,
+3,
+3
+],
+[
+null,
+null,
+null,
+0
+],
+[
+null,
+null,
+0,
+0
+],
+[
+null,
+null,
+3,
+3
+]
+],
+"palavras": [
+[
+"Giuliana Souza",
+[
+"giuliana",
+"souza"
+]
+],
+[
+"  São João, nº 12 ",
+[
+"sao",
+"joao",
+"no",
+"12"
+]
+],
+[
+"",
+[]
+],
+[
+null,
+[]
+],
+[
+"ÇÃO-ção_x",
+[
+"cao",
+"cao",
+"x"
+]
+]
+]
+}
