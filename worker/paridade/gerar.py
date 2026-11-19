@@ -563,8 +563,11 @@ def semear_agenda(caminho: Path) -> None:
                       (t, 2, "CIA", 21, "ocupado", A[3], "Cópia A3", 1.0), (t, 4, "CIA", 22, "ocupado", A[11], "Só na Grade", 1.2),
                       (t, 2, "SmartFit", 22, "livre", None, None, 1.2)]
         grade.append(("Pacotes", 5, "SmartFit", 23, "ocupado", I[0], "Cópia I0", 1.0))
+        mult = {int(k): v for k, v in con.execute("SELECT chave, valor FROM parametros WHERE grupo='mult_horario'")}
+        cheia = [(t, d, "CIA", h, "livre", None, None, mult.get(h, 1.0)) for t in ("Pacotes", "Mensalidades") for d in range(1, 7) for h in range(5, 24)]
         con.executemany("INSERT INTO grade_slots (tipo_calculo, dia, local, hora, status, cliente_id, cliente_nome, multiplicador)"
-                        " VALUES (?,?,?,?,?,?,?,?)", grade)
+                        " VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(tipo_calculo, dia, local, hora) DO UPDATE SET status=excluded.status,"
+                        " cliente_id=excluded.cliente_id, cliente_nome=excluded.cliente_nome, multiplicador=excluded.multiplicador", cheia + grade)
     con.close()
     fixar_carimbos(caminho)
 
@@ -615,6 +618,41 @@ def casos_agenda_ficha():
     telas_e_roteiro(caminho, "agenda-ficha", [f"/clientes/{A[0]}", f"/clientes/{I[0]}", f"/clientes?ids={muitos}&motivo=cobrar",
                                               f"/clientes?ids={muitos}&motivo=sem-aula"], passos,
                     ["clientes", "agenda_fixos", "grade_slots", "cliente_eventos"])
+
+
+def casos_grade():
+    """Etapa 3b: a tela da Grade (tipos, locais, plano de referência, vale) e o roteiro dos cliques que gravam na Agenda."""
+    caminho = banco_novo()
+    semear_agenda(caminho)
+    con = sqlite3.connect(caminho)
+    A = [r[0] for r in con.execute("SELECT id FROM clientes WHERE status='ativo' ORDER BY id")]
+    I = [r[0] for r in con.execute("SELECT id FROM clientes WHERE status!='ativo' ORDER BY id")]
+    con.close()
+    urls = ["/grade", "/grade?tipo=Mensalidades&local=CIA", "/grade?local=SmartFit", "/grade?local=SmartFit&tipo=Mensalidades&ref=3&vale=1",
+            "/grade?local=Condom%C3%ADnio", "/grade?ref=12&vale=1", "/grade?ref=7", "/grade?local=Inexistente"]
+    slot = lambda **d: ("POST", "/grade/slot", {"tipo": "Pacotes", "local": "CIA", "ref": "0", **d})  # noqa: E731
+    passos = [
+        ("POST", "/grade/multiplicadores?tipo=Pacotes&local=CIA&ref=0", {"m_05": "0,9", "m_07": "abc"}),
+        ("POST", "/grade/multiplicadores?tipo=Mensalidades&local=SmartFit&ref=3", {"m_05": "0,85", "m_22": "1,5", "m_06": ""}),
+        ("POST", "/grade/multiplicadores?tipo=Pacotes&local=CIA", {"m_08": "9"}),
+        ("POST", "/grade/multiplicadores", {}),
+        slot(dia="1", hora="21", status="ocupado", cliente_id=[str(A[13]), str(A[14])]),
+        slot(dia="1", hora="5", status="ocupado", cliente_id=[str(A[0]), str(A[2])]),
+        slot(celulas=["3-5", "2-21"], status="ocupado", cliente_id=[str(A[15])]),
+        slot(celulas=["2-21", "6-21", "6-21", "x", "9-9"], status="ocupado", cliente_id=[str(A[15])], local="SmartFit"),
+        slot(dia="1", hora="5", status="livre"),
+        slot(dia="3", hora="5", status="indisponivel"),
+        slot(dia="1", hora="23", status="indisponivel", local="SmartFit", tipo="Mensalidades", ref="3"),
+        slot(dia="1", hora="23", status=""), slot(celulas=["x", "9-9"], status="livre"),
+        slot(dia="4", hora="23", status="ocupado", cliente_id=[str(I[0])]), slot(dia="4", hora="23", status="ocupado"),
+        slot(dia="3", hora="5", status="ocupado", cliente_id=[str(A[4]), str(A[5])]),
+        slot(dia="3", hora="22", status="ocupado", cliente_id=[str(A[16])]),
+        slot(dia="abc", hora="5", status="livre"),
+        ("POST", "/grade/passar-para-agenda", {"tipo": "Mensalidades", "local": "SmartFit", "ref": "3"}),
+        ("POST", "/grade/passar-para-agenda", {}),
+        ("GET", "/grade?ref=abc", {}),
+    ]
+    telas_e_roteiro(caminho, "grade", urls, passos, ["agenda_fixos", "grade_slots", "parametros"])
 
 
 def casos_alunos():
@@ -755,4 +793,5 @@ if __name__ == "__main__":
     casos_alunos()
     casos_clientes()
     casos_agenda_ficha()
+    casos_grade()
     print("paridade gerada em worker/")

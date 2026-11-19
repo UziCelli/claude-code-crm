@@ -50,7 +50,7 @@ describe("portaria (port de tests/test_acesso.py, modo internet)", () => {
   it("login válido passa (cabeçalho ou cookie)", async () => {
     const f = renderFalso();
     expect((await pedir("/", { headers: { "cf-access-jwt-assertion": await token() } })).status).toBe(200);
-    expect((await pedir("/grade", { headers: { cookie: `CF_Authorization=${await token()}` } })).status).toBe(200);
+    expect((await pedir("/propostas", { headers: { cookie: `CF_Authorization=${await token()}` } })).status).toBe(200);
     expect(f).toHaveBeenCalledTimes(2);
   });
 
@@ -104,7 +104,7 @@ describe("sem BANCO configurado (achado do Codex na PR #117)", () => {
   });
   it("rota não migrada continua indo ao Render", async () => {
     renderFalso();
-    const r = await pedir("/grade", { headers: { "cf-access-jwt-assertion": await token() } }, semBanco);
+    const r = await pedir("/propostas", { headers: { "cf-access-jwt-assertion": await token() } }, semBanco);
     expect(await r.text()).toBe("render");
   });
 });

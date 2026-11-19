@@ -19,6 +19,8 @@ import { baseDoCliente, fixosAtuais } from "./trabalho.ts";
 import { doAluno as vantagemDoAluno } from "./vantagens.ts";
 
 export const DIAS_CURTO: Record<number, string> = { 1: "Seg", 2: "Ter", 3: "Qua", 4: "Qui", 5: "Sex", 6: "Sáb", 7: "Dom" };
+/** Filtro `dia` das telas (main.DIAS). */
+export const DIAS: Record<number, string> = { 1: "Segunda", 2: "Terça", 3: "Quarta", 4: "Quinta", 5: "Sexta", 6: "Sábado", 7: "Domingo" };
 export const ETAPAS: [string, string][] = [["lead", "Lead"], ["conversa", "Conversa"], ["avaliacao", "Avaliação marcada"], ["cliente", "Cliente"], ["perdido", "Perdido"]];
 export const WA_ORDEM = ["renovacao", "falta", "boas_vindas", "reativacao", "indicacao", "dupla", "depoimento"];
 export const DEPOIMENTO_DIAS = 90;

@@ -16,6 +16,7 @@ const TETO_MS = 7; // limite grátis: 10 ms por pedido; o resto é folga
 const TELAS: [string, string][] = process.env.SO_TELA ? [[process.env.SO_TELA, process.env.CENARIO ?? "cenario-clientes"]] : [
   ["/configuracoes", "cenario-financeiro"], ["/clientes", "cenario-clientes"], ["/clientes?status=todos", "cenario-clientes"],
   ["/clientes/1", "cenario-clientes"], ["/clientes/9", "cenario-clientes"], ["/leads", "cenario-clientes"],
+  ["/grade", "cenario-agenda"], ["/grade?local=SmartFit&tipo=Mensalidades", "cenario-agenda"],
 ];
 
 const bancos = new Map<string, DatabaseSync>();

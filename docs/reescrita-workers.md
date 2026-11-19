@@ -34,7 +34,7 @@ Fonte única da reescrita (Python no Render → TypeScript no Cloudflare Workers
   mesmas respostas e tabelas.
 
 ## Medições (cenário 3×)
-`/configuracoes` 4,1–4,5 ms; `/clientes` 4,6–4,8; ficha 3,3–3,9; `/leads` 1,4–2,0. HTML de 330 KB: 8 ms em JSX, 1,6 ms com `html`.
+`/configuracoes` 3,8–4,5 ms; `/clientes` 4,6–5,6; ficha 3,3–3,9; `/leads` 1,4–2,0; `/grade` 2,7–3,1. HTML de 330 KB: 8 ms em JSX, 1,6 ms com `html`.
 
 ## Fases (todas na mesma PR)
 0. Fundação: banco, portaria, repasse ao Render, layout, Crons, testes. **Feita.**
@@ -42,7 +42,8 @@ Fonte única da reescrita (Python no Render → TypeScript no Cloudflare Workers
    antes (fim do 503). Importar planilha, `/locais/*` e `/calculos` seguem no Render. **Feita.**
 2. Clientes, ficha e leads: estado do aluno, cobrança, cartão com QR Pix, ofertas e indicações. **Feita.**
 3. Agenda e grade, em 3 etapas: **3a feita** (gravação na Agenda e na cópia da Grade; salvar a ficha, status, evento, pular
-   mês e horários); 3b Grade; 3c Agenda. `/locais/*` fica para a Fase 4.
+   mês e horários); **3b feita** (tela da Grade, multiplicadores, ocupar/soltar horários, passar para a Agenda); 3c Agenda.
+   `/locais/*` (o pop-up do local) fica para a Fase 4: até lá vai ao Render.
 4. Propostas, ofertas e cálculos · 5. Financeiro · 6. Assistente ·
 7. Painel, campanhas, rotina, explorador, dados, importar e exportar · 8. D1, remoção do Python e do código do PC.
 
