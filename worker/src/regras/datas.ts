@@ -92,3 +92,9 @@ export function utilAnterior(data: string): string {
   const semana = diaDaSemana(data) - 1; // weekday() do Python: segunda = 0
   return somarDias(data, -Math.max(semana - 4, 0));
 }
+
+/** main.data_iso: 'AAAA-MM-DD' válida (dos 10 primeiros caracteres) ou null. */
+export function dataIso(v: unknown): string | null {
+  const s = String(v ?? "").trim().slice(0, 10);
+  return numeroDoDia(s) !== null ? s : null;
+}

@@ -3,7 +3,7 @@
  * Até a fase do Financeiro: o que o motor de preços usa (DAS, custo pessoal, custos fixos) e o protótipo do teste de CPU.
  */
 import type { Banco } from "../banco/banco.ts";
-import type { Linha } from "../banco/tipos.ts";
+import type { Comando, Linha } from "../banco/tipos.ts";
 import { arred } from "../arred.ts";
 import { ehCia } from "./contas_auto.ts";
 import { divPy, modPy, numeroDoDia, somarDias, ultimoDiaDoMes, utilAnterior, zeros } from "./datas.ts";
@@ -104,7 +104,7 @@ function podeSerOMesmo(x: Linha, y: Linha): boolean {
 }
 
 /** round(x * 100) do Python (inteiro, empate para o par). */
-const centavos = (v: number) => arred(v * 100, 0);
+const centavosPy = (v: number) => arred(v * 100, 0);
 
 /** Compara tuplas como o Python. */
 function cmp(a: (number | string)[], b: (number | string)[]): number {
@@ -138,7 +138,7 @@ export async function duplicados(b: Banco, jaAvisadas: Set<number>): Promise<Gru
     const x = linhas[k];
     for (let j = k + 1; j < linhas.length; j++) {
       const y = linhas[j];
-      if (x.escopo !== y.escopo || x.tipo !== y.tipo || centavos(x.valor) !== centavos(y.valor)) break;
+      if (x.escopo !== y.escopo || x.tipo !== y.tipo || centavosPy(x.valor) !== centavosPy(y.valor)) break;
       if (diasEntreSeguro(x.quando, y.quando) > JANELA_REPETIDO) break;
       if (ok.has(`${x.id}|${y.id}`) || jaAvisadas.has(x.id) || jaAvisadas.has(y.id) || !podeSerOMesmo(x, y)) continue;
       pai.set(raiz(y.id), raiz(x.id));
@@ -277,4 +277,295 @@ export async function custosFixosRateio(b: Banco, mes: string, locais: string[] 
     itens.push({ descricao: r.descricao, valor: arred(r.valor, 2) });
   }
   return { total: arred(itens.reduce((a, i) => a + i.valor, 0), 2), itens };
+}
+
+// ---------- Mensalidades, renovação, cobrança e crédito dos alunos ----------
+export const AVULSOS = ["Pacote de Aulas", "Avaliação Física"]; // venda que não se repete sozinha todo mês
+export const CONFIRMA = 15; // Renovação marcada até 15 dias depois de renovar só confirma a renovação
+
+/** A data mais n meses, sempre no mesmo dia (dia 31 vira o último dia nos meses curtos). */
+export function proximaRenovacao(data: string, n = 1): string {
+  return vencimento(Number(data.slice(8, 10)), somarMeses(data.slice(0, 7), n));
+}
+
+/** {cliente_id: 'AAAA-MM'}: até que mês um pagamento de 2+ meses (este mês ou o seguinte) cobre o aluno. */
+export async function pagoAdiantadoAte(b: Banco, hoje: string): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  const meses = [hoje.slice(0, 7), somarMeses(hoje.slice(0, 7), 1)];
+  for (const cob of await Promise.all(meses.map((m) => coberturaAdiantada(b, m))))
+    for (const [cid, c] of cob) out.set(cid, (out.get(cid) ?? "") > c.ate ? out.get(cid)! : c.ate);
+  return out;
+}
+
+/** Meses 'AAAA-MM' em que o aluno de Pacote ou Avaliação deve; null = não é venda avulsa (ou sem datas). */
+export function mesesDaVenda(c: Linha, renovacao: Renovacao | null | undefined): Set<string> | null {
+  if (!AVULSOS.includes((c.tipo_servico ?? "").trim())) return null;
+  const datas = [c.data_inicio, renovacao?.vence || c.data_renovacao];
+  const out = new Set(datas.filter((d) => ISO_DATA.test(String(d ?? "").trim().slice(0, 10))).map((d) => String(d).trim().slice(0, 7)));
+  return out.size ? out : null;
+}
+
+export interface Credito { id: number; mes: string; valor: number }
+
+/** Créditos ainda não descontados: {cliente_id: [{id, mes, valor}]}, o mais antigo primeiro. */
+export async function creditos(b: Banco, clienteId: number | null = null): Promise<Map<number, Credito[]>> {
+  const [filtro, args] = clienteId ? ["AND cliente_id=?", [clienteId]] : ["", []];
+  const out = new Map<number, Credito[]>();
+  for (const r of await b.query(`SELECT id, cliente_id, data, valor FROM cliente_eventos WHERE tipo='credito' AND excluido_em IS NULL
+      AND usado_em IS NULL ${filtro} ORDER BY data, id`, args)) {
+    if (!out.has(r.cliente_id)) out.set(r.cliente_id, []);
+    out.get(r.cliente_id)!.push({ id: r.id, mes: String(r.data).slice(0, 7), valor: arred(flt(r.valor), 2) });
+  }
+  return out;
+}
+
+/** [total, ids] dos créditos que cabem no próximo pagamento: do mais antigo, sem passar da mensalidade. */
+export function creditoAplicavel(lista: Credito[], valorMensal: unknown): [number, number[]] {
+  let total = 0;
+  const ids: number[] = [];
+  for (const c of lista) {
+    if (c.valor > 0 && total + c.valor <= flt(valorMensal) + 0.005) {
+      total = arred(total + c.valor, 2);
+      ids.push(c.id);
+    }
+  }
+  return [total, ids];
+}
+
+export interface Mensalidade { id: number; nome: string; previsto: number; recebido: number; situacao: string; credito: number;
+  abertos: Linha[]; aberto: number; quitado: boolean; coberto_ate: string | null; pago_em_mes: string | null; falta: number; entra: number }
+
+/** Alunos ativos no mês: previsto, recebido, situação (recebido, em aberto, pago adiantado, pulou o mês), crédito e o que falta. */
+export async function mensalidades(b: Banco, mes: string, ren?: Map<number, Renovacao> | null): Promise<Mensalidade[]> {
+  const [abertosRows, puladosRows, livres, descRows, adiantados, alunos] = await Promise.all([
+    b.query(`SELECT id, cliente_id, data, valor, descricao, categoria, conta FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
+      AND excluido_em IS NULL AND pago_em IS NULL AND cliente_id IS NOT NULL AND substr(data,1,7)=? ORDER BY data, id`, [mes]),
+    b.query(`SELECT DISTINCT cliente_id FROM cliente_eventos WHERE tipo='pausa' AND excluido_em IS NULL AND substr(data,1,7)=?`, [mes]),
+    creditos(b),
+    b.query(`SELECT e.cliente_id, e.valor FROM cliente_eventos e JOIN lancamentos l ON l.id = e.usado_lancamento_id
+      WHERE e.tipo='credito' AND e.excluido_em IS NULL AND substr(l.data,1,7)=?`, [mes]),
+    coberturaAdiantada(b, mes),
+    b.query(`SELECT c.id, c.nome, c.data_inicio, c.tipo_servico, c.data_renovacao, COALESCE(c.valor, 0) AS previsto,
+      (SELECT COALESCE(SUM(l.valor), 0) FROM lancamentos l WHERE l.cliente_id = c.id AND l.escopo='PJ' AND l.tipo='entrada'
+       AND l.excluido_em IS NULL AND l.pago_em IS NOT NULL AND substr(l.data,1,7)=?) AS recebido
+      FROM clientes c WHERE c.excluido_em IS NULL AND c.status='ativo' ORDER BY c.nome`, [mes]),
+  ]);
+  const abertos = new Map<number, Linha[]>();
+  for (const r of abertosRows) {
+    if (!abertos.has(r.cliente_id)) abertos.set(r.cliente_id, []);
+    abertos.get(r.cliente_id)!.push({ ...r });
+  }
+  const pulados = new Set(puladosRows.map((r) => r.cliente_id as number));
+  const descontados = new Map<number, number>();
+  for (const r of descRows) descontados.set(r.cliente_id, (descontados.get(r.cliente_id) ?? 0) + r.valor);
+  const itens: Mensalidade[] = [];
+  for (const c of alunos) {
+    const ini = String(c.data_inicio ?? "").trim().slice(0, 10);
+    if (ISO_DATA.test(ini) && ini.slice(0, 7) > mes) continue; // começa depois do mês: não deve nada nele
+    let previsto = arred(c.previsto, 2);
+    const recebido = arred(c.recebido, 2);
+    const pulou = pulados.has(c.id);
+    let foraDaVenda = false;
+    if (recebido <= 0 && !pulou && !adiantados.has(c.id) && AVULSOS.includes((c.tipo_servico ?? "").trim())) {
+      if (!ren) ren = await renovacoes(b);
+      const venda = mesesDaVenda(c, ren.get(c.id));
+      foraDaVenda = venda !== null && !venda.has(mes);
+    }
+    if (foraDaVenda) previsto = 0;
+    if (previsto <= 0 && recebido <= 0 && !(foraDaVenda && abertos.has(c.id))) continue;
+    const credito = arred(Math.min(creditoAplicavel((livres.get(c.id) ?? []).filter((x) => x.mes < mes), previsto)[0]
+      + (descontados.get(c.id) ?? 0), previsto), 2); // só vale para o mês seguinte ao não usado
+    previsto = arred(previsto - credito, 2);
+    if (pulou) previsto = 0;
+    const adiantado = recebido <= 0 ? adiantados.get(c.id) : undefined;
+    const sit = adiantado ? "pago adiantado" : pulou && recebido <= 0 ? "pulou o mês" : recebido > 0 ? "recebido" : "em aberto";
+    const quitado = recebido > 0 || Boolean(adiantado);
+    const meus = abertos.get(c.id) ?? [];
+    const aberto = quitado ? 0 : arred(meus.reduce((a, x) => a + x.valor, 0), 2);
+    itens.push({ id: c.id, nome: c.nome, previsto, recebido, situacao: sit, credito, abertos: meus, aberto, quitado,
+      coberto_ate: adiantado ? adiantado.ate : null, pago_em_mes: adiantado ? adiantado.de : null,
+      falta: quitado ? 0 : arred(Math.max(previsto - recebido - aberto, 0), 2),
+      entra: recebido > 0 ? recebido : adiantado ? 0 : previsto });
+  }
+  return itens;
+}
+
+export interface Renovacao { gravada: unknown; efetiva: unknown; vence: unknown; dia: number | null; ciclos: number; falta: number;
+  pendente: boolean; motivo: string | null; motivo_data: string | null; tipos: string[] }
+
+/**
+ * Renovação efetiva de cada aluno (não grava nada): parte da data do cadastro e anda um mês a cada pagamento, Renovação marcada
+ * perto do vencimento ou mês pulado. Regras completas em app/financeiro.py (renovacoes e _renovacao).
+ */
+export async function renovacoes(b: Banco, clienteId: number | null = null): Promise<Map<number, Renovacao>> {
+  const [f1, a1] = clienteId ? ["AND id=?", [clienteId]] : ["", []];
+  const f2 = clienteId ? "AND cliente_id=?" : "AND cliente_id IS NOT NULL";
+  const [alunos, descRows, pagosRows, evRows] = await Promise.all([
+    b.query(`SELECT id, valor, data_renovacao, renovacao_em FROM clientes WHERE excluido_em IS NULL AND data_renovacao IS NOT NULL ${f1}`, a1),
+    b.query(`SELECT usado_lancamento_id AS lid, SUM(valor) AS total FROM cliente_eventos WHERE tipo='credito'
+      AND excluido_em IS NULL AND usado_lancamento_id IS NOT NULL GROUP BY usado_lancamento_id`),
+    b.query(`SELECT id, cliente_id, data, valor, meses, criado_em FROM lancamentos WHERE escopo='PJ' AND tipo='entrada'
+      AND pago_em IS NOT NULL AND excluido_em IS NULL ${f2}`, a1),
+    b.query(`SELECT cliente_id, tipo, data, valor, criado_em FROM cliente_eventos WHERE excluido_em IS NULL
+      AND tipo IN ('pagamento','renovacao','pausa') ${f2}`, a1),
+  ]);
+  const descontos = new Map(descRows.map((r) => [r.lid as number, r.total as number]));
+  const pagos = new Map<number, Linha[]>();
+  for (const r of pagosRows) {
+    if (!pagos.has(r.cliente_id)) pagos.set(r.cliente_id, []);
+    pagos.get(r.cliente_id)!.push({ ...r, valor: (r.valor || 0) + (descontos.get(r.id) || 0) });
+  }
+  const eventos = new Map<number, Linha[]>();
+  for (const r of evRows) {
+    if (!eventos.has(r.cliente_id)) eventos.set(r.cliente_id, []);
+    eventos.get(r.cliente_id)!.push(r);
+  }
+  return new Map(alunos.map((c) => [c.id as number, renovacao(c, pagos.get(c.id) ?? [], eventos.get(c.id) ?? [])]));
+}
+
+function renovacao(c: Linha, pagos: Linha[], eventos: Linha[]): Renovacao {
+  const gravada = String(c.data_renovacao ?? "").trim().slice(0, 10);
+  const out: Renovacao = { gravada: c.data_renovacao, efetiva: c.data_renovacao, vence: c.data_renovacao, dia: null, ciclos: 0,
+    falta: 0, pendente: false, motivo: null, motivo_data: null, tipos: [] };
+  if (numeroDoDia(gravada) === null) return out; // data torta no cadastro: fica como está
+  const valor = flt(c.valor);
+  const desde = diasAntes(gravada, ANTECEDENCIA);
+  const trocada = c.renovacao_em;
+  const mesesPagos = new Set(pagos.map((p) => String(p.data).slice(0, 7)));
+  type Item = [string, unknown, unknown, unknown, unknown];
+  const itens: Item[] = pagos.map((p) => ["pagamento", p.data, p.valor, p.criado_em, p.meses]);
+  for (const e of eventos)
+    if (!(e.tipo === "pagamento" && mesesPagos.has(String(e.data).slice(0, 7)))) itens.push([e.tipo, e.data, e.valor, e.criado_em, null]);
+  const chave = (i: Item): [string, string] => [strPy(i[1]), strPy(i[3] || "")];
+  itens.sort((x, y) => {
+    const [a1, a2] = chave(x), [b1, b2] = chave(y);
+    return a1 < b1 ? -1 : a1 > b1 ? 1 : a2 < b2 ? -1 : a2 > b2 ? 1 : 0;
+  });
+  let k = 0, pendente = false, ultimo: string | null = null, venceuPendente: string | null = null;
+  for (const [tipo, dataBruta, vBruto, criado, explicito] of itens) {
+    const data = String(dataBruta || "").trim().slice(0, 10);
+    if (!ISO_DATA.test(data) || data < desde || (trocada && strPy(criado || "") <= trocada)) continue;
+    if (numeroDoDia(data) === null) continue;
+    const vence = proximaRenovacao(gravada, k);
+    const perto = data >= diasAntes(vence, ANTECEDENCIA);
+    let anda = 0;
+    if (tipo === "pagamento") {
+      const meses = mesesDoPagamento(flt(vBruto), valor, explicito as number | null);
+      if (pendente) {
+        pendente = false;
+        anda = Math.max(meses - 1, 0);
+      } else if (meses) anda = meses;
+      else if (perto) anda = 1;
+    } else if (tipo === "renovacao") {
+      const confirma = ultimo !== null && data < vence && numeroDoDia(data)! - numeroDoDia(ultimo)! <= CONFIRMA;
+      if (perto && !confirma) {
+        if (valor > 0 && !pendente) venceuPendente = vence;
+        anda = 1;
+        pendente = pendente || valor > 0;
+      }
+    } else if (perto) {
+      anda = 1;
+      pendente = false;
+    }
+    if (anda) {
+      k += anda;
+      ultimo = data;
+      for (let i = 0; i < anda; i++) out.tipos.push(tipo);
+      out.motivo = tipo;
+      out.motivo_data = data;
+    }
+  }
+  const efetiva = k ? proximaRenovacao(gravada, k) : gravada;
+  Object.assign(out, { efetiva, ciclos: k, pendente, falta: pendente ? valor : 0,
+    vence: pendente && venceuPendente ? venceuPendente : efetiva, dia: Number(gravada.slice(8, 10)) });
+  return out;
+}
+
+/** str() do Python para comparar textos como o sorted() de lá. */
+function strPy(v: unknown): string {
+  if (v === null || v === undefined) return "None";
+  if (typeof v === "number" && Number.isInteger(v) && v !== 0 && !String(v).includes(".")) return String(v);
+  return String(v);
+}
+
+/** Arredonda para o centavo, meio para cima (28,595 -> 28,60). */
+export function centavos(v: number): number {
+  return Math.floor(v * 100 + 0.5 + 1e-9) / 100;
+}
+
+export interface Cobranca { meses: number; dias: number; bruto: number; credito: number; valor: number; multa: number; juros: number; total: number }
+
+/** Cobrança de quem está vencido: cada mês vencido com multa (uma vez) e juros proporcionais; o crédito sai antes da multa e dos juros. */
+export function cobranca(valorBruto: unknown, vencida: string, hoje: string, par: Record<string, unknown>, creditoBruto: unknown = 0,
+  dia: number | null = null): Cobranca | null {
+  const valor = flt(valorBruto);
+  if (numeroDoDia(String(vencida)) === null) return null;
+  if (valor <= 0 || vencida >= hoje) return null;
+  const multaPct = flt(par.multa), jurosMes = flt(par.juros_ao_mes);
+  const h = numeroDoDia(hoje)!;
+  const resto = Math.min(Math.max(flt(creditoBruto), 0), valor);
+  const descontado = resto;
+  let meses = 0, principal = 0, multa = 0, juros = 0, data = vencida;
+  while (data < hoje && meses < 24) {
+    const dias = h - numeroDoDia(data)!;
+    const saldo = meses === 0 ? valor - resto : valor;
+    principal += saldo;
+    multa += saldo * multaPct;
+    juros += (saldo * jurosMes * dias) / 30;
+    meses += 1;
+    data = dia ? vencimento(dia, somarMeses(vencida.slice(0, 7), meses)) : proximaRenovacao(vencida, meses);
+  }
+  if (principal <= 0.005) return null;
+  principal = centavos(principal);
+  multa = centavos(multa);
+  juros = centavos(juros);
+  return { meses, dias: h - numeroDoDia(vencida)!, bruto: arred(valor * meses, 2), credito: arred(descontado, 2), valor: principal,
+    multa, juros, total: arred(principal + multa + juros, 2) };
+}
+
+/** Desconta o crédito do aluno (pagamento da mensalidade ou mês pulado coberto): [valor descontado, comandos de gravação]. */
+export async function usarCredito(b: Banco, lancamentoId: number | null, clienteId: number | null, hoje: string): Promise<[number, Comando[]]> {
+  let pago = 0;
+  if (lancamentoId) {
+    const p = await b.um(`SELECT cliente_id, valor, categoria FROM lancamentos WHERE id=? AND escopo='PJ' AND tipo='entrada' AND pago_em IS NOT NULL
+      AND excluido_em IS NULL`, [lancamentoId]);
+    if (!p || !p.cliente_id || p.categoria === EMPRESTIMO) return [0, []];
+    clienteId = p.cliente_id;
+    pago = flt(p.valor);
+  }
+  if (!clienteId) return [0, []];
+  const [c, livres] = await Promise.all([b.um("SELECT valor FROM clientes WHERE id=?", [clienteId]), creditos(b, clienteId)]);
+  const mensal = c ? flt(c.valor) : 0;
+  const [total, ids] = creditoAplicavel(livres.get(clienteId) ?? [], mensal);
+  if (!ids.length || (lancamentoId && pago < CHEIO * (mensal - total)) || (!lancamentoId && total < mensal - 0.005)) return [0, []];
+  return [total, ids.map((i) => ({ sql: "UPDATE cliente_eventos SET usado_em=?, usado_lancamento_id=? WHERE id=? AND usado_em IS NULL", params: [hoje, lancamentoId, i] }))];
+}
+
+export interface Diferenca { id: number; valor: number; pago: number; pago_em: string }
+
+/** Diferenças de multa e juros ainda em aberto: {cliente_id: [{id, valor, pago, pago_em}]}. */
+export async function diferencas(b: Banco, clienteId: number | null = null): Promise<Map<number, Diferenca[]>> {
+  const [filtro, args] = clienteId ? ["AND p.cliente_id=?", [MULTA_JUROS, clienteId]] : ["", [MULTA_JUROS]];
+  const out = new Map<number, Diferenca[]>();
+  for (const r of await b.query(`SELECT m.id, m.valor, p.cliente_id, p.valor AS pago, p.pago_em FROM lancamentos m
+      JOIN lancamentos p ON m.origem = 'MULTA:' || p.id
+      WHERE m.categoria=? AND m.pago_em IS NULL AND m.excluido_em IS NULL AND p.excluido_em IS NULL
+      AND p.cliente_id IS NOT NULL ${filtro} ORDER BY m.data, m.id`, args)) {
+    if (!out.has(r.cliente_id)) out.set(r.cliente_id, []);
+    out.get(r.cliente_id)!.push({ id: r.id, valor: arred(r.valor, 2), pago: arred(r.pago, 2), pago_em: String(r.pago_em ?? "").slice(0, 10) });
+  }
+  return out;
+}
+
+/** Aluno que o texto do lançamento cita (nome completo, ou primeiro nome único); na dúvida, nenhum. */
+export function sugerirAluno(texto: string | null | undefined, alunos: { id: number; nome: string }[]): number | null {
+  const pal = new Set(palavras(texto));
+  const completos: number[] = [], primeiros: number[] = [];
+  for (const a of alunos) {
+    const nome = palavras(a.nome);
+    if (nome.length && nome.every((x) => pal.has(x))) completos.push(a.id);
+    else if (nome.length && nome[0].length >= 3 && pal.has(nome[0])) primeiros.push(a.id);
+  }
+  if (completos.length === 1) return completos[0];
+  return !completos.length && primeiros.length === 1 ? primeiros[0] : null;
 }

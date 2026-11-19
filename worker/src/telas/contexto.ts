@@ -2,8 +2,8 @@
 import type { Banco } from "../banco/banco.ts";
 import type { Valor } from "../banco/tipos.ts";
 import { referencias } from "../regras/locais.ts";
+import { dadosMensagem, type DadosMsg } from "../regras/mensagens.ts";
 import { parametros, todasAsListas, type Listas } from "../regras/parametros.ts";
-import { doAluno } from "../regras/vantagens.ts";
 
 export interface Acao {
   wa?: boolean;
@@ -33,7 +33,7 @@ export interface Alerta {
   acoes: Acao[];
   cartao?: Cartao | null;
 }
-export interface DadosMsg { pix: string; pix_nome: string; pix_cidade: string; pix_banco: string; link_avaliacao: string; vantagem: string }
+export type { DadosMsg };
 
 export interface Contexto {
   caminho: string;
@@ -44,13 +44,6 @@ export interface Contexto {
   dadosMsg: DadosMsg;
   locaisRef: string[];
   alertas: Alerta[];
-}
-
-/** {pix, pix_nome, pix_cidade, pix_banco, link_avaliacao, vantagem} de Configurações > Dados das mensagens. */
-export async function dadosMensagem(b: Banco): Promise<DadosMsg> {
-  const [d, vantagem] = await Promise.all([parametros(b, "msg_dados"), doAluno(b, null)]);
-  const t = (k: string) => String(d[k] ?? "").trim();
-  return { pix: t("pix"), pix_nome: t("pix_nome"), pix_cidade: t("pix_cidade"), pix_banco: t("pix_banco"), link_avaliacao: t("link_avaliacao"), vantagem };
 }
 
 /** Os alertas do topo (main.alertas) dependem das regras de alunos e do financeiro: entram quando elas forem portadas. */

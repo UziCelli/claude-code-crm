@@ -18,5 +18,7 @@ mkdirSync(join(raiz, "src", "gerado"), { recursive: true });
 writeFileSync(join(raiz, "src", "gerado", "estaticos.ts"),
   "// Gerado por scripts/copiar-estaticos.mjs: não editar.\n" +
   `export const VERSOES: Record<string, string> = ${JSON.stringify({ "style.css": etiqueta("style.css"), "app.js": etiqueta("app.js") })};\n` +
-  `export const LOGO_SVG = ${JSON.stringify(logo)};\n`);
+  `export const LOGO_SVG = ${JSON.stringify(logo)};\n` +
+  `/** A fonte Montserrat em base64, para o cartão de cobrança (SVG) sair com a mesma letra. */\n` +
+  `export const MONTSERRAT_B64 = ${JSON.stringify(readFileSync(join(origem, "fonts", "montserrat.woff2")).toString("base64"))};\n`);
 console.log("estáticos copiados para public/static");

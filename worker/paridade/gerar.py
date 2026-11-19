@@ -327,6 +327,188 @@ def html_configuracoes(caminho: Path) -> None:
     (WORKER / "test" / "paridade" / "configuracoes.html").write_text(http.get("/configuracoes").text, encoding="utf-8")
 
 
+def semear_alunos(caminho: Path, n: int = 70) -> None:
+    """Alunos sintéticos em todas as situações: vencido (com e sem crédito), vence logo, pagou sem aula, sem aula nem pagamento,
+    sem aula recente, cadastro incompleto, em dia; pagamentos de vários meses, Renovação marcada pendente, mês pulado, créditos
+    (usados ou não), diferença de multa e juros, aulas com bloqueio no meio. Sempre os mesmos (semente fixa)."""
+    import datetime as dt
+    rnd = random.Random(42)
+    hoje = dt.date.fromisoformat(HOJE)
+    d = lambda k: (hoje + dt.timedelta(days=k)).isoformat()   # noqa: E731
+    con = sqlite3.connect(caminho)
+    with con:
+        con.execute("UPDATE parametros SET valor_texto='chave@pix.com' WHERE grupo='msg_dados' AND chave='pix'")
+        con.execute("UPDATE parametros SET valor_texto='Victor Celli' WHERE grupo='msg_dados' AND chave='pix_nome'")
+        con.execute("UPDATE parametros SET valor_texto='São Paulo' WHERE grupo='msg_dados' AND chave='pix_cidade'")
+        tipos = ["Mensalidade"] * 6 + ["Pacote de Aulas", "Pacote de Aulas", "Consultoria Online", "Consultoria Híbrida", "Avaliação Física", ""]
+        for i in range(n):
+            tipo = rnd.choice(tipos)
+            plano = {"Mensalidade": rnd.choice(["Mensalidade 2x", "Mensalidade 3x", "Mensalidade 1x", "Mensal"]),
+                     "Pacote de Aulas": rnd.choice(["Pacote 8", "Pacote de 4 aulas"]), "": rnd.choice(["Pacote 4", ""])}.get(tipo, "")
+            valor = rnd.choice([0, 300, 450.5, 600, 600, 615.33, 999.99])
+            tel = rnd.choice(["11999990000", "(11) 98888-7777", "", None])
+            inicio = rnd.choice([d(-rnd.randint(30, 400)), d(-rnd.randint(30, 400)), None, d(rnd.randint(1, 20)), "2026-02-30"])
+            renov = rnd.choice([d(rnd.randint(-70, 45)) for _ in range(6)] + [None, "2026-02-30"])
+            status = "ativo" if rnd.random() < 0.9 else "inativo"
+            cid = con.execute("INSERT INTO clientes (nome, telefone, tipo_servico, plano, valor, status, data_inicio, data_renovacao, local)"
+                              " VALUES (?,?,?,?,?,?,?,?, 'CIA')", (f"Aluno {i:02d} {rnd.choice(['Ána', 'Bê', 'Cid'])}", tel, tipo, plano, valor,
+                                                                     status, inicio, renov)).lastrowid
+            if rnd.random() < 0.15 and renov:
+                con.execute("UPDATE clientes SET renovacao_em=? WHERE id=?", (d(-rnd.randint(5, 40)) + " 10:00:00", cid))
+            if rnd.random() < 0.5:
+                con.execute("INSERT INTO agenda_fixos (cliente_id, dia, hora, local) VALUES (?,?,?, 'CIA')", (cid, rnd.randint(1, 6), rnd.randint(6, 20)))
+            densidade = rnd.choice([0, 0, 1, 2, 4, 8])
+            for k in range(densidade * 4):
+                con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, hora) VALUES (?, 'aula', ?, 7)", (cid, d(-rnd.randint(0, 130))))
+            if rnd.random() < 0.15:
+                con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data) VALUES (?, 'aula', ?)", (cid, d(-rnd.randint(140, 300))))
+            # pagamentos mensais com falhas; alguns de vários meses; alguns em aberto
+            if valor and renov and rnd.random() < 0.85:
+                base = dt.date.fromisoformat(renov) if renov != "2026-02-30" else hoje
+                for m in range(rnd.randint(0, 6)):
+                    if rnd.random() < 0.2:
+                        continue
+                    data = (base - dt.timedelta(days=30 * m + rnd.randint(-8, 5))).isoformat()
+                    meses = rnd.choice([None, None, None, None, 3])
+                    v = rnd.choice([valor, valor, valor * 2, round(valor * 0.5, 2), round(valor * 0.95, 2)])
+                    pago = data if (data <= HOJE and rnd.random() < 0.9) else None
+                    lid = con.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, cliente_id, meses, criado_em)"
+                                      " VALUES ('PJ','entrada',?,?,?, 'Mensalidade (Aulas Presenciais)', ?, ?, ?)",
+                                      (data, pago, v, cid, meses, data + " 09:00:00")).lastrowid
+                    if pago and rnd.random() < 0.08:
+                        con.execute("INSERT INTO lancamentos (escopo, tipo, data, valor, categoria, origem) VALUES ('PJ','entrada',?,?, 'Multa e juros', ?)",
+                                    (data, round(rnd.uniform(5, 30), 2), f"MULTA:{lid}"))
+            if rnd.random() < 0.2:
+                con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data) VALUES (?, 'pagamento', ?)", (cid, d(-rnd.randint(0, 60))))
+            if rnd.random() < 0.15 and renov and renov != "2026-02-30":
+                con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, criado_em) VALUES (?, 'renovacao', ?, ?)",
+                            (cid, d(rnd.randint(-40, 3)), d(-1) + " 08:00:00"))
+            if rnd.random() < 0.15 and renov and renov != "2026-02-30":
+                ate = rnd.choice([None, d(rnd.randint(-5, 40))])
+                con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, ate) VALUES (?, 'pausa', ?, ?)", (cid, d(rnd.randint(-45, 2)), ate))
+            if rnd.random() < 0.2:
+                mes = (hoje - dt.timedelta(days=30 * rnd.randint(1, 3))).isoformat()[:7]
+                usado = rnd.random() < 0.3
+                con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, valor, usado_em) VALUES (?, 'credito', ?, ?, ?)",
+                            (cid, mes + "-01", rnd.choice([120.0, 299.5, valor or 50.0]), d(-3) if usado else None))
+    con.close()
+    fixar_carimbos(caminho)
+
+
+def semear_ofertas_indicacoes(caminho: Path) -> None:
+    """Ofertas (ativa, pausada, vencida, com e sem prazo), respostas (enviada, aceitou com e sem prazo, recusou) e indicações."""
+    con = sqlite3.connect(caminho)
+    with con:
+        ofertas = [("Treino em dupla", "2 aulas por semana com um amigo.", 600, 480, 3, None, 1),
+                   ("Avaliação mensal", "avaliação física; plano ajustado", 500, 450, None, "2026-12-31", 1),
+                   ("Pausada", "x", 300, 200, 2, None, 0), ("Vencida", "y", 300, 250, 1, "2026-10-01", 1)]
+        for t, inc, vn, vo, m, ate, at in ofertas:
+            con.execute("INSERT INTO ofertas (titulo, inclui, valor_normal, valor_oferta, meses_desconto, valida_ate, ativa) VALUES (?,?,?,?,?,?,?)",
+                        (t, inc, vn, vo, m, ate, at))
+        ids = [r[0] for r in con.execute("SELECT id FROM clientes WHERE status='ativo' AND excluido_em IS NULL ORDER BY id")]
+        respostas = [(1, ids[0], "enviada", "2026-11-10", None, None), (1, ids[1], "aceitou", "2026-09-20", "2026-11-20", 600),
+                     (1, ids[2], "recusou", "2026-11-01", None, None), (2, ids[3], "aceitou", "2026-10-10", None, 500),
+                     (1, ids[4], "aceitou", "2026-08-01", "2026-11-01", 615.33)]
+        for oid, cid, st, d, ate, antes in respostas:
+            con.execute("INSERT INTO oferta_respostas (oferta_id, cliente_id, status, data, ate_desconto, valor_antes) VALUES (?,?,?,?,?,?)",
+                        (oid, cid, st, d, ate, antes))
+        con.execute("UPDATE clientes SET valor=480 WHERE id=?", (ids[1],))
+        con.execute("UPDATE clientes SET valor=480 WHERE id=?", (ids[4],))
+        for indicado, indicador in [(ids[5], ids[6]), (ids[7], ids[6]), (ids[8], ids[9]), (ids[10], ids[10])]:
+            con.execute("UPDATE clientes SET indicado_por=?, canal_origem='Indicação' WHERE id=?", (indicador, indicado))
+        con.execute("INSERT INTO cliente_eventos (cliente_id, tipo, data, descricao, indicado_id) VALUES (?, 'brinde', '2026-11-02', ?, ?)",
+                    (ids[6], "Presente pela indicação de X: Camiseta", ids[7]))
+        con.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, cliente_id) VALUES ('PJ','entrada','2026-11-03','2026-11-03', 600, 'Mensalidade (Aulas Presenciais)', ?)", (ids[5],))
+        con.execute("INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, cliente_id) VALUES ('PJ','entrada','2026-11-03','2026-11-03', 600, 'Mensalidade (Aulas Presenciais)', ?)", (ids[7],))
+    con.close()
+    fixar_carimbos(caminho)
+
+
+def casos_alunos():
+    from app import alunos, financeiro, main, pix
+    caminho = banco_novo()
+    semear_alunos(caminho)
+    semear_ofertas_indicacoes(caminho)
+    dump(caminho, ["parametros", "clientes", "agenda_fixos", "cliente_eventos", "lancamentos", "ofertas", "oferta_respostas"], "cenario-alunos.sql")
+    db.DB_PATH = caminho
+    con = db.conectar(caminho)
+    est = alunos.estado(con, HOJE)
+    situacoes = sorted({e["situacao"] for e in est.values()})
+    unicos = {cid: alunos.estado(con, HOJE, ids=[cid]).get(cid) for cid in list(est)[::7]}
+    par = db.parametros(con, "cobranca")
+    meses = [financeiro.somar_meses(HOJE[:7], k) for k in (-2, -1, 0, 1)]
+    saida = {
+        "situacoes": situacoes,
+        "estado": est, "estado_um": unicos,
+        "renovacoes": financeiro.renovacoes(con),
+        "mensalidades": {m: financeiro.mensalidades(con, m) for m in meses},
+        "creditos": financeiro.creditos(con),
+        "diferencas": financeiro.diferencas(con),
+        "pago_adiantado_ate": financeiro.pago_adiantado_ate(con, HOJE),
+        "cobranca": [[v, venc, cred, dia, financeiro.cobranca(v, venc, HOJE, par, cred, dia)]
+                     for v in (0, 600, 450.5) for venc in ("2026-11-19", "2026-11-18", "2026-09-30", "2026-01-31", "2024-05-10", "xx")
+                     for cred in (0, 100, 600) for dia in (None, 31, 10)],
+        "dias_parados": [[u, h, iv, main.dias_parados(__import__("datetime").date.fromisoformat(u), __import__("datetime").date.fromisoformat(h), iv)]
+                         for u, h, iv in [("2026-10-01", "2026-11-19", [("2026-10-25", "2026-11-02")]),
+                                          ("2026-10-01", "2026-11-19", [("2026-10-25", "2026-11-02"), ("2026-10-30", "2026-11-10"), ("2026-09-01", "2026-10-03")]),
+                                          ("2026-11-05", "2026-11-19", [("2026-10-25", "2026-11-02")]), ("2026-11-01", "2026-11-03", [("2026-11-02", "2026-12-30")])]],
+        "br_code": [[c, nm, ci, v, pix.br_code(c, nm, ci, v)] for c, nm, ci, v in [
+            ("chave@pix.com", "Victor Celli", "São Paulo", 615.33), ("+5511999990000", "José Ação da Silva Muito Comprido Nome", "Ribeirão Preto do Sul", None),
+            ("", "A", "B", 10), ("12345678900", "  ana  ", " sp ", 0.005), ("chave", "Ç", "É", 1234567.891)]],
+        "frase_valor": [[v, cs, alunos.frase_valor(v, cs)] for v, cs in [
+            (600, None), (0, [{"id": 1, "mes": "2026-10", "valor": 100.0}]), (600, [{"id": 1, "mes": "2026-10", "valor": 100.0}, {"id": 2, "mes": "2026-09", "valor": 550.0}]),
+            (300, [{"id": 3, "mes": "2026-08", "valor": 120.0}, {"id": 4, "mes": "2026-09", "valor": 120.0}])]],
+    }
+    salvar("alunos", jsonavel(saida))
+    casos_cartao_ofertas(con)
+    con.close()
+    print("situações no cenário:", situacoes)
+
+
+def casos_cartao_ofertas(con):
+    import datetime as dt
+    import textwrap
+    from app import alunos, cartao, financeiro, indicacoes, main, ofertas
+    hoje = dt.date.fromisoformat(HOJE)
+    est = alunos.estado(con, HOJE)
+    modelos, dados = db.parametros(con, "msg_whatsapp"), main.dados_mensagem(con)
+    par = db.parametros(con, "cobranca")
+    clientes = {r["id"]: r for r in con.execute("SELECT * FROM clientes")}
+    cartoes = []
+    for cid, e in est.items():
+        if not e["cartao"]:
+            continue
+        ren = e["renovacao"]
+        ca = main.cobranca_atual(con, clientes[cid], {"efetiva": ren["efetiva"], "vence": ren["vence"], "cob": e["cobranca"], "credito": e["credito"]},
+                                 hoje, modelos, dados)
+        cartoes.append([cid, ca["codigo"], cartao.svg(ca, main.moeda, main.data_br, par)])
+    difs = financeiro.diferencas(con)
+    dif_cartoes = [[cid, main.diferenca_cartao(clientes[cid], itens, dados, modelos)["codigo"],
+                    cartao.svg(main.diferenca_cartao(clientes[cid], itens, dados, modelos), main.moeda, main.data_br)] for cid, itens in difs.items()]
+    pendencias = {cid: main.pendencia_diferenca(clientes[cid], itens, dados) for cid, itens in difs.items()}
+    textos = ["Oi, Ana! Sua mensalidade de R$ 600,00 venceu em 10/11/2026. Segue o Pix atualizado com multa e juros.",
+              "palavra-com-hifen-muito-comprida-que-passa-do-limite-de-largura e mais", "a--b c—d e - f", "   espaço   no começo",
+              "x" * 80, "Tab\taqui e\nquebra", ""]
+    ids = sorted(clientes)
+    saida = {
+        "cartoes": cartoes, "dif_cartoes": dif_cartoes, "pendencias": pendencias,
+        "wrap": [[t, w, textwrap.wrap(t, w)] for t in textos for w in (10, 36)] + [[t, 62, textwrap.wrap(t, 62, break_on_hyphens=False)] for t in textos],
+        "indicacoes_pendentes": indicacoes.pendentes(con),
+        "indicacoes_do_aluno": {cid: indicacoes.do_aluno(con, cid) for cid in ids[:12]},
+        "quem_indicou": {cid: indicacoes.quem_indicou(con, cid) for cid in ids[:12]},
+        "escolher": indicacoes.alunos_para_escolher(con, ids[0]),
+        "ofertas_ativas": ofertas.ativas(con, HOJE),
+        "situacao": {cid: ofertas.situacao_aluno(con, cid, HOJE) for cid in ids[:6]},
+        "texto_oferta": [ofertas.texto(o, "Ana") for o in ofertas.todas(con)],
+        "pendentes_oferta": [[p["oferta"]["id"], [e["id"] for e in p["elegiveis"]]] for p in ofertas.pendentes(con, None, HOJE)],
+        "descontos_acabando": ofertas.descontos_acabando(con, HOJE),
+        "validar": [list(ofertas.validar(*a)) for a in [("", "x", "1", "0,5", "", ""), ("T", "", 1, 1, "", ""), ("T", "I", "abc", "1", "", ""),
+                    ("T", "I", "0", "1", "", ""), ("T", "I", "100", "100", "", ""), ("T", "I", "100", "80", "37", ""),
+                    ("T", "I", "100", "80", "x", ""), ("T", "I", "100", "80", "3", "2026-02-30"), (" Treino  dupla ", " inclui ", "1.500", "1.200,50", " 12 ", "2026-12-01")]],
+    }
+    salvar("cartao-ofertas", jsonavel(saida))
+
+
 def casos_formato():
     from app import main
     rnd = random.Random(11)
@@ -377,4 +559,5 @@ if __name__ == "__main__":
     html_base(caminho)
     casos_financeiro_prototipo()
     casos_motor()
+    casos_alunos()
     print("paridade gerada em worker/")
