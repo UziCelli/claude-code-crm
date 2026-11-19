@@ -8,13 +8,15 @@ import { html, raw } from "hono/html";
 import type { Child } from "hono/jsx";
 import { banco, type Ambiente } from "../app.ts";
 import type { Banco } from "../banco/banco.ts";
-import type { Linha } from "../banco/tipos.ts";
+import type { Comando, Linha, Valor } from "../banco/tipos.ts";
 import { arred } from "../arred.ts";
 import { capitalizar, dataBr, moeda, num, pct, preencher, reprFloat, wa } from "../formato.ts";
+import { avisoDeslocamento, avisoLotados, GravaAgenda, maxAlunos, quando } from "../regras/agenda.ts";
 import { darCredito, estado, estadoAluno, SEM_AULA, type Estado } from "../regras/alunos.ts";
 import { svg } from "../regras/cartao.ts";
 import { diferencaCartao, pendenciaDiferenca } from "../regras/cobranca.ts";
 import { dataIso } from "../regras/datas.ts";
+import { pularMes, registrarEvento } from "../regras/eventos.ts";
 import { diferencas, pagoAdiantadoAte, proximaRenovacao, renovacoes } from "../regras/financeiro.ts";
 import { alunosParaEscolher, CANAL, doAluno, quemIndicou, registrarPresente, validar as validarIndicacao } from "../regras/indicacoes.ts";
 import { nomes } from "../regras/locais.ts";
@@ -33,6 +35,8 @@ import { caminhoSeguro, ErroValor, intPy, numBr, quoteUrl, voltar } from "./util
 
 export const CAMPOS_CLIENTE = ["nome", "telefone", "local", "tipo_servico", "plano", "pessoas", "dias_horarios", "valor",
   "forma_pagamento", "status", "canal_origem", "data_inicio", "data_renovacao", "observacoes", "indicado_por"];
+/** A ficha não grava dias_horarios: os horários fixos ficam na Agenda (card "Dias e horários fixos"). */
+const CAMPOS_FICHA = CAMPOS_CLIENTE.filter((k) => k !== "dias_horarios");
 export const MAX_IDS = 200;
 export const MOTIVOS_LISTA: Record<string, string> = { "sem-aula": "Alunos sem nenhuma aula registrada", incompleto: "Cadastro incompleto",
   cobrar: "Mensalidades vencidas", indicacao: "Alunos para pedir indicação", reativar: "Ex-alunos para chamar de volta",
@@ -69,8 +73,8 @@ async function lista(b: Banco, url: URL) {
   let sql = "SELECT * FROM clientes WHERE excluido_em IS NULL";
   const args: (string | number)[] = [];
   if (filtro.length) {
-    sql += ` AND id IN (${filtro.map(() => "?").join(",")})`;
-    args.push(...filtro);
+    sql += " AND id IN (SELECT value FROM json_each(?))";   // um parâmetro só: o D1 aceita até 100 por consulta
+    args.push(JSON.stringify(filtro));
     if (motivo === "incompleto") sql += " AND status='ativo' AND (telefone IS NULL OR telefone='' OR data_renovacao IS NULL)";
     else if (STATUS_LISTA[motivo]) {
       sql += " AND status=?";
@@ -264,12 +268,6 @@ const SCRIPT_HORARIOS = `
       });
     })();
     `;
-
-async function maxAlunos(b: Banco): Promise<number> {
-  const v = (await parametros(b, "agenda")).max_alunos_horario;
-  const n = Math.trunc(Number(v || 2));
-  return Number.isNaN(n) ? 2 : Math.max(n, 1);
-}
 
 async function dadosFicha(b: Banco, c: Linha) {
   const cid = c.id as number, h = hoje();
@@ -642,6 +640,143 @@ export function rotasClientes(app: Hono<Ambiente>): void {
     if (!cli) return voltar(c, "/clientes", null, "Cliente não encontrado.");
     const [ctx, d] = await Promise.all([contextoBase(b, c.req.raw), dadosFicha(b, cli)]);
     return c.html(String(<TelaFicha ctx={ctx} d={d} />));
+  });
+
+  app.post("/clientes/:cid{[0-9]+}", async (c) => {
+    const b = banco(c);
+    const cid = Number(c.req.param("cid"));
+    const d = formCliente(await formulario(c));
+    const [iid, erroInd] = await validarIndicacao(b, d.indicado_por, cid);
+    if (erroInd) return voltar(c, `/clientes/${cid}`, null, erroInd);
+    d.indicado_por = iid;
+    if (iid) d.canal_origem = CANAL;
+    const [antigo, ren] = await Promise.all([b.um("SELECT status, data_renovacao FROM clientes WHERE id=?", [cid]), renovacoes(b, cid)]);
+    const r = ren.get(cid);
+    // a ficha mostra a data que já andou com os pagamentos: salvar não mexe nela
+    if (antigo && r && d.data_renovacao === r.efetiva) d.data_renovacao = antigo.data_renovacao;
+    const trocou = !!antigo && (d.data_renovacao || null) !== (antigo.data_renovacao || null);
+    const cmds: Comando[] = [{ sql: `UPDATE clientes SET ${CAMPOS_FICHA.map((k) => k + "=?").join(",")}, atualizado_em=datetime('now','localtime') WHERE id=?`,
+      params: [...CAMPOS_FICHA.map((k) => d[k] as Valor), cid] }];
+    if (trocou) cmds.push({ sql: "UPDATE clientes SET renovacao_em=datetime('now','localtime') WHERE id=?", params: [cid] });
+    let g: GravaAgenda | null = null, tirados: string[] = [];
+    if (antigo && antigo.status !== d.status) {
+      cmds.push({ sql: "INSERT INTO cliente_eventos (cliente_id, tipo, data, descricao) VALUES (?, 'status', ?, ?)", params: [cid, hoje(), `Status alterado para ${d.status}`] });
+      if (d.status === "ativo") {   // voltou pela ficha: o mesmo cuidado do botão de status
+        g = await GravaAgenda.abrir(b, hoje());
+        tirados = g.tirarDosLotados(cid);
+      }
+    }
+    await b.batch([...cmds, ...(g?.cmds ?? [])]);
+    return voltar(c, `/clientes/${cid}`, "Salvo." + avisoLotados(tirados));
+  });
+
+  app.post("/clientes/:cid{[0-9]+}/status", async (c) => {
+    const b = banco(c);
+    const cid = Number(c.req.param("cid"));
+    const f = await formulario(c);
+    if (f.status === undefined) return c.text("Campo obrigatório faltando", 422);
+    const status = f.status;
+    const [antes, g] = await Promise.all([b.um("SELECT status FROM clientes WHERE id=?", [cid]), GravaAgenda.abrir(b, hoje())]);
+    const cmds: Comando[] = [
+      { sql: "UPDATE clientes SET status=?, atualizado_em=datetime('now','localtime') WHERE id=?", params: [status, cid] },
+      { sql: "INSERT INTO cliente_eventos (cliente_id, tipo, data, descricao) VALUES (?, 'status', ?, ?)", params: [cid, hoje(), `Status alterado para ${status}`] },
+    ];
+    g.mudarStatus(cid, status);
+    let tirados: string[] = [];
+    if (status === "ativo" && antes && antes.status !== "ativo") {
+      tirados = g.tirarDosLotados(cid);
+      g.gradeReocupar(cid);
+    } else if (status !== "ativo" && antes && antes.status === "ativo") {
+      // parado/inativo não ocupa a Grade (a vaga aparece para venda); os horários fixos ficam para quando voltar
+      g.soltarAluno(cid);
+    }
+    await b.batch([...cmds, ...g.cmds]);
+    return voltar(c, `/clientes/${cid}`, `Status: ${status}.` + avisoLotados(tirados));
+  });
+
+  app.post("/clientes/:cid{[0-9]+}/evento", async (c) => {
+    const b = banco(c);
+    const cid = Number(c.req.param("cid"));
+    const f = await formulario(c);
+    if (f.tipo === undefined || f.data === undefined) return c.text("Campo obrigatório faltando", 422);
+    if (f.tipo !== "anotacao" && f.tipo !== "pausa") return voltar(c, `/clientes/${cid}`, null, "Aqui só anotação. Aula, falta e desmarcou: marque na Agenda.");
+    const [msg, erro] = await registrarEvento(b, cid, f.tipo, f.data, f.valor ?? "", f.descricao ?? "", f.nova_renovacao ?? "", hoje());
+    return voltar(c, `/clientes/${cid}`, msg, erro);
+  });
+
+  app.post("/alunos/:cid{[0-9]+}/pulou", async (c) => {
+    const cid = Number(c.req.param("cid"));
+    const f = await formulario(c);
+    const [msg, erro] = await pularMes(banco(c), cid, hoje());
+    return voltar(c, caminhoSeguro(f.voltar) || `/clientes/${cid}`, msg, erro);
+  });
+
+  app.post("/clientes/:cid{[0-9]+}/horarios", async (c) => {
+    const b = banco(c);
+    const cid = Number(c.req.param("cid"));
+    const corpo = await c.req.parseBody({ all: true });
+    const listaDe = (k: string) => [corpo[k] ?? []].flat().map((v) => (typeof v === "string" ? v : ""));
+    const inteiros = (k: string) => listaDe(k).map((v) => (/^\s*[+-]?\d+\s*$/.test(v) ? Number(v) : NaN));
+    const dia = inteiros("dia"), hora = inteiros("hora"), local = listaDe("local");
+    if ([...dia, ...hora].some(Number.isNaN)) return c.text("Campo inválido", 422);
+    const url = `/clientes/${cid}#horarios`;
+    const [cli, validos, g] = await Promise.all([
+      b.um("SELECT id, nome, status FROM clientes WHERE id=? AND excluido_em IS NULL", [cid]),
+      Promise.all([nomes(b), b.query("SELECT DISTINCT local FROM agenda_fixos WHERE cliente_id=?", [cid])]).then(([n, l]) => new Set([...n, ...l.map((r) => r.local)])),
+      GravaAgenda.abrir(b, hoje()),
+    ]);
+    if (!cli) return voltar(c, "/clientes", null, "Cliente não encontrado.");
+    if (cli.status !== "ativo") return voltar(c, url, null, "Só aluno ativo tem horário fixo na Agenda. Marque como ativo antes.");
+    if (!(dia.length === hora.length && hora.length === local.length)) return voltar(c, url, null, "Escolha o dia, a hora e o local de cada horário.");
+    if (dia.length > 12) return voltar(c, url, null, "No máximo 12 horários.");
+    const desejado = new Map<string, string>(), par = (k: string) => k.split("-").map(Number) as [number, number];
+    for (let i = 0; i < dia.length; i++) {
+      const [d, h, l] = [dia[i], hora[i], local[i].trim()];
+      if (!(d >= 1 && d <= 6 && h >= 5 && h <= 23)) return voltar(c, url, null, "Escolha o dia (segunda a sábado) e a hora (05h a 23h).");
+      if (!validos.has(l)) return voltar(c, url, null, "Escolha o local da lista.");
+      if (desejado.has(`${d}-${h}`)) return voltar(c, url, null, `${quando(d, h)} aparece duas vezes.`);
+      desejado.set(`${d}-${h}`, l);
+    }
+    const atual = new Map<string, string>();
+    for (const f of await fixosAtuais(b, new Set([cid]))) atual.set(`${f.dia}-${f.hora}`, f.local);
+    const sai = [...atual.keys()].filter((k) => !desejado.has(k));
+    const muda = [...desejado.keys()].filter((k) => atual.has(k) && atual.get(k) !== desejado.get(k));
+    const novos = [...desejado.keys()].filter((k) => !atual.has(k));
+    const membros = new Map([...sai, ...muda, ...novos].map((k) => [k, g.membros(...par(k))]));
+    const cheios = novos.filter((k) => [...membros.get(k)!.keys()].filter((x) => x !== cid).length >= g.cabe);
+    if (cheios.length) {
+      const quem = (k: string) => g.fixosDoHorario(...par(k)).map((r) => r.nome).join(" e ");
+      return voltar(c, url, null, `Horário cheio (cabem ${g.cabe} alunos): ` + cheios.map((k) => `${quando(...par(k))} já tem ${quem(k)}`).join("; ")
+        + ". Nada foi gravado.");
+    }
+    if (!(sai.length || muda.length || novos.length)) return voltar(c, url, "Nada mudou nos horários.");
+    for (const k of sai) {   // sai do horário: fica quem já estava, com o local de cada um
+      const m = membros.get(k)!;
+      m.delete(cid);
+      g.definirHorario(...par(k), [...m.keys()], m);
+    }
+    for (const k of muda) {
+      const m = membros.get(k)!;
+      m.set(cid, desejado.get(k)!);
+      g.definirHorario(...par(k), [...m.keys()], m);
+    }
+    if (novos.length) {
+      g.inserirFixos(novos.map((k) => [cid, ...par(k), desejado.get(k)!]), g.vigencias([cid]));
+      const porLocal = new Map<string, [number, string, number][]>();
+      for (const k of novos) {
+        const l = desejado.get(k)!, [d, h] = par(k);
+        if (!porLocal.has(l)) porLocal.set(l, []);
+        porLocal.get(l)!.push([d, l, h]);
+      }
+      for (const pares of porLocal.values()) g.gradeOcuparLote(cid, cli.nome, pares);
+    }
+    await b.batch(g.cmds);
+    const ordem = (a: string, z: string) => par(a)[0] - par(z)[0] || par(a)[1] - par(z)[1];
+    const q = (lst: string[]) => [...lst].sort(ordem).map((k) => quando(...par(k))).join(", ");
+    const frases = [novos.length ? `Entrou em ${q(novos)}.` : "", sai.length ? `Saiu de ${q(sai)}.` : "", muda.length ? `Mudou de local em ${q(muda)}.` : ""];
+    const aviso = novos.length || muda.length
+      ? await avisoDeslocamento(b, g, [...novos, ...muda].map((k) => [...par(k), desejado.get(k)!] as [number, number, string]), cid) : "";
+    return voltar(c, url, "Horários salvos na Agenda. " + frases.filter(Boolean).join(" ") + aviso);
   });
 
   app.post("/clientes/:cid{[0-9]+}/wa/:modelo", async (c) => {

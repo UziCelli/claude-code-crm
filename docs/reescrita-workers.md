@@ -14,7 +14,8 @@ Fonte única da reescrita (Python no Render → TypeScript no Cloudflare Workers
 
 ## Limites grátis (19/11/2026)
 - Workers: 10 ms de CPU por pedido e por Cron; 100 mil pedidos/dia; 50 subpedidos por pedido; 5 Crons.
-- D1: 50 consultas por pedido (`batch` = 1); 5 mi linhas lidas e 100 mil gravadas por dia; Time Travel de 7 dias.
+- D1: 50 consultas por pedido (`batch` = 1); **100 parâmetros por consulta**; 5 mi linhas lidas e 100 mil gravadas por dia;
+  Time Travel de 7 dias.
 
 ## Regras
 - **Idas ao banco:** o Python faz 95 a 590 consultas por tela. `Banco` junta as leituras do mesmo `Promise.all` numa ida e
@@ -25,6 +26,10 @@ Fonte única da reescrita (Python no Render → TypeScript no Cloudflare Workers
 - **CPU** (Victor, 19/11: ficar no Cloudflare e otimizar): soma ou filtro em laço vai para o SQL, que roda fora da CPU do
   Worker; listas grandes com `html`; cálculo repetido no pedido guardado (`Banco.memo`). `npm run cpu` (também no CI) mede a CPU
   da linha principal no pedido inteiro de cada tela, no cenário 3×, e falha acima de **7 ms**.
+- **Gravação numa ida:** o D1 não tem transação interativa. Quem grava lê antes, refaz as decisões do Python numa cópia em
+  memória das linhas (`GravaAgenda` em `regras/agenda.ts`) e manda as mesmas gravações, na mesma ordem, num `batch` só.
+- **100 parâmetros:** lista longa de ids vai num parâmetro JSON (`IN (SELECT value FROM json_each(?))`); INSERT de várias
+  linhas vai em blocos. O D1 local dos testes recusa a 101ª, então o teste pega.
 - **Roteiros:** `gerar.py` grava o HTML das telas e uma sequência de cliques no Python; o teste refaz no Worker e exige as
   mesmas respostas e tabelas.
 
@@ -35,9 +40,10 @@ Fonte única da reescrita (Python no Render → TypeScript no Cloudflare Workers
 0. Fundação: banco, portaria, repasse ao Render, layout, Crons, testes. **Feita.**
 1. Configurações: motor de preços, DAS e horas de trabalho; o POST grava só o que mudou, numa ida, e confere as margens
    antes (fim do 503). Importar planilha, `/locais/*` e `/calculos` seguem no Render. **Feita.**
-2. Clientes, ficha e leads: estado do aluno, cobrança, cartão com QR Pix, ofertas e indicações. Salvar a ficha, status,
-   evento, pular mês e horários mexem na Agenda/Grade: vão com a Fase 3. **Feita.**
-3. Agenda e grade · 4. Propostas, ofertas e cálculos · 5. Financeiro · 6. Assistente ·
+2. Clientes, ficha e leads: estado do aluno, cobrança, cartão com QR Pix, ofertas e indicações. **Feita.**
+3. Agenda e grade, em 3 etapas: **3a feita** (gravação na Agenda e na cópia da Grade; salvar a ficha, status, evento, pular
+   mês e horários); 3b Grade; 3c Agenda. `/locais/*` fica para a Fase 4.
+4. Propostas, ofertas e cálculos · 5. Financeiro · 6. Assistente ·
 7. Painel, campanhas, rotina, explorador, dados, importar e exportar · 8. D1, remoção do Python e do código do PC.
 
 Alertas do topo entram com as regras de alunos e do financeiro (até lá, vazios nas telas novas).

@@ -56,9 +56,11 @@ export async function abrir(caminho: string): Promise<Response> {
 }
 
 /** POST de formulário da própria tela, logado (sem seguir o redirecionamento). */
-export async function enviar(caminho: string, dados: Record<string, string> = {}): Promise<Response> {
+export async function enviar(caminho: string, dados: Record<string, string | string[]> = {}): Promise<Response> {
+  // campo repetido (dia=1&dia=2) vem como lista, como o httpx do Python manda
+  const corpo = new URLSearchParams(Object.entries(dados).flatMap(([k, v]) => [v].flat().map((x) => [k, x])));
   return app.fetch(new Request(`https://${HOST}${caminho}`, {
-    method: "POST", body: new URLSearchParams(dados).toString(), redirect: "manual",
+    method: "POST", body: corpo.toString(), redirect: "manual",
     headers: { host: HOST, origin: `https://${HOST}`, "content-type": "application/x-www-form-urlencoded", "cf-access-jwt-assertion": await tokenValido() },
   }), env);
 }
@@ -70,9 +72,9 @@ export function aviso(r: Response): { destino: string; msg: string | null; erro:
 }
 
 /** Roteiro gerado pelo Python (paridade/gerar.py: telas_e_roteiro): telas iguais, mesmas respostas e as tabelas iguais no fim. */
-export interface Roteiro { telas: Record<string, string>; respostas: [string, string, Record<string, string>, number, string | null][]; tabelas: Record<string, Record<string, unknown>[]> }
+export interface Roteiro { telas: Record<string, string>; respostas: [string, string, Record<string, string | string[]>, number, string | null][]; tabelas: Record<string, Record<string, unknown>[]> }
 
-export async function pedido(metodo: string, url: string, dados: Record<string, string> = {}): Promise<Response> {
+export async function pedido(metodo: string, url: string, dados: Record<string, string | string[]> = {}): Promise<Response> {
   return metodo === "GET" ? abrir(url) : enviar(url, dados);
 }
 

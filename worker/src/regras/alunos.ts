@@ -151,7 +151,8 @@ export async function estado(b: Banco, hoje: string, ids?: Iterable<number> | nu
     lista = [...new Set([...ids].map((i) => Math.trunc(i)))].sort((x, y) => x - y);
     if (!lista.length) return new Map();
   }
-  const [so, argsSo] = lista === null || lista.length > 500 ? ["", [] as number[]] : [` AND cliente_id IN (${lista.map(() => "?").join(",")})`, lista];
+  // a lista vai num parâmetro só (JSON): o D1 aceita até 100 parâmetros por consulta
+  const [so, argsSo] = lista === null || lista.length > 500 ? ["", [] as string[]] : [" AND cliente_id IN (SELECT value FROM json_each(?))", [JSON.stringify(lista)]];
   const um = lista && lista.length === 1 ? lista[0] : null;
   const desde = somar(h, -JANELA_DADOS);
   const [todos, ren, comHorario, fases, pausas, parCob, ultRows, aulaRows, pagoRows, evPag, evPc, livres] = await Promise.all([

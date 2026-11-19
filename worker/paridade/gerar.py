@@ -534,6 +534,89 @@ def casos_clientes():
     telas_e_roteiro(caminho, "clientes", urls, passos, ["clientes", "cliente_eventos", "leads", "lead_etapas_log", "oferta_respostas"])
 
 
+def semear_agenda(caminho: Path) -> None:
+    """Agenda e Grade sobre os alunos sintéticos: dupla, horário com 3 (limite reduzido depois), lixeira e linha repetida,
+    vigência, 2 locais colados (aviso de deslocamento), aluno parado cujo horário encheu, e as células antigas da Grade
+    (cópia com aluno, nome digitado, indisponível, multiplicadores). Horas 5 e 21-23: os horários sorteados usam 6 a 20."""
+    semear_alunos(caminho)
+    con = sqlite3.connect(caminho)
+    antigo, ontem = "2026-09-01 10:00:00", "2026-11-18 10:00:00"
+    with con:
+        A = [r[0] for r in con.execute("SELECT id FROM clientes WHERE status='ativo' ORDER BY id")]
+        I = [r[0] for r in con.execute("SELECT id FROM clientes WHERE status!='ativo' ORDER BY id")]
+        con.execute("UPDATE agenda_fixos SET criado_em=?", (antigo,))
+        con.execute("INSERT INTO locais_custos (local, tempo_deslocamento, taxa_aula) VALUES ('SmartFit', 25, 30)")
+        con.execute("UPDATE parametros SET valor=0.8 WHERE grupo='mult_horario' AND chave='05'")
+        con.execute("UPDATE parametros SET valor=1.2 WHERE grupo='mult_horario' AND chave='22'")
+        fixos = [(A[0], 1, 5, "CIA", None, antigo, None), (A[1], 1, 5, "CIA", None, antigo, None),
+                 (A[2], 2, 21, "SmartFit", "2026-10-01", antigo, None), (A[3], 2, 22, "CIA", None, ontem, None),
+                 (A[4], 3, 5, "CIA", None, antigo, None), (A[5], 3, 5, "CIA", None, antigo, None), (A[6], 3, 5, "CIA", None, antigo, None),
+                 (A[7], 4, 21, "CIA", None, antigo, "2026-11-01 10:00:00"), (A[8], 4, 21, "CIA", None, antigo, None),
+                 (A[8], 4, 21, "CIA", None, antigo, None),
+                 (I[0], 5, 5, "CIA", None, antigo, None), (A[9], 5, 5, "CIA", None, ontem, None), (A[10], 5, 5, "CIA", None, antigo, None),
+                 (I[0], 5, 23, "SmartFit", None, antigo, None), (I[1], 6, 22, "Condomínio", "2026-10-10", antigo, None)]
+        con.executemany("INSERT INTO agenda_fixos (cliente_id, dia, hora, local, vigente_de, criado_em, excluido_em) VALUES (?,?,?,?,?,?,?)", fixos)
+        grade = []
+        for t in ("Pacotes", "Mensalidades"):
+            grade += [(t, 1, "CIA", 5, "ocupado", A[0], "Cópia A0", 0.8), (t, 5, "CIA", 5, "ocupado", I[0], "Cópia I0", 0.8),
+                      (t, 3, "CIA", 22, "ocupado", None, "Fulano Digitado", 1.2), (t, 6, "SmartFit", 5, "indisponivel", None, None, 0.8),
+                      (t, 2, "CIA", 21, "ocupado", A[3], "Cópia A3", 1.0), (t, 4, "CIA", 22, "ocupado", A[11], "Só na Grade", 1.2),
+                      (t, 2, "SmartFit", 22, "livre", None, None, 1.2)]
+        grade.append(("Pacotes", 5, "SmartFit", 23, "ocupado", I[0], "Cópia I0", 1.0))
+        con.executemany("INSERT INTO grade_slots (tipo_calculo, dia, local, hora, status, cliente_id, cliente_nome, multiplicador)"
+                        " VALUES (?,?,?,?,?,?,?,?)", grade)
+    con.close()
+    fixar_carimbos(caminho)
+
+
+def casos_agenda_ficha():
+    """Etapa 3a: as gravações da ficha que mexem na Agenda (horários, status, evento, pular mês, salvar)."""
+    caminho = banco_novo()
+    semear_agenda(caminho)
+    dump(caminho, ["parametros", "clientes", "agenda_fixos", "grade_slots", "locais_custos", "cliente_eventos", "lancamentos"],
+         "cenario-agenda.sql")
+    con = sqlite3.connect(caminho)
+    A = [r[0] for r in con.execute("SELECT id FROM clientes WHERE status='ativo' ORDER BY id")]
+    I = [r[0] for r in con.execute("SELECT id FROM clientes WHERE status!='ativo' ORDER BY id")]
+    sem_ren = con.execute("SELECT id FROM clientes WHERE status='ativo' AND data_renovacao IS NULL ORDER BY id").fetchone()[0]
+    com_ren = [r[0] for r in con.execute("SELECT id FROM clientes WHERE status='ativo' AND data_renovacao LIKE '2026-1%' ORDER BY id")]
+    ficha = {k: v for k, v in zip(["nome", "telefone", "local", "tipo_servico", "plano", "pessoas", "valor", "forma_pagamento", "status",
+                                   "canal_origem", "data_inicio", "data_renovacao", "observacoes", "indicado_por"],
+                                  con.execute("SELECT nome, telefone, local, tipo_servico, plano, pessoas, valor, forma_pagamento, status, canal_origem,"
+                                              " data_inicio, data_renovacao, observacoes, indicado_por FROM clientes WHERE id=?", (A[12],)).fetchone())}
+    con.close()
+    ficha = {k: ("" if v is None else str(v)) for k, v in ficha.items()}
+    hor = lambda cid, ds, hs, ls: ("POST", f"/clientes/{cid}/horarios", {"dia": [str(x) for x in ds], "hora": [str(x) for x in hs], "local": ls})  # noqa: E731
+    passos = [
+        hor(A[11], [2, 3], [21, 5], ["SmartFit", "CIA"]),            # Qua 05h tem 3: cheio, nada grava
+        hor(A[11], [2, 6], [21, 23], ["SmartFit", "SmartFit"]),     # entra (e sai do sorteado), aviso de deslocamento
+        hor(A[11], [2, 6], [21, 23], ["SmartFit", " CIA "]),        # troca de local
+        hor(A[11], [2, 6], [21, 23], ["SmartFit", "CIA"]),          # nada mudou
+        hor(A[0], [], [], []),                                       # sai de tudo; a dupla fica com a célula da Grade
+        hor(A[8], [4], [21], ["SmartFit"]),                          # linha repetida + troca de local
+        hor(A[1], [1], [5], ["Lugar X"]), hor(A[1], [7], [5], ["CIA"]), hor(A[1], [1, 1], [5, 5], ["CIA", "CIA"]),
+        hor(A[1], [1], [5, 6], ["CIA"]), hor(A[1], list(range(1, 7)) * 3, [5] * 18, ["CIA"] * 18),
+        hor(I[2], [1], [5], ["CIA"]), hor(99999, [], [], []),
+        ("POST", f"/clientes/{I[0]}/status", {"status": "ativo"}),  # Sex 05h encheu: sai; Sex 23h volta para a Grade
+        ("POST", f"/clientes/{A[9]}/status", {"status": "inativo"}),
+        ("POST", f"/clientes/{I[1]}/status", {"status": "ativo"}),
+        ("POST", f"/clientes/{A[4]}/status", {}),
+        ("POST", f"/clientes/{A[4]}/evento", {"tipo": "anotacao", "data": "2026-11-19", "descricao": "Treino leve", "valor": "12,5"}),
+        ("POST", f"/clientes/{A[4]}/evento", {"tipo": "aula", "data": "2026-11-19"}),
+        ("POST", f"/clientes/{com_ren[0]}/evento", {"tipo": "pausa", "data": "2026-11-19", "descricao": "Viagem"}),
+        ("POST", f"/clientes/{com_ren[1]}/evento", {"tipo": "pausa", "data": "2026-11-19", "nova_renovacao": "2020-01-01"}),
+        ("POST", f"/clientes/{I[3]}/evento", {"tipo": "pausa", "data": "2026-11-19", "nova_renovacao": "2026-12-30"}),
+        ("POST", f"/alunos/{com_ren[2]}/pulou", {"voltar": "/clientes"}), ("POST", f"/alunos/{sem_ren}/pulou", {}),
+        ("POST", f"/clientes/{A[12]}", {**ficha, "status": "pausado", "observacoes": "Mudou"}),
+        ("POST", f"/clientes/{A[12]}", {**ficha, "status": "ativo", "data_renovacao": "2027-01-05"}),
+        ("POST", f"/clientes/{A[12]}", {**ficha, "indicado_por": str(A[12])}),
+    ]
+    muitos = ",".join(map(str, range(1, 151)))   # mais de 100 ids: o D1 aceita até 100 parâmetros por consulta
+    telas_e_roteiro(caminho, "agenda-ficha", [f"/clientes/{A[0]}", f"/clientes/{I[0]}", f"/clientes?ids={muitos}&motivo=cobrar",
+                                              f"/clientes?ids={muitos}&motivo=sem-aula"], passos,
+                    ["clientes", "agenda_fixos", "grade_slots", "cliente_eventos"])
+
+
 def casos_alunos():
     from app import alunos, financeiro, main, pix
     caminho = banco_novo()
@@ -671,4 +754,5 @@ if __name__ == "__main__":
     casos_motor()
     casos_alunos()
     casos_clientes()
+    casos_agenda_ficha()
     print("paridade gerada em worker/")
