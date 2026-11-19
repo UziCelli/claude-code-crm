@@ -674,7 +674,7 @@ export function rotasClientes(app: Hono<Ambiente>): void {
     const b = banco(c);
     const cid = Number(c.req.param("cid"));
     const f = await formulario(c);
-    if (f.status === undefined) return c.text("Campo obrigatório faltando", 422);
+    if (!f.status) return c.text("Campo obrigatório faltando", 422);
     const status = f.status;
     const [antes, g] = await Promise.all([b.um("SELECT status FROM clientes WHERE id=?", [cid]), GravaAgenda.abrir(b, hoje())]);
     const cmds: Comando[] = [
@@ -698,7 +698,7 @@ export function rotasClientes(app: Hono<Ambiente>): void {
     const b = banco(c);
     const cid = Number(c.req.param("cid"));
     const f = await formulario(c);
-    if (f.tipo === undefined || f.data === undefined) return c.text("Campo obrigatório faltando", 422);
+    if (!f.tipo || !f.data) return c.text("Campo obrigatório faltando", 422);
     if (f.tipo !== "anotacao" && f.tipo !== "pausa") return voltar(c, `/clientes/${cid}`, null, "Aqui só anotação. Aula, falta e desmarcou: marque na Agenda.");
     const [msg, erro] = await registrarEvento(b, cid, f.tipo, f.data, f.valor ?? "", f.descricao ?? "", f.nova_renovacao ?? "", hoje());
     return voltar(c, `/clientes/${cid}`, msg, erro);

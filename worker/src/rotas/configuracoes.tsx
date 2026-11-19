@@ -338,7 +338,7 @@ export function rotasConfiguracoes(app: Hono<Ambiente>): void {
 
   app.post("/configuracoes/lista", async (c) => {
     const f = await formulario(c);
-    if (f.grupo === undefined || f.nome === undefined) return c.text("Campo obrigatório faltando", 422);
+    if (!f.grupo || !f.nome) return c.text("Campo obrigatório faltando", 422);
     const nome = f.nome.trim();
     await banco(c).run(`INSERT OR IGNORE INTO parametros (grupo, chave, valor_texto, ordem)
       VALUES (?,?,?, (SELECT COALESCE(MAX(ordem),0)+1 FROM parametros WHERE grupo=?))`, [f.grupo, nome, nome, f.grupo]);

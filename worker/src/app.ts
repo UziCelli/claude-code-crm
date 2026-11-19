@@ -2,6 +2,7 @@ import { type Context, Hono } from "hono";
 import { motivoBloqueio, paginaBloqueio, protegerResposta } from "./acesso.ts";
 import { abrirBanco, type Banco, ErroConfig } from "./banco/banco.ts";
 import { repassar, vaiProRender } from "./repasse.ts";
+import { Erro422 } from "./rotas/form.ts";
 import type { Env } from "./tipos.ts";
 
 export type Ambiente = { Bindings: Env; Variables: { banco?: Banco } };
@@ -43,6 +44,7 @@ export function criarApp(registrar: (app: Hono<Ambiente>) => void): Hono<Ambient
   // rota que ainda não foi migrada: o Render atende
   app.notFound(async (c) => repassar(c.req.raw));
   app.onError((erro, c) => {
+    if (erro instanceof Erro422) return c.text("Campo inválido", 422);   // como o FastAPI com um número torto
     console.error(erro);
     const texto = erro instanceof ErroConfig ? erro.message : "Erro inesperado. Tente de novo; se continuar, chame o Claude.";
     return c.html(`<!doctype html><meta charset="utf-8"><title>VFITCOACH CRM</title><h1>Erro</h1><p>${texto.replace(/</g, "&lt;")}</p>`, 500);

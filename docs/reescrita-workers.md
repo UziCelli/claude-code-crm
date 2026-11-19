@@ -32,6 +32,8 @@ Fonte única da reescrita (Python no Render → TypeScript no Cloudflare Workers
   linhas vai em blocos. O D1 local dos testes recusa a 101ª, então o teste pega.
 - **Roteiros:** `gerar.py` grava o HTML das telas e uma sequência de cliques no Python; o teste refaz no Worker e exige as
   mesmas respostas e tabelas.
+- **Formulário como o FastAPI** (`rotas/form.ts`): número vazio no form = padrão; texto obrigatório vazio = 422; número na
+  URL vazio ou torto = 422 (`Erro422`); campo repetido = o último. Data como `date.fromisoformat` do Python 3.13 (`fromIsoPy`).
 
 ## Medições (cenário 3×)
 `/configuracoes` 3,8–4,5 ms; `/clientes` 4,6–5,6; ficha 3,3–3,9; `/leads` 1,4–2,0; `/grade` 2,7–3,1. HTML de 330 KB: 8 ms em JSX, 1,6 ms com `html`.
@@ -42,12 +44,33 @@ Fonte única da reescrita (Python no Render → TypeScript no Cloudflare Workers
    antes (fim do 503). Importar planilha, `/locais/*` e `/calculos` seguem no Render. **Feita.**
 2. Clientes, ficha e leads: estado do aluno, cobrança, cartão com QR Pix, ofertas e indicações. **Feita.**
 3. Agenda e grade, em 3 etapas: **3a feita** (gravação na Agenda e na cópia da Grade; salvar a ficha, status, evento, pular
-   mês e horários); **3b feita** (tela da Grade, multiplicadores, ocupar/soltar horários, passar para a Agenda); 3c Agenda.
+   mês e horários); **3b feita** (tela da Grade, multiplicadores, ocupar/soltar horários, passar para a Agenda); **3c em
+   andamento** (Agenda; ver "Onde parou").
    `/locais/*` (o pop-up do local) fica para a Fase 4: até lá vai ao Render.
 4. Propostas, ofertas e cálculos · 5. Financeiro · 6. Assistente ·
 7. Painel, campanhas, rotina, explorador, dados, importar e exportar · 8. D1, remoção do Python e do código do PC.
 
 Alertas do topo entram com as regras de alunos e do financeiro (até lá, vazios nas telas novas).
+
+## Onde parou (19/11/2026, pausa pedida pelo Victor)
+- **Último OK do Codex:** `33ed0d5` (3b). O commit da pausa (3c parcial) **ainda não foi revisado**: não pedi `@codex review`.
+- **3c já escrita** (compila; os 122 testes antigos seguem verdes):
+  - `regras/aulas.ts`: semana de aulas, saldos de reposição, resumo do mês, controle do aluno, `gravarMarcas`,
+    `sugerirCliente`/`norm`, `urlAgenda`, `descricaoMarca`.
+  - `rotas/agenda.tsx`: GET `/agenda` e `/agenda/pendentes`; POST `marcar`, `marcar-lote`, `incluir`, `horario`,
+    `copiar-grade`, `evento/:eid/nao-repoe`, `evento/:eid/excluir`, `avulsa/:aid/excluir`. Script da tela em
+    `rotas/agenda-script.ts`; `tojson` do Jinja em `telas/json.ts`.
+  - Correções de leitura de formulário em todas as rotas já portadas (`rotas/form.ts`, regra acima).
+  - **`rotasAgenda` ainda não está ligado** em `src/index.ts` (regra: sem paridade, a tela segue no Render).
+- **Falta na 3c:**
+  1. `gerar.py`: `casos_agenda()` com avulsas, reposições, marcas com e sem hora, pausa e bloqueio de campanha; telas
+     (`/agenda`, `?todas=1`, outra semana, `?aluno=&mes=`, aluno/mês inválido, `/agenda/pendentes`); roteiro com todos os
+     POSTs e os casos de 422; tabelas `agenda_fixos`, `agenda_avulsas`, `grade_slots`, `cliente_eventos`; 2º roteiro com a
+     Agenda vazia para `copiar-grade`.
+  2. `test/agenda.test.ts` (como `grade.test.ts`) e ligar `rotasAgenda` no `index.ts`.
+  3. `/agenda` no `npm run cpu` (teto 7 ms).
+  4. `npm run tipos && npm test && npm run cpu`; commit; `@codex review`; `.claude/esperar-pr.sh codex 117`.
+- **Depois:** resumo da Fase 3 ao Victor; plano da Fase 4 (Propostas, ofertas, cálculos, `/locais/*`) para aprovação.
 
 ## Ida ao ar (com o Victor, sem PR nova)
 1. Painel do Cloudflare: criar o D1 `vfitcoach-crm`; Workers Builds na pasta `worker` (`npm run deploy`); variáveis

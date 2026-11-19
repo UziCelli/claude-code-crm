@@ -1,5 +1,5 @@
 /** Grade semanal (port de app/main.py: /grade, /grade/multiplicadores, /grade/slot, /grade/passar-para-agenda; tela grade.html). */
-import type { Context, Hono } from "hono";
+import type { Hono } from "hono";
 import { raw } from "hono/html";
 import type { Child } from "hono/jsx";
 import { banco, type Ambiente } from "../app.ts";
@@ -18,6 +18,7 @@ import { fixosAtuais as fixosAtuaisDe } from "../regras/trabalho.ts";
 import { Base } from "../telas/Base.tsx";
 import { contextoBase, type Contexto } from "../telas/contexto.ts";
 import { DlgLocal } from "../telas/DlgLocal.tsx";
+import { intForm, intQuery, lerForm, um, varios } from "./form.ts";
 import { intPy, numBr, quoteUrl, voltar } from "./util.ts";
 import { SCRIPT_GRADE } from "./grade-script.ts";
 
@@ -78,17 +79,6 @@ async function dados(b: Banco, tipo: string, local: string, vale: number, ref: n
   const comparar = locais.map((l) => ({ local: l, ...decompor({ ...planoReferencia(tipo, l, ref) }, p, l) }));
   return { celulas, minima, tipo, local, vale, locais, maxAlunos: cabe, soGrade, clientes, base, resumo, refs, refAtual: base[col],
     custosLocal: cia ?? (p.locais.get(local) || {}), mults, comparar, cia: ehCia(local), refGrade: ref };
-}
-
-/** int() da URL ou do formulário: inválido = 422, como o FastAPI. */
-class Erro422 extends Error {}
-function inteiro(v: string | undefined, padrao = 0): number {
-  if (v === undefined) return padrao;
-  try {
-    return intPy(v);
-  } catch {
-    throw new Erro422();
-  }
 }
 
 function cor(c: Celula, minima: number): string {
@@ -241,23 +231,10 @@ function TelaGrade({ ctx, d }: { ctx: Contexto; d: DadosGrade }): Child {
   );
 }
 
-async function formulario(c: Context<Ambiente>): Promise<Record<string, string | string[]>> {
-  const corpo = await c.req.parseBody({ all: true });
-  return Object.fromEntries(Object.entries(corpo).map(([k, v]) => [k, Array.isArray(v) ? v.map((x) => (typeof x === "string" ? x : "")) : typeof v === "string" ? v : ""]));
-}
-const um = (v: string | string[] | undefined) => (Array.isArray(v) ? v[v.length - 1] : v);
-const varios = (v: string | string[] | undefined) => (v === undefined ? [] : [v].flat());
-
 export function rotasGrade(app: Hono<Ambiente>): void {
   app.get("/grade", async (c) => {
     const q = (k: string) => c.req.query(k);
-    let vale: number, ref: number;
-    try {
-      vale = inteiro(q("vale"));
-      ref = inteiro(q("ref"));
-    } catch {
-      return c.text("Campo inválido", 422);
-    }
+    const vale = intQuery(c, "vale"), ref = intQuery(c, "ref");
     const b = banco(c);
     const [ctx, d] = await Promise.all([contextoBase(b, c.req.raw), dados(b, q("tipo") ?? "Pacotes", q("local") ?? "CIA", vale, ref)]);
     return c.html(String(<TelaGrade ctx={ctx} d={d} />));
@@ -265,15 +242,10 @@ export function rotasGrade(app: Hono<Ambiente>): void {
 
   app.post("/grade/multiplicadores", async (c) => {
     const q = (k: string) => c.req.query(k);
-    let ref: number;
-    try {
-      ref = inteiro(q("ref"));
-    } catch {
-      return c.text("Campo inválido", 422);
-    }
+    const ref = intQuery(c, "ref");
     const tipo = q("tipo") ?? "Pacotes", local = q("local") ?? "CIA";
     const url = `/grade?tipo=${quoteUrl(tipo)}&local=${quoteUrl(local)}&ref=${ref}`;
-    const f = await formulario(c);
+    const f = await lerForm(c);
     const novos = new Map<number, number>();
     for (const h of HORAS_GRADE) {
       const txt = String(um(f[`m_${h2(h)}`]) ?? "").trim();
@@ -295,15 +267,10 @@ export function rotasGrade(app: Hono<Ambiente>): void {
 
   app.post("/grade/slot", async (c) => {
     const b = banco(c);
-    const f = await formulario(c);
+    const f = await lerForm(c);
     const tipo = um(f.tipo), local = um(f.local);
-    if (tipo === undefined || local === undefined) return c.text("Campo obrigatório faltando", 422);
-    let dia: number, hora: number, ref: number;
-    try {
-      [dia, hora, ref] = [inteiro(um(f.dia)), inteiro(um(f.hora)), inteiro(um(f.ref))];
-    } catch {
-      return c.text("Campo inválido", 422);
-    }
+    if (!tipo || !local) return c.text("Campo obrigatório faltando", 422);
+    const dia = intForm(f, "dia"), hora = intForm(f, "hora"), ref = intForm(f, "ref");
     const status = um(f.status) ?? "";
     const celulasForm = varios(f.celulas);
     const lote = celulasForm.length > 0;
@@ -377,14 +344,9 @@ export function rotasGrade(app: Hono<Ambiente>): void {
 
   app.post("/grade/passar-para-agenda", async (c) => {
     const b = banco(c);
-    const f = await formulario(c);
-    let ref: number;
-    try {
-      ref = inteiro(um(f.ref));
-    } catch {
-      return c.text("Campo inválido", 422);
-    }
-    const tipo = um(f.tipo) ?? "Pacotes", local = um(f.local) ?? "CIA";
+    const f = await lerForm(c);
+    const ref = intForm(f, "ref");
+    const tipo = um(f.tipo) || "Pacotes", local = um(f.local) || "CIA";
     const url = `/grade?tipo=${quoteUrl(tipo)}&local=${quoteUrl(local)}&ref=${ref}`;
     const [falta, g] = await Promise.all([soNaGrade(b), GravaAgenda.abrir(b, hoje())]);
     if (!falta.length) return voltar(c, url, "A Agenda já tem todos os horários da Grade.");

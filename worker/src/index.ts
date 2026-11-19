@@ -12,6 +12,7 @@ export const app = criarApp((a) => {
   rotasClientes(a);
   rotasLeads(a);
   rotasGrade(a);
+  // rotasAgenda (./rotas/agenda.tsx) entra quando a paridade da 3c estiver pronta; até lá /agenda vai ao Render
 });
 
 export default {

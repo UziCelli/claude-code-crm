@@ -125,7 +125,7 @@ export function rotasLeads(app: Hono<Ambiente>): void {
   app.post("/leads", async (c) => {
     const b = banco(c);
     const f = await formulario(c);
-    if (f.nome === undefined || f.canal_origem === undefined) return c.text("Campo obrigatório faltando", 422);
+    if (!f.nome || !f.canal_origem) return c.text("Campo obrigatório faltando", 422);
     const [indicador, erro] = await validar(b, f.indicado_por ?? "");
     if (erro) return voltar(c, "/leads", null, erro);
     const h = relogioMes.hoje();
@@ -141,7 +141,7 @@ export function rotasLeads(app: Hono<Ambiente>): void {
     const b = banco(c);
     const lid = Number(c.req.param("lid"));
     const f = await formulario(c);
-    if (f.nome === undefined || f.canal_origem === undefined) return c.text("Campo obrigatório faltando", 422);
+    if (!f.nome || !f.canal_origem) return c.text("Campo obrigatório faltando", 422);
     const antigo = await b.um("SELECT cliente_id FROM leads WHERE id=?", [lid]);
     const [indicador, erro] = await validar(b, f.indicado_por ?? "", antigo ? antigo.cliente_id : null);
     if (erro) return voltar(c, "/leads", null, erro);
@@ -156,7 +156,8 @@ export function rotasLeads(app: Hono<Ambiente>): void {
     const b = banco(c);
     const lid = Number(c.req.param("lid"));
     const f = await formulario(c);
-    const etapa = f.etapa ?? "";
+    if (!f.etapa) return c.text("Campo obrigatório faltando", 422);   // Form(...): vazio é o mesmo que faltando
+    const etapa = f.etapa;
     const l = await b.um("SELECT * FROM leads WHERE id=?", [lid]);
     if (!l || !(etapa in NOME_ETAPA)) return voltar(c, "/leads", null, "Etapa inválida.");
     const h = relogioMes.hoje();

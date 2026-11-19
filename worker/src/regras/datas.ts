@@ -109,3 +109,25 @@ export function dataIso(v: unknown): string | null {
   const s = String(v ?? "").trim().slice(0, 10);
   return numeroDoDia(s) !== null ? s : null;
 }
+
+/**
+ * date.fromisoformat do Python 3.13: "AAAA-MM-DD", "AAAAMMDD" e semana ISO ("AAAA-Www", "AAAA-Www-D", sem hífens também).
+ * Devolve a data como "AAAA-MM-DD" (o isoformat()) ou null se o Python daria ValueError.
+ */
+export function fromIsoPy(s: string): string | null {
+  let m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s) ?? /^(\d{4})(\d{2})(\d{2})$/.exec(s);
+  if (m) {
+    const iso = `${m[1]}-${m[2]}-${m[3]}`;
+    return numeroDoDia(iso) !== null ? iso : null;
+  }
+  m = /^(\d{4})-W(\d{2})(?:-(\d))?$/.exec(s) ?? /^(\d{4})W(\d{2})(\d)?$/.exec(s);
+  if (!m) return null;
+  const a = +m[1], w = +m[2], d = m[3] === undefined ? 1 : +m[3];
+  if (a < 1 || w < 1 || d < 1 || d > 7) return null;
+  const jan1 = modPy(diaCivil(a, 1, 1) + 3, 7) + 1;   // isoweekday de 1º de janeiro
+  if (w > 53 || (w === 53 && !(jan1 === 4 || (jan1 === 3 && bissexto(a))))) return null;
+  const jan4 = diaCivil(a, 1, 4);
+  const z = jan4 - (modPy(jan4 + 3, 7)) + (w - 1) * 7 + (d - 1);
+  const [ano] = civil(z);
+  return ano >= 1 && ano <= 9999 ? isoDoDia(z) : null;
+}
