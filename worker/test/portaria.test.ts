@@ -95,6 +95,20 @@ describe("portaria (port de tests/test_acesso.py, modo internet)", () => {
   });
 });
 
+describe("sem BANCO configurado (achado do Codex na PR #117)", () => {
+  const semBanco = { ...env, BANCO: undefined };
+  it.each(["/saude", "/health", "/healthz"])("%s continua respondendo ok", async (c) => {
+    const r = await pedir(c, {}, semBanco);
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("ok");
+  });
+  it("rota não migrada continua indo ao Render", async () => {
+    renderFalso();
+    const r = await pedir("/clientes", { headers: { "cf-access-jwt-assertion": await token() } }, semBanco);
+    expect(await r.text()).toBe("render");
+  });
+});
+
 describe("repasse ao Render", () => {
   it("rota não migrada vai ao Render com o pedido intacto (método, corpo, token)", async () => {
     const f = renderFalso();

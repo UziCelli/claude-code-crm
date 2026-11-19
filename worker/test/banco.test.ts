@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
-import { abrirBanco, ErroConfig } from "../src/banco/banco.ts";
+import { abrirBanco, Banco, ErroConfig } from "../src/banco/banco.ts";
+import type { Comando, Driver, Gravacao, Linha } from "../src/banco/tipos.ts";
 import { banco, semear } from "./apoio.ts";
 
 beforeAll(semear);
@@ -67,6 +68,36 @@ describe("Banco: gravação", () => {
     await b.query("SELECT 1 AS um");
     await b.query("SELECT 2 AS dois");
     await expect(b.query("SELECT 3 AS tres")).rejects.toThrow(/Muitas idas/);
+  });
+});
+
+describe("Banco: leitura durante uma gravação (achado do Codex na PR #117)", () => {
+  /** Banco de mentira com um número só; a gravação fica no ar até soltarmos. */
+  class DriverControlado implements Driver {
+    valor = 0;
+    soltar: () => void = () => {};
+    async ler(cmds: Comando[]): Promise<Linha[][]> {
+      return cmds.map(() => [{ n: this.valor }]);
+    }
+    gravar(): Promise<Gravacao[]> {
+      return new Promise((ok) => {
+        this.soltar = () => {
+          this.valor = 1;
+          ok([{ mudancas: 1, id: null, linhas: [] }]);
+        };
+      });
+    }
+  }
+
+  it("a leitura depois do await run() enxerga a gravação, mesmo com outra leitura no meio", async () => {
+    const d = new DriverControlado();
+    const b = new Banco(d);
+    const gravando = b.run("UPDATE x SET n = 1");
+    await new Promise((r) => setTimeout(r, 5)); // a gravação já saiu
+    expect(await b.valor("SELECT n")).toBe(0); // leu durante a gravação: ainda o antigo
+    d.soltar();
+    await gravando;
+    expect(await b.valor("SELECT n")).toBe(1);
   });
 });
 

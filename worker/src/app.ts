@@ -1,10 +1,20 @@
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { motivoBloqueio, paginaBloqueio, protegerResposta } from "./acesso.ts";
 import { abrirBanco, type Banco, ErroConfig } from "./banco/banco.ts";
 import { repassar, vaiProRender } from "./repasse.ts";
 import type { Env } from "./tipos.ts";
 
-export type Ambiente = { Bindings: Env; Variables: { banco: Banco } };
+export type Ambiente = { Bindings: Env; Variables: { banco?: Banco } };
+
+/** O banco do pedido, aberto só quando a rota precisa: saúde e repasse ao Render funcionam mesmo sem BANCO configurado. */
+export function banco(c: Context<Ambiente>): Banco {
+  let b = c.get("banco");
+  if (!b) {
+    b = abrirBanco(c.env);
+    c.set("banco", b);
+  }
+  return b;
+}
 
 /** O CRM: portaria em tudo, telas já migradas aqui, o resto repassado ao Render (app/ em Python) até a última fase. */
 export function criarApp(registrar: (app: Hono<Ambiente>) => void): Hono<Ambiente> {
@@ -20,7 +30,6 @@ export function criarApp(registrar: (app: Hono<Ambiente>) => void): Hono<Ambient
       c.res = protegerResposta(await repassar(c.req.raw));
       return;
     }
-    c.set("banco", abrirBanco(c.env));
     await next();
     c.res = protegerResposta(c.res);
   });

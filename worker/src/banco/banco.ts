@@ -67,13 +67,20 @@ export class Banco {
     return (await this.batch([{ sql, params }]))[0];
   }
 
-  /** Várias gravações numa ida só, tudo ou nada. */
+  /**
+   * Várias gravações numa ida só, tudo ou nada. O cache de leituras é limpo antes e também depois: uma leitura feita
+   * enquanto a gravação estava no ar pode ter visto o valor antigo e não pode servir a quem lê depois do await.
+   */
   async batch(cmds: Comando[]): Promise<Gravacao[]> {
     if (!cmds.length) return [];
     await this.esvaziar();
     this.lidas.clear();
     this.contar(cmds.length);
-    return this.driver.gravar(cmds);
+    try {
+      return await this.driver.gravar(cmds);
+    } finally {
+      this.lidas.clear();
+    }
   }
 
   private agendar() {
