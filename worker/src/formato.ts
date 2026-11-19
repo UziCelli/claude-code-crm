@@ -67,3 +67,22 @@ export function strPy(v: unknown): string {
   if (typeof v === "number" && Number.isInteger(v) && !Object.is(v, -0)) return String(v);
   return String(v);
 }
+
+/** str()/repr() de um float do Python: "3.0", "0.125", "1e-05", "1e+16". */
+export function reprFloat(x: number): string {
+  if (Number.isNaN(x)) return "nan";
+  if (!Number.isFinite(x)) return x > 0 ? "inf" : "-inf";
+  if (Object.is(x, -0)) return "-0.0";
+  const abs = Math.abs(x);
+  if (abs >= 1e16 || (abs !== 0 && abs < 1e-4)) {
+    const [m, e] = x.toExponential().split("e");
+    const n = Number(e);
+    return `${m}e${n < 0 ? "-" : "+"}${String(Math.abs(n)).padStart(2, "0")}`;
+  }
+  return Number.isInteger(x) ? `${x}.0` : String(x);
+}
+
+/** str.capitalize() do Python: primeira letra maiúscula e o resto minúsculo. */
+export function capitalizar(s: string): string {
+  return s.slice(0, 1).toUpperCase() + s.slice(1).toLowerCase();
+}

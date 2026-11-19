@@ -1,9 +1,12 @@
 import { criarApp } from "./app.ts";
 import { acordarRender } from "./repasse.ts";
+import { rotasConfiguracoes } from "./rotas/configuracoes.tsx";
 import type { Env } from "./tipos.ts";
 
 /** Telas migradas: cada fase acrescenta as suas aqui. */
-export const app = criarApp(() => {});
+export const app = criarApp((a) => {
+  rotasConfiguracoes(a);
+});
 
 export default {
   fetch: app.fetch,

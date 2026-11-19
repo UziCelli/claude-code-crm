@@ -25,6 +25,11 @@ export class Banco {
   idas = 0;
   /** comandos SQL executados (depois de juntar as repetidas) */
   comandos = 0;
+  /**
+   * Valores de parâmetros (id -> valor) que valem só neste pedido, sem gravar: o POST de Configurações confere as margens
+   * com os números novos antes de gravar (no Python isso era UPDATE + conferência + desfazer).
+   */
+  sobreposicao: Map<number, { valor?: number | null; valor_texto?: string | null }> | null = null;
   private fila: Pendente[] = [];
   private agendado = false;
   private lidas = new Map<string, Promise<Linha[]>>();

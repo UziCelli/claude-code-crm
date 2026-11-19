@@ -8,7 +8,7 @@ import { taxasCia } from "./precos.ts";
 import { espacosSimples } from "./texto.ts";
 
 const GRUPO = "vantagem_indicacao";
-const MAX_LEQUE = 3;
+export const MAX_LEQUE = 3;
 
 export async function cobraPorAula(b: Banco, local: string | null | undefined): Promise<boolean> {
   const nome = (local ?? "").trim();

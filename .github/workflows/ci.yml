@@ -64,5 +64,7 @@ jobs:
         run: npm run tipos
       - name: Testes
         run: npm test
+      - name: Orçamento de CPU (cenário 3x, teto 7 ms por tela)
+        run: npm run cpu
       - name: Vulnerabilidades das bibliotecas
         run: npm audit --audit-level=high

@@ -1,12 +1,14 @@
 /**
  * Financeiro PF + PJ (port de app/financeiro.py). Datas ISO (AAAA-MM-DD), competência AAAA-MM.
- * Fase 0: só o protótipo do teste de CPU (cobertura adiantada e lançamentos repetidos); o resto entra na fase do Financeiro.
+ * Até a fase do Financeiro: o que o motor de preços usa (DAS, custo pessoal, custos fixos) e o protótipo do teste de CPU.
  */
 import type { Banco } from "../banco/banco.ts";
 import type { Linha } from "../banco/tipos.ts";
 import { arred } from "../arred.ts";
-import { divPy, modPy, numeroDoDia, somarDias, ultimoDiaDoMes, zeros } from "./datas.ts";
-import { semAcento } from "./texto.ts";
+import { ehCia } from "./contas_auto.ts";
+import { divPy, modPy, numeroDoDia, somarDias, ultimoDiaDoMes, utilAnterior, zeros } from "./datas.ts";
+import { parametros } from "./parametros.ts";
+import { escaparRegex, flt, regexPalavra, semAcento, semAcentoLow } from "./texto.ts";
 
 export const ISO_DATA = /^\d{4}-\d{2}-\d{2}$/;
 export const RETIRADA = "Retirada";
@@ -15,6 +17,7 @@ export const DEVOLUCAO = "Empréstimo (devolução)";
 export const ANTECEDENCIA = 7;
 export const CHEIO = 0.9;
 export const JANELA_REPETIDO = 3;
+export const MULTA_JUROS = "Multa e juros";
 
 /** Vencimento no mês 'AAAA-MM': o dia pedido, ou o último dia do mês se ele não existir. */
 export function vencimento(dia: number, mes: string): string {
@@ -165,4 +168,113 @@ export async function duplicados(b: Banco, jaAvisadas: Set<number>): Promise<Gru
   out = out.map((g, i) => ({ g, i })).sort((p, q) => (q.g.itens[0].quando > p.g.itens[0].quando ? 1 : q.g.itens[0].quando < p.g.itens[0].quando ? -1 : p.i - q.i)).map((x) => x.g);
   out = out.map((g, i) => ({ g, i })).sort((p, q) => Number(p.g.certeza !== "quase certo") - Number(q.g.certeza !== "quase certo") || p.i - q.i).map((x) => x.g);
   return out;
+}
+
+// ---------- DAS (Simples Nacional, Anexo III) ----------
+/** (RBT12 até, alíquota nominal, parcela a deduzir). Acima da última faixa vale a última. */
+export const SIMPLES_ANEXO_III: [number, number, number][] = [[180_000, 0.06, 0], [360_000, 0.112, 9_360], [720_000, 0.135, 17_640],
+  [1_800_000, 0.16, 35_640], [3_600_000, 0.21, 125_640], [4_800_000, 0.33, 648_000]];
+
+const RECEITA_PJ = "escopo='PJ' AND tipo='entrada' AND excluido_em IS NULL AND pago_em IS NOT NULL AND categoria != ?";
+
+/** Vencimento no dia pedido do mês, antecipado para a sexta se cair no fim de semana. */
+export function vencimentoUtil(dia: number, mes: string): string {
+  return utilAnterior(vencimento(dia, mes));
+}
+
+/** Entradas PJ recebidas no mês (por pago_em): a base do DAS. Empréstimo não é receita. */
+export async function receitaPj(b: Banco, mes: string): Promise<number> {
+  return (await b.valor<number>(`SELECT COALESCE(SUM(valor), 0) AS total FROM lancamentos WHERE ${RECEITA_PJ} AND substr(pago_em,1,7)=?`,
+    [EMPRESTIMO, mes])) ?? 0;
+}
+
+/** [RBT12, como foi achado, meses usados] da competência: a receita PJ dos 12 meses anteriores (ou a média, no começo). */
+export async function rbt12(b: Banco, mes: string): Promise<[number, string, number]> {
+  const primeiro = await b.valor<string | null>(`SELECT MIN(substr(pago_em,1,7)) AS primeiro FROM lancamentos WHERE ${RECEITA_PJ}`, [EMPRESTIMO]);
+  if (primeiro === null || primeiro === undefined || primeiro > mes) return [0, "sem receita", 0];
+  if (primeiro === mes) return [(await receitaPj(b, mes)) * 12, "primeiro", 0];
+  const de = primeiro > somarMeses(mes, -12) ? primeiro : somarMeses(mes, -12);
+  const soma = (await b.valor<number>(`SELECT COALESCE(SUM(valor), 0) AS total FROM lancamentos WHERE ${RECEITA_PJ} AND substr(pago_em,1,7) BETWEEN ? AND ?`,
+    [EMPRESTIMO, de, somarMeses(mes, -1)])) ?? 0;
+  const n = (Number(mes.slice(0, 4)) - Number(de.slice(0, 4))) * 12 + Number(mes.slice(5, 7)) - Number(de.slice(5, 7));
+  return n >= 12 ? [soma, "12 meses", n] : [(soma / n) * 12, "media", n];
+}
+
+export interface Das { mes: string; receita: number; rbt12: number; faixa: number; nominal: number; deducao: number; efetiva: number;
+  valor: number; vencimento: string; base: string; meses_base: number }
+
+/** DAS da competência (pago no mês seguinte) sobre a receita PJ recebida no mês. Sem receita ainda: faixa 1 (6%). */
+export async function dasCompetencia(b: Banco, mes: string): Promise<Das> {
+  const [receita, [r12, base, n], previsao] = await Promise.all([receitaPj(b, mes), rbt12(b, mes), parametros(b, "previsao")]);
+  let faixa = SIMPLES_ANEXO_III.findIndex(([teto]) => r12 <= teto) + 1;
+  if (faixa === 0) faixa = SIMPLES_ANEXO_III.length;
+  const [, nominal, deducao] = SIMPLES_ANEXO_III[faixa - 1];
+  const efetiva = r12 > 0 ? (r12 * nominal - deducao) / r12 : nominal;
+  const dia = Math.trunc(flt(previsao.dia_das) || 20);
+  return { mes, receita: arred(receita, 2), rbt12: arred(r12, 2), faixa, nominal, deducao, efetiva, valor: arred(receita * efetiva, 2),
+    vencimento: vencimentoUtil(dia, somarMeses(mes, 1)), base, meses_base: n };
+}
+
+/** Alíquota efetiva do DAS do mês de `hoje` (fração: 0,06 = 6%). */
+export async function pctDas(b: Banco, hoje: string): Promise<number> {
+  return (await dasCompetencia(b, hoje.slice(0, 7))).efetiva;
+}
+
+/** 0,06 -> '6'; 0,045 -> '4,5'; 0,0753125 -> '7,53' (f"{round(x * 100, 2):g}"). */
+export function textoPct(fracao: number): string {
+  return formatoG(arred(fracao * 100, 2)).replace(".", ",");
+}
+
+/** f"{x:g}" do Python para os números das telas (6 algarismos significativos, sem zeros à direita). */
+export function formatoG(x: number): string {
+  if (x === 0) return Object.is(x, -0) ? "-0" : "0";
+  const exp = Math.floor(Math.log10(Math.abs(x)));
+  if (exp < -4 || exp >= 6) {
+    const [m, e] = x.toExponential(5).split("e");
+    const mant = m.includes(".") ? m.replace(/0+$/, "").replace(/\.$/, "") : m;
+    const n = Number(e);
+    return `${mant}e${n < 0 ? "-" : "+"}${String(Math.abs(n)).padStart(2, "0")}`;
+  }
+  const t = x.toPrecision(6);
+  return t.includes(".") ? t.replace(/0+$/, "").replace(/\.$/, "") : t;
+}
+
+/** Saída que é o DAS: categoria 'DAS', 'DAS' na descrição, 'Simples Nacional', ou imposto sem descrição. */
+export function ehDas(descricao: string | null | undefined, categoria: string | null | undefined): boolean {
+  let d = (descricao ?? "").trim();
+  if (d === (categoria ?? "").trim()) d = "";
+  const pal = palavras(d);
+  const cat = palavras(categoria);
+  if ((cat.length === 1 && cat[0] === "das") || regexPalavra("DAS").test(d) || pal[0] === "das" || pal.join(" ").includes("simples nacional"))
+    return true;
+  return !d && (categoria ?? "").toLowerCase().includes("imposto");
+}
+
+// ---------- custo pessoal e custos fixos (motor de preços) ----------
+/** [R$ por mês, nº de meses]: média das saídas pagas da PF nos 3 meses antes de `mes` (só meses com saída). */
+export async function custoPessoalMedio(b: Banco, mes: string): Promise<[number, number]> {
+  const meses = [3, 2, 1].map((k) => somarMeses(mes, -k));
+  const rows = await b.query<{ mes: string; total: number | null }>(
+    `SELECT substr(data,1,7) AS mes, SUM(valor) AS total FROM lancamentos WHERE escopo='PF' AND tipo='saida' AND excluido_em IS NULL
+     AND pago_em IS NOT NULL AND substr(data,1,7) BETWEEN ? AND ? GROUP BY substr(data,1,7)`, [meses[0], meses[2]]);
+  const totais = rows.map((r) => r.total).filter((t): t is number => (t ?? 0) > 0);
+  return totais.length ? [totais.reduce((a, t) => a + t, 0) / totais.length, totais.length] : [0, 0];
+}
+
+export interface CustosFixos { total: number; itens: { descricao: string; valor: number }[] }
+
+/** Custos fixos que o preço divide por hora: recorrências fixas da PJ do mês, sem Retirada, DAS, CIA e locais do motor. */
+export async function custosFixosRateio(b: Banco, mes: string, locais: string[] = []): Promise<CustosFixos> {
+  const nomes = locais.map(semAcentoLow).filter(Boolean);
+  const rows = await b.query<{ descricao: string; categoria: string; valor: number }>(
+    `SELECT descricao, categoria, valor FROM recorrencias WHERE excluido_em IS NULL AND escopo='PJ' AND fixo=1
+     AND categoria != ? AND inicio <= ? AND (fim IS NULL OR fim >= ?) ORDER BY valor DESC, descricao`, [RETIRADA, mes, mes]);
+  const itens: CustosFixos["itens"] = [];
+  for (const r of rows) {
+    const desc = semAcentoLow(r.descricao);
+    // palavra inteira: um local "Box" não pode tirar a conta do "Dropbox"
+    if (ehDas(r.descricao, r.categoria) || ehCia(r.descricao) || nomes.some((n) => new RegExp(`\\b${escaparRegex(n)}\\b`).test(desc))) continue;
+    itens.push({ descricao: r.descricao, valor: arred(r.valor, 2) });
+  }
+  return { total: arred(itens.reduce((a, i) => a + i.valor, 0), 2), itens };
 }

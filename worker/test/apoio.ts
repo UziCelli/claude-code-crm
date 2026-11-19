@@ -15,3 +15,56 @@ export async function semear(): Promise<void> {
 export function banco(teto?: number): Banco {
   return new Banco(new DriverD1(env.DB), teto);
 }
+
+/** Carrega um cenário SQL gerado pelo Python (test/dados/*.sql) no D1 do arquivo de teste. */
+export async function carregarCenario(sql: string): Promise<void> {
+  const cmds = sql.split("\n").filter((l) => /^(INSERT|UPDATE|DELETE)/.test(l));
+  await env.DB.batch(cmds.map((s) => env.DB.prepare(s)));
+}
+
+/** Estruturas do TS como o JSON do Python: Map vira objeto de chaves texto. */
+export function jsonavel(x: unknown): unknown {
+  if (x instanceof Map) return Object.fromEntries([...x].map(([k, v]) => [String(k), jsonavel(v)]));
+  if (x instanceof Set) return [...x].sort().map(jsonavel);
+  if (Array.isArray(x)) return x.map(jsonavel);
+  if (x && typeof x === "object") return Object.fromEntries(Object.entries(x).map(([k, v]) => [k, jsonavel(v)]));
+  return x;
+}
+
+// ---------- pedidos de quem entrou pelo Cloudflare Access (chaves de teste) ----------
+import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from "jose";
+import { usarChavesDeTeste } from "../src/acesso.ts";
+import { app } from "../src/index.ts";
+
+export const HOST = "crm.vfitcoachapp.com";
+let chavePrivada: CryptoKey | null = null;
+
+/** Token válido do Access (equipe e AUD de teste do vitest.config.ts). */
+export async function tokenValido(): Promise<string> {
+  if (!chavePrivada) {
+    const par = await generateKeyPair("RS256", { extractable: true });
+    chavePrivada = par.privateKey;
+    usarChavesDeTeste(createLocalJWKSet({ keys: [{ ...(await exportJWK(par.publicKey)), kid: "k1", alg: "RS256" }] }));
+  }
+  return new SignJWT({ email: "dono@exemplo.com" }).setProtectedHeader({ alg: "RS256", kid: "k1" }).setAudience(["aud-do-crm"])
+    .setIssuer("https://vfit.cloudflareaccess.com").setIssuedAt().setExpirationTime(Math.floor(Date.now() / 1000) + 600).sign(chavePrivada);
+}
+
+/** GET de uma tela, logado. */
+export async function abrir(caminho: string): Promise<Response> {
+  return app.fetch(new Request(`https://${HOST}${caminho}`, { headers: { host: HOST, "cf-access-jwt-assertion": await tokenValido() } }), env);
+}
+
+/** POST de formulário da própria tela, logado (sem seguir o redirecionamento). */
+export async function enviar(caminho: string, dados: Record<string, string> = {}): Promise<Response> {
+  return app.fetch(new Request(`https://${HOST}${caminho}`, {
+    method: "POST", body: new URLSearchParams(dados).toString(), redirect: "manual",
+    headers: { host: HOST, origin: `https://${HOST}`, "content-type": "application/x-www-form-urlencoded", "cf-access-jwt-assertion": await tokenValido() },
+  }), env);
+}
+
+/** O aviso (?msg= ou ?erro=) de um redirecionamento, já decodificado. */
+export function aviso(r: Response): { destino: string; msg: string | null; erro: string | null } {
+  const u = new URL(r.headers.get("location") ?? "", `https://${HOST}`);
+  return { destino: u.pathname + u.hash, msg: u.searchParams.get("msg"), erro: u.searchParams.get("erro") };
+}

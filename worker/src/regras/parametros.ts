@@ -7,12 +7,17 @@ export const LISTAS = ["lista_canais", "lista_locais", "lista_tipos_servico", "l
   "lista_categorias_pj", "lista_categorias_pf", "lista_formas_lancamento", "lista_contas"] as const;
 export type Listas = Record<(typeof LISTAS)[number], string[]>;
 
-const SQL = "SELECT chave, valor, valor_texto FROM parametros WHERE grupo=? ORDER BY ordem, chave";
+const SQL = "SELECT id, chave, valor, valor_texto FROM parametros WHERE grupo=? ORDER BY ordem, chave";
 
-/** Linhas do grupo na ordem cadastrada: [chave, valor (ou valor_texto quando valor é NULL)]. */
+/** Linhas do grupo na ordem cadastrada: [chave, valor (ou valor_texto quando valor é NULL)]. Respeita b.sobreposicao. */
 export async function parametrosEmOrdem(b: Banco, grupo: string): Promise<[string, Valor][]> {
-  const rows = await b.query<{ chave: string; valor: Valor; valor_texto: Valor }>(SQL, [grupo]);
-  return rows.map((r) => [r.chave, r.valor !== null ? r.valor : r.valor_texto]);
+  const rows = await b.query<{ id: number; chave: string; valor: Valor; valor_texto: Valor }>(SQL, [grupo]);
+  return rows.map((r) => {
+    const s = b.sobreposicao?.get(r.id);
+    const valor = s && "valor" in s ? (s.valor ?? null) : r.valor;
+    const texto = s && "valor_texto" in s ? (s.valor_texto ?? null) : r.valor_texto;
+    return [r.chave, valor !== null ? valor : texto];
+  });
 }
 
 /** {chave: valor} como db.parametros. Atenção: objeto JS põe chaves numéricas ("1", "2") primeiro; para a ordem, use parametrosEmOrdem. */

@@ -31,7 +31,10 @@ export function criarApp(registrar: (app: Hono<Ambiente>) => void): Hono<Ambient
       return;
     }
     await next();
-    c.res = protegerResposta(c.res);
+    const resp = protegerResposta(c.res);
+    const b = c.get("banco");
+    if (b) resp.headers.set("x-crm-idas", String(b.idas)); // idas ao banco deste pedido (o limite grátis é 50)
+    c.res = resp;
   });
 
   for (const caminho of ["/saude", "/health", "/healthz"]) app.on(["GET", "HEAD"], caminho, (c) => c.text("ok"));

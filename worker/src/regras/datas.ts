@@ -86,3 +86,9 @@ export const modPy = (a: number, b: number) => ((a % b) + b) % b;
 export function zeros(n: number, largura: number): string {
   return n < 0 ? "-" + String(-n).padStart(largura - 1, "0") : String(n).padStart(largura, "0");
 }
+
+/** Sábado e domingo antecipam para a sexta (feriado não entra na conta). */
+export function utilAnterior(data: string): string {
+  const semana = diaDaSemana(data) - 1; // weekday() do Python: segunda = 0
+  return somarDias(data, -Math.max(semana - 4, 0));
+}
