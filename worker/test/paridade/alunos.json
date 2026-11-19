@@ -1,0 +1,10751 @@
+{
+"situacoes": [
+"cadastro_incompleto",
+"cobrar",
+"em_dia",
+"pago_sem_aula",
+"sem_aula_recente",
+"sem_pagar_sem_aula",
+"vence_logo"
+],
+"estado": {
+"1": {
+"id": 1,
+"nome": "Aluno 00 Ána",
+"tel": "(11) 98888-7777",
+"valor": 300.0,
+"tem_aulas": false,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-09-13",
+"vence": "2026-09-13",
+"dias": -67,
+"vencida": true,
+"pendente": false,
+"dia": 13
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": null,
+"previsto": 0.0,
+"recebido": 0.0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 4,
+"ultima": "2026-11-18",
+"dias_sem": null
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": "cobranca",
+"botao": "Cobrança crítica · R$ 929,00",
+"extra": {
+"valor": "R$ 900,00",
+"dias": 67,
+"multa": "R$ 18,00",
+"juros": "R$ 11,00",
+"total": "R$ 929,00"
+},
+"data_modelo": "13/09/2026",
+"cobranca": {
+"meses": 3,
+"dias": 67,
+"bruto": 900.0,
+"credito": 0.0,
+"valor": 900.0,
+"multa": 18.0,
+"juros": 11.0,
+"total": 929.0
+},
+"cartao": {
+"cid": 1,
+"codigo": "00020126350014br.gov.bcb.pix0113chave@pix.com5204000053039865406929.005802BR5912VICTOR CELLI6009SAO PAULO62070503***6304B932",
+"acao": "/clientes/1/wa/cobranca",
+"svg": "/clientes/1/cobranca/cartao.svg"
+},
+"ordem": "2026-09-13",
+"frase_valor": "R$ 300,00",
+"texto": "renovação venceu em 13/09/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 00 Ána",
+"cliente_id": 1,
+"valor": "929,00",
+"descricao": "Mensalidade 09/2026",
+"mensal": "300,00",
+"encargos": "29,00",
+"nota": "multa de R$ 18,00 e juros de R$ 11,00 incluídos"
+}
+},
+{
+"wa": true
+},
+{
+"rotulo": "Pular mês",
+"href": "/clientes/1#renovacao"
+}
+]
+},
+"2": {
+"id": 2,
+"nome": "Aluno 01 Bê",
+"tel": null,
+"valor": 480.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-12-17",
+"vence": "2026-12-17",
+"dias": 28,
+"vencida": false,
+"pendente": false,
+"dia": 17
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 480.0,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-17",
+"fim": "2026-11-17",
+"mes": "2026-10",
+"feitas": 5,
+"esperadas": 2.8,
+"uteis": 22
+},
+"mes_atual": 3,
+"ultima": "2026-11-17",
+"dias_sem": 2
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 0.0,
+"pausado_no_mes": false,
+"situacao": "cadastro_incompleto",
+"rotulo": "Cadastro incompleto",
+"cor": "azul",
+"grav": 3,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 01 Bê",
+"frase_valor": "R$ 480,00",
+"texto": "cadastro incompleto: falta telefone",
+"acoes": [
+{
+"rotulo": "Completar cadastro",
+"href": "/clientes/2#cadastro"
+}
+]
+},
+"3": {
+"id": 3,
+"nome": "Aluno 02 Ána",
+"tel": "",
+"valor": 300.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-09-24",
+"vence": "2026-09-24",
+"dias": -56,
+"vencida": true,
+"pendente": false,
+"dia": 24
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 300.0,
+"recebido": 0,
+"ultimo_pago": "2026-06",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 0,
+"ultima": null,
+"dias_sem": null
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": null,
+"botao": "Cobrar R$ 620,20",
+"extra": {
+"valor": "R$ 600,00",
+"dias": 56,
+"multa": "R$ 12,00",
+"juros": "R$ 8,20",
+"total": "R$ 620,20"
+},
+"data_modelo": "24/09/2026",
+"cobranca": {
+"meses": 2,
+"dias": 56,
+"bruto": 600.0,
+"credito": 0.0,
+"valor": 600.0,
+"multa": 12.0,
+"juros": 8.2,
+"total": 620.2
+},
+"cartao": null,
+"ordem": "2026-09-24",
+"frase_valor": "R$ 300,00",
+"texto": "renovação venceu em 24/09/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 02 Ána",
+"cliente_id": 3,
+"valor": "620,20",
+"descricao": "Mensalidade 09/2026",
+"mensal": "300,00",
+"encargos": "20,20",
+"nota": "multa de R$ 12,00 e juros de R$ 8,20 incluídos"
+}
+},
+{
+"rotulo": "Cadastre o telefone",
+"href": "/clientes/3#cadastro"
+},
+{
+"rotulo": "Já pagou adiantado",
+"href": "/clientes/3#pagamentos"
+}
+]
+},
+"4": {
+"id": 4,
+"nome": "Aluno 03 Cid",
+"tel": null,
+"valor": 999.99,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-12-03",
+"vence": "2026-12-03",
+"dias": 14,
+"vencida": false,
+"pendente": false,
+"dia": 3
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 999.99,
+"recebido": 0,
+"ultimo_pago": "2026-09",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-03",
+"fim": "2026-11-03",
+"mes": "2026-10",
+"feitas": 0,
+"esperadas": 9.2,
+"uteis": 22
+},
+"mes_atual": 0,
+"ultima": null,
+"dias_sem": null
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 999.99,
+"pausado_no_mes": false,
+"situacao": "pago_sem_aula",
+"rotulo": "Pagou sem aula",
+"cor": "amarelo",
+"grav": 2,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 03 Cid",
+"frase_valor": "R$ 999,99",
+"texto": "pagou e não teve aula em 10/2026",
+"acoes": [
+{
+"rotulo": "Pulou o mês",
+"dialogo": "dlg-pulou",
+"classe": "claro",
+"dados": {
+"titulo": "Aluno 03 Cid pulou o mês? A renovação de 03/12/2026 vai para 03/01/2027, sem cobrança.",
+"acao": "/alunos/4/pulou"
+}
+},
+{
+"rotulo": "Crédito na próxima (R$ 999,99)",
+"dialogo": "dlg-credito",
+"classe": "claro",
+"dados": {
+"titulo": "Crédito para Aluno 03 Cid: não usou 10/2026",
+"acao": "/alunos/4/credito",
+"valor": "999,99",
+"mes": "2026-10"
+}
+},
+{
+"rotulo": "Não tem aula (consultoria)",
+"href": "/clientes?ids=4&motivo=sem-aula"
+}
+]
+},
+"5": {
+"id": 5,
+"nome": "Aluno 04 Cid",
+"tel": "(11) 98888-7777",
+"valor": 480.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-12-19",
+"vence": "2026-12-19",
+"dias": 30,
+"vencida": false,
+"pendente": false,
+"dia": 19
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "recebido",
+"previsto": 480.0,
+"recebido": 600.0,
+"ultimo_pago": "2026-11",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-19",
+"fim": "2026-11-19",
+"mes": "2026-10",
+"feitas": 11,
+"esperadas": 9.2,
+"uteis": 22
+},
+"mes_atual": 8,
+"ultima": "2026-11-09",
+"dias_sem": 10
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 0.0,
+"pausado_no_mes": false,
+"situacao": "em_dia",
+"rotulo": "Em dia",
+"cor": "verde",
+"grav": 4,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 04 Cid",
+"frase_valor": "R$ 480,00",
+"texto": "em dia",
+"acoes": []
+},
+"6": {
+"id": 6,
+"nome": "Aluno 05 Ána",
+"tel": "",
+"valor": 615.33,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-11-19",
+"vence": "2026-11-19",
+"dias": 0,
+"vencida": false,
+"pendente": false,
+"dia": 19
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "recebido",
+"previsto": 615.33,
+"recebido": 600.0,
+"ultimo_pago": "2026-11",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-19",
+"fim": "2026-11-19",
+"mes": "2026-10",
+"feitas": 1,
+"esperadas": 0,
+"uteis": 22
+},
+"mes_atual": 1,
+"ultima": "2026-11-06",
+"dias_sem": 13
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 0.0,
+"pausado_no_mes": false,
+"situacao": "vence_logo",
+"rotulo": "Vence logo",
+"cor": "amarelo",
+"grav": 2,
+"modelo": null,
+"botao": null,
+"extra": {
+"valor": "R$ 615,33"
+},
+"data_modelo": "19/11/2026",
+"cobranca": null,
+"cartao": null,
+"ordem": "2026-11-19",
+"frase_valor": "R$ 615,33",
+"texto": "renovação em 19/11/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 05 Ána",
+"cliente_id": 6,
+"valor": "615,33",
+"descricao": "Mensalidade 11/2026",
+"mensal": "615,33"
+}
+},
+{
+"rotulo": "Cadastre o telefone",
+"href": "/clientes/6#cadastro"
+},
+{
+"rotulo": "Já pagou adiantado",
+"href": "/clientes/6#pagamentos"
+}
+]
+},
+"7": {
+"id": 7,
+"nome": "Aluno 06 Ána",
+"tel": "(11) 98888-7777",
+"valor": 0.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-10-19",
+"vence": "2026-10-19",
+"dias": -31,
+"vencida": true,
+"pendente": false,
+"dia": 19
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": null,
+"previsto": 0.0,
+"recebido": 0.0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 0,
+"ultima": null,
+"dias_sem": null
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": "renovacao",
+"botao": null,
+"extra": {
+"valor": ""
+},
+"data_modelo": "19/10/2026",
+"cobranca": null,
+"cartao": null,
+"ordem": "2026-10-19",
+"frase_valor": "",
+"texto": "renovação venceu em 19/10/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 06 Ána",
+"cliente_id": 7,
+"valor": "",
+"descricao": "Mensalidade 10/2026",
+"mensal": "0,00"
+}
+},
+{
+"wa": true
+},
+{
+"rotulo": "Pular mês",
+"href": "/clientes/7#renovacao"
+}
+]
+},
+"8": {
+"id": 8,
+"nome": "Aluno 07 Ána",
+"tel": "(11) 98888-7777",
+"valor": 0.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-11-30",
+"vence": "2026-11-30",
+"dias": 11,
+"vencida": false,
+"pendente": false,
+"dia": 30
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "recebido",
+"previsto": 0.0,
+"recebido": 600.0,
+"ultimo_pago": "2026-11",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-09-30",
+"fim": "2026-10-30",
+"mes": "2026-09",
+"feitas": 0,
+"esperadas": 10.8,
+"uteis": 25
+},
+"mes_atual": 1,
+"ultima": "2026-11-13",
+"dias_sem": 1
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 0.0,
+"pausado_no_mes": true,
+"situacao": "pago_sem_aula",
+"rotulo": "Pagou sem aula",
+"cor": "amarelo",
+"grav": 2,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 07 Ána",
+"frase_valor": "",
+"texto": "pagou e não teve aula em 09/2026",
+"acoes": [
+{
+"rotulo": "Pulou o mês",
+"dialogo": "dlg-pulou",
+"classe": "claro",
+"dados": {
+"titulo": "Aluno 07 Ána pulou o mês? A renovação de 30/11/2026 vai para 30/12/2026, sem cobrança.",
+"acao": "/alunos/8/pulou"
+}
+},
+{
+"rotulo": "Crédito na próxima (R$ 0,00)",
+"dialogo": "dlg-credito",
+"classe": "claro",
+"dados": {
+"titulo": "Crédito para Aluno 07 Ána: não usou 09/2026",
+"acao": "/alunos/8/credito",
+"valor": "0,00",
+"mes": "2026-09"
+}
+}
+]
+},
+"9": {
+"id": 9,
+"nome": "Aluno 08 Cid",
+"tel": "(11) 98888-7777",
+"valor": 450.5,
+"tem_aulas": false,
+"consultoria": false,
+"renovacao": null,
+"pagamento": {
+"mes": "2026-11",
+"situacao": null,
+"previsto": 0.0,
+"recebido": 0.0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 0,
+"ultima": null,
+"dias_sem": null
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cadastro_incompleto",
+"rotulo": "Cadastro incompleto",
+"cor": "azul",
+"grav": 3,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 08 Cid",
+"frase_valor": "R$ 450,50",
+"texto": "cadastro incompleto: falta renovação",
+"acoes": [
+{
+"rotulo": "Completar cadastro",
+"href": "/clientes/9#cadastro"
+}
+]
+},
+"10": {
+"id": 10,
+"nome": "Aluno 09 Ána",
+"tel": "",
+"valor": 0.0,
+"tem_aulas": false,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-10-21",
+"vence": "2026-10-21",
+"dias": -29,
+"vencida": true,
+"pendente": false,
+"dia": 21
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": null,
+"previsto": 0.0,
+"recebido": 0.0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 4,
+"ultima": "2026-11-19",
+"dias_sem": null
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": "renovacao",
+"botao": null,
+"extra": {
+"valor": ""
+},
+"data_modelo": "21/10/2026",
+"cobranca": null,
+"cartao": null,
+"ordem": "2026-10-21",
+"frase_valor": "",
+"texto": "renovação venceu em 21/10/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 09 Ána",
+"cliente_id": 10,
+"valor": "",
+"descricao": "Mensalidade 10/2026",
+"mensal": "0,00"
+}
+},
+{
+"wa": true
+},
+{
+"rotulo": "Pular mês",
+"href": "/clientes/10#renovacao"
+}
+]
+},
+"11": {
+"id": 11,
+"nome": "Aluno 10 Cid",
+"tel": "(11) 98888-7777",
+"valor": 300.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": null,
+"pagamento": {
+"mes": "2026-11",
+"situacao": "recebido",
+"previsto": 300.0,
+"recebido": 600.0,
+"ultimo_pago": "2026-11",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 0,
+"ultima": "2026-10-10",
+"dias_sem": 31
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "sem_aula_recente",
+"rotulo": "Sem aula",
+"cor": "vermelho",
+"grav": 1,
+"modelo": "falta",
+"botao": null,
+"extra": null,
+"data_modelo": "10/10/2026",
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 10 Cid",
+"frase_valor": "R$ 300,00",
+"texto": "sem aula desde 10/10/2026",
+"acoes": [
+{
+"rotulo": "Abrir agenda",
+"href": "/agenda?aluno=11"
+},
+{
+"wa": true
+}
+]
+},
+"12": {
+"id": 12,
+"nome": "Aluno 11 Ána",
+"tel": "(11) 98888-7777",
+"valor": 615.33,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-11-30",
+"vence": "2026-11-30",
+"dias": 11,
+"vencida": false,
+"pendente": false,
+"dia": 30
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "recebido",
+"previsto": 615.33,
+"recebido": 615.33,
+"ultimo_pago": "2026-11",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-09-30",
+"fim": "2026-10-30",
+"mes": "2026-09",
+"feitas": 0,
+"esperadas": 0,
+"uteis": 25
+},
+"mes_atual": 0,
+"ultima": "2026-09-26",
+"dias_sem": 45
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 615.33,
+"pausado_no_mes": false,
+"situacao": "pago_sem_aula",
+"rotulo": "Pagou sem aula",
+"cor": "amarelo",
+"grav": 2,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 11 Ána",
+"frase_valor": "R$ 615,33",
+"texto": "pagou e não teve aula em 09/2026",
+"acoes": [
+{
+"rotulo": "Pulou o mês",
+"dialogo": "dlg-pulou",
+"classe": "claro",
+"dados": {
+"titulo": "Aluno 11 Ána pulou o mês? A renovação de 30/11/2026 vai para 30/12/2026, sem cobrança.",
+"acao": "/alunos/12/pulou"
+}
+},
+{
+"rotulo": "Crédito na próxima (R$ 615,33)",
+"dialogo": "dlg-credito",
+"classe": "claro",
+"dados": {
+"titulo": "Crédito para Aluno 11 Ána: não usou 09/2026",
+"acao": "/alunos/12/credito",
+"valor": "615,33",
+"mes": "2026-09"
+}
+}
+]
+},
+"13": {
+"id": 13,
+"nome": "Aluno 12 Bê",
+"tel": "11999990000",
+"valor": 450.5,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-12-10",
+"vence": "2026-12-10",
+"dias": 21,
+"vencida": false,
+"pendente": false,
+"dia": 10
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 450.5,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-10",
+"fim": "2026-11-10",
+"mes": "2026-10",
+"feitas": 0,
+"esperadas": 9.2,
+"uteis": 22
+},
+"mes_atual": 0,
+"ultima": null,
+"dias_sem": null
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 450.5,
+"pausado_no_mes": false,
+"situacao": "sem_pagar_sem_aula",
+"rotulo": "Sem aula nem pagamento",
+"cor": "amarelo",
+"grav": 2,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 12 Bê",
+"frase_valor": "R$ 450,50",
+"texto": "sem aula e sem pagamento em 10/2026: pulou o mês?",
+"acoes": [
+{
+"rotulo": "Pulou o mês",
+"dialogo": "dlg-pulou",
+"classe": "claro",
+"dados": {
+"titulo": "Aluno 12 Bê pulou o mês? A renovação de 10/12/2026 vai para 10/01/2027, sem cobrança.",
+"acao": "/alunos/13/pulou"
+}
+},
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 12 Bê",
+"cliente_id": 13,
+"valor": "450,50",
+"descricao": "Mensalidade 12/2026",
+"mensal": "450,50"
+}
+},
+{
+"rotulo": "Não tem aula (consultoria)",
+"href": "/clientes?ids=13&motivo=sem-aula"
+}
+]
+},
+"14": {
+"id": 14,
+"nome": "Aluno 13 Cid",
+"tel": null,
+"valor": 0.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": null,
+"pagamento": {
+"mes": "2026-11",
+"situacao": null,
+"previsto": 0.0,
+"recebido": 0.0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 0,
+"ultima": null,
+"dias_sem": null
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "sem_aula_recente",
+"rotulo": "Sem aula",
+"cor": "vermelho",
+"grav": 1,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 13 Cid",
+"frase_valor": "",
+"texto": "nenhuma aula registrada",
+"acoes": [
+{
+"rotulo": "Abrir agenda",
+"href": "/agenda?aluno=14"
+}
+]
+},
+"15": {
+"id": 15,
+"nome": "Aluno 14 Ána",
+"tel": null,
+"valor": 300.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-10-15",
+"vence": "2026-10-15",
+"dias": -35,
+"vencida": true,
+"pendente": false,
+"dia": 15
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 300.0,
+"recebido": 0,
+"ultimo_pago": "2026-10",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 1,
+"ultima": "2026-11-15",
+"dias_sem": 4
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": null,
+"botao": "Cobrar R$ 615,90",
+"extra": {
+"valor": "R$ 600,00",
+"dias": 35,
+"multa": "R$ 12,00",
+"juros": "R$ 3,90",
+"total": "R$ 615,90"
+},
+"data_modelo": "15/10/2026",
+"cobranca": {
+"meses": 2,
+"dias": 35,
+"bruto": 600.0,
+"credito": 0.0,
+"valor": 600.0,
+"multa": 12.0,
+"juros": 3.9,
+"total": 615.9
+},
+"cartao": null,
+"ordem": "2026-10-15",
+"frase_valor": "R$ 300,00",
+"texto": "renovação venceu em 15/10/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 14 Ána",
+"cliente_id": 15,
+"valor": "615,90",
+"descricao": "Mensalidade 10/2026",
+"mensal": "300,00",
+"encargos": "15,90",
+"nota": "multa de R$ 12,00 e juros de R$ 3,90 incluídos"
+}
+},
+{
+"rotulo": "Cadastre o telefone",
+"href": "/clientes/15#cadastro"
+},
+{
+"rotulo": "Já pagou adiantado",
+"href": "/clientes/15#pagamentos"
+}
+]
+},
+"16": {
+"id": 16,
+"nome": "Aluno 15 Bê",
+"tel": "(11) 98888-7777",
+"valor": 450.5,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-09-16",
+"vence": "2026-09-16",
+"dias": -64,
+"vencida": true,
+"pendente": false,
+"dia": 16
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 450.5,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 1,
+"ultima": "2026-11-06",
+"dias_sem": 13
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": "cobranca",
+"botao": "Cobrança crítica · R$ 1.393,70",
+"extra": {
+"valor": "R$ 1.351,50",
+"dias": 64,
+"multa": "R$ 27,03",
+"juros": "R$ 15,17",
+"total": "R$ 1.393,70"
+},
+"data_modelo": "16/09/2026",
+"cobranca": {
+"meses": 3,
+"dias": 64,
+"bruto": 1351.5,
+"credito": 0.0,
+"valor": 1351.5,
+"multa": 27.03,
+"juros": 15.17,
+"total": 1393.7
+},
+"cartao": {
+"cid": 16,
+"codigo": "00020126350014br.gov.bcb.pix0113chave@pix.com52040000530398654071393.705802BR5912VICTOR CELLI6009SAO PAULO62070503***6304DCB0",
+"acao": "/clientes/16/wa/cobranca",
+"svg": "/clientes/16/cobranca/cartao.svg"
+},
+"ordem": "2026-09-16",
+"frase_valor": "R$ 450,50",
+"texto": "renovação venceu em 16/09/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 15 Bê",
+"cliente_id": 16,
+"valor": "1393,70",
+"descricao": "Mensalidade 09/2026",
+"mensal": "450,50",
+"encargos": "42,20",
+"nota": "multa de R$ 27,03 e juros de R$ 15,17 incluídos"
+}
+},
+{
+"wa": true
+},
+{
+"rotulo": "Pular mês",
+"href": "/clientes/16#renovacao"
+}
+]
+},
+"17": {
+"id": 17,
+"nome": "Aluno 16 Cid",
+"tel": null,
+"valor": 600.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": null,
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 480.0,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 0,
+"ultima": null,
+"dias_sem": null
+},
+"credito": 120.0,
+"credito_total": 120.0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "sem_aula_recente",
+"rotulo": "Sem aula",
+"cor": "vermelho",
+"grav": 1,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 16 Cid",
+"frase_valor": "R$ 480,00 (R$ 600,00 − R$ 120,00 de crédito das aulas não usadas em 10/2026)",
+"texto": "nenhuma aula registrada",
+"acoes": [
+{
+"rotulo": "Abrir agenda",
+"href": "/agenda?aluno=17"
+},
+{
+"rotulo": "Não tem aula (consultoria)",
+"href": "/clientes?ids=17&motivo=sem-aula"
+}
+]
+},
+"18": {
+"id": 18,
+"nome": "Aluno 17 Cid",
+"tel": "11999990000",
+"valor": 450.5,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-11-13",
+"vence": "2026-11-13",
+"dias": -6,
+"vencida": true,
+"pendente": false,
+"dia": 13
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "pago adiantado",
+"previsto": 0.0,
+"recebido": 0,
+"ultimo_pago": "2026-10",
+"coberto_ate": "2026-11"
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 0,
+"ultima": "2026-05-21",
+"dias_sem": 173
+},
+"credito": 450.5,
+"credito_total": 450.5,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "2026-11-13",
+"frase_valor": "R$ 0,00 (R$ 450,50 − R$ 450,50 de crédito das aulas não usadas em 08/2026)",
+"texto": "renovação venceu em 13/11/2026: o crédito de R$ 450,50 cobre esse mês",
+"acoes": [
+{
+"rotulo": "Pulou o mês",
+"dialogo": "dlg-pulou",
+"classe": "claro",
+"dados": {
+"titulo": "Aluno 17 Cid pulou o mês? A renovação de 13/11/2026 vai para 13/12/2026, sem cobrança.",
+"acao": "/alunos/18/pulou"
+}
+}
+]
+},
+"19": {
+"id": 19,
+"nome": "Aluno 18 Bê",
+"tel": "(11) 98888-7777",
+"valor": 450.5,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-10-24",
+"vence": "2026-10-24",
+"dias": -26,
+"vencida": true,
+"pendente": false,
+"dia": 24
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 0.0,
+"recebido": 0,
+"ultimo_pago": "2026-09",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 3,
+"ultima": "2026-11-19",
+"dias_sem": 0
+},
+"credito": 450.5,
+"credito_total": 450.5,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "2026-10-24",
+"frase_valor": "R$ 0,00 (R$ 450,50 − R$ 450,50 de crédito das aulas não usadas em 10/2026)",
+"texto": "renovação venceu em 24/10/2026: o crédito de R$ 450,50 cobre esse mês",
+"acoes": [
+{
+"rotulo": "Pulou o mês",
+"dialogo": "dlg-pulou",
+"classe": "claro",
+"dados": {
+"titulo": "Aluno 18 Bê pulou o mês? A renovação de 24/10/2026 vai para 24/11/2026, sem cobrança.",
+"acao": "/alunos/19/pulou"
+}
+}
+]
+},
+"20": {
+"id": 20,
+"nome": "Aluno 19 Bê",
+"tel": "(11) 98888-7777",
+"valor": 600.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-11-25",
+"vence": "2026-11-25",
+"dias": 6,
+"vencida": false,
+"pendente": false,
+"dia": 25
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 600.0,
+"recebido": 0,
+"ultimo_pago": "2026-10",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-25",
+"fim": "2026-11-25",
+"mes": "2026-10",
+"feitas": 1,
+"esperadas": 3.1,
+"uteis": 22
+},
+"mes_atual": 1,
+"ultima": "2026-11-19",
+"dias_sem": 0
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 404.74,
+"pausado_no_mes": false,
+"situacao": "vence_logo",
+"rotulo": "Vence logo",
+"cor": "amarelo",
+"grav": 2,
+"modelo": "renovacao",
+"botao": null,
+"extra": {
+"valor": "R$ 600,00"
+},
+"data_modelo": "25/11/2026",
+"cobranca": null,
+"cartao": null,
+"ordem": "2026-11-25",
+"frase_valor": "R$ 600,00",
+"texto": "renovação em 25/11/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 19 Bê",
+"cliente_id": 20,
+"valor": "600,00",
+"descricao": "Mensalidade 11/2026",
+"mensal": "600,00"
+}
+},
+{
+"wa": true
+},
+{
+"rotulo": "Já pagou adiantado",
+"href": "/clientes/20#pagamentos"
+}
+]
+},
+"21": {
+"id": 21,
+"nome": "Aluno 20 Bê",
+"tel": "11999990000",
+"valor": 999.99,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-10-28",
+"vence": "2026-10-28",
+"dias": -22,
+"vencida": true,
+"pendente": false,
+"dia": 28
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": null,
+"previsto": 0.0,
+"recebido": 0.0,
+"ultimo_pago": "2026-09",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 5,
+"ultima": "2026-11-12",
+"dias_sem": 7
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": "cobranca",
+"botao": "Cobrar R$ 1.027,32 · 22 dias",
+"extra": {
+"valor": "R$ 999,99",
+"dias": 22,
+"multa": "R$ 20,00",
+"juros": "R$ 7,33",
+"total": "R$ 1.027,32"
+},
+"data_modelo": "28/10/2026",
+"cobranca": {
+"meses": 1,
+"dias": 22,
+"bruto": 999.99,
+"credito": 0.0,
+"valor": 999.99,
+"multa": 20.0,
+"juros": 7.33,
+"total": 1027.32
+},
+"cartao": {
+"cid": 21,
+"codigo": "00020126350014br.gov.bcb.pix0113chave@pix.com52040000530398654071027.325802BR5912VICTOR CELLI6009SAO PAULO62070503***63046C36",
+"acao": "/clientes/21/wa/cobranca",
+"svg": "/clientes/21/cobranca/cartao.svg"
+},
+"ordem": "2026-10-28",
+"frase_valor": "R$ 999,99",
+"texto": "renovação venceu em 28/10/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 20 Bê",
+"cliente_id": 21,
+"valor": "1027,32",
+"descricao": "Mensalidade 10/2026",
+"mensal": "999,99",
+"encargos": "27,33",
+"nota": "multa de R$ 20,00 e juros de R$ 7,33 incluídos"
+}
+},
+{
+"wa": true
+},
+{
+"rotulo": "Já pagou adiantado",
+"href": "/clientes/21#pagamentos"
+}
+]
+},
+"22": {
+"id": 22,
+"nome": "Aluno 21 Cid",
+"tel": "",
+"valor": 999.99,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-11-28",
+"vence": "2026-11-28",
+"dias": 9,
+"vencida": false,
+"pendente": false,
+"dia": 28
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 999.99,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-09-28",
+"fim": "2026-10-28",
+"mes": "2026-09",
+"feitas": 6,
+"esperadas": 7.8,
+"uteis": 27
+},
+"mes_atual": 0,
+"ultima": "2026-10-27",
+"dias_sem": 17
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 230.17,
+"pausado_no_mes": false,
+"situacao": "sem_aula_recente",
+"rotulo": "Sem aula",
+"cor": "vermelho",
+"grav": 1,
+"modelo": "falta",
+"botao": null,
+"extra": null,
+"data_modelo": "27/10/2026",
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 21 Cid",
+"frase_valor": "R$ 999,99",
+"texto": "sem aula desde 27/10/2026",
+"acoes": [
+{
+"rotulo": "Abrir agenda",
+"href": "/agenda?aluno=22"
+},
+{
+"wa": true
+}
+]
+},
+"23": {
+"id": 23,
+"nome": "Aluno 22 Ána",
+"tel": "",
+"valor": 0.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-10-28",
+"vence": "2026-10-28",
+"dias": -22,
+"vencida": true,
+"pendente": false,
+"dia": 28
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": null,
+"previsto": 0.0,
+"recebido": 0.0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 3,
+"ultima": "2026-11-10",
+"dias_sem": 9
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": "renovacao",
+"botao": null,
+"extra": {
+"valor": ""
+},
+"data_modelo": "28/10/2026",
+"cobranca": null,
+"cartao": null,
+"ordem": "2026-10-28",
+"frase_valor": "",
+"texto": "renovação venceu em 28/10/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 22 Ána",
+"cliente_id": 23,
+"valor": "",
+"descricao": "Mensalidade 10/2026",
+"mensal": "0,00"
+}
+},
+{
+"wa": true
+},
+{
+"rotulo": "Pular mês",
+"href": "/clientes/23#renovacao"
+}
+]
+},
+"24": {
+"id": 24,
+"nome": "Aluno 23 Cid",
+"tel": null,
+"valor": 999.99,
+"tem_aulas": false,
+"consultoria": true,
+"renovacao": {
+"efetiva": "2026-10-10",
+"vence": "2026-10-10",
+"dias": -40,
+"vencida": true,
+"pendente": false,
+"dia": 10
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 999.99,
+"recebido": 0,
+"ultimo_pago": "2026-09",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 7,
+"ultima": "2026-11-19",
+"dias_sem": null
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": null,
+"botao": "Cobrar R$ 2.056,31",
+"extra": {
+"valor": "R$ 1.999,98",
+"dias": 40,
+"multa": "R$ 40,00",
+"juros": "R$ 16,33",
+"total": "R$ 2.056,31"
+},
+"data_modelo": "10/10/2026",
+"cobranca": {
+"meses": 2,
+"dias": 40,
+"bruto": 1999.98,
+"credito": 0.0,
+"valor": 1999.98,
+"multa": 40.0,
+"juros": 16.33,
+"total": 2056.31
+},
+"cartao": null,
+"ordem": "2026-10-10",
+"frase_valor": "R$ 999,99",
+"texto": "renovação venceu em 10/10/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 23 Cid",
+"cliente_id": 24,
+"valor": "2056,31",
+"descricao": "Mensalidade 10/2026",
+"mensal": "999,99",
+"encargos": "56,33",
+"nota": "multa de R$ 40,00 e juros de R$ 16,33 incluídos"
+}
+},
+{
+"rotulo": "Cadastre o telefone",
+"href": "/clientes/24#cadastro"
+},
+{
+"rotulo": "Já pagou adiantado",
+"href": "/clientes/24#pagamentos"
+}
+]
+},
+"25": {
+"id": 25,
+"nome": "Aluno 24 Ána",
+"tel": "11999990000",
+"valor": 615.33,
+"tem_aulas": false,
+"consultoria": true,
+"renovacao": {
+"efetiva": "2026-09-23",
+"vence": "2026-09-23",
+"dias": -57,
+"vencida": true,
+"pendente": false,
+"dia": 23
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": null,
+"previsto": 0.0,
+"recebido": 0.0,
+"ultimo_pago": "2026-09",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 0,
+"ultima": "2026-10-25",
+"dias_sem": null
+},
+"credito": 615.33,
+"credito_total": 615.33,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": "cobranca",
+"botao": "Cobrança crítica · R$ 633,18",
+"extra": {
+"valor": "R$ 615,33",
+"dias": 57,
+"multa": "R$ 12,31",
+"juros": "R$ 5,54",
+"total": "R$ 633,18"
+},
+"data_modelo": "23/09/2026",
+"cobranca": {
+"meses": 2,
+"dias": 57,
+"bruto": 1230.66,
+"credito": 615.33,
+"valor": 615.33,
+"multa": 12.31,
+"juros": 5.54,
+"total": 633.18
+},
+"cartao": {
+"cid": 25,
+"codigo": "00020126350014br.gov.bcb.pix0113chave@pix.com5204000053039865406633.185802BR5912VICTOR CELLI6009SAO PAULO62070503***630494C0",
+"acao": "/clientes/25/wa/cobranca",
+"svg": "/clientes/25/cobranca/cartao.svg"
+},
+"ordem": "2026-09-23",
+"frase_valor": "R$ 0,00 (R$ 615,33 − R$ 615,33 de crédito das aulas não usadas em 10/2026)",
+"texto": "renovação venceu em 23/09/2026 (crédito de R$ 615,33 já descontado)",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 24 Ána",
+"cliente_id": 25,
+"valor": "633,18",
+"descricao": "Mensalidade 09/2026",
+"mensal": "615,33",
+"encargos": "17,85",
+"nota": "Crédito de R$ 615,33 descontado · multa de R$ 12,31 e juros de R$ 5,54 incluídos"
+}
+},
+{
+"wa": true
+},
+{
+"rotulo": "Já pagou adiantado",
+"href": "/clientes/25#pagamentos"
+}
+]
+},
+"26": {
+"id": 26,
+"nome": "Aluno 25 Ána",
+"tel": null,
+"valor": 450.5,
+"tem_aulas": true,
+"consultoria": true,
+"renovacao": {
+"efetiva": "2026-12-23",
+"vence": "2026-12-23",
+"dias": 34,
+"vencida": false,
+"pendente": false,
+"dia": 23
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "pago adiantado",
+"previsto": 450.5,
+"recebido": 0,
+"ultimo_pago": "2026-09",
+"coberto_ate": "2026-11"
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-23",
+"fim": "2026-11-23",
+"mes": "2026-10",
+"feitas": 0,
+"esperadas": 0,
+"uteis": 22
+},
+"mes_atual": 0,
+"ultima": null,
+"dias_sem": null
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 450.5,
+"pausado_no_mes": false,
+"situacao": "pago_sem_aula",
+"rotulo": "Pagou sem aula",
+"cor": "amarelo",
+"grav": 2,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 25 Ána",
+"frase_valor": "R$ 450,50",
+"texto": "pagou e não teve aula em 10/2026",
+"acoes": [
+{
+"rotulo": "Pulou o mês",
+"dialogo": "dlg-pulou",
+"classe": "claro",
+"dados": {
+"titulo": "Aluno 25 Ána pulou o mês? A renovação de 23/12/2026 vai para 23/01/2027, sem cobrança.",
+"acao": "/alunos/26/pulou"
+}
+},
+{
+"rotulo": "Crédito na próxima (R$ 450,50)",
+"dialogo": "dlg-credito",
+"classe": "claro",
+"dados": {
+"titulo": "Crédito para Aluno 25 Ána: não usou 10/2026",
+"acao": "/alunos/26/credito",
+"valor": "450,50",
+"mes": "2026-10"
+}
+}
+]
+},
+"27": {
+"id": 27,
+"nome": "Aluno 26 Bê",
+"tel": "11999990000",
+"valor": 300.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-11-16",
+"vence": "2026-11-16",
+"dias": -3,
+"vencida": true,
+"pendente": false,
+"dia": 16
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 300.0,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 0,
+"ultima": null,
+"dias_sem": null
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": "cobranca",
+"botao": "Cobrar R$ 306,30 · 3 dias",
+"extra": {
+"valor": "R$ 300,00",
+"dias": 3,
+"multa": "R$ 6,00",
+"juros": "R$ 0,30",
+"total": "R$ 306,30"
+},
+"data_modelo": "16/11/2026",
+"cobranca": {
+"meses": 1,
+"dias": 3,
+"bruto": 300.0,
+"credito": 0.0,
+"valor": 300.0,
+"multa": 6.0,
+"juros": 0.3,
+"total": 306.3
+},
+"cartao": {
+"cid": 27,
+"codigo": "00020126350014br.gov.bcb.pix0113chave@pix.com5204000053039865406306.305802BR5912VICTOR CELLI6009SAO PAULO62070503***63049586",
+"acao": "/clientes/27/wa/cobranca",
+"svg": "/clientes/27/cobranca/cartao.svg"
+},
+"ordem": "2026-11-16",
+"frase_valor": "R$ 300,00",
+"texto": "renovação venceu em 16/11/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 26 Bê",
+"cliente_id": 27,
+"valor": "306,30",
+"descricao": "Mensalidade 11/2026",
+"mensal": "300,00",
+"encargos": "6,30",
+"nota": "multa de R$ 6,00 e juros de R$ 0,30 incluídos"
+}
+},
+{
+"wa": true
+},
+{
+"rotulo": "Pular mês",
+"href": "/clientes/27#renovacao"
+}
+]
+},
+"28": {
+"id": 28,
+"nome": "Aluno 27 Ána",
+"tel": "11999990000",
+"valor": 600.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-11-30",
+"vence": "2026-11-30",
+"dias": 11,
+"vencida": false,
+"pendente": false,
+"dia": 30
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "pulou o mês",
+"previsto": 0.0,
+"recebido": 0,
+"ultimo_pago": "2026-10",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-09-30",
+"fim": "2026-10-30",
+"mes": "2026-09",
+"feitas": 12,
+"esperadas": 7.2,
+"uteis": 25
+},
+"mes_atual": 0,
+"ultima": "2026-10-31",
+"dias_sem": 0
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 0.0,
+"pausado_no_mes": true,
+"situacao": "em_dia",
+"rotulo": "Em dia",
+"cor": "verde",
+"grav": 4,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 27 Ána",
+"frase_valor": "R$ 600,00",
+"texto": "em dia",
+"acoes": []
+},
+"29": {
+"id": 29,
+"nome": "Aluno 28 Ána",
+"tel": null,
+"valor": 450.5,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-12-22",
+"vence": "2026-12-22",
+"dias": 33,
+"vencida": false,
+"pendente": false,
+"dia": 22
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 450.5,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-22",
+"fim": "2026-11-22",
+"mes": "2026-10",
+"feitas": 3,
+"esperadas": 2.8,
+"uteis": 22
+},
+"mes_atual": 2,
+"ultima": "2026-11-06",
+"dias_sem": 13
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 0.0,
+"pausado_no_mes": false,
+"situacao": "cadastro_incompleto",
+"rotulo": "Cadastro incompleto",
+"cor": "azul",
+"grav": 3,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 28 Ána",
+"frase_valor": "R$ 450,50",
+"texto": "cadastro incompleto: falta telefone",
+"acoes": [
+{
+"rotulo": "Completar cadastro",
+"href": "/clientes/29#cadastro"
+}
+]
+},
+"30": {
+"id": 30,
+"nome": "Aluno 29 Bê",
+"tel": "",
+"valor": 600.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-12-17",
+"vence": "2026-12-17",
+"dias": 28,
+"vencida": false,
+"pendente": false,
+"dia": 17
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 600.0,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-17",
+"fim": "2026-11-17",
+"mes": "2026-10",
+"feitas": 3,
+"esperadas": 9.2,
+"uteis": 22
+},
+"mes_atual": 2,
+"ultima": "2026-11-10",
+"dias_sem": 9
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 404.74,
+"pausado_no_mes": false,
+"situacao": "cadastro_incompleto",
+"rotulo": "Cadastro incompleto",
+"cor": "azul",
+"grav": 3,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 29 Bê",
+"frase_valor": "R$ 600,00",
+"texto": "cadastro incompleto: falta telefone",
+"acoes": [
+{
+"rotulo": "Completar cadastro",
+"href": "/clientes/30#cadastro"
+}
+]
+},
+"31": {
+"id": 31,
+"nome": "Aluno 30 Ána",
+"tel": null,
+"valor": 999.99,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-10-30",
+"vence": "2026-10-30",
+"dias": -20,
+"vencida": true,
+"pendente": false,
+"dia": 30
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 999.99,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 6,
+"ultima": "2026-11-18",
+"dias_sem": 1
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": null,
+"botao": "Cobrar R$ 1.026,66",
+"extra": {
+"valor": "R$ 999,99",
+"dias": 20,
+"multa": "R$ 20,00",
+"juros": "R$ 6,67",
+"total": "R$ 1.026,66"
+},
+"data_modelo": "30/10/2026",
+"cobranca": {
+"meses": 1,
+"dias": 20,
+"bruto": 999.99,
+"credito": 0.0,
+"valor": 999.99,
+"multa": 20.0,
+"juros": 6.67,
+"total": 1026.66
+},
+"cartao": null,
+"ordem": "2026-10-30",
+"frase_valor": "R$ 999,99",
+"texto": "renovação venceu em 30/10/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 30 Ána",
+"cliente_id": 31,
+"valor": "1026,66",
+"descricao": "Mensalidade 10/2026",
+"mensal": "999,99",
+"encargos": "26,67",
+"nota": "multa de R$ 20,00 e juros de R$ 6,67 incluídos"
+}
+},
+{
+"rotulo": "Cadastre o telefone",
+"href": "/clientes/31#cadastro"
+},
+{
+"rotulo": "Pular mês",
+"href": "/clientes/31#renovacao"
+}
+]
+},
+"32": {
+"id": 32,
+"nome": "Aluno 31 Cid",
+"tel": null,
+"valor": 615.33,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-11-18",
+"vence": "2026-11-18",
+"dias": -1,
+"vencida": true,
+"pendente": false,
+"dia": 18
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 615.33,
+"recebido": 0,
+"ultimo_pago": "2026-09",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 0,
+"ultima": "2026-10-06",
+"dias_sem": 35
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": null,
+"botao": "Cobrar R$ 627,85",
+"extra": {
+"valor": "R$ 615,33",
+"dias": 1,
+"multa": "R$ 12,31",
+"juros": "R$ 0,21",
+"total": "R$ 627,85"
+},
+"data_modelo": "18/11/2026",
+"cobranca": {
+"meses": 1,
+"dias": 1,
+"bruto": 615.33,
+"credito": 0.0,
+"valor": 615.33,
+"multa": 12.31,
+"juros": 0.21,
+"total": 627.85
+},
+"cartao": null,
+"ordem": "2026-11-18",
+"frase_valor": "R$ 615,33",
+"texto": "renovação venceu em 18/11/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 31 Cid",
+"cliente_id": 32,
+"valor": "627,85",
+"descricao": "Mensalidade 11/2026",
+"mensal": "615,33",
+"encargos": "12,52",
+"nota": "multa de R$ 12,31 e juros de R$ 0,21 incluídos"
+}
+},
+{
+"rotulo": "Cadastre o telefone",
+"href": "/clientes/32#cadastro"
+},
+{
+"rotulo": "Já pagou adiantado",
+"href": "/clientes/32#pagamentos"
+}
+]
+},
+"33": {
+"id": 33,
+"nome": "Aluno 32 Bê",
+"tel": null,
+"valor": 450.5,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-12-12",
+"vence": "2026-12-12",
+"dias": 23,
+"vencida": false,
+"pendente": false,
+"dia": 12
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "recebido",
+"previsto": 450.5,
+"recebido": 450.5,
+"ultimo_pago": "2026-11",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-12",
+"fim": "2026-11-12",
+"mes": "2026-10",
+"feitas": 0,
+"esperadas": 6.1,
+"uteis": 22
+},
+"mes_atual": 0,
+"ultima": "2026-03-21",
+"dias_sem": 234
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 450.5,
+"pausado_no_mes": false,
+"situacao": "pago_sem_aula",
+"rotulo": "Pagou sem aula",
+"cor": "amarelo",
+"grav": 2,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 32 Bê",
+"frase_valor": "R$ 450,50",
+"texto": "pagou e não teve aula em 10/2026",
+"acoes": [
+{
+"rotulo": "Pulou o mês",
+"dialogo": "dlg-pulou",
+"classe": "claro",
+"dados": {
+"titulo": "Aluno 32 Bê pulou o mês? A renovação de 12/12/2026 vai para 12/01/2027, sem cobrança.",
+"acao": "/alunos/33/pulou"
+}
+},
+{
+"rotulo": "Crédito na próxima (R$ 450,50)",
+"dialogo": "dlg-credito",
+"classe": "claro",
+"dados": {
+"titulo": "Crédito para Aluno 32 Bê: não usou 10/2026",
+"acao": "/alunos/33/credito",
+"valor": "450,50",
+"mes": "2026-10"
+}
+}
+]
+},
+"34": {
+"id": 34,
+"nome": "Aluno 33 Bê",
+"tel": "11999990000",
+"valor": 300.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-12-06",
+"vence": "2026-12-06",
+"dias": 17,
+"vencida": false,
+"pendente": false,
+"dia": 6
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 300.0,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-06",
+"fim": "2026-11-06",
+"mes": "2026-10",
+"feitas": 11,
+"esperadas": 0,
+"uteis": 22
+},
+"mes_atual": 4,
+"ultima": "2026-11-13",
+"dias_sem": 6
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 0.0,
+"pausado_no_mes": false,
+"situacao": "em_dia",
+"rotulo": "Em dia",
+"cor": "verde",
+"grav": 4,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 33 Bê",
+"frase_valor": "R$ 300,00",
+"texto": "em dia",
+"acoes": []
+},
+"35": {
+"id": 35,
+"nome": "Aluno 34 Cid",
+"tel": "",
+"valor": 615.33,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-12-13",
+"vence": "2026-12-13",
+"dias": 24,
+"vencida": false,
+"pendente": false,
+"dia": 13
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "recebido",
+"previsto": 615.33,
+"recebido": 584.56,
+"ultimo_pago": "2026-11",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-13",
+"fim": "2026-11-13",
+"mes": "2026-10",
+"feitas": 5,
+"esperadas": 6.1,
+"uteis": 22
+},
+"mes_atual": 4,
+"ultima": "2026-11-12",
+"dias_sem": 7
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 114.72,
+"pausado_no_mes": false,
+"situacao": "cadastro_incompleto",
+"rotulo": "Cadastro incompleto",
+"cor": "azul",
+"grav": 3,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 34 Cid",
+"frase_valor": "R$ 615,33",
+"texto": "cadastro incompleto: falta telefone",
+"acoes": [
+{
+"rotulo": "Completar cadastro",
+"href": "/clientes/35#cadastro"
+}
+]
+},
+"37": {
+"id": 37,
+"nome": "Aluno 36 Bê",
+"tel": "",
+"valor": 615.33,
+"tem_aulas": false,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-12-05",
+"vence": "2026-12-05",
+"dias": 16,
+"vencida": false,
+"pendente": false,
+"dia": 5
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "recebido",
+"previsto": 615.33,
+"recebido": 307.67,
+"ultimo_pago": "2026-11",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 3,
+"ultima": "2026-11-15",
+"dias_sem": null
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cadastro_incompleto",
+"rotulo": "Cadastro incompleto",
+"cor": "azul",
+"grav": 3,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 36 Bê",
+"frase_valor": "R$ 615,33",
+"texto": "cadastro incompleto: falta telefone",
+"acoes": [
+{
+"rotulo": "Completar cadastro",
+"href": "/clientes/37#cadastro"
+}
+]
+},
+"38": {
+"id": 38,
+"nome": "Aluno 37 Ána",
+"tel": null,
+"valor": 600.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-10-24",
+"vence": "2026-10-24",
+"dias": -26,
+"vencida": true,
+"pendente": false,
+"dia": 24
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 600.0,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 3,
+"ultima": "2026-11-18",
+"dias_sem": 1
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": null,
+"botao": "Cobrar R$ 617,20",
+"extra": {
+"valor": "R$ 600,00",
+"dias": 26,
+"multa": "R$ 12,00",
+"juros": "R$ 5,20",
+"total": "R$ 617,20"
+},
+"data_modelo": "24/10/2026",
+"cobranca": {
+"meses": 1,
+"dias": 26,
+"bruto": 600.0,
+"credito": 0.0,
+"valor": 600.0,
+"multa": 12.0,
+"juros": 5.2,
+"total": 617.2
+},
+"cartao": null,
+"ordem": "2026-10-24",
+"frase_valor": "R$ 600,00",
+"texto": "renovação venceu em 24/10/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 37 Ána",
+"cliente_id": 38,
+"valor": "617,20",
+"descricao": "Mensalidade 10/2026",
+"mensal": "600,00",
+"encargos": "17,20",
+"nota": "multa de R$ 12,00 e juros de R$ 5,20 incluídos"
+}
+},
+{
+"rotulo": "Cadastre o telefone",
+"href": "/clientes/38#cadastro"
+},
+{
+"rotulo": "Pular mês",
+"href": "/clientes/38#renovacao"
+}
+]
+},
+"39": {
+"id": 39,
+"nome": "Aluno 38 Ána",
+"tel": "11999990000",
+"valor": 615.33,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": null,
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 495.33,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 2,
+"ultima": "2026-11-17",
+"dias_sem": 2
+},
+"credito": 120.0,
+"credito_total": 120.0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cadastro_incompleto",
+"rotulo": "Cadastro incompleto",
+"cor": "azul",
+"grav": 3,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 38 Ána",
+"frase_valor": "R$ 495,33 (R$ 615,33 − R$ 120,00 de crédito das aulas não usadas em 08/2026)",
+"texto": "cadastro incompleto: falta renovação",
+"acoes": [
+{
+"rotulo": "Completar cadastro",
+"href": "/clientes/39#cadastro"
+}
+]
+},
+"40": {
+"id": 40,
+"nome": "Aluno 39 Cid",
+"tel": "",
+"valor": 615.33,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-11-21",
+"vence": "2026-11-21",
+"dias": 2,
+"vencida": false,
+"pendente": false,
+"dia": 21
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 615.33,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-21",
+"fim": "2026-11-21",
+"mes": "2026-10",
+"feitas": 3,
+"esperadas": 3.1,
+"uteis": 22
+},
+"mes_atual": 1,
+"ultima": "2026-11-18",
+"dias_sem": 1
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 14.6,
+"pausado_no_mes": false,
+"situacao": "vence_logo",
+"rotulo": "Vence logo",
+"cor": "amarelo",
+"grav": 2,
+"modelo": null,
+"botao": null,
+"extra": {
+"valor": "R$ 615,33"
+},
+"data_modelo": "21/11/2026",
+"cobranca": null,
+"cartao": null,
+"ordem": "2026-11-21",
+"frase_valor": "R$ 615,33",
+"texto": "renovação em 21/11/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 39 Cid",
+"cliente_id": 40,
+"valor": "615,33",
+"descricao": "Mensalidade 11/2026",
+"mensal": "615,33"
+}
+},
+{
+"rotulo": "Cadastre o telefone",
+"href": "/clientes/40#cadastro"
+}
+]
+},
+"41": {
+"id": 41,
+"nome": "Aluno 40 Cid",
+"tel": "",
+"valor": 615.33,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": null,
+"pagamento": {
+"mes": "2026-11",
+"situacao": null,
+"previsto": 0.0,
+"recebido": 0.0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 1,
+"ultima": "2026-11-04",
+"dias_sem": 15
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "sem_aula_recente",
+"rotulo": "Sem aula",
+"cor": "vermelho",
+"grav": 1,
+"modelo": "falta",
+"botao": null,
+"extra": null,
+"data_modelo": "04/11/2026",
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 40 Cid",
+"frase_valor": "R$ 615,33",
+"texto": "sem aula desde 04/11/2026",
+"acoes": [
+{
+"rotulo": "Abrir agenda",
+"href": "/agenda?aluno=41"
+},
+{
+"wa": true
+}
+]
+},
+"42": {
+"id": 42,
+"nome": "Aluno 41 Bê",
+"tel": null,
+"valor": 0.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-11-20",
+"vence": "2026-11-20",
+"dias": 1,
+"vencida": false,
+"pendente": false,
+"dia": 20
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": null,
+"previsto": 0.0,
+"recebido": 0.0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-20",
+"fim": "2026-11-20",
+"mes": "2026-10",
+"feitas": 0,
+"esperadas": 0.5,
+"uteis": 2
+},
+"mes_atual": 0,
+"ultima": "2026-04-05",
+"dias_sem": 186
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 0.0,
+"pausado_no_mes": true,
+"situacao": "vence_logo",
+"rotulo": "Vence logo",
+"cor": "amarelo",
+"grav": 2,
+"modelo": "renovacao",
+"botao": null,
+"extra": {
+"valor": ""
+},
+"data_modelo": "20/11/2026",
+"cobranca": null,
+"cartao": null,
+"ordem": "2026-11-20",
+"frase_valor": "",
+"texto": "renovação em 20/11/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 41 Bê",
+"cliente_id": 42,
+"valor": "",
+"descricao": "Mensalidade 11/2026",
+"mensal": "0,00"
+}
+},
+{
+"wa": true
+}
+]
+},
+"43": {
+"id": 43,
+"nome": "Aluno 42 Cid",
+"tel": null,
+"valor": 600.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": null,
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 600.0,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 0,
+"ultima": null,
+"dias_sem": null
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "sem_aula_recente",
+"rotulo": "Sem aula",
+"cor": "vermelho",
+"grav": 1,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 42 Cid",
+"frase_valor": "R$ 600,00",
+"texto": "nenhuma aula registrada",
+"acoes": [
+{
+"rotulo": "Abrir agenda",
+"href": "/agenda?aluno=43"
+},
+{
+"rotulo": "Não tem aula (consultoria)",
+"href": "/clientes?ids=43&motivo=sem-aula"
+}
+]
+},
+"44": {
+"id": 44,
+"nome": "Aluno 43 Cid",
+"tel": "",
+"valor": 300.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2027-01-01",
+"vence": "2027-01-01",
+"dias": 43,
+"vencida": false,
+"pendente": false,
+"dia": 1
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "recebido",
+"previsto": 300.0,
+"recebido": 150.0,
+"ultimo_pago": "2026-11",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-01",
+"fim": "2026-11-01",
+"mes": "2026-10",
+"feitas": 1,
+"esperadas": 10.1,
+"uteis": 24
+},
+"mes_atual": 1,
+"ultima": "2026-11-05",
+"dias_sem": 14
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 270.17,
+"pausado_no_mes": false,
+"situacao": "cadastro_incompleto",
+"rotulo": "Cadastro incompleto",
+"cor": "azul",
+"grav": 3,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 43 Cid",
+"frase_valor": "R$ 300,00",
+"texto": "cadastro incompleto: falta telefone",
+"acoes": [
+{
+"rotulo": "Completar cadastro",
+"href": "/clientes/44#cadastro"
+}
+]
+},
+"45": {
+"id": 45,
+"nome": "Aluno 44 Bê",
+"tel": "(11) 98888-7777",
+"valor": 600.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-10-19",
+"vence": "2026-10-19",
+"dias": -31,
+"vencida": true,
+"pendente": false,
+"dia": 19
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 600.0,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 0,
+"ultima": null,
+"dias_sem": null
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": "cobranca",
+"botao": "Cobrança crítica · R$ 618,20",
+"extra": {
+"valor": "R$ 600,00",
+"dias": 31,
+"multa": "R$ 12,00",
+"juros": "R$ 6,20",
+"total": "R$ 618,20"
+},
+"data_modelo": "19/10/2026",
+"cobranca": {
+"meses": 1,
+"dias": 31,
+"bruto": 600.0,
+"credito": 0.0,
+"valor": 600.0,
+"multa": 12.0,
+"juros": 6.2,
+"total": 618.2
+},
+"cartao": {
+"cid": 45,
+"codigo": "00020126350014br.gov.bcb.pix0113chave@pix.com5204000053039865406618.205802BR5912VICTOR CELLI6009SAO PAULO62070503***63044784",
+"acao": "/clientes/45/wa/cobranca",
+"svg": "/clientes/45/cobranca/cartao.svg"
+},
+"ordem": "2026-10-19",
+"frase_valor": "R$ 600,00",
+"texto": "renovação venceu em 19/10/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 44 Bê",
+"cliente_id": 45,
+"valor": "618,20",
+"descricao": "Mensalidade 10/2026",
+"mensal": "600,00",
+"encargos": "18,20",
+"nota": "multa de R$ 12,00 e juros de R$ 6,20 incluídos"
+}
+},
+{
+"wa": true
+},
+{
+"rotulo": "Pular mês",
+"href": "/clientes/45#renovacao"
+}
+]
+},
+"46": {
+"id": 46,
+"nome": "Aluno 45 Cid",
+"tel": "",
+"valor": 999.99,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": null,
+"pagamento": {
+"mes": "2026-11",
+"situacao": "recebido",
+"previsto": 879.99,
+"recebido": 999.99,
+"ultimo_pago": "2026-11",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 0,
+"ultima": null,
+"dias_sem": null
+},
+"credito": 120.0,
+"credito_total": 120.0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "sem_aula_recente",
+"rotulo": "Sem aula",
+"cor": "vermelho",
+"grav": 1,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 45 Cid",
+"frase_valor": "R$ 879,99 (R$ 999,99 − R$ 120,00 de crédito das aulas não usadas em 08/2026)",
+"texto": "nenhuma aula registrada",
+"acoes": [
+{
+"rotulo": "Abrir agenda",
+"href": "/agenda?aluno=46"
+},
+{
+"rotulo": "Não tem aula (consultoria)",
+"href": "/clientes?ids=46&motivo=sem-aula"
+}
+]
+},
+"47": {
+"id": 47,
+"nome": "Aluno 46 Cid",
+"tel": "11999990000",
+"valor": 999.99,
+"tem_aulas": false,
+"consultoria": true,
+"renovacao": {
+"efetiva": "2026-12-07",
+"vence": "2026-12-07",
+"dias": 18,
+"vencida": false,
+"pendente": false,
+"dia": 7
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 999.99,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 4,
+"ultima": "2026-11-18",
+"dias_sem": null
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "em_dia",
+"rotulo": "Em dia",
+"cor": "verde",
+"grav": 4,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 46 Cid",
+"frase_valor": "R$ 999,99",
+"texto": "em dia",
+"acoes": []
+},
+"48": {
+"id": 48,
+"nome": "Aluno 47 Bê",
+"tel": null,
+"valor": 450.5,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-10-18",
+"vence": "2026-10-18",
+"dias": -32,
+"vencida": true,
+"pendente": false,
+"dia": 18
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 450.5,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 4,
+"ultima": "2026-11-15",
+"dias_sem": 4
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": null,
+"botao": "Cobrar R$ 923,98",
+"extra": {
+"valor": "R$ 901,00",
+"dias": 32,
+"multa": "R$ 18,02",
+"juros": "R$ 4,96",
+"total": "R$ 923,98"
+},
+"data_modelo": "18/10/2026",
+"cobranca": {
+"meses": 2,
+"dias": 32,
+"bruto": 901.0,
+"credito": 0.0,
+"valor": 901.0,
+"multa": 18.02,
+"juros": 4.96,
+"total": 923.98
+},
+"cartao": null,
+"ordem": "2026-10-18",
+"frase_valor": "R$ 450,50",
+"texto": "renovação venceu em 18/10/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 47 Bê",
+"cliente_id": 48,
+"valor": "923,98",
+"descricao": "Mensalidade 10/2026",
+"mensal": "450,50",
+"encargos": "22,98",
+"nota": "multa de R$ 18,02 e juros de R$ 4,96 incluídos"
+}
+},
+{
+"rotulo": "Cadastre o telefone",
+"href": "/clientes/48#cadastro"
+},
+{
+"rotulo": "Pular mês",
+"href": "/clientes/48#renovacao"
+}
+]
+},
+"49": {
+"id": 49,
+"nome": "Aluno 48 Cid",
+"tel": "(11) 98888-7777",
+"valor": 600.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-11-28",
+"vence": "2026-11-28",
+"dias": 9,
+"vencida": false,
+"pendente": false,
+"dia": 28
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": null,
+"previsto": 0.0,
+"recebido": 0.0,
+"ultimo_pago": "2026-10",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-09-28",
+"fim": "2026-10-28",
+"mes": "2026-09",
+"feitas": 9,
+"esperadas": 7.8,
+"uteis": 27
+},
+"mes_atual": 3,
+"ultima": "2026-11-18",
+"dias_sem": 1
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 0.0,
+"pausado_no_mes": false,
+"situacao": "em_dia",
+"rotulo": "Em dia",
+"cor": "verde",
+"grav": 4,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 48 Cid",
+"frase_valor": "R$ 600,00",
+"texto": "em dia",
+"acoes": []
+},
+"51": {
+"id": 51,
+"nome": "Aluno 50 Bê",
+"tel": null,
+"valor": 999.99,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-12-15",
+"vence": "2026-12-15",
+"dias": 26,
+"vencida": false,
+"pendente": false,
+"dia": 15
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "recebido",
+"previsto": 999.99,
+"recebido": 500.0,
+"ultimo_pago": "2026-11",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-15",
+"fim": "2026-11-15",
+"mes": "2026-10",
+"feitas": 10,
+"esperadas": 6.1,
+"uteis": 22
+},
+"mes_atual": 4,
+"ultima": "2026-11-14",
+"dias_sem": 5
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 0.0,
+"pausado_no_mes": false,
+"situacao": "cadastro_incompleto",
+"rotulo": "Cadastro incompleto",
+"cor": "azul",
+"grav": 3,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 50 Bê",
+"frase_valor": "R$ 999,99",
+"texto": "cadastro incompleto: falta telefone",
+"acoes": [
+{
+"rotulo": "Completar cadastro",
+"href": "/clientes/51#cadastro"
+}
+]
+},
+"52": {
+"id": 52,
+"nome": "Aluno 51 Bê",
+"tel": "(11) 98888-7777",
+"valor": 450.5,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": null,
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 450.5,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 2,
+"ultima": "2026-11-17",
+"dias_sem": 2
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cadastro_incompleto",
+"rotulo": "Cadastro incompleto",
+"cor": "azul",
+"grav": 3,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 51 Bê",
+"frase_valor": "R$ 450,50",
+"texto": "cadastro incompleto: falta renovação",
+"acoes": [
+{
+"rotulo": "Completar cadastro",
+"href": "/clientes/52#cadastro"
+}
+]
+},
+"53": {
+"id": 53,
+"nome": "Aluno 52 Bê",
+"tel": "11999990000",
+"valor": 300.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": null,
+"pagamento": {
+"mes": "2026-11",
+"situacao": "recebido",
+"previsto": 300.0,
+"recebido": 150.0,
+"ultimo_pago": "2026-11",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 2,
+"ultima": "2026-11-11",
+"dias_sem": 8
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "em_dia",
+"rotulo": "Em dia",
+"cor": "verde",
+"grav": 4,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 52 Bê",
+"frase_valor": "R$ 300,00",
+"texto": "em dia",
+"acoes": []
+},
+"55": {
+"id": 55,
+"nome": "Aluno 54 Cid",
+"tel": null,
+"valor": 300.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-10-18",
+"vence": "2026-10-18",
+"dias": -32,
+"vencida": true,
+"pendente": false,
+"dia": 18
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "pago adiantado",
+"previsto": 300.0,
+"recebido": 0,
+"ultimo_pago": "2026-09",
+"coberto_ate": "2026-11"
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 0,
+"ultima": "2026-10-28",
+"dias_sem": 17
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": null,
+"botao": "Cobrar R$ 615,30",
+"extra": {
+"valor": "R$ 600,00",
+"dias": 32,
+"multa": "R$ 12,00",
+"juros": "R$ 3,30",
+"total": "R$ 615,30"
+},
+"data_modelo": "18/10/2026",
+"cobranca": {
+"meses": 2,
+"dias": 32,
+"bruto": 600.0,
+"credito": 0.0,
+"valor": 600.0,
+"multa": 12.0,
+"juros": 3.3,
+"total": 615.3
+},
+"cartao": null,
+"ordem": "2026-10-18",
+"frase_valor": "R$ 300,00",
+"texto": "renovação venceu em 18/10/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 54 Cid",
+"cliente_id": 55,
+"valor": "615,30",
+"descricao": "Mensalidade 10/2026",
+"mensal": "300,00",
+"encargos": "15,30",
+"nota": "multa de R$ 12,00 e juros de R$ 3,30 incluídos"
+}
+},
+{
+"rotulo": "Cadastre o telefone",
+"href": "/clientes/55#cadastro"
+},
+{
+"rotulo": "Já pagou adiantado",
+"href": "/clientes/55#pagamentos"
+}
+]
+},
+"56": {
+"id": 56,
+"nome": "Aluno 55 Bê",
+"tel": "11999990000",
+"valor": 0.0,
+"tem_aulas": false,
+"consultoria": true,
+"renovacao": null,
+"pagamento": {
+"mes": "2026-11",
+"situacao": null,
+"previsto": 0.0,
+"recebido": 0.0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 2,
+"ultima": "2026-11-05",
+"dias_sem": null
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cadastro_incompleto",
+"rotulo": "Cadastro incompleto",
+"cor": "azul",
+"grav": 3,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 55 Bê",
+"frase_valor": "",
+"texto": "cadastro incompleto: falta renovação",
+"acoes": [
+{
+"rotulo": "Completar cadastro",
+"href": "/clientes/56#cadastro"
+}
+]
+},
+"57": {
+"id": 57,
+"nome": "Aluno 56 Ána",
+"tel": "(11) 98888-7777",
+"valor": 615.33,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-12-24",
+"vence": "2026-12-24",
+"dias": 35,
+"vencida": false,
+"pendente": false,
+"dia": 24
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 615.33,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-24",
+"fim": "2026-11-24",
+"mes": "2026-10",
+"feitas": 9,
+"esperadas": 2.8,
+"uteis": 22
+},
+"mes_atual": 7,
+"ultima": "2026-11-19",
+"dias_sem": 0
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 0.0,
+"pausado_no_mes": false,
+"situacao": "em_dia",
+"rotulo": "Em dia",
+"cor": "verde",
+"grav": 4,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 56 Ána",
+"frase_valor": "R$ 615,33",
+"texto": "em dia",
+"acoes": []
+},
+"59": {
+"id": 59,
+"nome": "Aluno 58 Bê",
+"tel": "11999990000",
+"valor": 600.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-12-04",
+"vence": "2026-12-04",
+"dias": 15,
+"vencida": false,
+"pendente": false,
+"dia": 4
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "recebido",
+"previsto": 600.0,
+"recebido": 600.0,
+"ultimo_pago": "2026-11",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-04",
+"fim": "2026-11-04",
+"mes": "2026-10",
+"feitas": 1,
+"esperadas": 2.8,
+"uteis": 22
+},
+"mes_atual": 0,
+"ultima": "2026-10-31",
+"dias_sem": 17
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 388.64,
+"pausado_no_mes": false,
+"situacao": "sem_aula_recente",
+"rotulo": "Sem aula",
+"cor": "vermelho",
+"grav": 1,
+"modelo": "falta",
+"botao": null,
+"extra": null,
+"data_modelo": "31/10/2026",
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 58 Bê",
+"frase_valor": "R$ 600,00",
+"texto": "sem aula desde 31/10/2026",
+"acoes": [
+{
+"rotulo": "Abrir agenda",
+"href": "/agenda?aluno=59"
+},
+{
+"wa": true
+}
+]
+},
+"60": {
+"id": 60,
+"nome": "Aluno 59 Ána",
+"tel": null,
+"valor": 0.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-12-08",
+"vence": "2026-12-08",
+"dias": 19,
+"vencida": false,
+"pendente": false,
+"dia": 8
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": null,
+"previsto": 0.0,
+"recebido": 0.0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-08",
+"fim": "2026-11-08",
+"mes": "2026-10",
+"feitas": 0,
+"esperadas": 0,
+"uteis": 22
+},
+"mes_atual": 0,
+"ultima": null,
+"dias_sem": null
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 0.0,
+"pausado_no_mes": true,
+"situacao": "sem_aula_recente",
+"rotulo": "Sem aula",
+"cor": "vermelho",
+"grav": 1,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 59 Ána",
+"frase_valor": "",
+"texto": "nenhuma aula registrada",
+"acoes": [
+{
+"rotulo": "Abrir agenda",
+"href": "/agenda?aluno=60"
+}
+]
+},
+"61": {
+"id": 61,
+"nome": "Aluno 60 Ána",
+"tel": null,
+"valor": 0.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": null,
+"pagamento": {
+"mes": "2026-11",
+"situacao": null,
+"previsto": 0.0,
+"recebido": 0.0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 0,
+"ultima": "2026-01-25",
+"dias_sem": 289
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "sem_aula_recente",
+"rotulo": "Sem aula",
+"cor": "vermelho",
+"grav": 1,
+"modelo": "falta",
+"botao": null,
+"extra": null,
+"data_modelo": "25/01/2026",
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 60 Ána",
+"frase_valor": "",
+"texto": "sem aula desde 25/01/2026",
+"acoes": [
+{
+"rotulo": "Abrir agenda",
+"href": "/agenda?aluno=61"
+},
+{
+"wa": true
+}
+]
+},
+"62": {
+"id": 62,
+"nome": "Aluno 61 Bê",
+"tel": "(11) 98888-7777",
+"valor": 600.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-11-28",
+"vence": "2026-11-28",
+"dias": 9,
+"vencida": false,
+"pendente": false,
+"dia": 28
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "recebido",
+"previsto": 600.0,
+"recebido": 570.0,
+"ultimo_pago": "2026-11",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-09-28",
+"fim": "2026-10-28",
+"mes": "2026-09",
+"feitas": 1,
+"esperadas": 7.2,
+"uteis": 27
+},
+"mes_atual": 1,
+"ultima": "2026-11-13",
+"dias_sem": 6
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 516.67,
+"pausado_no_mes": false,
+"situacao": "em_dia",
+"rotulo": "Em dia",
+"cor": "verde",
+"grav": 4,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 61 Bê",
+"frase_valor": "R$ 600,00",
+"texto": "em dia",
+"acoes": []
+},
+"63": {
+"id": 63,
+"nome": "Aluno 62 Bê",
+"tel": "(11) 98888-7777",
+"valor": 600.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-09-12",
+"vence": "2026-09-12",
+"dias": -68,
+"vencida": true,
+"pendente": false,
+"dia": 12
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 600.0,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 0,
+"ultima": "2026-10-25",
+"dias_sem": 17
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": "cobranca",
+"botao": "Cobrança crítica · R$ 1.858,60",
+"extra": {
+"valor": "R$ 1.800,00",
+"dias": 68,
+"multa": "R$ 36,00",
+"juros": "R$ 22,60",
+"total": "R$ 1.858,60"
+},
+"data_modelo": "12/09/2026",
+"cobranca": {
+"meses": 3,
+"dias": 68,
+"bruto": 1800.0,
+"credito": 0.0,
+"valor": 1800.0,
+"multa": 36.0,
+"juros": 22.6,
+"total": 1858.6
+},
+"cartao": {
+"cid": 63,
+"codigo": "00020126350014br.gov.bcb.pix0113chave@pix.com52040000530398654071858.605802BR5912VICTOR CELLI6009SAO PAULO62070503***6304F1AA",
+"acao": "/clientes/63/wa/cobranca",
+"svg": "/clientes/63/cobranca/cartao.svg"
+},
+"ordem": "2026-09-12",
+"frase_valor": "R$ 600,00",
+"texto": "renovação venceu em 12/09/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 62 Bê",
+"cliente_id": 63,
+"valor": "1858,60",
+"descricao": "Mensalidade 09/2026",
+"mensal": "600,00",
+"encargos": "58,60",
+"nota": "multa de R$ 36,00 e juros de R$ 22,60 incluídos"
+}
+},
+{
+"wa": true
+},
+{
+"rotulo": "Pular mês",
+"href": "/clientes/63#renovacao"
+}
+]
+},
+"64": {
+"id": 64,
+"nome": "Aluno 63 Cid",
+"tel": "11999990000",
+"valor": 615.33,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-11-24",
+"vence": "2026-11-24",
+"dias": 5,
+"vencida": false,
+"pendente": false,
+"dia": 24
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 615.33,
+"recebido": 0,
+"ultimo_pago": "2026-10",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-24",
+"fim": "2026-11-24",
+"mes": "2026-10",
+"feitas": 2,
+"esperadas": 9.2,
+"uteis": 22
+},
+"mes_atual": 2,
+"ultima": "2026-11-17",
+"dias_sem": 2
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 481.83,
+"pausado_no_mes": false,
+"situacao": "vence_logo",
+"rotulo": "Vence logo",
+"cor": "amarelo",
+"grav": 2,
+"modelo": "renovacao",
+"botao": null,
+"extra": {
+"valor": "R$ 615,33"
+},
+"data_modelo": "24/11/2026",
+"cobranca": null,
+"cartao": null,
+"ordem": "2026-11-24",
+"frase_valor": "R$ 615,33",
+"texto": "renovação em 24/11/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 63 Cid",
+"cliente_id": 64,
+"valor": "615,33",
+"descricao": "Mensalidade 11/2026",
+"mensal": "615,33"
+}
+},
+{
+"wa": true
+},
+{
+"rotulo": "Já pagou adiantado",
+"href": "/clientes/64#pagamentos"
+}
+]
+},
+"65": {
+"id": 65,
+"nome": "Aluno 64 Bê",
+"tel": "11999990000",
+"valor": 300.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-11-10",
+"vence": "2026-11-10",
+"dias": -9,
+"vencida": true,
+"pendente": false,
+"dia": 10
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "pago adiantado",
+"previsto": 300.0,
+"recebido": 0,
+"ultimo_pago": "2026-10",
+"coberto_ate": "2026-12"
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 1,
+"ultima": "2026-11-07",
+"dias_sem": 0
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": true,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": "cobranca",
+"botao": "Cobrar R$ 306,90 · 9 dias",
+"extra": {
+"valor": "R$ 300,00",
+"dias": 9,
+"multa": "R$ 6,00",
+"juros": "R$ 0,90",
+"total": "R$ 306,90"
+},
+"data_modelo": "10/11/2026",
+"cobranca": {
+"meses": 1,
+"dias": 9,
+"bruto": 300.0,
+"credito": 0.0,
+"valor": 300.0,
+"multa": 6.0,
+"juros": 0.9,
+"total": 306.9
+},
+"cartao": {
+"cid": 65,
+"codigo": "00020126350014br.gov.bcb.pix0113chave@pix.com5204000053039865406306.905802BR5912VICTOR CELLI6009SAO PAULO62070503***63048965",
+"acao": "/clientes/65/wa/cobranca",
+"svg": "/clientes/65/cobranca/cartao.svg"
+},
+"ordem": "2026-11-10",
+"frase_valor": "R$ 300,00",
+"texto": "renovação venceu em 10/11/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 64 Bê",
+"cliente_id": 65,
+"valor": "306,90",
+"descricao": "Mensalidade 11/2026",
+"mensal": "300,00",
+"encargos": "6,90",
+"nota": "multa de R$ 6,00 e juros de R$ 0,90 incluídos"
+}
+},
+{
+"wa": true
+},
+{
+"rotulo": "Já pagou adiantado",
+"href": "/clientes/65#pagamentos"
+}
+]
+},
+"66": {
+"id": 66,
+"nome": "Aluno 65 Bê",
+"tel": "",
+"valor": 0.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-11-14",
+"vence": "2026-11-14",
+"dias": -5,
+"vencida": true,
+"pendente": false,
+"dia": 14
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": null,
+"previsto": 0.0,
+"recebido": 0.0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 2,
+"ultima": "2026-11-11",
+"dias_sem": 0
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": true,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": "renovacao",
+"botao": null,
+"extra": {
+"valor": ""
+},
+"data_modelo": "14/11/2026",
+"cobranca": null,
+"cartao": null,
+"ordem": "2026-11-14",
+"frase_valor": "",
+"texto": "renovação venceu em 14/11/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 65 Bê",
+"cliente_id": 66,
+"valor": "",
+"descricao": "Mensalidade 11/2026",
+"mensal": "0,00"
+}
+},
+{
+"wa": true
+},
+{
+"rotulo": "Pular mês",
+"href": "/clientes/66#renovacao"
+}
+]
+},
+"67": {
+"id": 67,
+"nome": "Aluno 66 Cid",
+"tel": "11999990000",
+"valor": 615.33,
+"tem_aulas": false,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-11-19",
+"vence": "2026-11-19",
+"dias": 0,
+"vencida": false,
+"pendente": false,
+"dia": 19
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": null,
+"previsto": 0.0,
+"recebido": 0.0,
+"ultimo_pago": "2026-10",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 0,
+"ultima": null,
+"dias_sem": null
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": true,
+"situacao": "vence_logo",
+"rotulo": "Vence logo",
+"cor": "amarelo",
+"grav": 2,
+"modelo": "renovacao",
+"botao": "Vence hoje · R$ 615,33",
+"extra": {
+"valor": "R$ 615,33"
+},
+"data_modelo": "19/11/2026",
+"cobranca": null,
+"cartao": {
+"cid": 67,
+"codigo": "00020126350014br.gov.bcb.pix0113chave@pix.com5204000053039865406615.335802BR5912VICTOR CELLI6009SAO PAULO62070503***63049E54",
+"acao": "/clientes/67/wa/cobranca",
+"svg": "/clientes/67/cobranca/cartao.svg"
+},
+"ordem": "2026-11-19",
+"frase_valor": "R$ 615,33",
+"texto": "renovação em 19/11/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 66 Cid",
+"cliente_id": 67,
+"valor": "615,33",
+"descricao": "Mensalidade 11/2026",
+"mensal": "615,33"
+}
+},
+{
+"wa": true
+},
+{
+"rotulo": "Já pagou adiantado",
+"href": "/clientes/67#pagamentos"
+}
+]
+},
+"68": {
+"id": 68,
+"nome": "Aluno 67 Bê",
+"tel": "",
+"valor": 999.99,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-12-05",
+"vence": "2026-12-05",
+"dias": 16,
+"vencida": false,
+"pendente": false,
+"dia": 5
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 700.49,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-05",
+"fim": "2026-11-05",
+"mes": "2026-10",
+"feitas": 2,
+"esperadas": 3.1,
+"uteis": 22
+},
+"mes_atual": 2,
+"ultima": "2026-11-05",
+"dias_sem": 14
+},
+"credito": 299.5,
+"credito_total": 299.5,
+"credito_sugerido": 349.15,
+"pausado_no_mes": false,
+"situacao": "cadastro_incompleto",
+"rotulo": "Cadastro incompleto",
+"cor": "azul",
+"grav": 3,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 67 Bê",
+"frase_valor": "R$ 700,49 (R$ 999,99 − R$ 299,50 de crédito das aulas não usadas em 10/2026)",
+"texto": "cadastro incompleto: falta telefone",
+"acoes": [
+{
+"rotulo": "Completar cadastro",
+"href": "/clientes/68#cadastro"
+}
+]
+},
+"69": {
+"id": 69,
+"nome": "Aluno 68 Bê",
+"tel": null,
+"valor": 999.99,
+"tem_aulas": false,
+"consultoria": false,
+"renovacao": null,
+"pagamento": {
+"mes": "2026-11",
+"situacao": "recebido",
+"previsto": 999.99,
+"recebido": 999.99,
+"ultimo_pago": "2026-11",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 1,
+"ultima": "2026-11-12",
+"dias_sem": null
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cadastro_incompleto",
+"rotulo": "Cadastro incompleto",
+"cor": "azul",
+"grav": 3,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 68 Bê",
+"frase_valor": "R$ 999,99",
+"texto": "cadastro incompleto: falta telefone",
+"acoes": [
+{
+"rotulo": "Completar cadastro",
+"href": "/clientes/69#cadastro"
+}
+]
+},
+"70": {
+"id": 70,
+"nome": "Aluno 69 Cid",
+"tel": "",
+"valor": 450.5,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-10-24",
+"vence": "2026-10-24",
+"dias": -26,
+"vencida": true,
+"pendente": false,
+"dia": 24
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 450.5,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 2,
+"ultima": "2026-11-18",
+"dias_sem": 1
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": null,
+"botao": "Cobrar R$ 463,41",
+"extra": {
+"valor": "R$ 450,50",
+"dias": 26,
+"multa": "R$ 9,01",
+"juros": "R$ 3,90",
+"total": "R$ 463,41"
+},
+"data_modelo": "24/10/2026",
+"cobranca": {
+"meses": 1,
+"dias": 26,
+"bruto": 450.5,
+"credito": 0.0,
+"valor": 450.5,
+"multa": 9.01,
+"juros": 3.9,
+"total": 463.41
+},
+"cartao": null,
+"ordem": "2026-10-24",
+"frase_valor": "R$ 450,50",
+"texto": "renovação venceu em 24/10/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 69 Cid",
+"cliente_id": 70,
+"valor": "463,41",
+"descricao": "Mensalidade 10/2026",
+"mensal": "450,50",
+"encargos": "12,91",
+"nota": "multa de R$ 9,01 e juros de R$ 3,90 incluídos"
+}
+},
+{
+"rotulo": "Cadastre o telefone",
+"href": "/clientes/70#cadastro"
+},
+{
+"rotulo": "Pular mês",
+"href": "/clientes/70#renovacao"
+}
+]
+}
+},
+"estado_um": {
+"1": {
+"id": 1,
+"nome": "Aluno 00 Ána",
+"tel": "(11) 98888-7777",
+"valor": 300.0,
+"tem_aulas": false,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-09-13",
+"vence": "2026-09-13",
+"dias": -67,
+"vencida": true,
+"pendente": false,
+"dia": 13
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": null,
+"previsto": 0.0,
+"recebido": 0.0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 4,
+"ultima": "2026-11-18",
+"dias_sem": null
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": "cobranca",
+"botao": "Cobrança crítica · R$ 929,00",
+"extra": {
+"valor": "R$ 900,00",
+"dias": 67,
+"multa": "R$ 18,00",
+"juros": "R$ 11,00",
+"total": "R$ 929,00"
+},
+"data_modelo": "13/09/2026",
+"cobranca": {
+"meses": 3,
+"dias": 67,
+"bruto": 900.0,
+"credito": 0.0,
+"valor": 900.0,
+"multa": 18.0,
+"juros": 11.0,
+"total": 929.0
+},
+"cartao": {
+"cid": 1,
+"codigo": "00020126350014br.gov.bcb.pix0113chave@pix.com5204000053039865406929.005802BR5912VICTOR CELLI6009SAO PAULO62070503***6304B932",
+"acao": "/clientes/1/wa/cobranca",
+"svg": "/clientes/1/cobranca/cartao.svg"
+},
+"ordem": "2026-09-13",
+"frase_valor": "R$ 300,00",
+"texto": "renovação venceu em 13/09/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 00 Ána",
+"cliente_id": 1,
+"valor": "929,00",
+"descricao": "Mensalidade 09/2026",
+"mensal": "300,00",
+"encargos": "29,00",
+"nota": "multa de R$ 18,00 e juros de R$ 11,00 incluídos"
+}
+},
+{
+"wa": true
+},
+{
+"rotulo": "Pular mês",
+"href": "/clientes/1#renovacao"
+}
+]
+},
+"8": {
+"id": 8,
+"nome": "Aluno 07 Ána",
+"tel": "(11) 98888-7777",
+"valor": 0.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-11-30",
+"vence": "2026-11-30",
+"dias": 11,
+"vencida": false,
+"pendente": false,
+"dia": 30
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "recebido",
+"previsto": 0.0,
+"recebido": 600.0,
+"ultimo_pago": "2026-11",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-09-30",
+"fim": "2026-10-30",
+"mes": "2026-09",
+"feitas": 0,
+"esperadas": 10.8,
+"uteis": 25
+},
+"mes_atual": 1,
+"ultima": "2026-11-13",
+"dias_sem": 1
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 0.0,
+"pausado_no_mes": true,
+"situacao": "pago_sem_aula",
+"rotulo": "Pagou sem aula",
+"cor": "amarelo",
+"grav": 2,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 07 Ána",
+"frase_valor": "",
+"texto": "pagou e não teve aula em 09/2026",
+"acoes": [
+{
+"rotulo": "Pulou o mês",
+"dialogo": "dlg-pulou",
+"classe": "claro",
+"dados": {
+"titulo": "Aluno 07 Ána pulou o mês? A renovação de 30/11/2026 vai para 30/12/2026, sem cobrança.",
+"acao": "/alunos/8/pulou"
+}
+},
+{
+"rotulo": "Crédito na próxima (R$ 0,00)",
+"dialogo": "dlg-credito",
+"classe": "claro",
+"dados": {
+"titulo": "Crédito para Aluno 07 Ána: não usou 09/2026",
+"acao": "/alunos/8/credito",
+"valor": "0,00",
+"mes": "2026-09"
+}
+}
+]
+},
+"15": {
+"id": 15,
+"nome": "Aluno 14 Ána",
+"tel": null,
+"valor": 300.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-10-15",
+"vence": "2026-10-15",
+"dias": -35,
+"vencida": true,
+"pendente": false,
+"dia": 15
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 300.0,
+"recebido": 0,
+"ultimo_pago": "2026-10",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 1,
+"ultima": "2026-11-15",
+"dias_sem": 4
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cobrar",
+"rotulo": "Vencida",
+"cor": "vermelho",
+"grav": 1,
+"modelo": null,
+"botao": "Cobrar R$ 615,90",
+"extra": {
+"valor": "R$ 600,00",
+"dias": 35,
+"multa": "R$ 12,00",
+"juros": "R$ 3,90",
+"total": "R$ 615,90"
+},
+"data_modelo": "15/10/2026",
+"cobranca": {
+"meses": 2,
+"dias": 35,
+"bruto": 600.0,
+"credito": 0.0,
+"valor": 600.0,
+"multa": 12.0,
+"juros": 3.9,
+"total": 615.9
+},
+"cartao": null,
+"ordem": "2026-10-15",
+"frase_valor": "R$ 300,00",
+"texto": "renovação venceu em 15/10/2026",
+"acoes": [
+{
+"rotulo": "Registrar pagamento",
+"dialogo": "dlg-pgto",
+"classe": "verde",
+"dados": {
+"titulo": "Registrar pagamento de Aluno 14 Ána",
+"cliente_id": 15,
+"valor": "615,90",
+"descricao": "Mensalidade 10/2026",
+"mensal": "300,00",
+"encargos": "15,90",
+"nota": "multa de R$ 12,00 e juros de R$ 3,90 incluídos"
+}
+},
+{
+"rotulo": "Cadastre o telefone",
+"href": "/clientes/15#cadastro"
+},
+{
+"rotulo": "Já pagou adiantado",
+"href": "/clientes/15#pagamentos"
+}
+]
+},
+"22": {
+"id": 22,
+"nome": "Aluno 21 Cid",
+"tel": "",
+"valor": 999.99,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-11-28",
+"vence": "2026-11-28",
+"dias": 9,
+"vencida": false,
+"pendente": false,
+"dia": 28
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 999.99,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-09-28",
+"fim": "2026-10-28",
+"mes": "2026-09",
+"feitas": 6,
+"esperadas": 7.8,
+"uteis": 27
+},
+"mes_atual": 0,
+"ultima": "2026-10-27",
+"dias_sem": 17
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 230.17,
+"pausado_no_mes": false,
+"situacao": "sem_aula_recente",
+"rotulo": "Sem aula",
+"cor": "vermelho",
+"grav": 1,
+"modelo": "falta",
+"botao": null,
+"extra": null,
+"data_modelo": "27/10/2026",
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 21 Cid",
+"frase_valor": "R$ 999,99",
+"texto": "sem aula desde 27/10/2026",
+"acoes": [
+{
+"rotulo": "Abrir agenda",
+"href": "/agenda?aluno=22"
+},
+{
+"wa": true
+}
+]
+},
+"29": {
+"id": 29,
+"nome": "Aluno 28 Ána",
+"tel": null,
+"valor": 450.5,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-12-22",
+"vence": "2026-12-22",
+"dias": 33,
+"vencida": false,
+"pendente": false,
+"dia": 22
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 450.5,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-22",
+"fim": "2026-11-22",
+"mes": "2026-10",
+"feitas": 3,
+"esperadas": 2.8,
+"uteis": 22
+},
+"mes_atual": 2,
+"ultima": "2026-11-06",
+"dias_sem": 13
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 0.0,
+"pausado_no_mes": false,
+"situacao": "cadastro_incompleto",
+"rotulo": "Cadastro incompleto",
+"cor": "azul",
+"grav": 3,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 28 Ána",
+"frase_valor": "R$ 450,50",
+"texto": "cadastro incompleto: falta telefone",
+"acoes": [
+{
+"rotulo": "Completar cadastro",
+"href": "/clientes/29#cadastro"
+}
+]
+},
+"37": {
+"id": 37,
+"nome": "Aluno 36 Bê",
+"tel": "",
+"valor": 615.33,
+"tem_aulas": false,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-12-05",
+"vence": "2026-12-05",
+"dias": 16,
+"vencida": false,
+"pendente": false,
+"dia": 5
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "recebido",
+"previsto": 615.33,
+"recebido": 307.67,
+"ultimo_pago": "2026-11",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 3,
+"ultima": "2026-11-15",
+"dias_sem": null
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cadastro_incompleto",
+"rotulo": "Cadastro incompleto",
+"cor": "azul",
+"grav": 3,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 36 Bê",
+"frase_valor": "R$ 615,33",
+"texto": "cadastro incompleto: falta telefone",
+"acoes": [
+{
+"rotulo": "Completar cadastro",
+"href": "/clientes/37#cadastro"
+}
+]
+},
+"44": {
+"id": 44,
+"nome": "Aluno 43 Cid",
+"tel": "",
+"valor": 300.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2027-01-01",
+"vence": "2027-01-01",
+"dias": 43,
+"vencida": false,
+"pendente": false,
+"dia": 1
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "recebido",
+"previsto": 300.0,
+"recebido": 150.0,
+"ultimo_pago": "2026-11",
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-01",
+"fim": "2026-11-01",
+"mes": "2026-10",
+"feitas": 1,
+"esperadas": 10.1,
+"uteis": 24
+},
+"mes_atual": 1,
+"ultima": "2026-11-05",
+"dias_sem": 14
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": 270.17,
+"pausado_no_mes": false,
+"situacao": "cadastro_incompleto",
+"rotulo": "Cadastro incompleto",
+"cor": "azul",
+"grav": 3,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 43 Cid",
+"frase_valor": "R$ 300,00",
+"texto": "cadastro incompleto: falta telefone",
+"acoes": [
+{
+"rotulo": "Completar cadastro",
+"href": "/clientes/44#cadastro"
+}
+]
+},
+"52": {
+"id": 52,
+"nome": "Aluno 51 Bê",
+"tel": "(11) 98888-7777",
+"valor": 450.5,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": null,
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 450.5,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 2,
+"ultima": "2026-11-17",
+"dias_sem": 2
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "cadastro_incompleto",
+"rotulo": "Cadastro incompleto",
+"cor": "azul",
+"grav": 3,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 51 Bê",
+"frase_valor": "R$ 450,50",
+"texto": "cadastro incompleto: falta renovação",
+"acoes": [
+{
+"rotulo": "Completar cadastro",
+"href": "/clientes/52#cadastro"
+}
+]
+},
+"61": {
+"id": 61,
+"nome": "Aluno 60 Ána",
+"tel": null,
+"valor": 0.0,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": null,
+"pagamento": {
+"mes": "2026-11",
+"situacao": null,
+"previsto": 0.0,
+"recebido": 0.0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": null,
+"mes_atual": 0,
+"ultima": "2026-01-25",
+"dias_sem": 289
+},
+"credito": 0.0,
+"credito_total": 0,
+"credito_sugerido": null,
+"pausado_no_mes": false,
+"situacao": "sem_aula_recente",
+"rotulo": "Sem aula",
+"cor": "vermelho",
+"grav": 1,
+"modelo": "falta",
+"botao": null,
+"extra": null,
+"data_modelo": "25/01/2026",
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 60 Ána",
+"frase_valor": "",
+"texto": "sem aula desde 25/01/2026",
+"acoes": [
+{
+"rotulo": "Abrir agenda",
+"href": "/agenda?aluno=61"
+},
+{
+"wa": true
+}
+]
+},
+"68": {
+"id": 68,
+"nome": "Aluno 67 Bê",
+"tel": "",
+"valor": 999.99,
+"tem_aulas": true,
+"consultoria": false,
+"renovacao": {
+"efetiva": "2026-12-05",
+"vence": "2026-12-05",
+"dias": 16,
+"vencida": false,
+"pendente": false,
+"dia": 5
+},
+"pagamento": {
+"mes": "2026-11",
+"situacao": "em aberto",
+"previsto": 700.49,
+"recebido": 0,
+"ultimo_pago": null,
+"coberto_ate": null
+},
+"uso": {
+"ciclo": {
+"inicio": "2026-10-05",
+"fim": "2026-11-05",
+"mes": "2026-10",
+"feitas": 2,
+"esperadas": 3.1,
+"uteis": 22
+},
+"mes_atual": 2,
+"ultima": "2026-11-05",
+"dias_sem": 14
+},
+"credito": 299.5,
+"credito_total": 299.5,
+"credito_sugerido": 349.15,
+"pausado_no_mes": false,
+"situacao": "cadastro_incompleto",
+"rotulo": "Cadastro incompleto",
+"cor": "azul",
+"grav": 3,
+"modelo": null,
+"botao": null,
+"extra": null,
+"data_modelo": null,
+"cobranca": null,
+"cartao": null,
+"ordem": "Aluno 67 Bê",
+"frase_valor": "R$ 700,49 (R$ 999,99 − R$ 299,50 de crédito das aulas não usadas em 10/2026)",
+"texto": "cadastro incompleto: falta telefone",
+"acoes": [
+{
+"rotulo": "Completar cadastro",
+"href": "/clientes/68#cadastro"
+}
+]
+}
+},
+"renovacoes": {
+"1": {
+"gravada": "2026-09-13",
+"efetiva": "2026-09-13",
+"vence": "2026-09-13",
+"dia": 13,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"2": {
+"gravada": "2026-12-17",
+"efetiva": "2026-12-17",
+"vence": "2026-12-17",
+"dia": 17,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"3": {
+"gravada": "2026-09-24",
+"efetiva": "2026-09-24",
+"vence": "2026-09-24",
+"dia": 24,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"4": {
+"gravada": "2026-12-03",
+"efetiva": "2026-12-03",
+"vence": "2026-12-03",
+"dia": 3,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"5": {
+"gravada": "2026-12-19",
+"efetiva": "2026-12-19",
+"vence": "2026-12-19",
+"dia": 19,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"6": {
+"gravada": "2026-11-19",
+"efetiva": "2026-11-19",
+"vence": "2026-11-19",
+"dia": 19,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"7": {
+"gravada": "2026-10-19",
+"efetiva": "2026-10-19",
+"vence": "2026-10-19",
+"dia": 19,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"8": {
+"gravada": "2026-09-30",
+"efetiva": "2026-11-30",
+"vence": "2026-11-30",
+"dia": 30,
+"ciclos": 2,
+"falta": 0.0,
+"pendente": false,
+"motivo": "pausa",
+"motivo_data": "2026-11-15",
+"tipos": [
+"pagamento",
+"pausa"
+]
+},
+"10": {
+"gravada": "2026-10-21",
+"efetiva": "2026-10-21",
+"vence": "2026-10-21",
+"dia": 21,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"11": {
+"gravada": "2026-02-30",
+"efetiva": "2026-02-30",
+"vence": "2026-02-30",
+"dia": null,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"12": {
+"gravada": "2026-10-30",
+"efetiva": "2026-11-30",
+"vence": "2026-11-30",
+"dia": 30,
+"ciclos": 1,
+"falta": 0.0,
+"pendente": false,
+"motivo": "renovacao",
+"motivo_data": "2026-10-23",
+"tipos": [
+"renovacao"
+]
+},
+"13": {
+"gravada": "2026-12-10",
+"efetiva": "2026-12-10",
+"vence": "2026-12-10",
+"dia": 10,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"14": {
+"gravada": "2026-02-30",
+"efetiva": "2026-02-30",
+"vence": "2026-02-30",
+"dia": null,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"15": {
+"gravada": "2026-10-15",
+"efetiva": "2026-10-15",
+"vence": "2026-10-15",
+"dia": 15,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"16": {
+"gravada": "2026-09-16",
+"efetiva": "2026-09-16",
+"vence": "2026-09-16",
+"dia": 16,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"18": {
+"gravada": "2026-10-13",
+"efetiva": "2026-11-13",
+"vence": "2026-11-13",
+"dia": 13,
+"ciclos": 1,
+"falta": 0.0,
+"pendente": false,
+"motivo": "pagamento",
+"motivo_data": "2026-10-12",
+"tipos": [
+"pagamento"
+]
+},
+"19": {
+"gravada": "2026-10-24",
+"efetiva": "2026-10-24",
+"vence": "2026-10-24",
+"dia": 24,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"20": {
+"gravada": "2026-11-25",
+"efetiva": "2026-11-25",
+"vence": "2026-11-25",
+"dia": 25,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"21": {
+"gravada": "2026-09-28",
+"efetiva": "2026-10-28",
+"vence": "2026-10-28",
+"dia": 28,
+"ciclos": 1,
+"falta": 0.0,
+"pendente": false,
+"motivo": "pagamento",
+"motivo_data": "2026-09-27",
+"tipos": [
+"pagamento"
+]
+},
+"22": {
+"gravada": "2026-11-28",
+"efetiva": "2026-11-28",
+"vence": "2026-11-28",
+"dia": 28,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"23": {
+"gravada": "2026-10-28",
+"efetiva": "2026-10-28",
+"vence": "2026-10-28",
+"dia": 28,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"24": {
+"gravada": "2026-10-10",
+"efetiva": "2026-10-10",
+"vence": "2026-10-10",
+"dia": 10,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"25": {
+"gravada": "2026-09-23",
+"efetiva": "2026-09-23",
+"vence": "2026-09-23",
+"dia": 23,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"26": {
+"gravada": "2026-09-23",
+"efetiva": "2026-12-23",
+"vence": "2026-12-23",
+"dia": 23,
+"ciclos": 3,
+"falta": 0.0,
+"pendente": false,
+"motivo": "pagamento",
+"motivo_data": "2026-09-23",
+"tipos": [
+"pagamento",
+"pagamento",
+"pagamento"
+]
+},
+"27": {
+"gravada": "2026-11-16",
+"efetiva": "2026-11-16",
+"vence": "2026-11-16",
+"dia": 16,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"28": {
+"gravada": "2026-11-30",
+"efetiva": "2026-11-30",
+"vence": "2026-11-30",
+"dia": 30,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"29": {
+"gravada": "2026-12-22",
+"efetiva": "2026-12-22",
+"vence": "2026-12-22",
+"dia": 22,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"30": {
+"gravada": "2026-12-17",
+"efetiva": "2026-12-17",
+"vence": "2026-12-17",
+"dia": 17,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"31": {
+"gravada": "2026-10-30",
+"efetiva": "2026-10-30",
+"vence": "2026-10-30",
+"dia": 30,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"32": {
+"gravada": "2026-09-18",
+"efetiva": "2026-11-18",
+"vence": "2026-11-18",
+"dia": 18,
+"ciclos": 2,
+"falta": 0.0,
+"pendente": false,
+"motivo": "pagamento",
+"motivo_data": "2026-10-12",
+"tipos": [
+"pagamento",
+"pagamento"
+]
+},
+"33": {
+"gravada": "2026-12-12",
+"efetiva": "2026-12-12",
+"vence": "2026-12-12",
+"dia": 12,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"34": {
+"gravada": "2026-12-06",
+"efetiva": "2026-12-06",
+"vence": "2026-12-06",
+"dia": 6,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"35": {
+"gravada": "2026-11-13",
+"efetiva": "2026-12-13",
+"vence": "2026-12-13",
+"dia": 13,
+"ciclos": 1,
+"falta": 0.0,
+"pendente": false,
+"motivo": "pagamento",
+"motivo_data": "2026-11-18",
+"tipos": [
+"pagamento"
+]
+},
+"36": {
+"gravada": "2026-02-30",
+"efetiva": "2026-02-30",
+"vence": "2026-02-30",
+"dia": null,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"37": {
+"gravada": "2026-12-05",
+"efetiva": "2026-12-05",
+"vence": "2026-12-05",
+"dia": 5,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"38": {
+"gravada": "2026-10-24",
+"efetiva": "2026-10-24",
+"vence": "2026-10-24",
+"dia": 24,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"40": {
+"gravada": "2026-11-21",
+"efetiva": "2026-11-21",
+"vence": "2026-11-21",
+"dia": 21,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"41": {
+"gravada": "2026-02-30",
+"efetiva": "2026-02-30",
+"vence": "2026-02-30",
+"dia": null,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"42": {
+"gravada": "2026-11-20",
+"efetiva": "2026-11-20",
+"vence": "2026-11-20",
+"dia": 20,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"44": {
+"gravada": "2027-01-01",
+"efetiva": "2027-01-01",
+"vence": "2027-01-01",
+"dia": 1,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"45": {
+"gravada": "2026-09-19",
+"efetiva": "2026-10-19",
+"vence": "2026-10-19",
+"dia": 19,
+"ciclos": 1,
+"falta": 0.0,
+"pendente": false,
+"motivo": "pagamento",
+"motivo_data": "2026-10-02",
+"tipos": [
+"pagamento"
+]
+},
+"46": {
+"gravada": "2026-02-30",
+"efetiva": "2026-02-30",
+"vence": "2026-02-30",
+"dia": null,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"47": {
+"gravada": "2026-11-07",
+"efetiva": "2026-12-07",
+"vence": "2026-12-07",
+"dia": 7,
+"ciclos": 1,
+"falta": 0.0,
+"pendente": false,
+"motivo": "pagamento",
+"motivo_data": "2026-11-10",
+"tipos": [
+"pagamento"
+]
+},
+"48": {
+"gravada": "2026-10-18",
+"efetiva": "2026-10-18",
+"vence": "2026-10-18",
+"dia": 18,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"49": {
+"gravada": "2026-10-28",
+"efetiva": "2026-11-28",
+"vence": "2026-11-28",
+"dia": 28,
+"ciclos": 1,
+"falta": 0.0,
+"pendente": false,
+"motivo": "pagamento",
+"motivo_data": "2026-10-29",
+"tipos": [
+"pagamento"
+]
+},
+"50": {
+"gravada": "2026-12-07",
+"efetiva": "2026-12-07",
+"vence": "2026-12-07",
+"dia": 7,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"51": {
+"gravada": "2026-11-15",
+"efetiva": "2026-12-15",
+"vence": "2026-12-15",
+"dia": 15,
+"ciclos": 1,
+"falta": 0.0,
+"pendente": false,
+"motivo": "pagamento",
+"motivo_data": "2026-11-16",
+"tipos": [
+"pagamento"
+]
+},
+"53": {
+"gravada": "2026-02-30",
+"efetiva": "2026-02-30",
+"vence": "2026-02-30",
+"dia": null,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"54": {
+"gravada": "2026-02-30",
+"efetiva": "2026-02-30",
+"vence": "2026-02-30",
+"dia": null,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"55": {
+"gravada": "2026-10-18",
+"efetiva": "2026-10-18",
+"vence": "2026-10-18",
+"dia": 18,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"57": {
+"gravada": "2026-12-24",
+"efetiva": "2026-12-24",
+"vence": "2026-12-24",
+"dia": 24,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"58": {
+"gravada": "2026-12-05",
+"efetiva": "2026-12-05",
+"vence": "2026-12-05",
+"dia": 5,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"59": {
+"gravada": "2026-11-04",
+"efetiva": "2026-12-04",
+"vence": "2026-12-04",
+"dia": 4,
+"ciclos": 1,
+"falta": 0.0,
+"pendente": false,
+"motivo": "pagamento",
+"motivo_data": "2026-11-10",
+"tipos": [
+"pagamento"
+]
+},
+"60": {
+"gravada": "2026-11-08",
+"efetiva": "2026-12-08",
+"vence": "2026-12-08",
+"dia": 8,
+"ciclos": 1,
+"falta": 0.0,
+"pendente": false,
+"motivo": "pausa",
+"motivo_data": "2026-11-15",
+"tipos": [
+"pausa"
+]
+},
+"62": {
+"gravada": "2026-10-28",
+"efetiva": "2026-11-28",
+"vence": "2026-11-28",
+"dia": 28,
+"ciclos": 1,
+"falta": 0.0,
+"pendente": false,
+"motivo": "pagamento",
+"motivo_data": "2026-11-05",
+"tipos": [
+"pagamento"
+]
+},
+"63": {
+"gravada": "2026-09-12",
+"efetiva": "2026-09-12",
+"vence": "2026-09-12",
+"dia": 12,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"64": {
+"gravada": "2026-10-24",
+"efetiva": "2026-11-24",
+"vence": "2026-11-24",
+"dia": 24,
+"ciclos": 1,
+"falta": 0.0,
+"pendente": false,
+"motivo": "pagamento",
+"motivo_data": "2026-10-30",
+"tipos": [
+"pagamento"
+]
+},
+"65": {
+"gravada": "2026-11-10",
+"efetiva": "2026-11-10",
+"vence": "2026-11-10",
+"dia": 10,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"66": {
+"gravada": "2026-10-14",
+"efetiva": "2026-11-14",
+"vence": "2026-11-14",
+"dia": 14,
+"ciclos": 1,
+"falta": 0.0,
+"pendente": false,
+"motivo": "pausa",
+"motivo_data": "2026-10-17",
+"tipos": [
+"pausa"
+]
+},
+"67": {
+"gravada": "2026-11-19",
+"efetiva": "2026-11-19",
+"vence": "2026-11-19",
+"dia": 19,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"68": {
+"gravada": "2026-11-05",
+"efetiva": "2026-12-05",
+"vence": "2026-12-05",
+"dia": 5,
+"ciclos": 1,
+"falta": 0.0,
+"pendente": false,
+"motivo": "pagamento",
+"motivo_data": "2026-11-07",
+"tipos": [
+"pagamento"
+]
+},
+"69": {
+"gravada": "2026-02-30",
+"efetiva": "2026-02-30",
+"vence": "2026-02-30",
+"dia": null,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+},
+"70": {
+"gravada": "2026-10-24",
+"efetiva": "2026-10-24",
+"vence": "2026-10-24",
+"dia": 24,
+"ciclos": 0,
+"falta": 0.0,
+"pendente": false,
+"motivo": null,
+"motivo_data": null,
+"tipos": []
+}
+},
+"mensalidades": {
+"2026-09": [
+{
+"id": 1,
+"nome": "Aluno 00 Ána",
+"previsto": 300.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 300.0,
+"entra": 300.0
+},
+{
+"id": 2,
+"nome": "Aluno 01 Bê",
+"previsto": 480.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 480.0,
+"entra": 480.0
+},
+{
+"id": 3,
+"nome": "Aluno 02 Ána",
+"previsto": 300.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [
+{
+"id": 1,
+"cliente_id": 3,
+"data": "2026-09-30",
+"valor": 150.0,
+"descricao": null,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"conta": null
+}
+],
+"aberto": 150.0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 150.0,
+"entra": 300.0
+},
+{
+"id": 4,
+"nome": "Aluno 03 Cid",
+"previsto": 999.99,
+"recebido": 500.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 500.0
+},
+{
+"id": 6,
+"nome": "Aluno 05 Ána",
+"previsto": 615.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 615.33,
+"entra": 615.33
+},
+{
+"id": 11,
+"nome": "Aluno 10 Cid",
+"previsto": 300.0,
+"recebido": 300.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 300.0
+},
+{
+"id": 12,
+"nome": "Aluno 11 Ána",
+"previsto": 615.33,
+"recebido": 615.33,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 615.33
+},
+{
+"id": 13,
+"nome": "Aluno 12 Bê",
+"previsto": 450.5,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 450.5,
+"entra": 450.5
+},
+{
+"id": 15,
+"nome": "Aluno 14 Ána",
+"previsto": 300.0,
+"recebido": 300.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 300.0
+},
+{
+"id": 17,
+"nome": "Aluno 16 Cid",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 19,
+"nome": "Aluno 18 Bê",
+"previsto": 450.5,
+"recebido": 450.5,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 450.5
+},
+{
+"id": 22,
+"nome": "Aluno 21 Cid",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 24,
+"nome": "Aluno 23 Cid",
+"previsto": 999.99,
+"recebido": 949.99,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 949.99
+},
+{
+"id": 26,
+"nome": "Aluno 25 Ána",
+"previsto": 450.5,
+"recebido": 427.97,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 427.97
+},
+{
+"id": 28,
+"nome": "Aluno 27 Ána",
+"previsto": 600.0,
+"recebido": 1170.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 1170.0
+},
+{
+"id": 30,
+"nome": "Aluno 29 Bê",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 31,
+"nome": "Aluno 30 Ána",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 32,
+"nome": "Aluno 31 Cid",
+"previsto": 615.33,
+"recebido": 615.33,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 615.33
+},
+{
+"id": 33,
+"nome": "Aluno 32 Bê",
+"previsto": 450.5,
+"recebido": 225.25,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 225.25
+},
+{
+"id": 34,
+"nome": "Aluno 33 Bê",
+"previsto": 300.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 300.0,
+"entra": 300.0
+},
+{
+"id": 35,
+"nome": "Aluno 34 Cid",
+"previsto": 615.33,
+"recebido": 307.67,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 307.67
+},
+{
+"id": 37,
+"nome": "Aluno 36 Bê",
+"previsto": 615.33,
+"recebido": 1230.66,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 1230.66
+},
+{
+"id": 38,
+"nome": "Aluno 37 Ána",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 39,
+"nome": "Aluno 38 Ána",
+"previsto": 495.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 120.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 495.33,
+"entra": 495.33
+},
+{
+"id": 40,
+"nome": "Aluno 39 Cid",
+"previsto": 615.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 615.33,
+"entra": 615.33
+},
+{
+"id": 43,
+"nome": "Aluno 42 Cid",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 45,
+"nome": "Aluno 44 Bê",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 46,
+"nome": "Aluno 45 Cid",
+"previsto": 879.99,
+"recebido": 949.99,
+"situacao": "recebido",
+"credito": 120.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 949.99
+},
+{
+"id": 47,
+"nome": "Aluno 46 Cid",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 48,
+"nome": "Aluno 47 Bê",
+"previsto": 450.5,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 450.5,
+"entra": 450.5
+},
+{
+"id": 51,
+"nome": "Aluno 50 Bê",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 53,
+"nome": "Aluno 52 Bê",
+"previsto": 300.0,
+"recebido": 600.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 600.0
+},
+{
+"id": 55,
+"nome": "Aluno 54 Cid",
+"previsto": 300.0,
+"recebido": 600.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 600.0
+},
+{
+"id": 59,
+"nome": "Aluno 58 Bê",
+"previsto": 600.0,
+"recebido": 300.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 300.0
+},
+{
+"id": 62,
+"nome": "Aluno 61 Bê",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "pago adiantado",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": "2026-09",
+"pago_em_mes": "2026-07",
+"falta": 0.0,
+"entra": 0.0
+},
+{
+"id": 63,
+"nome": "Aluno 62 Bê",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 64,
+"nome": "Aluno 63 Cid",
+"previsto": 615.33,
+"recebido": 584.56,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 584.56
+},
+{
+"id": 65,
+"nome": "Aluno 64 Bê",
+"previsto": 300.0,
+"recebido": 300.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 300.0
+},
+{
+"id": 68,
+"nome": "Aluno 67 Bê",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 69,
+"nome": "Aluno 68 Bê",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+}
+],
+"2026-10": [
+{
+"id": 2,
+"nome": "Aluno 01 Bê",
+"previsto": 480.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 480.0,
+"entra": 480.0
+},
+{
+"id": 3,
+"nome": "Aluno 02 Ána",
+"previsto": 300.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 300.0,
+"entra": 300.0
+},
+{
+"id": 4,
+"nome": "Aluno 03 Cid",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 6,
+"nome": "Aluno 05 Ána",
+"previsto": 615.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 615.33,
+"entra": 615.33
+},
+{
+"id": 11,
+"nome": "Aluno 10 Cid",
+"previsto": 300.0,
+"recebido": 285.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 285.0
+},
+{
+"id": 12,
+"nome": "Aluno 11 Ána",
+"previsto": 615.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 615.33,
+"entra": 615.33
+},
+{
+"id": 13,
+"nome": "Aluno 12 Bê",
+"previsto": 450.5,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 450.5,
+"entra": 450.5
+},
+{
+"id": 15,
+"nome": "Aluno 14 Ána",
+"previsto": 300.0,
+"recebido": 285.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 285.0
+},
+{
+"id": 16,
+"nome": "Aluno 15 Bê",
+"previsto": 450.5,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 450.5,
+"entra": 450.5
+},
+{
+"id": 17,
+"nome": "Aluno 16 Cid",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 19,
+"nome": "Aluno 18 Bê",
+"previsto": 450.5,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 450.5,
+"entra": 450.5
+},
+{
+"id": 22,
+"nome": "Aluno 21 Cid",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 24,
+"nome": "Aluno 23 Cid",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 26,
+"nome": "Aluno 25 Ána",
+"previsto": 450.5,
+"recebido": 0,
+"situacao": "pago adiantado",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": "2026-11",
+"pago_em_mes": "2026-09",
+"falta": 0.0,
+"entra": 0.0
+},
+{
+"id": 28,
+"nome": "Aluno 27 Ána",
+"previsto": 600.0,
+"recebido": 600.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 600.0
+},
+{
+"id": 30,
+"nome": "Aluno 29 Bê",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 31,
+"nome": "Aluno 30 Ána",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 32,
+"nome": "Aluno 31 Cid",
+"previsto": 615.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 615.33,
+"entra": 615.33
+},
+{
+"id": 33,
+"nome": "Aluno 32 Bê",
+"previsto": 450.5,
+"recebido": 427.97,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 427.97
+},
+{
+"id": 34,
+"nome": "Aluno 33 Bê",
+"previsto": 300.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 300.0,
+"entra": 300.0
+},
+{
+"id": 35,
+"nome": "Aluno 34 Cid",
+"previsto": 615.33,
+"recebido": 307.67,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 307.67
+},
+{
+"id": 37,
+"nome": "Aluno 36 Bê",
+"previsto": 615.33,
+"recebido": 0,
+"situacao": "pago adiantado",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": "2026-11",
+"pago_em_mes": "2026-09",
+"falta": 0.0,
+"entra": 0.0
+},
+{
+"id": 38,
+"nome": "Aluno 37 Ána",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 39,
+"nome": "Aluno 38 Ána",
+"previsto": 495.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 120.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 495.33,
+"entra": 495.33
+},
+{
+"id": 40,
+"nome": "Aluno 39 Cid",
+"previsto": 615.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 615.33,
+"entra": 615.33
+},
+{
+"id": 43,
+"nome": "Aluno 42 Cid",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 45,
+"nome": "Aluno 44 Bê",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 46,
+"nome": "Aluno 45 Cid",
+"previsto": 879.99,
+"recebido": 999.99,
+"situacao": "recebido",
+"credito": 120.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 999.99
+},
+{
+"id": 47,
+"nome": "Aluno 46 Cid",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 48,
+"nome": "Aluno 47 Bê",
+"previsto": 450.5,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 450.5,
+"entra": 450.5
+},
+{
+"id": 51,
+"nome": "Aluno 50 Bê",
+"previsto": 999.99,
+"recebido": 949.99,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 949.99
+},
+{
+"id": 53,
+"nome": "Aluno 52 Bê",
+"previsto": 300.0,
+"recebido": 285.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 285.0
+},
+{
+"id": 55,
+"nome": "Aluno 54 Cid",
+"previsto": 300.0,
+"recebido": 0,
+"situacao": "pago adiantado",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": "2026-11",
+"pago_em_mes": "2026-09",
+"falta": 0.0,
+"entra": 0.0
+},
+{
+"id": 62,
+"nome": "Aluno 61 Bê",
+"previsto": 600.0,
+"recebido": 600.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 600.0
+},
+{
+"id": 63,
+"nome": "Aluno 62 Bê",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 64,
+"nome": "Aluno 63 Cid",
+"previsto": 615.33,
+"recebido": 307.67,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 307.67
+},
+{
+"id": 65,
+"nome": "Aluno 64 Bê",
+"previsto": 0.0,
+"recebido": 150.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 150.0
+},
+{
+"id": 68,
+"nome": "Aluno 67 Bê",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 69,
+"nome": "Aluno 68 Bê",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+}
+],
+"2026-11": [
+{
+"id": 2,
+"nome": "Aluno 01 Bê",
+"previsto": 480.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 480.0,
+"entra": 480.0
+},
+{
+"id": 3,
+"nome": "Aluno 02 Ána",
+"previsto": 300.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 300.0,
+"entra": 300.0
+},
+{
+"id": 4,
+"nome": "Aluno 03 Cid",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 5,
+"nome": "Aluno 04 Cid",
+"previsto": 480.0,
+"recebido": 600.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 600.0
+},
+{
+"id": 6,
+"nome": "Aluno 05 Ána",
+"previsto": 615.33,
+"recebido": 600.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 600.0
+},
+{
+"id": 8,
+"nome": "Aluno 07 Ána",
+"previsto": 0.0,
+"recebido": 600.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 600.0
+},
+{
+"id": 11,
+"nome": "Aluno 10 Cid",
+"previsto": 300.0,
+"recebido": 600.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 600.0
+},
+{
+"id": 12,
+"nome": "Aluno 11 Ána",
+"previsto": 615.33,
+"recebido": 615.33,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 615.33
+},
+{
+"id": 13,
+"nome": "Aluno 12 Bê",
+"previsto": 450.5,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 450.5,
+"entra": 450.5
+},
+{
+"id": 15,
+"nome": "Aluno 14 Ána",
+"previsto": 300.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 300.0,
+"entra": 300.0
+},
+{
+"id": 16,
+"nome": "Aluno 15 Bê",
+"previsto": 450.5,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 450.5,
+"entra": 450.5
+},
+{
+"id": 17,
+"nome": "Aluno 16 Cid",
+"previsto": 480.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 120.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 480.0,
+"entra": 480.0
+},
+{
+"id": 18,
+"nome": "Aluno 17 Cid",
+"previsto": 0.0,
+"recebido": 0,
+"situacao": "pago adiantado",
+"credito": 450.5,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": "2026-11",
+"pago_em_mes": "2026-09",
+"falta": 0.0,
+"entra": 0.0
+},
+{
+"id": 19,
+"nome": "Aluno 18 Bê",
+"previsto": 0.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 450.5,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 0.0
+},
+{
+"id": 20,
+"nome": "Aluno 19 Bê",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [
+{
+"id": 26,
+"cliente_id": 20,
+"data": "2026-11-25",
+"valor": 300.0,
+"descricao": null,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"conta": null
+}
+],
+"aberto": 300.0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 300.0,
+"entra": 600.0
+},
+{
+"id": 22,
+"nome": "Aluno 21 Cid",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 24,
+"nome": "Aluno 23 Cid",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 26,
+"nome": "Aluno 25 Ána",
+"previsto": 450.5,
+"recebido": 0,
+"situacao": "pago adiantado",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": "2026-11",
+"pago_em_mes": "2026-09",
+"falta": 0.0,
+"entra": 0.0
+},
+{
+"id": 27,
+"nome": "Aluno 26 Bê",
+"previsto": 300.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [
+{
+"id": 43,
+"cliente_id": 27,
+"data": "2026-11-24",
+"valor": 150.0,
+"descricao": null,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"conta": null
+}
+],
+"aberto": 150.0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 150.0,
+"entra": 300.0
+},
+{
+"id": 28,
+"nome": "Aluno 27 Ána",
+"previsto": 0.0,
+"recebido": 0,
+"situacao": "pulou o mês",
+"credito": 0.0,
+"abertos": [
+{
+"id": 44,
+"cliente_id": 28,
+"data": "2026-11-29",
+"valor": 1200.0,
+"descricao": null,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"conta": null
+}
+],
+"aberto": 1200.0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0,
+"entra": 0.0
+},
+{
+"id": 29,
+"nome": "Aluno 28 Ána",
+"previsto": 450.5,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 450.5,
+"entra": 450.5
+},
+{
+"id": 30,
+"nome": "Aluno 29 Bê",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 31,
+"nome": "Aluno 30 Ána",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [
+{
+"id": 49,
+"cliente_id": 31,
+"data": "2026-11-05",
+"valor": 949.99,
+"descricao": null,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"conta": null
+}
+],
+"aberto": 949.99,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 50.0,
+"entra": 999.99
+},
+{
+"id": 32,
+"nome": "Aluno 31 Cid",
+"previsto": 615.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 615.33,
+"entra": 615.33
+},
+{
+"id": 33,
+"nome": "Aluno 32 Bê",
+"previsto": 450.5,
+"recebido": 450.5,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 450.5
+},
+{
+"id": 34,
+"nome": "Aluno 33 Bê",
+"previsto": 300.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 300.0,
+"entra": 300.0
+},
+{
+"id": 35,
+"nome": "Aluno 34 Cid",
+"previsto": 615.33,
+"recebido": 584.56,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 584.56
+},
+{
+"id": 37,
+"nome": "Aluno 36 Bê",
+"previsto": 615.33,
+"recebido": 307.67,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 307.67
+},
+{
+"id": 38,
+"nome": "Aluno 37 Ána",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 39,
+"nome": "Aluno 38 Ána",
+"previsto": 495.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 120.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 495.33,
+"entra": 495.33
+},
+{
+"id": 40,
+"nome": "Aluno 39 Cid",
+"previsto": 615.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 615.33,
+"entra": 615.33
+},
+{
+"id": 43,
+"nome": "Aluno 42 Cid",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 44,
+"nome": "Aluno 43 Cid",
+"previsto": 300.0,
+"recebido": 150.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 150.0
+},
+{
+"id": 45,
+"nome": "Aluno 44 Bê",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 46,
+"nome": "Aluno 45 Cid",
+"previsto": 879.99,
+"recebido": 999.99,
+"situacao": "recebido",
+"credito": 120.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 999.99
+},
+{
+"id": 47,
+"nome": "Aluno 46 Cid",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 48,
+"nome": "Aluno 47 Bê",
+"previsto": 450.5,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 450.5,
+"entra": 450.5
+},
+{
+"id": 51,
+"nome": "Aluno 50 Bê",
+"previsto": 999.99,
+"recebido": 500.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 500.0
+},
+{
+"id": 52,
+"nome": "Aluno 51 Bê",
+"previsto": 450.5,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 450.5,
+"entra": 450.5
+},
+{
+"id": 53,
+"nome": "Aluno 52 Bê",
+"previsto": 300.0,
+"recebido": 150.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 150.0
+},
+{
+"id": 55,
+"nome": "Aluno 54 Cid",
+"previsto": 300.0,
+"recebido": 0,
+"situacao": "pago adiantado",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": "2026-11",
+"pago_em_mes": "2026-09",
+"falta": 0.0,
+"entra": 0.0
+},
+{
+"id": 57,
+"nome": "Aluno 56 Ána",
+"previsto": 615.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 615.33,
+"entra": 615.33
+},
+{
+"id": 59,
+"nome": "Aluno 58 Bê",
+"previsto": 600.0,
+"recebido": 600.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 600.0
+},
+{
+"id": 62,
+"nome": "Aluno 61 Bê",
+"previsto": 600.0,
+"recebido": 570.0,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 570.0
+},
+{
+"id": 63,
+"nome": "Aluno 62 Bê",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 64,
+"nome": "Aluno 63 Cid",
+"previsto": 615.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 615.33,
+"entra": 615.33
+},
+{
+"id": 65,
+"nome": "Aluno 64 Bê",
+"previsto": 300.0,
+"recebido": 0,
+"situacao": "pago adiantado",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": "2026-12",
+"pago_em_mes": "2026-10",
+"falta": 0.0,
+"entra": 0.0
+},
+{
+"id": 68,
+"nome": "Aluno 67 Bê",
+"previsto": 700.49,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 299.5,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 700.49,
+"entra": 700.49
+},
+{
+"id": 69,
+"nome": "Aluno 68 Bê",
+"previsto": 999.99,
+"recebido": 999.99,
+"situacao": "recebido",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 999.99
+},
+{
+"id": 70,
+"nome": "Aluno 69 Cid",
+"previsto": 450.5,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 450.5,
+"entra": 450.5
+}
+],
+"2026-12": [
+{
+"id": 2,
+"nome": "Aluno 01 Bê",
+"previsto": 480.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 480.0,
+"entra": 480.0
+},
+{
+"id": 3,
+"nome": "Aluno 02 Ána",
+"previsto": 300.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 300.0,
+"entra": 300.0
+},
+{
+"id": 4,
+"nome": "Aluno 03 Cid",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 5,
+"nome": "Aluno 04 Cid",
+"previsto": 480.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [
+{
+"id": 8,
+"cliente_id": 5,
+"data": "2026-12-15",
+"valor": 600.0,
+"descricao": null,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"conta": null
+}
+],
+"aberto": 600.0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0,
+"entra": 480.0
+},
+{
+"id": 6,
+"nome": "Aluno 05 Ána",
+"previsto": 615.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 615.33,
+"entra": 615.33
+},
+{
+"id": 11,
+"nome": "Aluno 10 Cid",
+"previsto": 300.0,
+"recebido": 0,
+"situacao": "pago adiantado",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": "2026-12",
+"pago_em_mes": "2026-11",
+"falta": 0.0,
+"entra": 0.0
+},
+{
+"id": 12,
+"nome": "Aluno 11 Ána",
+"previsto": 615.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 615.33,
+"entra": 615.33
+},
+{
+"id": 13,
+"nome": "Aluno 12 Bê",
+"previsto": 450.5,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 450.5,
+"entra": 450.5
+},
+{
+"id": 15,
+"nome": "Aluno 14 Ána",
+"previsto": 300.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 300.0,
+"entra": 300.0
+},
+{
+"id": 16,
+"nome": "Aluno 15 Bê",
+"previsto": 450.5,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 450.5,
+"entra": 450.5
+},
+{
+"id": 17,
+"nome": "Aluno 16 Cid",
+"previsto": 480.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 120.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 480.0,
+"entra": 480.0
+},
+{
+"id": 18,
+"nome": "Aluno 17 Cid",
+"previsto": 0.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 450.5,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 0.0
+},
+{
+"id": 19,
+"nome": "Aluno 18 Bê",
+"previsto": 0.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 450.5,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 0.0
+},
+{
+"id": 20,
+"nome": "Aluno 19 Bê",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 21,
+"nome": "Aluno 20 Bê",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 22,
+"nome": "Aluno 21 Cid",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 24,
+"nome": "Aluno 23 Cid",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 25,
+"nome": "Aluno 24 Ána",
+"previsto": 0.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 615.33,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 0.0
+},
+{
+"id": 26,
+"nome": "Aluno 25 Ána",
+"previsto": 450.5,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 450.5,
+"entra": 450.5
+},
+{
+"id": 28,
+"nome": "Aluno 27 Ána",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 29,
+"nome": "Aluno 28 Ána",
+"previsto": 450.5,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [
+{
+"id": 48,
+"cliente_id": 29,
+"data": "2026-12-26",
+"valor": 450.5,
+"descricao": null,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"conta": null
+}
+],
+"aberto": 450.5,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 450.5
+},
+{
+"id": 30,
+"nome": "Aluno 29 Bê",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 31,
+"nome": "Aluno 30 Ána",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 32,
+"nome": "Aluno 31 Cid",
+"previsto": 615.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 615.33,
+"entra": 615.33
+},
+{
+"id": 33,
+"nome": "Aluno 32 Bê",
+"previsto": 450.5,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [
+{
+"id": 56,
+"cliente_id": 33,
+"data": "2026-12-18",
+"valor": 450.5,
+"descricao": null,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"conta": null
+}
+],
+"aberto": 450.5,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 450.5
+},
+{
+"id": 34,
+"nome": "Aluno 33 Bê",
+"previsto": 300.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 300.0,
+"entra": 300.0
+},
+{
+"id": 35,
+"nome": "Aluno 34 Cid",
+"previsto": 615.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 615.33,
+"entra": 615.33
+},
+{
+"id": 37,
+"nome": "Aluno 36 Bê",
+"previsto": 615.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [
+{
+"id": 69,
+"cliente_id": 37,
+"data": "2026-12-06",
+"valor": 615.33,
+"descricao": null,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"conta": null
+}
+],
+"aberto": 615.33,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 0.0,
+"entra": 615.33
+},
+{
+"id": 38,
+"nome": "Aluno 37 Ána",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 39,
+"nome": "Aluno 38 Ána",
+"previsto": 495.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 120.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 495.33,
+"entra": 495.33
+},
+{
+"id": 40,
+"nome": "Aluno 39 Cid",
+"previsto": 615.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 615.33,
+"entra": 615.33
+},
+{
+"id": 43,
+"nome": "Aluno 42 Cid",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 44,
+"nome": "Aluno 43 Cid",
+"previsto": 300.0,
+"recebido": 0,
+"situacao": "pago adiantado",
+"credito": 0.0,
+"abertos": [
+{
+"id": 75,
+"cliente_id": 44,
+"data": "2026-12-06",
+"valor": 300.0,
+"descricao": null,
+"categoria": "Mensalidade (Aulas Presenciais)",
+"conta": null
+}
+],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": "2026-12",
+"pago_em_mes": "2026-10",
+"falta": 0.0,
+"entra": 0.0
+},
+{
+"id": 45,
+"nome": "Aluno 44 Bê",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 46,
+"nome": "Aluno 45 Cid",
+"previsto": 879.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 120.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 879.99,
+"entra": 879.99
+},
+{
+"id": 47,
+"nome": "Aluno 46 Cid",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 48,
+"nome": "Aluno 47 Bê",
+"previsto": 450.5,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 450.5,
+"entra": 450.5
+},
+{
+"id": 49,
+"nome": "Aluno 48 Cid",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 51,
+"nome": "Aluno 50 Bê",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 52,
+"nome": "Aluno 51 Bê",
+"previsto": 450.5,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 450.5,
+"entra": 450.5
+},
+{
+"id": 53,
+"nome": "Aluno 52 Bê",
+"previsto": 300.0,
+"recebido": 0,
+"situacao": "pago adiantado",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": "2027-01",
+"pago_em_mes": "2026-11",
+"falta": 0.0,
+"entra": 0.0
+},
+{
+"id": 55,
+"nome": "Aluno 54 Cid",
+"previsto": 300.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 300.0,
+"entra": 300.0
+},
+{
+"id": 57,
+"nome": "Aluno 56 Ána",
+"previsto": 615.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 615.33,
+"entra": 615.33
+},
+{
+"id": 59,
+"nome": "Aluno 58 Bê",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 63,
+"nome": "Aluno 62 Bê",
+"previsto": 600.0,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 600.0,
+"entra": 600.0
+},
+{
+"id": 64,
+"nome": "Aluno 63 Cid",
+"previsto": 615.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 615.33,
+"entra": 615.33
+},
+{
+"id": 65,
+"nome": "Aluno 64 Bê",
+"previsto": 300.0,
+"recebido": 0,
+"situacao": "pago adiantado",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0.0,
+"quitado": true,
+"coberto_ate": "2026-12",
+"pago_em_mes": "2026-10",
+"falta": 0.0,
+"entra": 0.0
+},
+{
+"id": 67,
+"nome": "Aluno 66 Cid",
+"previsto": 615.33,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 615.33,
+"entra": 615.33
+},
+{
+"id": 68,
+"nome": "Aluno 67 Bê",
+"previsto": 700.49,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 299.5,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 700.49,
+"entra": 700.49
+},
+{
+"id": 69,
+"nome": "Aluno 68 Bê",
+"previsto": 999.99,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 999.99,
+"entra": 999.99
+},
+{
+"id": 70,
+"nome": "Aluno 69 Cid",
+"previsto": 450.5,
+"recebido": 0,
+"situacao": "em aberto",
+"credito": 0.0,
+"abertos": [],
+"aberto": 0,
+"quitado": false,
+"coberto_ate": null,
+"pago_em_mes": null,
+"falta": 450.5,
+"entra": 450.5
+}
+]
+},
+"creditos": {
+"18": [
+{
+"id": 178,
+"mes": "2026-08",
+"valor": 450.5
+}
+],
+"39": [
+{
+"id": 547,
+"mes": "2026-08",
+"valor": 120.0
+}
+],
+"46": [
+{
+"id": 584,
+"mes": "2026-08",
+"valor": 120.0
+}
+],
+"54": [
+{
+"id": 786,
+"mes": "2026-09",
+"valor": 299.5
+}
+],
+"17": [
+{
+"id": 176,
+"mes": "2026-10",
+"valor": 120.0
+}
+],
+"19": [
+{
+"id": 195,
+"mes": "2026-10",
+"valor": 450.5
+}
+],
+"25": [
+{
+"id": 313,
+"mes": "2026-10",
+"valor": 615.33
+}
+],
+"50": [
+{
+"id": 669,
+"mes": "2026-10",
+"valor": 299.5
+}
+],
+"58": [
+{
+"id": 858,
+"mes": "2026-10",
+"valor": 450.5
+}
+],
+"68": [
+{
+"id": 936,
+"mes": "2026-10",
+"valor": 299.5
+}
+]
+},
+"diferencas": {
+"3": [
+{
+"id": 5,
+"valor": 5.53,
+"pago": 300.0,
+"pago_em": "2026-05-27"
+}
+],
+"55": [
+{
+"id": 107,
+"valor": 14.03,
+"pago": 285.0,
+"pago_em": "2026-06-19"
+}
+],
+"32": [
+{
+"id": 52,
+"valor": 21.17,
+"pago": 584.56,
+"pago_em": "2026-07-20"
+}
+],
+"24": [
+{
+"id": 35,
+"valor": 16.21,
+"pago": 949.99,
+"pago_em": "2026-09-16"
+}
+],
+"67": [
+{
+"id": 129,
+"valor": 11.89,
+"pago": 584.56,
+"pago_em": "2026-09-18"
+}
+],
+"65": [
+{
+"id": 124,
+"valor": 9.27,
+"pago": 150.0,
+"pago_em": "2026-10-09"
+}
+],
+"50": [
+{
+"id": 90,
+"valor": 29.77,
+"pago": 225.25,
+"pago_em": "2026-10-12"
+}
+],
+"54": [
+{
+"id": 102,
+"valor": 16.92,
+"pago": 600.0,
+"pago_em": "2026-10-25"
+}
+],
+"44": [
+{
+"id": 77,
+"valor": 13.61,
+"pago": 150.0,
+"pago_em": "2026-11-01"
+}
+]
+},
+"pago_adiantado_ate": {
+"37": "2026-11",
+"44": "2026-12",
+"18": "2026-11",
+"55": "2026-11",
+"26": "2026-11",
+"65": "2026-12",
+"53": "2027-01",
+"11": "2026-12"
+},
+"cobranca": [
+[
+0,
+"2026-11-19",
+0,
+null,
+null
+],
+[
+0,
+"2026-11-19",
+0,
+31,
+null
+],
+[
+0,
+"2026-11-19",
+0,
+10,
+null
+],
+[
+0,
+"2026-11-19",
+100,
+null,
+null
+],
+[
+0,
+"2026-11-19",
+100,
+31,
+null
+],
+[
+0,
+"2026-11-19",
+100,
+10,
+null
+],
+[
+0,
+"2026-11-19",
+600,
+null,
+null
+],
+[
+0,
+"2026-11-19",
+600,
+31,
+null
+],
+[
+0,
+"2026-11-19",
+600,
+10,
+null
+],
+[
+0,
+"2026-11-18",
+0,
+null,
+null
+],
+[
+0,
+"2026-11-18",
+0,
+31,
+null
+],
+[
+0,
+"2026-11-18",
+0,
+10,
+null
+],
+[
+0,
+"2026-11-18",
+100,
+null,
+null
+],
+[
+0,
+"2026-11-18",
+100,
+31,
+null
+],
+[
+0,
+"2026-11-18",
+100,
+10,
+null
+],
+[
+0,
+"2026-11-18",
+600,
+null,
+null
+],
+[
+0,
+"2026-11-18",
+600,
+31,
+null
+],
+[
+0,
+"2026-11-18",
+600,
+10,
+null
+],
+[
+0,
+"2026-09-30",
+0,
+null,
+null
+],
+[
+0,
+"2026-09-30",
+0,
+31,
+null
+],
+[
+0,
+"2026-09-30",
+0,
+10,
+null
+],
+[
+0,
+"2026-09-30",
+100,
+null,
+null
+],
+[
+0,
+"2026-09-30",
+100,
+31,
+null
+],
+[
+0,
+"2026-09-30",
+100,
+10,
+null
+],
+[
+0,
+"2026-09-30",
+600,
+null,
+null
+],
+[
+0,
+"2026-09-30",
+600,
+31,
+null
+],
+[
+0,
+"2026-09-30",
+600,
+10,
+null
+],
+[
+0,
+"2026-01-31",
+0,
+null,
+null
+],
+[
+0,
+"2026-01-31",
+0,
+31,
+null
+],
+[
+0,
+"2026-01-31",
+0,
+10,
+null
+],
+[
+0,
+"2026-01-31",
+100,
+null,
+null
+],
+[
+0,
+"2026-01-31",
+100,
+31,
+null
+],
+[
+0,
+"2026-01-31",
+100,
+10,
+null
+],
+[
+0,
+"2026-01-31",
+600,
+null,
+null
+],
+[
+0,
+"2026-01-31",
+600,
+31,
+null
+],
+[
+0,
+"2026-01-31",
+600,
+10,
+null
+],
+[
+0,
+"2024-05-10",
+0,
+null,
+null
+],
+[
+0,
+"2024-05-10",
+0,
+31,
+null
+],
+[
+0,
+"2024-05-10",
+0,
+10,
+null
+],
+[
+0,
+"2024-05-10",
+100,
+null,
+null
+],
+[
+0,
+"2024-05-10",
+100,
+31,
+null
+],
+[
+0,
+"2024-05-10",
+100,
+10,
+null
+],
+[
+0,
+"2024-05-10",
+600,
+null,
+null
+],
+[
+0,
+"2024-05-10",
+600,
+31,
+null
+],
+[
+0,
+"2024-05-10",
+600,
+10,
+null
+],
+[
+0,
+"xx",
+0,
+null,
+null
+],
+[
+0,
+"xx",
+0,
+31,
+null
+],
+[
+0,
+"xx",
+0,
+10,
+null
+],
+[
+0,
+"xx",
+100,
+null,
+null
+],
+[
+0,
+"xx",
+100,
+31,
+null
+],
+[
+0,
+"xx",
+100,
+10,
+null
+],
+[
+0,
+"xx",
+600,
+null,
+null
+],
+[
+0,
+"xx",
+600,
+31,
+null
+],
+[
+0,
+"xx",
+600,
+10,
+null
+],
+[
+600,
+"2026-11-19",
+0,
+null,
+null
+],
+[
+600,
+"2026-11-19",
+0,
+31,
+null
+],
+[
+600,
+"2026-11-19",
+0,
+10,
+null
+],
+[
+600,
+"2026-11-19",
+100,
+null,
+null
+],
+[
+600,
+"2026-11-19",
+100,
+31,
+null
+],
+[
+600,
+"2026-11-19",
+100,
+10,
+null
+],
+[
+600,
+"2026-11-19",
+600,
+null,
+null
+],
+[
+600,
+"2026-11-19",
+600,
+31,
+null
+],
+[
+600,
+"2026-11-19",
+600,
+10,
+null
+],
+[
+600,
+"2026-11-18",
+0,
+null,
+{
+"meses": 1,
+"dias": 1,
+"bruto": 600.0,
+"credito": 0.0,
+"valor": 600.0,
+"multa": 12.0,
+"juros": 0.2,
+"total": 612.2
+}
+],
+[
+600,
+"2026-11-18",
+0,
+31,
+{
+"meses": 1,
+"dias": 1,
+"bruto": 600.0,
+"credito": 0.0,
+"valor": 600.0,
+"multa": 12.0,
+"juros": 0.2,
+"total": 612.2
+}
+],
+[
+600,
+"2026-11-18",
+0,
+10,
+{
+"meses": 1,
+"dias": 1,
+"bruto": 600.0,
+"credito": 0.0,
+"valor": 600.0,
+"multa": 12.0,
+"juros": 0.2,
+"total": 612.2
+}
+],
+[
+600,
+"2026-11-18",
+100,
+null,
+{
+"meses": 1,
+"dias": 1,
+"bruto": 600.0,
+"credito": 100.0,
+"valor": 500.0,
+"multa": 10.0,
+"juros": 0.17,
+"total": 510.17
+}
+],
+[
+600,
+"2026-11-18",
+100,
+31,
+{
+"meses": 1,
+"dias": 1,
+"bruto": 600.0,
+"credito": 100.0,
+"valor": 500.0,
+"multa": 10.0,
+"juros": 0.17,
+"total": 510.17
+}
+],
+[
+600,
+"2026-11-18",
+100,
+10,
+{
+"meses": 1,
+"dias": 1,
+"bruto": 600.0,
+"credito": 100.0,
+"valor": 500.0,
+"multa": 10.0,
+"juros": 0.17,
+"total": 510.17
+}
+],
+[
+600,
+"2026-11-18",
+600,
+null,
+null
+],
+[
+600,
+"2026-11-18",
+600,
+31,
+null
+],
+[
+600,
+"2026-11-18",
+600,
+10,
+null
+],
+[
+600,
+"2026-09-30",
+0,
+null,
+{
+"meses": 2,
+"dias": 50,
+"bruto": 1200.0,
+"credito": 0.0,
+"valor": 1200.0,
+"multa": 24.0,
+"juros": 14.0,
+"total": 1238.0
+}
+],
+[
+600,
+"2026-09-30",
+0,
+31,
+{
+"meses": 2,
+"dias": 50,
+"bruto": 1200.0,
+"credito": 0.0,
+"valor": 1200.0,
+"multa": 24.0,
+"juros": 13.8,
+"total": 1237.8
+}
+],
+[
+600,
+"2026-09-30",
+0,
+10,
+{
+"meses": 3,
+"dias": 50,
+"bruto": 1800.0,
+"credito": 0.0,
+"valor": 1800.0,
+"multa": 36.0,
+"juros": 19.8,
+"total": 1855.8
+}
+],
+[
+600,
+"2026-09-30",
+100,
+null,
+{
+"meses": 2,
+"dias": 50,
+"bruto": 1200.0,
+"credito": 100.0,
+"valor": 1100.0,
+"multa": 22.0,
+"juros": 12.33,
+"total": 1134.33
+}
+],
+[
+600,
+"2026-09-30",
+100,
+31,
+{
+"meses": 2,
+"dias": 50,
+"bruto": 1200.0,
+"credito": 100.0,
+"valor": 1100.0,
+"multa": 22.0,
+"juros": 12.13,
+"total": 1134.13
+}
+],
+[
+600,
+"2026-09-30",
+100,
+10,
+{
+"meses": 3,
+"dias": 50,
+"bruto": 1800.0,
+"credito": 100.0,
+"valor": 1700.0,
+"multa": 34.0,
+"juros": 18.13,
+"total": 1752.13
+}
+],
+[
+600,
+"2026-09-30",
+600,
+null,
+{
+"meses": 2,
+"dias": 50,
+"bruto": 1200.0,
+"credito": 600.0,
+"valor": 600.0,
+"multa": 12.0,
+"juros": 4.0,
+"total": 616.0
+}
+],
+[
+600,
+"2026-09-30",
+600,
+31,
+{
+"meses": 2,
+"dias": 50,
+"bruto": 1200.0,
+"credito": 600.0,
+"valor": 600.0,
+"multa": 12.0,
+"juros": 3.8,
+"total": 615.8
+}
+],
+[
+600,
+"2026-09-30",
+600,
+10,
+{
+"meses": 3,
+"dias": 50,
+"bruto": 1800.0,
+"credito": 600.0,
+"valor": 1200.0,
+"multa": 24.0,
+"juros": 9.8,
+"total": 1233.8
+}
+],
+[
+600,
+"2026-01-31",
+0,
+null,
+{
+"meses": 10,
+"dias": 292,
+"bruto": 6000.0,
+"credito": 0.0,
+"valor": 6000.0,
+"multa": 120.0,
+"juros": 313.2,
+"total": 6433.2
+}
+],
+[
+600,
+"2026-01-31",
+0,
+31,
+{
+"meses": 10,
+"dias": 292,
+"bruto": 6000.0,
+"credito": 0.0,
+"valor": 6000.0,
+"multa": 120.0,
+"juros": 313.2,
+"total": 6433.2
+}
+],
+[
+600,
+"2026-01-31",
+0,
+10,
+{
+"meses": 11,
+"dias": 292,
+"bruto": 6600.0,
+"credito": 0.0,
+"valor": 6600.0,
+"multa": 132.0,
+"juros": 351.6,
+"total": 7083.6
+}
+],
+[
+600,
+"2026-01-31",
+100,
+null,
+{
+"meses": 10,
+"dias": 292,
+"bruto": 6000.0,
+"credito": 100.0,
+"valor": 5900.0,
+"multa": 118.0,
+"juros": 303.47,
+"total": 6321.47
+}
+],
+[
+600,
+"2026-01-31",
+100,
+31,
+{
+"meses": 10,
+"dias": 292,
+"bruto": 6000.0,
+"credito": 100.0,
+"valor": 5900.0,
+"multa": 118.0,
+"juros": 303.47,
+"total": 6321.47
+}
+],
+[
+600,
+"2026-01-31",
+100,
+10,
+{
+"meses": 11,
+"dias": 292,
+"bruto": 6600.0,
+"credito": 100.0,
+"valor": 6500.0,
+"multa": 130.0,
+"juros": 341.87,
+"total": 6971.87
+}
+],
+[
+600,
+"2026-01-31",
+600,
+null,
+{
+"meses": 10,
+"dias": 292,
+"bruto": 6000.0,
+"credito": 600.0,
+"valor": 5400.0,
+"multa": 108.0,
+"juros": 254.8,
+"total": 5762.8
+}
+],
+[
+600,
+"2026-01-31",
+600,
+31,
+{
+"meses": 10,
+"dias": 292,
+"bruto": 6000.0,
+"credito": 600.0,
+"valor": 5400.0,
+"multa": 108.0,
+"juros": 254.8,
+"total": 5762.8
+}
+],
+[
+600,
+"2026-01-31",
+600,
+10,
+{
+"meses": 11,
+"dias": 292,
+"bruto": 6600.0,
+"credito": 600.0,
+"valor": 6000.0,
+"multa": 120.0,
+"juros": 293.2,
+"total": 6413.2
+}
+],
+[
+600,
+"2024-05-10",
+0,
+null,
+{
+"meses": 24,
+"dias": 923,
+"bruto": 14400.0,
+"credito": 0.0,
+"valor": 14400.0,
+"multa": 288.0,
+"juros": 2747.2,
+"total": 17435.2
+}
+],
+[
+600,
+"2024-05-10",
+0,
+31,
+{
+"meses": 24,
+"dias": 923,
+"bruto": 14400.0,
+"credito": 0.0,
+"valor": 14400.0,
+"multa": 288.0,
+"juros": 2653.4,
+"total": 17341.4
+}
+],
+[
+600,
+"2024-05-10",
+0,
+10,
+{
+"meses": 24,
+"dias": 923,
+"bruto": 14400.0,
+"credito": 0.0,
+"valor": 14400.0,
+"multa": 288.0,
+"juros": 2747.2,
+"total": 17435.2
+}
+],
+[
+600,
+"2024-05-10",
+100,
+null,
+{
+"meses": 24,
+"dias": 923,
+"bruto": 14400.0,
+"credito": 100.0,
+"valor": 14300.0,
+"multa": 286.0,
+"juros": 2716.43,
+"total": 17302.43
+}
+],
+[
+600,
+"2024-05-10",
+100,
+31,
+{
+"meses": 24,
+"dias": 923,
+"bruto": 14400.0,
+"credito": 100.0,
+"valor": 14300.0,
+"multa": 286.0,
+"juros": 2622.63,
+"total": 17208.63
+}
+],
+[
+600,
+"2024-05-10",
+100,
+10,
+{
+"meses": 24,
+"dias": 923,
+"bruto": 14400.0,
+"credito": 100.0,
+"valor": 14300.0,
+"multa": 286.0,
+"juros": 2716.43,
+"total": 17302.43
+}
+],
+[
+600,
+"2024-05-10",
+600,
+null,
+{
+"meses": 24,
+"dias": 923,
+"bruto": 14400.0,
+"credito": 600.0,
+"valor": 13800.0,
+"multa": 276.0,
+"juros": 2562.6,
+"total": 16638.6
+}
+],
+[
+600,
+"2024-05-10",
+600,
+31,
+{
+"meses": 24,
+"dias": 923,
+"bruto": 14400.0,
+"credito": 600.0,
+"valor": 13800.0,
+"multa": 276.0,
+"juros": 2468.8,
+"total": 16544.8
+}
+],
+[
+600,
+"2024-05-10",
+600,
+10,
+{
+"meses": 24,
+"dias": 923,
+"bruto": 14400.0,
+"credito": 600.0,
+"valor": 13800.0,
+"multa": 276.0,
+"juros": 2562.6,
+"total": 16638.6
+}
+],
+[
+600,
+"xx",
+0,
+null,
+null
+],
+[
+600,
+"xx",
+0,
+31,
+null
+],
+[
+600,
+"xx",
+0,
+10,
+null
+],
+[
+600,
+"xx",
+100,
+null,
+null
+],
+[
+600,
+"xx",
+100,
+31,
+null
+],
+[
+600,
+"xx",
+100,
+10,
+null
+],
+[
+600,
+"xx",
+600,
+null,
+null
+],
+[
+600,
+"xx",
+600,
+31,
+null
+],
+[
+600,
+"xx",
+600,
+10,
+null
+],
+[
+450.5,
+"2026-11-19",
+0,
+null,
+null
+],
+[
+450.5,
+"2026-11-19",
+0,
+31,
+null
+],
+[
+450.5,
+"2026-11-19",
+0,
+10,
+null
+],
+[
+450.5,
+"2026-11-19",
+100,
+null,
+null
+],
+[
+450.5,
+"2026-11-19",
+100,
+31,
+null
+],
+[
+450.5,
+"2026-11-19",
+100,
+10,
+null
+],
+[
+450.5,
+"2026-11-19",
+600,
+null,
+null
+],
+[
+450.5,
+"2026-11-19",
+600,
+31,
+null
+],
+[
+450.5,
+"2026-11-19",
+600,
+10,
+null
+],
+[
+450.5,
+"2026-11-18",
+0,
+null,
+{
+"meses": 1,
+"dias": 1,
+"bruto": 450.5,
+"credito": 0.0,
+"valor": 450.5,
+"multa": 9.01,
+"juros": 0.15,
+"total": 459.66
+}
+],
+[
+450.5,
+"2026-11-18",
+0,
+31,
+{
+"meses": 1,
+"dias": 1,
+"bruto": 450.5,
+"credito": 0.0,
+"valor": 450.5,
+"multa": 9.01,
+"juros": 0.15,
+"total": 459.66
+}
+],
+[
+450.5,
+"2026-11-18",
+0,
+10,
+{
+"meses": 1,
+"dias": 1,
+"bruto": 450.5,
+"credito": 0.0,
+"valor": 450.5,
+"multa": 9.01,
+"juros": 0.15,
+"total": 459.66
+}
+],
+[
+450.5,
+"2026-11-18",
+100,
+null,
+{
+"meses": 1,
+"dias": 1,
+"bruto": 450.5,
+"credito": 100.0,
+"valor": 350.5,
+"multa": 7.01,
+"juros": 0.12,
+"total": 357.63
+}
+],
+[
+450.5,
+"2026-11-18",
+100,
+31,
+{
+"meses": 1,
+"dias": 1,
+"bruto": 450.5,
+"credito": 100.0,
+"valor": 350.5,
+"multa": 7.01,
+"juros": 0.12,
+"total": 357.63
+}
+],
+[
+450.5,
+"2026-11-18",
+100,
+10,
+{
+"meses": 1,
+"dias": 1,
+"bruto": 450.5,
+"credito": 100.0,
+"valor": 350.5,
+"multa": 7.01,
+"juros": 0.12,
+"total": 357.63
+}
+],
+[
+450.5,
+"2026-11-18",
+600,
+null,
+null
+],
+[
+450.5,
+"2026-11-18",
+600,
+31,
+null
+],
+[
+450.5,
+"2026-11-18",
+600,
+10,
+null
+],
+[
+450.5,
+"2026-09-30",
+0,
+null,
+{
+"meses": 2,
+"dias": 50,
+"bruto": 901.0,
+"credito": 0.0,
+"valor": 901.0,
+"multa": 18.02,
+"juros": 10.51,
+"total": 929.53
+}
+],
+[
+450.5,
+"2026-09-30",
+0,
+31,
+{
+"meses": 2,
+"dias": 50,
+"bruto": 901.0,
+"credito": 0.0,
+"valor": 901.0,
+"multa": 18.02,
+"juros": 10.36,
+"total": 929.38
+}
+],
+[
+450.5,
+"2026-09-30",
+0,
+10,
+{
+"meses": 3,
+"dias": 50,
+"bruto": 1351.5,
+"credito": 0.0,
+"valor": 1351.5,
+"multa": 27.03,
+"juros": 14.87,
+"total": 1393.4
+}
+],
+[
+450.5,
+"2026-09-30",
+100,
+null,
+{
+"meses": 2,
+"dias": 50,
+"bruto": 901.0,
+"credito": 100.0,
+"valor": 801.0,
+"multa": 16.02,
+"juros": 8.85,
+"total": 825.87
+}
+],
+[
+450.5,
+"2026-09-30",
+100,
+31,
+{
+"meses": 2,
+"dias": 50,
+"bruto": 901.0,
+"credito": 100.0,
+"valor": 801.0,
+"multa": 16.02,
+"juros": 8.69,
+"total": 825.71
+}
+],
+[
+450.5,
+"2026-09-30",
+100,
+10,
+{
+"meses": 3,
+"dias": 50,
+"bruto": 1351.5,
+"credito": 100.0,
+"valor": 1251.5,
+"multa": 25.03,
+"juros": 13.2,
+"total": 1289.73
+}
+],
+[
+450.5,
+"2026-09-30",
+600,
+null,
+{
+"meses": 2,
+"dias": 50,
+"bruto": 901.0,
+"credito": 450.5,
+"valor": 450.5,
+"multa": 9.01,
+"juros": 3.0,
+"total": 462.51
+}
+],
+[
+450.5,
+"2026-09-30",
+600,
+31,
+{
+"meses": 2,
+"dias": 50,
+"bruto": 901.0,
+"credito": 450.5,
+"valor": 450.5,
+"multa": 9.01,
+"juros": 2.85,
+"total": 462.36
+}
+],
+[
+450.5,
+"2026-09-30",
+600,
+10,
+{
+"meses": 3,
+"dias": 50,
+"bruto": 1351.5,
+"credito": 450.5,
+"valor": 901.0,
+"multa": 18.02,
+"juros": 7.36,
+"total": 926.38
+}
+],
+[
+450.5,
+"2026-01-31",
+0,
+null,
+{
+"meses": 10,
+"dias": 292,
+"bruto": 4505.0,
+"credito": 0.0,
+"valor": 4505.0,
+"multa": 90.1,
+"juros": 235.16,
+"total": 4830.26
+}
+],
+[
+450.5,
+"2026-01-31",
+0,
+31,
+{
+"meses": 10,
+"dias": 292,
+"bruto": 4505.0,
+"credito": 0.0,
+"valor": 4505.0,
+"multa": 90.1,
+"juros": 235.16,
+"total": 4830.26
+}
+],
+[
+450.5,
+"2026-01-31",
+0,
+10,
+{
+"meses": 11,
+"dias": 292,
+"bruto": 4955.5,
+"credito": 0.0,
+"valor": 4955.5,
+"multa": 99.11,
+"juros": 263.99,
+"total": 5318.6
+}
+],
+[
+450.5,
+"2026-01-31",
+100,
+null,
+{
+"meses": 10,
+"dias": 292,
+"bruto": 4505.0,
+"credito": 100.0,
+"valor": 4405.0,
+"multa": 88.1,
+"juros": 225.43,
+"total": 4718.53
+}
+],
+[
+450.5,
+"2026-01-31",
+100,
+31,
+{
+"meses": 10,
+"dias": 292,
+"bruto": 4505.0,
+"credito": 100.0,
+"valor": 4405.0,
+"multa": 88.1,
+"juros": 225.43,
+"total": 4718.53
+}
+],
+[
+450.5,
+"2026-01-31",
+100,
+10,
+{
+"meses": 11,
+"dias": 292,
+"bruto": 4955.5,
+"credito": 100.0,
+"valor": 4855.5,
+"multa": 97.11,
+"juros": 254.26,
+"total": 5206.87
+}
+],
+[
+450.5,
+"2026-01-31",
+600,
+null,
+{
+"meses": 10,
+"dias": 292,
+"bruto": 4505.0,
+"credito": 450.5,
+"valor": 4054.5,
+"multa": 81.09,
+"juros": 191.31,
+"total": 4326.9
+}
+],
+[
+450.5,
+"2026-01-31",
+600,
+31,
+{
+"meses": 10,
+"dias": 292,
+"bruto": 4505.0,
+"credito": 450.5,
+"valor": 4054.5,
+"multa": 81.09,
+"juros": 191.31,
+"total": 4326.9
+}
+],
+[
+450.5,
+"2026-01-31",
+600,
+10,
+{
+"meses": 11,
+"dias": 292,
+"bruto": 4955.5,
+"credito": 450.5,
+"valor": 4505.0,
+"multa": 90.1,
+"juros": 220.14,
+"total": 4815.24
+}
+],
+[
+450.5,
+"2024-05-10",
+0,
+null,
+{
+"meses": 24,
+"dias": 923,
+"bruto": 10812.0,
+"credito": 0.0,
+"valor": 10812.0,
+"multa": 216.24,
+"juros": 2062.69,
+"total": 13090.93
+}
+],
+[
+450.5,
+"2024-05-10",
+0,
+31,
+{
+"meses": 24,
+"dias": 923,
+"bruto": 10812.0,
+"credito": 0.0,
+"valor": 10812.0,
+"multa": 216.24,
+"juros": 1992.26,
+"total": 13020.5
+}
+],
+[
+450.5,
+"2024-05-10",
+0,
+10,
+{
+"meses": 24,
+"dias": 923,
+"bruto": 10812.0,
+"credito": 0.0,
+"valor": 10812.0,
+"multa": 216.24,
+"juros": 2062.69,
+"total": 13090.93
+}
+],
+[
+450.5,
+"2024-05-10",
+100,
+null,
+{
+"meses": 24,
+"dias": 923,
+"bruto": 10812.0,
+"credito": 100.0,
+"valor": 10712.0,
+"multa": 214.24,
+"juros": 2031.92,
+"total": 12958.16
+}
+],
+[
+450.5,
+"2024-05-10",
+100,
+31,
+{
+"meses": 24,
+"dias": 923,
+"bruto": 10812.0,
+"credito": 100.0,
+"valor": 10712.0,
+"multa": 214.24,
+"juros": 1961.49,
+"total": 12887.73
+}
+],
+[
+450.5,
+"2024-05-10",
+100,
+10,
+{
+"meses": 24,
+"dias": 923,
+"bruto": 10812.0,
+"credito": 100.0,
+"valor": 10712.0,
+"multa": 214.24,
+"juros": 2031.92,
+"total": 12958.16
+}
+],
+[
+450.5,
+"2024-05-10",
+600,
+null,
+{
+"meses": 24,
+"dias": 923,
+"bruto": 10812.0,
+"credito": 450.5,
+"valor": 10361.5,
+"multa": 207.23,
+"juros": 1924.09,
+"total": 12492.82
+}
+],
+[
+450.5,
+"2024-05-10",
+600,
+31,
+{
+"meses": 24,
+"dias": 923,
+"bruto": 10812.0,
+"credito": 450.5,
+"valor": 10361.5,
+"multa": 207.23,
+"juros": 1853.66,
+"total": 12422.39
+}
+],
+[
+450.5,
+"2024-05-10",
+600,
+10,
+{
+"meses": 24,
+"dias": 923,
+"bruto": 10812.0,
+"credito": 450.5,
+"valor": 10361.5,
+"multa": 207.23,
+"juros": 1924.09,
+"total": 12492.82
+}
+],
+[
+450.5,
+"xx",
+0,
+null,
+null
+],
+[
+450.5,
+"xx",
+0,
+31,
+null
+],
+[
+450.5,
+"xx",
+0,
+10,
+null
+],
+[
+450.5,
+"xx",
+100,
+null,
+null
+],
+[
+450.5,
+"xx",
+100,
+31,
+null
+],
+[
+450.5,
+"xx",
+100,
+10,
+null
+],
+[
+450.5,
+"xx",
+600,
+null,
+null
+],
+[
+450.5,
+"xx",
+600,
+31,
+null
+],
+[
+450.5,
+"xx",
+600,
+10,
+null
+]
+],
+"dias_parados": [
+[
+"2026-10-01",
+"2026-11-19",
+[
+[
+"2026-10-25",
+"2026-11-02"
+]
+],
+9
+],
+[
+"2026-10-01",
+"2026-11-19",
+[
+[
+"2026-10-25",
+"2026-11-02"
+],
+[
+"2026-10-30",
+"2026-11-10"
+],
+[
+"2026-09-01",
+"2026-10-03"
+]
+],
+19
+],
+[
+"2026-11-05",
+"2026-11-19",
+[
+[
+"2026-10-25",
+"2026-11-02"
+]
+],
+0
+],
+[
+"2026-11-01",
+"2026-11-03",
+[
+[
+"2026-11-02",
+"2026-12-30"
+]
+],
+2
+]
+],
+"br_code": [
+[
+"chave@pix.com",
+"Victor Celli",
+"São Paulo",
+615.33,
+"00020126350014br.gov.bcb.pix0113chave@pix.com5204000053039865406615.335802BR5912VICTOR CELLI6009SAO PAULO62070503***63049E54"
+],
+[
+"+5511999990000",
+"José Ação da Silva Muito Comprido Nome",
+"Ribeirão Preto do Sul",
+null,
+"00020126360014br.gov.bcb.pix0114+55119999900005204000053039865802BR5924JOSE ACAO DA SILVA MUITO6014RIBEIRAO PRETO62070503***6304C8B7"
+],
+[
+"",
+"A",
+"B",
+10,
+""
+],
+[
+"12345678900",
+"  ana  ",
+" sp ",
+0.005,
+"00020126330014br.gov.bcb.pix01111234567890052040000530398654040.015802BR5903ANA6002SP62070503***630489FA"
+],
+[
+"chave",
+"Ç",
+"É",
+1234567.891,
+"00020126270014br.gov.bcb.pix0105chave52040000530398654101234567.895802BR5901C6001E62070503***63042736"
+]
+],
+"frase_valor": [
+[
+600,
+null,
+"R$ 600,00"
+],
+[
+0,
+[
+{
+"id": 1,
+"mes": "2026-10",
+"valor": 100.0
+}
+],
+""
+],
+[
+600,
+[
+{
+"id": 1,
+"mes": "2026-10",
+"valor": 100.0
+},
+{
+"id": 2,
+"mes": "2026-09",
+"valor": 550.0
+}
+],
+"R$ 500,00 (R$ 600,00 − R$ 100,00 de crédito das aulas não usadas em 10/2026)"
+],
+[
+300,
+[
+{
+"id": 3,
+"mes": "2026-08",
+"valor": 120.0
+},
+{
+"id": 4,
+"mes": "2026-09",
+"valor": 120.0
+}
+],
+"R$ 60,00 (R$ 300,00 − R$ 240,00 de crédito das aulas não usadas em 08/2026 e 09/2026)"
+]
+]
+}

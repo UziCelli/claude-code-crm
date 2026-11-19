@@ -1,0 +1,28 @@
+{
+  "name": "vfitcoach-crm-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "estaticos": "node scripts/copiar-estaticos.mjs",
+    "dev": "npm run estaticos && wrangler dev",
+    "deploy": "npm run estaticos && wrangler deploy",
+    "tipos": "npm run estaticos && tsc --noEmit",
+    "test": "npm run estaticos && vitest run",
+    "cpu": "npm run estaticos && esbuild scripts/medir-cpu.tsx --bundle --platform=node --format=esm --jsx=automatic --jsx-import-source=hono/jsx --packages=external --log-level=warning --outfile=scripts/.medir-cpu.mjs && node --no-warnings scripts/.medir-cpu.mjs"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.18.0",
+    "hono": "^4.13.19",
+    "jose": "^6.2.18",
+    "uqr": "^0.1.3"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.8.5",
+    "@cloudflare/workers-types": "^5.20261119.1",
+    "@types/node": "^26.6.6",
+    "jsqr": "^1.4.0",
+    "typescript": "5.9",
+    "vitest": "^5.1.1",
+    "wrangler": "4.165.0"
+  }
+}
