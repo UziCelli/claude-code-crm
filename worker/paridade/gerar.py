@@ -27,6 +27,22 @@ def banco_novo() -> Path:
     return db.DB_PATH
 
 
+CARIMBO = "2026-11-19 12:00:00"
+
+
+def fixar_carimbos(caminho: Path) -> None:
+    """criado_em/atualizado_em gravados pelo SQL na hora da geração viram uma data fixa: gerar de novo dá os mesmos arquivos."""
+    con = sqlite3.connect(caminho)
+    with con:
+        for (tabela,) in con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall():
+            cols = {r[1] for r in con.execute(f'PRAGMA table_info("{tabela}")')}
+            for col in ("criado_em", "atualizado_em"):
+                if col in cols:
+                    # o que o SQL carimbou agora (hoje de verdade); datas escritas no cenário são anteriores
+                    con.execute(f"UPDATE \"{tabela}\" SET {col}=? WHERE {col} >= date('now', '-2 days')", (CARIMBO,))
+    con.close()
+
+
 def literal(v) -> str:
     if v is None:
         return "NULL"
@@ -36,6 +52,7 @@ def literal(v) -> str:
 
 
 def esquema_e_semente(caminho: Path) -> None:
+    fixar_carimbos(caminho)
     con = sqlite3.connect(caminho)
     objs = con.execute("SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY rowid").fetchall()
     ddl = [s + ";" for t, _, s in objs if t == "table"] + [s + ";" for t, _, s in objs if t != "table"]
@@ -110,6 +127,7 @@ def semear_financeiro(caminho: Path, fator: int = 3) -> None:
                         " VALUES (?,?,?,?,?,?,?,?,?,?,?)", (orig[0], orig[1], d, d if orig[3] else None, *orig[4:]))
         con.execute("INSERT INTO duplicados_ok (a, b) SELECT MIN(id), MAX(id) FROM lancamentos WHERE id IN (1, 2)")
     con.close()
+    fixar_carimbos(caminho)
 
 
 def dump(caminho: Path, tabelas: list[str], arquivo: str) -> None:
@@ -221,6 +239,7 @@ def semear_motor(caminho: Path) -> None:
                             (f"{mes}-0{k + 1}", f"{mes}-0{k + 1}", round(rnd.uniform(200, 1500), 2)))
         con.execute("INSERT INTO lancamentos (escopo, tipo, data, valor, categoria) VALUES ('PF','saida','2026-09-05', 999, 'Alimentação')")
     con.close()
+    fixar_carimbos(caminho)
 
 
 def casos_motor():
@@ -298,6 +317,7 @@ def html_configuracoes(caminho: Path) -> None:
         con.execute("INSERT INTO segredos (chave, valor, atualizado_em) VALUES ('anthropic_api_key', 'sk-ant-teste-0000000000wxyz', '2026-11-01 10:00:00')")
         con.execute("UPDATE parametros SET valor_texto='chave@pix.com' WHERE grupo='msg_dados' AND chave='pix'")
     con.close()
+    fixar_carimbos(caminho)
     dump(caminho, ["importacoes", "segredos", "parametros"], "cenario-config.sql")
     db.DB_PATH = caminho
     c2 = db.conectar(caminho)
