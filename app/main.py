@@ -4193,15 +4193,15 @@ async def configuracoes_salvar(request: Request, con=Depends(get_db)):
         numeros, textos = _mudancas_configuracoes(form, atuais)
         if not numeros and not textos:
             return voltar(destino, msg="Parâmetros salvos.")   # nada mudou: nenhuma gravação
-        das = financeiro.pct_das(con)   # da tabela do Simples: não é campo desta tela
-        _checar_margens(_margens_propostas(das, atuais, numeros))   # valida antes de gravar: margem inválida não grava nada
+        # valida antes de gravar: margem inválida falha cedo, sem gravar nada
+        _checar_margens(_margens_propostas(financeiro.pct_das(con), atuais, numeros))
         with con:
             _gravar_mudancas_parametros(con, numeros, textos)
-            if numeros:   # revalida dentro da transação, já com a gravação: outro aparelho pode ter salvo uma taxa ou margem
-                # depois da leitura acima, e duas mudanças válidas sozinhas podem passar de 100% juntas (o with desfaz)
+            if numeros:   # revalida dentro da transação, já com a gravação: outro aparelho pode ter salvo uma taxa, uma margem
+                # ou uma receita (que muda o DAS) depois da leitura acima, e mudanças válidas sozinhas podem passar de 100% juntas
                 margens = {r["id"]: r for r in con.execute(
                     "SELECT id, grupo, chave, valor, valor_texto, ordem FROM parametros WHERE grupo IN (?, ?, ?)", GRUPOS_MARGEM)}
-                _checar_margens(_margens_propostas(das, margens, {}))
+                _checar_margens(_margens_propostas(financeiro.pct_das(con), margens, {}))   # erro: o with desfaz
     except ValueError as e:
         return voltar(destino, erro=str(e))
     return voltar(destino, msg="Parâmetros salvos.")
@@ -4212,7 +4212,7 @@ GRUPOS_MARGEM = ("taxa_pagamento", "margem_minima", "margem_alvo")   # o que _ch
 
 def _margens_propostas(das: float, atuais: dict, numeros: dict) -> dict:
     """O pedaço de carregar_parametros que _checar_margens usa (DAS, taxas, margens mínima e alvo), já com os valores propostos,
-    montado das linhas lidas (atuais), sem consultar o banco de novo."""
+    montado das linhas lidas (atuais). O DAS vem de financeiro.pct_das: tabela do Simples e receitas lançadas."""
     nomes = dict(zip(GRUPOS_MARGEM, ("taxas", "margens", "margens_alvo")))
     p = {"das": das, "taxas": {}, "margens": {}, "margens_alvo": {}}
     for r in sorted(atuais.values(), key=lambda r: (r["ordem"] or 0, r["chave"])):   # a ordem de db.parametros

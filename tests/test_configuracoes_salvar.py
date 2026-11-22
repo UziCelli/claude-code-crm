@@ -153,3 +153,18 @@ def test_duas_mudancas_validas_que_juntas_passam_de_100_sao_recusadas(http, con,
     assert "erro=" in r.headers["location"] and "100%25" in r.headers["location"]
     assert con.execute("SELECT valor FROM parametros WHERE id=?", (margem,)).fetchone()[0] == antes   # a margem não entrou
     assert con.execute("SELECT valor FROM parametros WHERE id=?", (taxa,)).fetchone()[0] == 0.5   # a do outro aparelho fica
+
+
+def test_receita_lancada_no_meio_que_sobe_o_das_e_recusada(http, con, monkeypatch):  # noqa: F811
+    """Outro aparelho lança uma receita entre a leitura e a gravação e o DAS sobe: a revalidação usa o DAS novo, não o lido antes."""
+    margem = _pid(con, "margem_alvo", next(iter(db.parametros(con, "margem_alvo"))))
+    chamadas = []
+
+    def pct_das(c, hoje=None):
+        chamadas.append(c.in_transaction)
+        return 0.06 if not c.in_transaction else 0.60   # dentro da transação: já com a receita do outro aparelho
+    monkeypatch.setattr(main.financeiro, "pct_das", pct_das)
+    antes = con.execute("SELECT valor FROM parametros WHERE id=?", (margem,)).fetchone()[0]
+    r = http.post("/configuracoes", data={f"p_{margem}": "45", f"f_{margem}": "pct"}, follow_redirects=False)
+    assert "erro=" in r.headers["location"] and True in chamadas
+    assert con.execute("SELECT valor FROM parametros WHERE id=?", (margem,)).fetchone()[0] == antes
