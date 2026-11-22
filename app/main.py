@@ -4134,29 +4134,96 @@ def calculos(request: Request, con=Depends(get_db)):
                   cobre=cobre_custos(con, p), das_txt=financeiro.texto_pct(p["das"]))
 
 
+GRUPOS_TEXTO_CFG = ("msg_whatsapp", "msg_dados")   # só estes grupos recebem texto (t_) pela tela de Configurações
+
+
+def valor_tela(valor, fmt: str) -> str:
+    """O número como aparece no campo de Configurações e Cálculos (% com 2 casas, demais com 4, vírgula decimal).
+    É também o que o POST compara: campo reenviado igual ao da tela não é regravado (nem arredondado)."""
+    if valor is None:
+        return ""
+    return str(round(valor * 100, 2) if fmt == "pct" else round(valor, 4)).replace(".", ",")
+
+
+templates.env.filters["valor_tela"] = valor_tela
+
+
+def _mudancas_configuracoes(form, atuais: dict) -> tuple[dict, dict]:
+    """({id: novo valor}, {id: novo texto}) só com o que o formulário realmente mudou. ValueError se um número não é número.
+    atuais: {id: linha de parametros}; id que não existe é ignorado (como o UPDATE antigo, que não achava a linha)."""
+    numeros, textos = {}, {}
+    for k, v in form.items():
+        if k.startswith("p_") and v != "":
+            pid = int(k[2:])
+            fmt = form.get(f"f_{pid}", "num")
+            atual = atuais.get(pid)
+            if atual is None or v.strip() == valor_tela(atual["valor"], fmt):
+                continue   # igual ao que a tela mostrou: mantém o número guardado, sem arredondar
+            val = _num_br(v)
+            val = val / 100 if fmt == "pct" else val
+            if atual["valor"] is None or not math.isclose(val, atual["valor"], rel_tol=1e-12, abs_tol=1e-12):
+                numeros[pid] = val
+        elif k.startswith("t_"):
+            pid = int(k[2:])
+            atual = atuais.get(pid)
+            if atual is not None and atual["grupo"] in GRUPOS_TEXTO_CFG and v.strip() != (atual["valor_texto"] or ""):
+                textos[pid] = v.strip()
+    return numeros, textos
+
+
+def _gravar_mudancas_parametros(con, numeros: dict, textos: dict) -> None:
+    """Um único UPDATE com CASE para todas as mudanças: uma ida ao banco (no Turso, uma gravação remota) e atômico por si só."""
+    ids = sorted(set(numeros) | set(textos))
+    if not ids:
+        return
+    sets, params = [], []
+    for coluna, mudas in (("valor", numeros), ("valor_texto", textos)):
+        if mudas:
+            sets.append(f"{coluna} = CASE id {' '.join('WHEN ? THEN ?' for _ in mudas)} ELSE {coluna} END")
+            params += [x for pid, val in mudas.items() for x in (pid, val)]
+    con.execute(f"UPDATE parametros SET {', '.join(sets)} WHERE id IN ({', '.join('?' * len(ids))})", (*params, *ids))
+
+
 @app.post("/configuracoes")
 async def configuracoes_salvar(request: Request, con=Depends(get_db)):
     form = await request.form()
     destino = "/calculos" if form.get("voltar") == "/calculos" else "/configuracoes"   # lista fechada: nada de redirecionar para fora
     try:
+        atuais = {r["id"]: r for r in con.execute("SELECT id, grupo, chave, valor, valor_texto, ordem FROM parametros")}
+        numeros, textos = _mudancas_configuracoes(form, atuais)
+        if not numeros and not textos:
+            return voltar(destino, msg="Parâmetros salvos.")   # nada mudou: nenhuma gravação
+        # valida antes de gravar: margem inválida falha cedo, sem gravar nada
+        _checar_margens(_margens_propostas(financeiro.pct_das(con), atuais, numeros))
         with con:
-            for k, v in form.items():
-                if k.startswith("p_") and v != "":
-                    pid = int(k[2:])
-                    fmt = form.get(f"f_{pid}", "num")
-                    val = _num_br(v)
-                    con.execute("UPDATE parametros SET valor=? WHERE id=?", (val / 100 if fmt == "pct" else val, pid))
-                elif k.startswith("t_"):
-                    con.execute("UPDATE parametros SET valor_texto=? WHERE id=? AND grupo IN ('msg_whatsapp','msg_dados')", (v.strip(), int(k[2:])))
-            _checar_margens(con)
-    except ValueError as e:   # nada é salvo (o with desfaz)
+            _gravar_mudancas_parametros(con, numeros, textos)
+            if numeros:   # revalida dentro da transação, já com a gravação: outro aparelho pode ter salvo uma taxa, uma margem
+                # ou uma receita (que muda o DAS) depois da leitura acima, e mudanças válidas sozinhas podem passar de 100% juntas
+                margens = {r["id"]: r for r in con.execute(
+                    "SELECT id, grupo, chave, valor, valor_texto, ordem FROM parametros WHERE grupo IN (?, ?, ?)", GRUPOS_MARGEM)}
+                _checar_margens(_margens_propostas(financeiro.pct_das(con), margens, {}))   # erro: o with desfaz
+    except ValueError as e:
         return voltar(destino, erro=str(e))
     return voltar(destino, msg="Parâmetros salvos.")
 
 
-def _checar_margens(con) -> None:
+GRUPOS_MARGEM = ("taxa_pagamento", "margem_minima", "margem_alvo")   # o que _checar_margens confere, além do DAS
+
+
+def _margens_propostas(das: float, atuais: dict, numeros: dict) -> dict:
+    """O pedaço de carregar_parametros que _checar_margens usa (DAS, taxas, margens mínima e alvo), já com os valores propostos,
+    montado das linhas lidas (atuais). O DAS vem de financeiro.pct_das: tabela do Simples e receitas lançadas."""
+    nomes = dict(zip(GRUPOS_MARGEM, ("taxas", "margens", "margens_alvo")))
+    p = {"das": das, "taxas": {}, "margens": {}, "margens_alvo": {}}
+    for r in sorted(atuais.values(), key=lambda r: (r["ordem"] or 0, r["chave"])):   # a ordem de db.parametros
+        if r["grupo"] in nomes:
+            valor = numeros.get(r["id"], r["valor"])
+            p[nomes[r["grupo"]]][r["chave"]] = valor if valor is not None else r["valor_texto"]
+    return p
+
+
+def _checar_margens(p: dict) -> None:
     """Margem mínima + DAS + a maior taxa de pagamento precisa ficar abaixo de 100%: senão o preço mínimo não existe."""
-    p = precos.carregar_parametros(con)
     taxa = p["das"] + max(p["taxas"].values(), default=0)
     for servico, m in p["margens"].items():
         if m >= 1 or taxa + m >= 1:

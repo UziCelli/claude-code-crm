@@ -89,7 +89,7 @@
       <div class="campo linha">
         <label style="flex:1;margin:0" for="p_{{ it.id }}">{{ rotulos.get(it.chave, it.chave) }}</label>
         <input type="hidden" name="f_{{ it.id }}" value="{{ g.fmt }}">
-        <input id="p_{{ it.id }}" name="p_{{ it.id }}" class="num-curto" value="{{ (((it.valor * 100)|round(2)) if g.fmt == 'pct' else (it.valor|round(4)))|string|replace('.', ',') }}">
+        <input id="p_{{ it.id }}" name="p_{{ it.id }}" class="num-curto" value="{{ it.valor|valor_tela(g.fmt) }}">
         <span class="muted" style="width:18px">{{ '%' if g.fmt == 'pct' }}</span>
       </div>
       {% endfor %}
