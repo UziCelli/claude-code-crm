@@ -133,3 +133,23 @@ def test_texto_em_grupo_que_nao_e_de_mensagem_continua_ignorado(http, con, grava
                                             (53.123456789, "num", "53,1235"), (None, "num", "")])
 def test_valor_tela_igual_ao_campo_antigo(valor, fmt, tela):
     assert main.valor_tela(valor, fmt) == tela
+
+
+def test_duas_mudancas_validas_que_juntas_passam_de_100_sao_recusadas(http, con, monkeypatch):  # noqa: F811
+    """Outro aparelho salva uma taxa alta entre a leitura e a gravação: a margem alta desta tela, válida sozinha, não pode entrar."""
+    taxa = _pid(con, "taxa_pagamento", next(iter(db.parametros(con, "taxa_pagamento"))))
+    margem = _pid(con, "margem_alvo", next(iter(db.parametros(con, "margem_alvo"))))
+    gravar = main._gravar_mudancas_parametros
+
+    def outro_aparelho_salva_antes(c, numeros, textos):
+        outro = db.conectar()
+        with outro:
+            outro.execute("UPDATE parametros SET valor=0.5 WHERE id=?", (taxa,))
+        outro.close()
+        gravar(c, numeros, textos)
+    monkeypatch.setattr(main, "_gravar_mudancas_parametros", outro_aparelho_salva_antes)
+    antes = con.execute("SELECT valor FROM parametros WHERE id=?", (margem,)).fetchone()[0]
+    r = http.post("/configuracoes", data={f"p_{margem}": "45", f"f_{margem}": "pct"}, follow_redirects=False)
+    assert "erro=" in r.headers["location"] and "100%25" in r.headers["location"]
+    assert con.execute("SELECT valor FROM parametros WHERE id=?", (margem,)).fetchone()[0] == antes   # a margem não entrou
+    assert con.execute("SELECT valor FROM parametros WHERE id=?", (taxa,)).fetchone()[0] == 0.5   # a do outro aparelho fica

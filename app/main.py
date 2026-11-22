@@ -4193,23 +4193,32 @@ async def configuracoes_salvar(request: Request, con=Depends(get_db)):
         numeros, textos = _mudancas_configuracoes(form, atuais)
         if not numeros and not textos:
             return voltar(destino, msg="Parâmetros salvos.")   # nada mudou: nenhuma gravação
-        _checar_margens(_margens_propostas(con, atuais, numeros))   # valida antes de gravar: margem inválida não grava nada
+        das = financeiro.pct_das(con)   # da tabela do Simples: não é campo desta tela
+        _checar_margens(_margens_propostas(das, atuais, numeros))   # valida antes de gravar: margem inválida não grava nada
         with con:
             _gravar_mudancas_parametros(con, numeros, textos)
+            if numeros:   # revalida dentro da transação, já com a gravação: outro aparelho pode ter salvo uma taxa ou margem
+                # depois da leitura acima, e duas mudanças válidas sozinhas podem passar de 100% juntas (o with desfaz)
+                margens = {r["id"]: r for r in con.execute(
+                    "SELECT id, grupo, chave, valor, valor_texto, ordem FROM parametros WHERE grupo IN (?, ?, ?)", GRUPOS_MARGEM)}
+                _checar_margens(_margens_propostas(das, margens, {}))
     except ValueError as e:
         return voltar(destino, erro=str(e))
     return voltar(destino, msg="Parâmetros salvos.")
 
 
-def _margens_propostas(con, atuais: dict, numeros: dict) -> dict:
-    """O pedaço de carregar_parametros que _checar_margens usa (DAS, taxas, margens mínima e alvo), já com os valores propostos.
-    O DAS vem da tabela do Simples (não é campo desta tela); o resto sai das linhas lidas, sem consultar o banco de novo."""
-    grupos = {"taxa_pagamento": "taxas", "margem_minima": "margens", "margem_alvo": "margens_alvo"}
-    p = {"das": financeiro.pct_das(con), "taxas": {}, "margens": {}, "margens_alvo": {}}
+GRUPOS_MARGEM = ("taxa_pagamento", "margem_minima", "margem_alvo")   # o que _checar_margens confere, além do DAS
+
+
+def _margens_propostas(das: float, atuais: dict, numeros: dict) -> dict:
+    """O pedaço de carregar_parametros que _checar_margens usa (DAS, taxas, margens mínima e alvo), já com os valores propostos,
+    montado das linhas lidas (atuais), sem consultar o banco de novo."""
+    nomes = dict(zip(GRUPOS_MARGEM, ("taxas", "margens", "margens_alvo")))
+    p = {"das": das, "taxas": {}, "margens": {}, "margens_alvo": {}}
     for r in sorted(atuais.values(), key=lambda r: (r["ordem"] or 0, r["chave"])):   # a ordem de db.parametros
-        if r["grupo"] in grupos:
+        if r["grupo"] in nomes:
             valor = numeros.get(r["id"], r["valor"])
-            p[grupos[r["grupo"]]][r["chave"]] = valor if valor is not None else r["valor_texto"]
+            p[nomes[r["grupo"]]][r["chave"]] = valor if valor is not None else r["valor_texto"]
     return p
 
 
