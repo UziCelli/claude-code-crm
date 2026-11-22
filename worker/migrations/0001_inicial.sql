@@ -1,0 +1,371 @@
+-- Gerado por worker/paridade/gerar.py a partir de um banco novo do CRM em Python (app/schema.sql + app/db.py). Não editar.
+CREATE TABLE parametros (
+    id INTEGER PRIMARY KEY,
+    grupo TEXT NOT NULL,
+    chave TEXT NOT NULL,
+    valor REAL,
+    valor_texto TEXT,
+    ordem INTEGER DEFAULT 0,
+    UNIQUE (grupo, chave)
+);
+CREATE TABLE clientes (
+    id INTEGER PRIMARY KEY,
+    nome TEXT NOT NULL,
+    telefone TEXT,
+    local TEXT,
+    tipo_servico TEXT,
+    plano TEXT,
+    pessoas INTEGER DEFAULT 1,
+    dias_horarios TEXT,
+    valor REAL DEFAULT 0,
+    forma_pagamento TEXT,
+    status TEXT NOT NULL DEFAULT 'ativo',
+    canal_origem TEXT,
+    data_inicio TEXT,
+    data_renovacao TEXT,
+    observacoes TEXT,
+    planilha_id INTEGER UNIQUE,
+    lead_id INTEGER,
+    criado_em TEXT DEFAULT (datetime('now','localtime')),
+    atualizado_em TEXT DEFAULT (datetime('now','localtime')),
+    excluido_em TEXT,
+    renovacao_em TEXT,               -- quando a data de renovação foi trocada à mão (o que foi lançado antes já está nela)
+    indicado_por INTEGER REFERENCES clientes(id)   -- quem indicou este aluno (ganha um presente no 1º pagamento; nunca desconto)
+);
+CREATE TABLE cliente_eventos (
+    id INTEGER PRIMARY KEY,
+    cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+    tipo TEXT NOT NULL,              -- pagamento | renovacao | pausa | credito | brinde (presente por indicação) | anotacao | status | aula | falta | desmarcou | cancelada (não repõe)
+    data TEXT NOT NULL,              -- pausa: a renovação que foi pulada; credito: dia 1 do mês pago e não usado
+    valor REAL,
+    descricao TEXT,
+    criado_em TEXT DEFAULT (datetime('now','localtime')),
+    excluido_em TEXT,
+    hora INTEGER,                    -- aula marcada pela Agenda (5..23); NULL = lançada pela ficha
+    ate TEXT,                        -- pausa: dia da volta
+    usado_em TEXT,                   -- credito: dia em que foi descontado (NULL = ainda disponível)
+    usado_lancamento_id INTEGER,     -- credito: o pagamento (lancamentos.id) que o descontou
+    indicado_id INTEGER              -- brinde: o aluno indicado que rendeu o presente (1 presente por indicado)
+);
+CREATE TABLE leads (
+    id INTEGER PRIMARY KEY,
+    nome TEXT NOT NULL,
+    telefone TEXT,
+    canal_origem TEXT NOT NULL,
+    etapa TEXT NOT NULL DEFAULT 'lead',   -- lead | conversa | avaliacao | cliente | perdido
+    motivo_perda TEXT,
+    proxima_acao TEXT,
+    data_proxima_acao TEXT,
+    interesse TEXT,
+    observacoes TEXT,
+    cliente_id INTEGER,
+    data_entrada TEXT DEFAULT (date('now','localtime')),
+    data_mudanca_etapa TEXT DEFAULT (date('now','localtime')),
+    criado_em TEXT DEFAULT (datetime('now','localtime')),
+    atualizado_em TEXT DEFAULT (datetime('now','localtime')),
+    excluido_em TEXT,
+    indicado_por INTEGER REFERENCES clientes(id)   -- quem indicou este lead; passa para o aluno quando ele fecha
+);
+CREATE TABLE lead_etapas_log (
+    id INTEGER PRIMARY KEY,
+    lead_id INTEGER NOT NULL REFERENCES leads(id),
+    etapa TEXT NOT NULL,
+    data TEXT DEFAULT (datetime('now','localtime'))
+);
+CREATE TABLE precos_base (
+    id INTEGER PRIMARY KEY,
+    tipo_servico TEXT NOT NULL,
+    local TEXT NOT NULL,
+    forma_pagamento TEXT NOT NULL,
+    qtd_aulas INTEGER DEFAULT 0,
+    freq_semanal INTEGER DEFAULT 0,
+    sessoes_mes REAL DEFAULT 0,
+    preco_base REAL NOT NULL,
+    custo_operacional REAL DEFAULT 0,
+    mao_obra REAL DEFAULT 0,
+    custo_total REAL DEFAULT 0,
+    origem TEXT DEFAULT 'manual',
+    UNIQUE (tipo_servico, local, forma_pagamento, qtd_aulas, freq_semanal)
+);
+CREATE TABLE grade_slots (
+    id INTEGER PRIMARY KEY,
+    tipo_calculo TEXT NOT NULL,      -- Pacotes | Mensalidades
+    dia INTEGER NOT NULL,            -- 1=Seg ... 7=Dom
+    local TEXT NOT NULL,
+    hora INTEGER NOT NULL,           -- 5..23
+    status TEXT NOT NULL DEFAULT 'livre',   -- livre | ocupado | indisponivel
+    cliente_id INTEGER,
+    cliente_nome TEXT,
+    bloqueio TEXT,
+    multiplicador REAL DEFAULT 1,
+    UNIQUE (tipo_calculo, dia, local, hora)
+);
+CREATE TABLE propostas (
+    id INTEGER PRIMARY KEY,
+    data TEXT DEFAULT (date('now','localtime')),
+    lead_id INTEGER,
+    cliente_id INTEGER,
+    tipo_servico TEXT NOT NULL,
+    qtd_aulas INTEGER DEFAULT 0,
+    freq_semanal INTEGER DEFAULT 0,
+    local TEXT,
+    forma_pagamento TEXT,
+    pessoas INTEGER DEFAULT 1,
+    dia INTEGER,
+    hora INTEGER,
+    desconto REAL DEFAULT 0,
+    preco_total REAL,
+    preco_pessoa REAL,
+    custo_total REAL,
+    lucro REAL,
+    margem REAL,
+    lucro_hora REAL,
+    preco_minimo REAL,
+    desconto_maximo REAL,
+    abaixo_margem INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'rascunho',  -- rascunho | enviada | aceita | recusada
+    observacoes TEXT,
+    criado_em TEXT DEFAULT (datetime('now','localtime')),
+    excluido_em TEXT
+, preco_cheio REAL, consultoria TEXT);
+CREATE TABLE proposta_horarios (
+    id INTEGER PRIMARY KEY,
+    proposta_id INTEGER NOT NULL,
+    dia INTEGER,
+    hora INTEGER,
+    local TEXT,
+    multiplicador REAL DEFAULT 1
+);
+CREATE TABLE locais_custos (
+    local TEXT PRIMARY KEY,
+    taxa_aula REAL DEFAULT 0,          -- R$ por aula com 1 pessoa
+    taxa_pessoa_extra REAL DEFAULT 0,  -- R$ por aula a mais para cada pessoa além da 1ª
+    max_pessoas INTEGER DEFAULT 0,     -- 0 = sem limite
+    deslocamento REAL DEFAULT 0,       -- R$ por aula (gasolina, estacionamento, Uber)
+    tempo_deslocamento REAL DEFAULT 0, -- minutos por aula: entra nas horas do lucro/hora
+    taxa_mensal REAL DEFAULT 0,        -- R$ por mês fixo (dividido pelas aulas do mês)
+    aulas_mes REAL DEFAULT 0,
+    referencia TEXT,                   -- local de onde os preços e a grade foram copiados
+    modo TEXT                          -- margem | preco
+);
+CREATE TABLE campanha_fases (
+    id INTEGER PRIMARY KEY,
+    nome TEXT NOT NULL,
+    inicio TEXT,
+    fim TEXT,
+    tipo TEXT DEFAULT 'fase',        -- fase | bloqueio
+    descricao TEXT,
+    ordem INTEGER DEFAULT 0
+);
+CREATE TABLE campanha_itens (
+    id INTEGER PRIMARY KEY,
+    fase_id INTEGER NOT NULL REFERENCES campanha_fases(id),
+    texto TEXT NOT NULL,
+    feito INTEGER DEFAULT 0,
+    data_feito TEXT,
+    ordem INTEGER DEFAULT 0,
+    excluido_em TEXT
+);
+CREATE TABLE campanha_checkpoints (
+    id INTEGER PRIMARY KEY,
+    pergunta TEXT NOT NULL,
+    canal TEXT NOT NULL,             -- '' = sem canal: resposta só na mão
+    prazo TEXT NOT NULL,
+    resposta TEXT DEFAULT 'pendente', -- pendente | sim | nao
+    excluido_em TEXT
+);
+CREATE TABLE gastos_marketing (
+    id INTEGER PRIMARY KEY,
+    mes TEXT NOT NULL,               -- AAAA-MM
+    canal TEXT NOT NULL,
+    mensalidade REAL DEFAULT 0,
+    anuncios REAL DEFAULT 0,
+    comissoes REAL DEFAULT 0,
+    outros REAL DEFAULT 0,
+    leads INTEGER DEFAULT 0,
+    agendamentos INTEGER DEFAULT 0,
+    clientes INTEGER DEFAULT 0,
+    observacao TEXT,
+    excluido_em TEXT,
+    UNIQUE (mes, canal)
+);
+CREATE TABLE metricas_mensais (
+    id INTEGER PRIMARY KEY,
+    mes TEXT NOT NULL UNIQUE,        -- AAAA-MM
+    clientes_ativos INTEGER,
+    horas_ocupadas REAL,
+    lucro_hora REAL,
+    pct_receita_grupos REAL,
+    faturamento_recorrente REAL,
+    clientes_perdidos INTEGER,
+    vendas_abaixo_10 INTEGER,
+    nivel INTEGER,
+    fechado_em TEXT DEFAULT (datetime('now','localtime')),
+    lucro_hora_trabalho INTEGER DEFAULT 0,  -- 1 = lucro_hora por hora de TRABALHO; 0 = gravado antes, por hora de aula
+    foto INTEGER                            -- 1 = foto automática do mês em andamento; NULL = fechado à mão ou linha antiga
+);
+CREATE TABLE rotina_tarefas (   -- itens do checklist da semana (o usuário inclui e exclui)
+    id INTEGER PRIMARY KEY,
+    chave TEXT NOT NULL UNIQUE,      -- liga com rotina_itens.item; 'fim_mes' = último dia do mês (Fechar o mês no Painel)
+    texto TEXT NOT NULL,
+    dia INTEGER,                     -- 1=segunda ... 7=domingo: dia do aviso "Rotina de hoje"; NULL = sem dia
+    ordem INTEGER DEFAULT 0,
+    excluido_em TEXT
+);
+CREATE TABLE rotina_itens (
+    id INTEGER PRIMARY KEY,
+    semana TEXT NOT NULL,            -- AAAA-Wss
+    item TEXT NOT NULL,              -- rotina_tarefas.chave
+    feito INTEGER DEFAULT 0,
+    data_feito TEXT,
+    UNIQUE (semana, item)
+);
+CREATE TABLE agenda_avulsas (   -- aula só num dia (reposição, extra); o horário fixo vem da agenda_fixos
+    id INTEGER PRIMARY KEY,
+    cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+    data TEXT NOT NULL,
+    hora INTEGER NOT NULL,           -- 5..23
+    local TEXT NOT NULL,
+    reposicao INTEGER DEFAULT 0,     -- 1 = reposição de uma aula desmarcada (conta no saldo do aluno quando fica Feita ou Faltou)
+    repoe_evento_id INTEGER,         -- reposição: o cliente_eventos 'desmarcou' que ela repõe (só informativo; o saldo não depende dele)
+    criado_em TEXT DEFAULT (datetime('now','localtime')),
+    excluido_em TEXT
+);
+CREATE TABLE agenda_fixos (   -- horário fixo da Agenda: até agenda.max_alunos_horario alunos ativos por (dia, hora), controlado no app; a Grade lê a ocupação daqui
+    id INTEGER PRIMARY KEY,
+    cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+    dia INTEGER NOT NULL,            -- 1..6 (segunda a sábado)
+    hora INTEGER NOT NULL,           -- 5..23
+    local TEXT NOT NULL,
+    vigente_de TEXT,                 -- AAAA-MM-DD em que o horário passou a valer (NULL = desde a data de início do aluno)
+    criado_em TEXT DEFAULT (datetime('now','localtime')),
+    excluido_em TEXT                 -- deixou de valer neste dia: as semanas de antes continuam com ele
+);
+CREATE TABLE lista_espera (
+    id INTEGER PRIMARY KEY,
+    nome TEXT NOT NULL,
+    telefone TEXT,
+    dia INTEGER,
+    hora INTEGER,
+    local TEXT,
+    observacao TEXT,
+    data TEXT DEFAULT (date('now','localtime')),
+    excluido_em TEXT
+);
+CREATE TABLE importacoes (
+    id INTEGER PRIMARY KEY,
+    data TEXT DEFAULT (datetime('now','localtime')),
+    arquivo TEXT,
+    resumo TEXT
+);
+CREATE TABLE recorrencias (
+    id INTEGER PRIMARY KEY,
+    escopo TEXT NOT NULL CHECK (escopo IN ('PF','PJ')),
+    descricao TEXT NOT NULL,
+    categoria TEXT NOT NULL,
+    valor REAL NOT NULL CHECK (valor > 0),            -- previsto; a baixa grava o real
+    dia_vencimento INTEGER NOT NULL CHECK (dia_vencimento BETWEEN 1 AND 31),
+    fixo INTEGER NOT NULL DEFAULT 1,                  -- 1 fixo, 0 variável (ponto de equilíbrio)
+    conta TEXT,
+    inicio TEXT NOT NULL,                             -- AAAA-MM
+    fim TEXT,                                         -- AAAA-MM; NULL = sem fim
+    origem TEXT UNIQUE,                               -- ID da planilha: CEF-001, CPV-002...
+    excluido_em TEXT,
+    prioridade INTEGER                                -- fila de pagamento: 1 = sempre primeiro, -1 = pode esperar, NULL = automática
+);
+CREATE TABLE lancamentos (
+    id INTEGER PRIMARY KEY,
+    escopo TEXT NOT NULL CHECK (escopo IN ('PF','PJ')),
+    tipo TEXT NOT NULL CHECK (tipo IN ('entrada','saida')),
+    data TEXT NOT NULL,                               -- data do movimento / vencimento
+    pago_em TEXT,                                     -- NULL = em aberto
+    valor REAL NOT NULL CHECK (valor > 0),
+    categoria TEXT NOT NULL,
+    descricao TEXT,
+    contraparte TEXT,
+    cliente_id INTEGER REFERENCES clientes(id),
+    conta TEXT,
+    forma TEXT,
+    parcela_num INTEGER,
+    parcela_total INTEGER,
+    recorrencia_id INTEGER REFERENCES recorrencias(id),
+    competencia TEXT,                                 -- AAAA-MM, só junto com recorrencia_id
+    meses INTEGER,                                    -- entrada de aluno: quantos meses este pagamento cobre (pago adiantado/parcelado); NULL = automático
+    sem_recorrencia INTEGER,                          -- 1 = "não é a conta recorrente": sai da lista de contas parecidas
+    nfse INTEGER,                                     -- 1 emitida, 0 não, NULL não se aplica
+    observacao TEXT,                                  -- conta automática: o "Como calculei"
+    origem TEXT UNIQUE,                               -- 'PJ:17', 'PF:8', 'CC:11', 'EP:11'
+    auto TEXT,                                        -- 'das:2026-10' | 'cia:2026-10' | 'local:<nome>:2026-10': conta lançada pelo app (índice único criado em db.py); editar à mão zera
+    criado_em TEXT DEFAULT (datetime('now','localtime')),
+    excluido_em TEXT,
+    UNIQUE (recorrencia_id, competencia)
+);
+CREATE TABLE saldos (
+    id INTEGER PRIMARY KEY,
+    conta TEXT NOT NULL,
+    saldo REAL NOT NULL,
+    data TEXT NOT NULL,                               -- AAAA-MM-DD
+    criado_em TEXT DEFAULT (datetime('now','localtime')),
+    excluido_em TEXT
+);
+CREATE TABLE duplicados_ok (
+    a INTEGER NOT NULL,
+    b INTEGER NOT NULL,
+    PRIMARY KEY (a, b)
+);
+CREATE TABLE recorrencia_pulos (
+    recorrencia_id INTEGER NOT NULL REFERENCES recorrencias(id),
+    competencia TEXT NOT NULL,
+    criado_em TEXT DEFAULT (datetime('now','localtime')),
+    PRIMARY KEY (recorrencia_id, competencia)
+);
+CREATE TABLE assistente_conversas (
+    id INTEGER PRIMARY KEY,
+    titulo TEXT,
+    criado_em TEXT DEFAULT (datetime('now','localtime')),
+    atualizado_em TEXT DEFAULT (datetime('now','localtime')),
+    excluido_em TEXT
+);
+CREATE TABLE assistente_mensagens (
+    id INTEGER PRIMARY KEY,
+    conversa_id INTEGER NOT NULL REFERENCES assistente_conversas(id),
+    papel TEXT NOT NULL,              -- user | assistant | aviso (aviso só aparece na tela, não vai para a API)
+    conteudo TEXT NOT NULL,           -- JSON: lista de blocos, como a API devolveu
+    uso TEXT,                         -- JSON: modelo e tokens da resposta (estimativa de custo)
+    criado_em TEXT DEFAULT (datetime('now','localtime'))
+);
+CREATE TABLE segredos (
+    chave TEXT PRIMARY KEY,
+    valor TEXT NOT NULL,
+    atualizado_em TEXT DEFAULT (datetime('now','localtime'))
+);
+CREATE TABLE ofertas (
+    id INTEGER PRIMARY KEY,
+    titulo TEXT NOT NULL,
+    inclui TEXT NOT NULL,
+    valor_normal REAL NOT NULL,
+    valor_oferta REAL NOT NULL,
+    meses_desconto INTEGER,          -- NULL = o valor da oferta vale sempre
+    valida_ate TEXT,                 -- NULL = sem prazo para aceitar
+    ativa INTEGER DEFAULT 1,
+    criado_em TEXT DEFAULT (datetime('now','localtime')),
+    excluido_em TEXT
+);
+CREATE TABLE oferta_respostas (
+    id INTEGER PRIMARY KEY,
+    oferta_id INTEGER NOT NULL REFERENCES ofertas(id),
+    cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+    status TEXT NOT NULL CHECK (status IN ('enviada','aceitou','recusou')),
+    data TEXT,                       -- dia do último envio / da resposta
+    ate_desconto TEXT,               -- aceitou: dia em que o valor da oferta acaba (NULL = sempre)
+    valor_antes REAL,                -- aceitou: a mensalidade do aluno antes de aceitar (mede a receita a mais)
+    criado_em TEXT DEFAULT (datetime('now','localtime')),
+    excluido_em TEXT,
+    encerrado_em TEXT,               -- aceitou: dia em que o desconto acabou e a mensalidade voltou (some do alerta)
+    UNIQUE (oferta_id, cliente_id)
+);
+CREATE INDEX idx_lancamentos_data ON lancamentos (data);
+CREATE INDEX idx_lancamentos_competencia ON lancamentos (competencia);
+CREATE INDEX idx_saldos_conta ON saldos (conta, data);
+CREATE INDEX idx_assistente_mensagens ON assistente_mensagens (conversa_id, id);
+CREATE UNIQUE INDEX idx_lancamentos_auto ON lancamentos (auto);

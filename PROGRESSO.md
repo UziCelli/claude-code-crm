@@ -38,6 +38,8 @@ Plano completo em `C:\Users\victo\.claude\plans\a-gente-vai-come-ar-functional-t
 - 34 testes passando (`.venv\Scripts\python.exe -m pytest tests`)
 
 ## Próximos passos
+- **Reescrita para Cloudflare Workers (PR #117, rascunho, nada no ar até o merge):** Fases 0–2, 3a e 3b feitas; 3c (Agenda)
+  pausada no meio em 19/11/2026. Estado e o que falta: `docs/reescrita-workers.md`, seção "Onde parou".
 - **Usuário:** completar telefone e data de renovação dos alunos (o painel mostra "cadastro incompleto").
 - **Rodada 2 — financeiro PF + PJ: código pronto em 02/10/2026** (60 testes):
   - `/financeiro` (livro-caixa + "A pagar e a receber" + contas recorrentes/cartões), `/financeiro/mensalidades` (previsto × recebido), `/financeiro/painel` (receita, custos, lucro, ponto de equilíbrio, DAS, pró-labore, INSS, bloco PF, 12 meses); pagamentos na ficha do aluno; alerta de contas vencidas.
