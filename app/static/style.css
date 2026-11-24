@@ -705,3 +705,8 @@ ol.passos li { margin: 4px 0; }
 .repor-ok { margin-top: 8px; }
 .repor-ok summary { cursor: pointer; color: var(--cinza); font-size: 13px; }
 @media (max-width: 760px) { .pend-colunas { grid-template-columns: 1fr; } }
+
+/* Importar extrato: área de soltar os arquivos (o próprio input recebe o arrasto) */
+.soltar-arquivos { display: block; border: 2px dashed var(--azul-f); border-radius: 12px; padding: 18px; text-align: center; cursor: pointer; }
+.soltar-arquivos:focus-within { outline: 2px solid var(--aco); outline-offset: 2px; }
+.soltar-arquivos input[type=file] { display: block; margin: 10px auto 0; max-width: 100%; }

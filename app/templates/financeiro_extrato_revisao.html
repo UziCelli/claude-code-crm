@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block titulo %}Revisar extrato · Financeiro · VFITCOACH CRM{% endblock %}
+{% set rotulo = {'novo': 'novo', 'existe': 'já existe', 'pagar': 'pago agora', 'ignorar': 'ignorado'} %}
+{% set cor = {'novo': 'azul', 'existe': 'neutro', 'pagar': 'verde', 'ignorar': 'neutro'} %}
+{% block conteudo %}
+<a class="voltar" href="/financeiro/extrato">← Importar extrato</a>
+<h1>Revisar extrato</h1>
+<p class="muted">O que tem certeza já vem escolhido. Só as linhas marcadas <span class="tag amarelo">escolha</span> pedem decisão. Nada é salvo antes de você confirmar.</p>
+{% for e in previa.erros %}<div class="card mt atencao">{{ e }}</div>{% endfor %}
+
+<form method="post" action="/financeiro/extrato/salvar" class="mt">
+  <input type="hidden" name="dados" value="{{ dados }}">
+  <input type="hidden" name="saldos" value="{{ saldos }}">
+  {% for c in previa.contas %}{% set k = loop.index0 %}
+  {% set duvidas = c.linhas|rejectattr('certo')|list %}
+  <h2 class="mt">{{ c.conta }} <span class="muted" style="font-size:.8em">({{ c.escopo }} · {{ c.de|data }} a {{ c.ate|data }} · {{ c.linhas|length }} movimentos{% if duvidas %} · {{ duvidas|length }} para decidir{% endif %})</span></h2>
+  {% if c.saldo is not none %}
+  <div class="card mt">
+    <label class="linha"><input type="checkbox" name="saldo_{{ k }}" value="1" checked>
+      <span>Guardar o saldo do banco: <strong>{{ c.saldo|moeda }}</strong> em {{ c.saldo_data|data }}{% if c.saldo_digitado is not none %} <span class="muted">(você digitou {{ c.saldo_digitado|moeda }} nesse dia; a foto digitada fica)</span>{% endif %}</span></label>
+  </div>
+  {% else %}
+  <p class="muted">Este arquivo não traz o saldo: digite em Saldos das contas, se quiser conferir.</p>
+  {% endif %}
+  {% for l in c.linhas|sort(attribute='certo') %}{% set n = k ~ '_' ~ (c.linhas.index(l)) %}
+  <div class="card mt {{ '' if l.certo else 'atencao' }}">
+    <div class="linha topo">
+      <strong>{{ '+' if l.tipo == 'entrada' else '−' }} {{ l.valor|moeda }}</strong>
+      <span>{{ l.data|data }}</span>
+      {% if l.certo %}<span class="tag {{ cor[l.acao] }}">{{ rotulo[l.acao] }}</span>{% else %}<span class="tag amarelo">escolha</span>{% endif %}
+    </div>
+    <div>{{ l.descricao }}</div>
+    {% if l.motivo %}<div class="muted">{{ l.motivo }}</div>{% endif %}
+    {% if l.acao == 'existe' and not l.opcoes|length > 1 %}
+    <input type="hidden" name="acao_{{ n }}" value="existe">
+    {% else %}
+    <div class="linha mt">
+      <label class="campo">O que fazer
+        <select name="acao_{{ n }}" required>
+          {% if not l.certo %}<option value="">Escolha…</option>{% endif %}
+          {% for v, t in l.opcoes %}<option value="{{ v }}" {{ 'selected' if l.certo and (v == l.ref or (not l.ref and v == l.acao)) }}>{{ t }}</option>{% endfor %}
+        </select></label>
+      <label class="campo">Categoria (se for novo)
+        <select name="categoria_{{ n }}">{% for cat in (listas.lista_categorias_pj if l.escopo == 'PJ' else listas.lista_categorias_pf) %}<option {{ 'selected' if cat == l.categoria }}>{{ cat }}</option>{% endfor %}</select></label>
+      {% if l.escopo == 'PJ' and l.tipo == 'entrada' %}
+      <label class="campo">Aluno
+        <select name="cliente_{{ n }}"><option value="">—</option>{% for a in alunos %}<option value="{{ a.id }}" {{ 'selected' if a.id == l.cliente_id }}>{{ a.nome }}</option>{% endfor %}</select></label>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% endfor %}
+  <div class="linha mt"><button class="verde">Confirmar e salvar</button><a class="btn claro" href="/financeiro/extrato">Cancelar</a></div>
+</form>
+{% endblock %}

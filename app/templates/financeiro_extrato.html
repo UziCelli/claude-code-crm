@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block titulo %}Importar extrato · Financeiro · VFITCOACH CRM{% endblock %}
+{% block conteudo %}
+<a class="voltar" href="/financeiro">← Financeiro</a>
+<h1>Importar extrato</h1>
+<p class="muted">Toda segunda, exporte os últimos 30 dias de cada banco e solte os arquivos aqui. Pode repetir o período: o que já entrou não entra de novo.</p>
+
+<div class="card mt">
+  <ul style="margin:0 0 10px 18px">
+    <li><strong>Inter (PF):</strong> arquivo OFX.</li>
+    <li><strong>Contabilizei Bank (PJ):</strong> arquivo CSV.</li>
+  </ul>
+  <form method="post" action="/financeiro/extrato" enctype="multipart/form-data">
+    <label class="soltar-arquivos" for="arquivos-extrato">
+      <strong>Arraste os arquivos aqui</strong> ou clique para escolher
+      <input id="arquivos-extrato" type="file" name="arquivos" accept=".ofx,.csv,.txt" multiple required>
+    </label>
+    <div class="linha mt"><button>Ler e revisar</button><span class="muted">Nada é salvo antes da revisão.</span></div>
+  </form>
+</div>
+
+<h2 class="mt">Última importação</h2>
+<div class="card mt">
+  {% for conta in ['Inter', 'Contabilizei Bank'] %}
+  <div class="linha" style="justify-content:space-between">
+    <span>{{ conta }}</span>
+    {% if ultimas.get(conta) %}<span class="{{ 'tag amarelo' if conta in atrasadas else 'muted' }}">{{ ultimas[conta][:10]|data }}</span>
+    {% else %}<span class="muted">nunca</span>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

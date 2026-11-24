@@ -25,6 +25,7 @@ from fastapi.templating import Jinja2Templates
 from . import cartao, pix   # código Pix copia-e-cola, QR e o cartão-imagem da cobrança
 from . import acesso, assistente, atualizar, contas_auto, db, exportar, financeiro, importar, precos, sugestoes, vigia
 from . import locais as loc   # "+ Novo local": custos do local, preços e grade ('locais' é nome de variável nas telas)
+from . import extrato   # extrato das contas (Inter OFX, Contabilizei CSV): prévia, revisão e gravação
 from . import indicacoes   # quem indicou quem e o presente da indicação (brinde, nunca desconto)
 from . import vantagens   # o leque de vantagens da indicação que cabe no local de quem indicou
 from . import ofertas   # ofertas de upsell: proposta transparente, resposta do aluno e fim do valor da oferta
@@ -430,6 +431,9 @@ def alertas(con):
             f"Gasto pessoal do mês em {sal['pct_gasto']}% do salário ({moeda(sal['gasto_pf'])} de {moeda(sal['valor'])})", "/financeiro")
     if sal["pode_pagar"]:
         add("azul", f"Pagar o salário do mês ({moeda(sal['valor'])}) da PJ para a PF", "/financeiro")
+    for conta, dias in extrato.contas_atrasadas(con, h):
+        add("amarelo", f"Extrato do {conta} sem importar {'há ' + str(dias) + ' dias' if dias is not None else 'ainda'}: importe os últimos 30 dias",
+            "/financeiro/extrato", acoes=[{"rotulo": "Importar extrato", "href": "/financeiro/extrato"}])
     saldos = financeiro.saldos_resumo(con, h)
     if saldos["desatualizado"]:
         add("amarelo", f"Saldos das contas sem atualizar há {saldos['dias_velho']} dias: atualize para saber quanto tem", "/financeiro?abrir=saldos")
@@ -3811,6 +3815,111 @@ def financeiro_conferir_ok(conta: str = Form(""), volta: str = Form("/financeiro
     except ValueError as e:
         return _fin_voltar(volta, erro=str(e))
     return _fin_voltar(volta, msg=f"Combinado: {conta} fica sem aviso até você digitar um saldo novo.")
+
+
+@app.get("/financeiro/extrato", response_class=HTMLResponse)
+def financeiro_extrato(request: Request, con=Depends(get_db)):
+    """Importar extrato: arrastar os arquivos do Inter (OFX) e do Contabilizei (CSV)."""
+    return render(request, "financeiro_extrato.html", con, ultimas=extrato.ultimas_importacoes(con),
+                  atrasadas=dict(extrato.contas_atrasadas(con, relogio.hoje().isoformat())))
+
+
+@app.post("/financeiro/extrato", response_class=HTMLResponse)
+async def financeiro_extrato_previa(request: Request, con=Depends(get_db)):
+    """Lê os arquivos e mostra a revisão (novo / já existe / pago agora). Nada é gravado aqui."""
+    f = await request.form(max_files=10)
+    arquivos = []
+    for a in f.getlist("arquivos"):
+        if hasattr(a, "read") and a.filename:
+            arquivos.append((a.filename, await a.read(extrato.MAX_BYTES + 1)))
+    if not arquivos:
+        return voltar("/financeiro/extrato", erro="Escolha pelo menos um arquivo (OFX do Inter ou CSV do Contabilizei).")
+    p = extrato.previa(con, arquivos, relogio.hoje().isoformat())
+    if not p["contas"]:
+        return voltar("/financeiro/extrato", erro=" ".join(p["erros"]))
+    alunos = con.execute("SELECT id, nome FROM clientes WHERE excluido_em IS NULL ORDER BY nome").fetchall()
+    return render(request, "financeiro_extrato_revisao.html", con, previa=p, alunos=alunos,
+                  dados=json.dumps([[{k: l[k] for k in _EXTRATO_CAMPOS} | {"opcoes": [o[0] for o in l["opcoes"]]} for l in c["linhas"]]
+                                    for c in p["contas"]], ensure_ascii=False),
+                  saldos=json.dumps([{"conta": c["conta"], "saldo": c["saldo"], "data": c["saldo_data"]} for c in p["contas"]]))
+
+
+_EXTRATO_CAMPOS = ("origem", "conta", "escopo", "tipo", "data", "valor", "descricao", "contraparte", "forma", "categoria_sugerida")
+_EXTRATO_ACAO = re.compile(r"(novo|ignorar|existe|e:\d+|l:\d+|r:\d+:\d{4}-\d{2})")
+
+
+def _extrato_linhas(f, con) -> tuple[list[dict], list[dict]]:
+    """Valida o que voltou da revisão (o JSON da prévia + as escolhas de cada linha). ValueError em português."""
+    try:
+        dados, saldos = json.loads(f.get("dados") or "[]"), json.loads(f.get("saldos") or "[]")
+    except ValueError:
+        raise ValueError("A revisão veio incompleta: importe o arquivo de novo.") from None
+    contas = set(db.lista(con, "lista_contas"))
+    listas = {"PJ": set(db.lista(con, "lista_categorias_pj")), "PF": set(db.lista(con, "lista_categorias_pf"))}
+    alunos = {r[0] for r in con.execute("SELECT id FROM clientes WHERE excluido_em IS NULL")}
+    linhas, fotos = [], []
+    for k, grupo in enumerate(dados if isinstance(dados, list) else []):
+        for i, l in enumerate(grupo if isinstance(grupo, list) else []):
+            n = f"{k}_{i}"
+            try:
+                l = {c: l.get(c) for c in (*_EXTRATO_CAMPOS, "opcoes")}
+                valor = round(float(l["valor"]), 2)
+                ok = (l["conta"] in contas and l["escopo"] in ("PF", "PJ") and l["tipo"] in ("entrada", "saida")
+                      and str(l["origem"]).startswith((f"OFX:{l['conta']}:", f"CSV:{l['conta']}:")) and _ja_aconteceu(str(l["data"]))
+                      and math.isfinite(valor) and valor > 0)
+            except (TypeError, ValueError, AttributeError):
+                ok = False
+            if not ok:
+                raise ValueError("Uma linha da revisão veio diferente do arquivo: importe de novo.")
+            acao = f.get(f"acao_{n}", "")
+            if not acao:
+                raise ValueError("Falta decidir alguma linha marcada \"escolha\".")
+            if not _EXTRATO_ACAO.fullmatch(acao) or acao not in (l["opcoes"] or []):
+                raise ValueError("Escolha inválida numa linha: importe de novo.")
+            cat = f.get(f"categoria_{n}") or l["categoria_sugerida"]
+            if cat not in listas[l["escopo"]]:
+                raise ValueError(f"A categoria \"{cat}\" não existe na lista {l['escopo']}.")
+            try:
+                cliente = int(f.get(f"cliente_{n}") or 0) or None
+            except ValueError:
+                cliente = None
+            if cliente not in alunos or not (l["escopo"] == "PJ" and l["tipo"] == "entrada"):
+                cliente = None
+            linhas.append({**l, "valor": valor, "descricao": str(l["descricao"] or "")[:200], "acao": acao, "categoria": cat,
+                           "cliente_id": cliente})
+    for k, s in enumerate(saldos if isinstance(saldos, list) else []):
+        if f.get(f"saldo_{k}") != "1":
+            continue
+        try:
+            v = round(float(s["saldo"]), 2)
+            if s["conta"] not in contas or not _ja_aconteceu(str(s["data"])) or not math.isfinite(v):
+                raise ValueError
+        except (TypeError, ValueError, KeyError):
+            raise ValueError("O saldo do extrato veio diferente do arquivo: importe de novo.") from None
+        fotos.append({"conta": s["conta"], "saldo": v, "data": s["data"]})
+    return linhas, fotos
+
+
+@app.post("/financeiro/extrato/salvar")
+async def financeiro_extrato_salvar(request: Request, con=Depends(get_db)):
+    """Grava o que você confirmou na revisão (uma transação; repetir o envio não duplica: a chave de cada movimento barra)."""
+    f = await request.form(max_fields=20000)
+    try:
+        linhas, fotos = _extrato_linhas(f, con)
+    except ValueError as e:
+        return voltar("/financeiro/extrato", erro=str(e))
+    db.fazer_backup("antes-extrato")
+    r = extrato.salvar(con, linhas, fotos)
+    partes = [f"{r['novos']} novo{'s' if r['novos'] != 1 else ''}", f"{r['pagos']} baixa{'s' if r['pagos'] != 1 else ''}",
+              f"{r['existentes']} já existia{'m' if r['existentes'] != 1 else ''}"]
+    if r["ignorados"]:
+        partes.append(f"{r['ignorados']} ignorado{'s' if r['ignorados'] != 1 else ''}")
+    if r["saldos"]:
+        partes.append(f"{r['saldos']} saldo{'s' if r['saldos'] != 1 else ''} do banco")
+    if r["regras"]:
+        partes.append(f"{r['regras']} categoria{'s' if r['regras'] != 1 else ''} aprendida{'s' if r['regras'] != 1 else ''}")
+    aviso = " Algumas linhas já tinham sido gravadas e foram puladas." if r["pulados"] else ""
+    return voltar("/financeiro/extrato", msg="Extrato importado: " + ", ".join(partes) + "." + aviso)
 
 
 @app.get("/financeiro/linha-do-tempo", response_class=HTMLResponse)
