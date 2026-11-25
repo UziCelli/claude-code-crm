@@ -177,11 +177,20 @@ def ler_inter(texto: str) -> dict:
             "compras": compras, "pagamentos": pagamentos}
 
 
-def _ano(dia_mes: str, ref: str) -> str:
-    """'03/09' sem ano -> a data mais recente até `ref` (a fatura só traz o que aconteceu até o fechamento)."""
+def _ano(dia_mes: str, ref: str, parcela: int | None = None) -> str:
+    """'03/09' sem ano -> a data mais recente até `ref` (a fatura só traz o que aconteceu até o fechamento). A parcela N só pode
+    ser de uma compra de N-1 meses antes ou mais: '03/09 15/18' numa fatura de 11/2026 é de 09/2025. 29/02 pula para um ano bissexto."""
     d, m = (int(x) for x in dia_mes.split("/"))
-    ano = int(ref[:4]) if (m, d) <= (int(ref[5:7]), int(ref[8:10])) else int(ref[:4]) - 1
-    return dt.date(ano, m, d).isoformat()
+    ref_d = dt.date.fromisoformat(ref)
+    for ano in range(ref_d.year, ref_d.year - 6, -1):
+        try:
+            data = dt.date(ano, m, d)
+        except ValueError:
+            continue
+        meses = (ref_d.year - ano) * 12 + ref_d.month - m
+        if data <= ref_d and meses >= (parcela or 1) - 1:
+            return data.isoformat()
+    raise ValueError(dia_mes)
 
 
 def ler_itau(texto: str) -> dict:
@@ -213,15 +222,15 @@ def ler_itau(texto: str) -> dict:
             modo, ultimo = None, None
             continue
         if modo in ("pag", "compra") and (m := item.match(linha)):
+            desc, num, total = _parcela(m.group(2), r"\s(\d{2})/(\d{2})$")
             try:
-                data = _ano(m.group(1), fech)
+                data = _ano(m.group(1), fech, num)
             except ValueError:
-                continue
+                continue   # dia/mês que não existe: a soma não bate e a revisão avisa
             valor = _valor(m.group(3))
             if modo == "pag":
                 pagamentos.append({"data": data, "valor": round(abs(valor), 2), "descricao": m.group(2)})
                 continue
-            desc, num, total = _parcela(m.group(2), r"\s(\d{2})/(\d{2})$")
             ultimo = {"cartao": cartao, "data": data, "descricao": desc, "valor": round(valor, 2), "parcela_num": num,
                       "parcela_total": total, "ramo": None, "nota": None}
             compras.append(ultimo)

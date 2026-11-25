@@ -185,6 +185,15 @@ def test_le_itau_sem_ano_ramo_parcelamento_e_encargos():
     assert lim["usado_crm"] == 612.0 and lim["bate"] and lim["diferenca"] == 0
 
 
+def test_ano_da_compra_parcelada_que_atravessa_o_ano():
+    assert faturas._ano("03/09", "2026-11-21", 3) == "2026-09-03"
+    assert faturas._ano("03/09", "2026-11-21", 15) == "2025-09-03"   # parcela 15: a compra tem mais de um ano
+    assert faturas._ano("27/12", "2026-11-21") == "2025-12-27"
+    assert faturas._ano("29/02", "2025-03-21", 13) == "2024-02-29"   # dia que só existe em ano bissexto
+    f = faturas.ler_texto(ITAU.replace("27/12 LOJA ANTIGA 100,00", "29/02 LOJA ANTIGA 05/18 100,00"))
+    assert next(c for c in f["compras"] if c["descricao"] == "LOJA ANTIGA")["data"] == "2024-02-29"
+
+
 def test_categoria_sugerida_por_palavra():
     validas = db.LISTAS_INICIAIS[faturas.LISTA]
     cat = {d: faturas.categoria(d, r, [], validas)[0] for d, r in [
