@@ -132,7 +132,7 @@
   }
   function atualizar() {
     var minha = ++n;
-    fetch("/campanhas/ofertas/previa?" + consulta()).then(function (r) { return r.text(); }).then(function (x) { if (minha === n) alvo.textContent = x; });
+    fetch("/campanhas/ofertas/previa?" + consulta()).then(function (r) { return r.text(); }).then(function (x) { if (minha === n && x) alvo.textContent = x; });
   }
   function agendar() { clearTimeout(t); t = setTimeout(atualizar, 200); }
   f.addEventListener("input", agendar);

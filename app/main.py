@@ -9,6 +9,7 @@ import secrets
 import signal
 import sqlite3
 import threading
+import time
 import traceback
 import unicodedata
 from contextlib import asynccontextmanager, closing
@@ -91,7 +92,11 @@ async def portaria(request: Request, call_next):
                             "<title>VFITCOACH CRM</title><body style='font-family:system-ui;padding:24px;background:#E8F0FA;color:#0F2A52'>"
                             f"<h1>Acesso restrito</h1><p>{acesso.MENSAGENS[motivo]}</p>", status_code=403)
     else:
+        inicio = time.monotonic()
         response = await call_next(request)
+        demora = time.monotonic() - inicio
+        if demora > 3:   # aparece nos logs do Render: mostra qual tela segura o servidor
+            print(f"LENTO: {request.method} {request.url.path} levou {demora:.1f} s", flush=True)
     # Todo o CRM é privado, inclusive exportações, redirects e respostas de erro.
     response.headers["Cache-Control"] = "no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -198,6 +203,20 @@ def get_db():
     if db.nuvem.ativo():
         db.nuvem.sincronizar_se_velho(db.DB_PATH)   # traz o que foi lançado no outro aparelho (PC ou celular)
     con = db.conectar()
+    try:
+        yield con
+    finally:
+        con.close()
+
+
+def get_db_previa():
+    """Prévia ao digitar: não sincroniza e não entra na fila do banco por mais de 2 s (sem banco, a prévia só some).
+    Antes, cada pausa na digitação esperava atrás do Salvar e ocupava o servidor (erro 503 ao criar local)."""
+    try:
+        con = db.conectar(espera=2)
+    except sqlite3.OperationalError:
+        yield None
+        return
     try:
         yield con
     finally:
@@ -3255,7 +3274,9 @@ def oferta_salvar(id: str = Form(""), titulo: str = Form("", alias="titulo_ofert
 
 
 @app.get("/campanhas/ofertas/previa", response_class=PlainTextResponse)
-def oferta_previa(request: Request, con=Depends(get_db)):
+def oferta_previa(request: Request, con=Depends(get_db_previa)):
+    if con is None:   # banco ocupado: a tela mantém a prévia anterior
+        return ""
     """A mensagem exata, com um aluno de exemplo, enquanto a oferta é preenchida (a tela de Campanhas chama a cada tecla)."""
     return ofertas.previa(request.query_params, db.parametros(con, "msg_whatsapp").get("upsell"))
 
@@ -4357,8 +4378,10 @@ def _taxas_cia_form(form) -> dict:
 
 
 @app.post("/locais/previa", response_class=HTMLResponse)
-async def locais_previa(request: Request, con=Depends(get_db)):
+async def locais_previa(request: Request, con=Depends(get_db_previa)):
     """Prévia do pop-up do local (CIA inclusive): as partes do preço de 1 aula com os números digitados, sem gravar nada."""
+    if con is None:   # banco ocupado (alguém salvando): a caixa da prévia some e volta na próxima tecla
+        return HTMLResponse("")
     form = await request.form()
     tipo = "Mensalidades" if form.get("tipo") == "Mensalidades" else "Pacotes"
     try:

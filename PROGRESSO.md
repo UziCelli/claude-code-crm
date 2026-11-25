@@ -387,6 +387,11 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - **Aviso de conta fixa** (`locais.contas_fixas_do_local`): conta fixa da PJ que cita o local (ex.: "Mensalidade SmartFit") sai do rateio quando o local tem custos; a prévia avisa para pôr o valor em Taxa mensal.
 - Testes: `tests/test_locais_editar.py`.
 
+## Erro 503 ao criar local: fila do banco na nuvem (25/11/2026)
+- Causa: no modo nuvem (Turso) o CRM tem uma conexão só, com trava; cada pedido espera a vez. Criar local copiava ~230 horários um INSERT por vez, cada um ida e volta pela internet com a trava presa; a prévia (uma a cada pausa na digitação) fazia fila atrás. Simulando 0,2 s por gravação: Salvar levava 46 s e as prévias esperavam 45 s.
+- Correção: `locais._copiar_grade` grava a grade numa instrução só (Salvar caiu para 0,9 s na mesma simulação). As prévias (`/locais/previa`, `/campanhas/ofertas/previa`) usam `get_db_previa`: não sincronizam e desistem depois de 2 s na fila (a caixa some e volta na próxima tecla).
+- Log: pedido com mais de 3 s ou mais de 2 s na fila do banco escreve `LENTO:` no log (Render › Logs).
+
 ## Reserva removida; o celular usa o Render (25/11/2026)
 - O Victor confirmou que `crm.vfitcoachapp.com` aponta para o Render (`claude-code-crm.onrender.com`) e é o que funciona. A reserva no Cloud Run nunca ficou em uso.
 - Saíram `Dockerfile`, `.dockerignore`, `cloudflare/worker-reserva.js` e `CRM_ENDERECOS` (`acesso._origem_estranha` volta a aceitar só o Host que chegou). README descreve o serviço do Render; o túnel no PC fica como alternativa fora de uso.
