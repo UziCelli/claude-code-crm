@@ -3844,7 +3844,8 @@ async def financeiro_extrato_previa(request: Request, con=Depends(get_db)):
                   saldos=json.dumps([{"conta": c["conta"], "saldo": c["saldo"], "data": c["saldo_data"]} for c in p["contas"]]))
 
 
-_EXTRATO_CAMPOS = ("origem", "conta", "escopo", "tipo", "data", "valor", "descricao", "contraparte", "forma", "categoria_sugerida")
+_EXTRATO_CAMPOS = ("origem", "conta", "escopo", "tipo", "data", "valor", "descricao", "contraparte", "forma", "categoria_sugerida",
+                   "emprestimo")
 _EXTRATO_ACAO = re.compile(r"(novo|ignorar|existe|e:\d+|l:\d+|r:\d+:\d{4}-\d{2})")
 
 
@@ -3886,6 +3887,8 @@ def _extrato_linhas(f, con) -> tuple[list[dict], list[dict]]:
             if cliente not in alunos or not (l["escopo"] == "PJ" and l["tipo"] == "entrada"):
                 cliente = None
             linhas.append({**l, "valor": valor, "descricao": str(l["descricao"] or "")[:200], "acao": acao, "categoria": cat,
+                           "emprestimo": l["emprestimo"] is True, "contraparte": str(l["contraparte"])[:80] if l["contraparte"] else None,
+                           "forma": l["forma"] if l["forma"] in db.lista(con, "lista_formas_lancamento") else None,
                            "cliente_id": cliente})
     for k, s in enumerate(saldos if isinstance(saldos, list) else []):
         if f.get(f"saldo_{k}") != "1":

@@ -8,31 +8,70 @@ from fastapi.testclient import TestClient
 
 from app import db, extrato, main, relogio
 
-OFX = """OFXHEADER:100
+def _trn(tipo, data, valor, fitid, memo, nome):
+    return (f"<STMTTRN>\n<TRNTYPE>{tipo}</TRNTYPE>\n<DTPOSTED>{data}</DTPOSTED>\n<TRNAMT>{valor}</TRNAMT>\n<FITID>{fitid}</FITID>\n"
+            f"<CHECKNUM>077</CHECKNUM>\n<REFNUM>077</REFNUM>\n<MEMO>{memo}</MEMO>\n<NAME>{nome}</NAME>\n</STMTTRN>\n")
+
+
+# no formato real do Inter (SGML com fechamento, CHARSET 1252, FITID = data + 077 + sequência do dia); dados inventados
+OFX = ("""OFXHEADER:100
 DATA:OFXSGML
 VERSION:102
+SECURITY:NONE
+ENCODING:USASCII
 CHARSET:1252
+COMPRESSION:NONE
+OLDFILEUID:NONE
+NEWFILEUID:NONE
 
 <OFX>
-<BANKMSGSRSV1><STMTTRNRS><STMTRS>
-<CURDEF>BRL
-<BANKACCTFROM><BANKID>0077<ACCTID>123456<ACCTTYPE>CHECKING</BANKACCTFROM>
+<SIGNONMSGSRSV1>
+<SONRS>
+<STATUS>
+<CODE>0</CODE>
+<SEVERITY>INFO</SEVERITY>
+</STATUS>
+<DTSERVER>20261110</DTSERVER>
+<LANGUAGE>POR</LANGUAGE>
+<FI>
+<ORG>Banco Intermedium S/A</ORG>
+<FID>077</FID>
+</FI>
+</SONRS>
+</SIGNONMSGSRSV1>
+<BANKMSGSRSV1>
+<STMTTRNRS>
+<TRNUID>1001</TRNUID>
+<STMTRS>
+<CURDEF>BRL</CURDEF>
+<BANKACCTFROM>
+<BANKID>077</BANKID>
+<BRANCHID>0001-9</BRANCHID>
+<ACCTID>11111111</ACCTID>
+<ACCTTYPE>CHECKING</ACCTTYPE>
+</BANKACCTFROM>
 <BANKTRANLIST>
-<DTSTART>20261101<DTEND>20261110
-<STMTTRN><TRNTYPE>CREDIT<DTPOSTED>20261103<TRNAMT>350.00<FITID>A1<MEMO>PIX RECEBIDO - Cp :12345678-MARIA TESTE</STMTTRN>
-<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261105<TRNAMT>-89.90<FITID>A2<MEMO>Pagamento de boleto ACADEMIA X</STMTTRN>
-<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261106<TRNAMT>-1200.00<FITID>A3<MEMO>PIX ENVIADO - IMOBILIARIA LAR</STMTTRN>
-</BANKTRANLIST>
-<LEDGERBAL><BALAMT>1000.50<DTASOF>20261110</LEDGERBAL>
-</STMTRS></STMTTRNRS></BANKMSGSRSV1>
+<DTSTART>20261101</DTSTART>
+<DTEND>20261110</DTEND>
+""" + _trn("CREDIT", "20261103", "350.00", "202611030771", 'Pix recebido: "Cp :12345678-MARIA TESTE"', "Maria Teste")
+    + _trn("PAYMENT", "20261105", "-89.90", "202611050771", 'Pagamento de Titulo: "ACADEMIA X"', "ACADEMIA X")
+    + _trn("PAYMENT", "20261106", "-1200.00", "2026110607710", 'Pix enviado: "Cp :00000000-IMOBILIARIA LAR"', "Imobiliaria Lar")
+    + """</BANKTRANLIST>
+<LEDGERBAL>
+<BALAMT>1000.50</BALAMT>
+<DTASOF>20261110</DTASOF>
+</LEDGERBAL>
+</STMTRS>
+</STMTTRNRS>
+</BANKMSGSRSV1>
 </OFX>
-""".encode("cp1252")
+""").encode("cp1252")
 
-CSV = """Data;Descrição;Valor;Saldo
-03/11/2026;Pix recebido de Aluno Teste;400,00;5.400,00
-04/11/2026;Tarifa pacote;-12,90;5.387,10
-04/11/2026;Tarifa pacote;-12,90;5.374,20
-""".encode("utf-8")
+# no formato real do Contabilizei (vírgula, "R$ 1.006,82", "-" = vazio, saldo do dia repetido, linhas fora de ordem); dados inventados
+CSV = ("\ufeffData,Categoria,Lançamento,Descrição,Entrada,Saída,Saldo do dia\n"
+       '04/11/2026,Pessoa Jurídica,PIX,TARIFA PACOTE,-,"R$\xa012,90","R$\xa05.374,20"\n'
+       '03/11/2026,Pessoa Jurídica,PIX,ALUNO TESTE,"R$\xa0400,00",-,"R$\xa05.400,00"\n'
+       '04/11/2026,Pessoa Jurídica,PIX,TARIFA PACOTE,-,"R$\xa012,90","R$\xa05.374,20"\n').encode("utf-8")
 
 HOJE = "2026-11-20"
 
@@ -61,22 +100,33 @@ def _confirmar(prev):
 def test_le_ofx_do_inter():
     r = extrato.ler_arquivo("inter.ofx", OFX)
     assert r["conta"] == "Inter" and r["saldo"] == 1000.5 and r["saldo_data"] == "2026-11-10"
-    assert [(m["data"], m["valor"], m["chave"]) for m in r["movimentos"]] == [
-        ("2026-11-03", 350.0, "A1"), ("2026-11-05", -89.9, "A2"), ("2026-11-06", -1200.0, "A3")]
+    assert [(m["data"], m["valor"], m["contraparte"]) for m in r["movimentos"]] == [
+        ("2026-11-03", 350.0, "Maria Teste"), ("2026-11-05", -89.9, "ACADEMIA X"), ("2026-11-06", -1200.0, "Imobiliaria Lar")]
+    assert r["movimentos"][0]["descricao"] == 'Pix recebido: "Cp :12345678-MARIA TESTE"'
+    # a chave vem do conteúdo, não do FITID (que é a sequência do dia e muda se exportar no meio do dia)
+    outro = extrato.ler_arquivo("i.ofx", OFX.replace(b"202611030771", b"202611030779"))
+    assert [m["chave"] for m in outro["movimentos"]] == [m["chave"] for m in r["movimentos"]]
+
+
+def test_nome_do_inter_sem_cidade_nem_codigo():
+    assert extrato._nome_ofx("Super Market          Sao Paulo    Bra") == "Super Market"
+    assert extrato._nome_ofx("São Paulo - Bilhete único - 01M7MT37GXQ05") == "São Paulo - Bilhete único"
 
 
 def test_le_csv_do_contabilizei_com_saldo_e_repeticao_no_mesmo_dia():
     r = extrato.ler_arquivo("extrato.csv", CSV)
     assert r["conta"] == "Contabilizei Bank" and r["saldo"] == 5374.2 and r["saldo_data"] == "2026-11-04"
     chaves = [m["chave"] for m in r["movimentos"]]
-    assert len(set(chaves)) == 3 and chaves[1].endswith(":1") and chaves[2].endswith(":2")   # duas tarifas iguais = duas linhas
+    assert len(set(chaves)) == 3 and chaves[0].endswith(":1") and chaves[2].endswith(":2")   # duas tarifas iguais = duas linhas
+    assert [(m["data"], m["valor"]) for m in r["movimentos"]] == [("2026-11-04", -12.9), ("2026-11-03", 400.0), ("2026-11-04", -12.9)]
+    assert r["movimentos"][1]["descricao"] == "PIX: ALUNO TESTE" and r["movimentos"][1]["contraparte"] == "Aluno Teste"
 
 
 def test_arquivo_estranho_e_recusado_com_motivo():
     with pytest.raises(extrato.ArquivoInvalido):
         extrato.ler_arquivo("foto.png", b"\x89PNG....")
     with pytest.raises(extrato.ArquivoInvalido, match="Inter"):
-        extrato.ler_arquivo("x.ofx", OFX.replace(b"0077", b"0341"))
+        extrato.ler_arquivo("x.ofx", OFX.replace(b"<BANKID>077", b"<BANKID>341").replace(b"Intermedium", b"Outro"))
 
 
 def test_interpreta_forma_contraparte_aluno_e_categoria(con):
@@ -84,10 +134,10 @@ def test_interpreta_forma_contraparte_aluno_e_categoria(con):
         aid = con.execute("INSERT INTO clientes (nome) VALUES ('Aluno Teste')").lastrowid
     prev = extrato.previa(con, [("e.csv", CSV), ("i.ofx", OFX)], HOJE)
     pj, pf = prev["contas"]
-    pix = pj["linhas"][0]
+    pix = pj["linhas"][1]
     assert (pix["tipo"], pix["escopo"], pix["forma"], pix["cliente_id"], pix["categoria"]) == (
         "entrada", "PJ", "PIX", aid, "Mensalidade (Aulas Presenciais)")
-    assert pj["linhas"][1]["categoria"] == "Impostos/Taxas"
+    assert pj["linhas"][0]["categoria"] == "Impostos/Taxas"
     assert pf["linhas"][1]["forma"] == "Boleto" and pf["linhas"][2]["contraparte"] == "Imobiliaria Lar"
     assert all(l["acao"] == "novo" and l["certo"] for l in pf["linhas"])
 
@@ -105,7 +155,7 @@ def test_reimportar_o_mesmo_periodo_nao_duplica_e_saldo_vira_foto(con):
     assert con.execute("SELECT COUNT(*) FROM lancamentos").fetchone()[0] == n
     fotos = [tuple(x) for x in con.execute("SELECT saldo, data FROM saldos WHERE conta='Inter' AND excluido_em IS NULL ORDER BY id")]
     assert fotos == [(999.0, "2026-11-10"), (1000.5, "2026-11-10")]
-    assert con.execute("SELECT pago_em FROM lancamentos WHERE origem='OFX:Inter:A1'").fetchone()[0] == "2026-11-03"
+    assert con.execute("SELECT pago_em FROM lancamentos WHERE origem LIKE 'OFX:Inter:2026-11-03:35000:%'").fetchone()[0] == "2026-11-03"
 
 
 def test_casa_com_lancado_a_mao_conta_em_aberto_e_recorrente(con):
@@ -123,7 +173,7 @@ def test_casa_com_lancado_a_mao_conta_em_aberto_e_recorrente(con):
     assert (r["novos"], r["pagos"], r["existentes"]) == (0, 2, 1)
     assert con.execute("SELECT COUNT(*) FROM lancamentos").fetchone()[0] == 3   # nada em dobro
     assert con.execute("SELECT pago_em, conta FROM lancamentos WHERE id=?", (aberto,)).fetchone()[:] == ("2026-11-05", "Inter")
-    assert con.execute("SELECT origem FROM lancamentos WHERE id=?", (manual,)).fetchone()[0] == "OFX:Inter:A1"
+    assert con.execute("SELECT origem FROM lancamentos WHERE id=?", (manual,)).fetchone()[0].startswith("OFX:Inter:2026-11-03:35000:")
     assert con.execute("SELECT valor, pago_em FROM lancamentos WHERE recorrencia_id=? AND competencia='2026-11'", (rid,)).fetchone()[:] == (
         1200.0, "2026-11-06")
 
@@ -140,7 +190,7 @@ def test_categoria_corrigida_vira_regra_para_a_proxima(con):
     linhas, saldos = _confirmar(extrato.previa(con, [("i.ofx", OFX)], HOJE))
     linhas[2]["categoria"] = "Moradia"   # você corrigiu "Outros" -> "Moradia" no aluguel
     assert extrato.salvar(con, linhas, saldos)["regras"] == 1
-    outro = OFX.replace(b"<FITID>A3", b"<FITID>B9").replace(b"20261106", b"20261206")
+    outro = OFX.replace(b"20261106", b"20261206")
     linha = extrato.previa(con, [("i.ofx", outro)], HOJE)["contas"][0]["linhas"][2]
     assert linha["acao"] == "novo" and linha["categoria"] == "Moradia"
 
@@ -150,7 +200,7 @@ def test_ignorar_nao_volta_como_novo(con):
     linhas[0]["acao"] = "ignorar"
     extrato.salvar(con, linhas, [])
     l = extrato.previa(con, [("i.ofx", OFX)], HOJE)["contas"][0]["linhas"][0]
-    assert l["acao"] == "ignorar" and con.execute("SELECT COUNT(*) FROM lancamentos WHERE origem='OFX:Inter:A1'").fetchone()[0] == 0
+    assert l["acao"] == "ignorar" and con.execute("SELECT COUNT(*) FROM lancamentos").fetchone()[0] == 2
 
 
 def test_aviso_de_extrato_atrasado_so_depois_da_primeira_importacao(con):
@@ -217,3 +267,13 @@ def test_tela_recusa_revisao_adulterada_e_arquivo_invalido(http):
     con = db.conectar()
     assert con.execute("SELECT COUNT(*) FROM lancamentos").fetchone()[0] == 0
     con.close()
+
+
+def test_entrada_que_parece_emprestimo_pede_decisao_e_depois_aprende(con):
+    zippi = OFX.replace(b"MARIA TESTE", b"ZIPPI SOLUCOES DE CREDITO").replace(b"Maria Teste", b"Zippi Solucoes De Credito")
+    l = extrato.previa(con, [("i.ofx", zippi)], HOJE)["contas"][0]["linhas"][0]
+    assert l["emprestimo"] and not l["certo"]
+    linhas, _ = _confirmar(extrato.previa(con, [("i.ofx", zippi)], HOJE))
+    assert extrato.salvar(con, linhas, [])["regras"] == 1   # você confirmou "Outros": a próxima vem sem pedir
+    l = extrato.previa(con, [("i.ofx", zippi.replace(b"20261103", b"20261108"))], HOJE)["contas"][0]["linhas"][0]
+    assert l["acao"] == "novo" and l["certo"] and not l["emprestimo"]

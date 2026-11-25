@@ -1,9 +1,10 @@
 """Extrato das contas: Inter (PF) em OFX e Contabilizei Bank (PJ) em CSV. Lê o arquivo, interpreta cada movimento, casa com o que
 já está no CRM e devolve uma prévia; só grava o que você confirmar na tela de revisão (nada entra sozinho).
 
-Anti-duplicação: cada movimento importado guarda em lancamentos.origem uma chave fixa ('OFX:<conta>:<FITID>' no OFX;
-'CSV:<conta>:<data>:<centavos>:<descrição>:<n>' no CSV, n = repetição idêntica no mesmo dia). Importar o mesmo período de novo
-encontra a chave e não cria nada."""
+Anti-duplicação: cada movimento importado guarda em lancamentos.origem uma chave fixa '<OFX|CSV>:<conta>:<data>:<centavos>:<descrição>:<n>'
+(n = repetição idêntica no mesmo dia). No Inter o FITID é a data + 077 + a sequência do dia (202611240771), então pode mudar se o
+extrato for exportado no meio do dia; por isso a chave vem do conteúdo, nos dois bancos. Importar o mesmo período de novo encontra a
+chave e não cria nada."""
 import datetime as dt
 import hashlib
 import json
@@ -81,8 +82,25 @@ def _tag(bloco: str, nome: str) -> str | None:
     return m.group(1).strip() if m else None
 
 
+def _nome_ofx(nome: str | None) -> str | None:
+    """NAME do Inter sem o enchimento da cidade e sem códigos: 'Super Market          Sao Paulo    Bra' -> 'Super Market';
+    'São Paulo - Bilhete único - 01M7MT37' -> 'São Paulo - Bilhete único'."""
+    nome = re.split(r"\s{2,}", (nome or "").strip())[0]
+    partes = [p.strip() for p in nome.split(" - ") if p.strip() and not re.search(r"\d", p)]
+    return " - ".join(partes)[:80] or None
+
+
+def _chaves(movs: list[dict]) -> None:
+    """Chave estável de cada movimento: data + centavos + descrição, numerando as repetições idênticas do mesmo dia."""
+    vistos: dict[tuple, int] = {}
+    for m in movs:
+        base = (m["data"], round(m["valor"] * 100), " ".join(financeiro._palavras(m["descricao"])))
+        vistos[base] = vistos.get(base, 0) + 1
+        m["chave"] = f"{base[0]}:{base[1]}:{hashlib.sha1(base[2].encode()).hexdigest()[:10]}:{vistos[base]}"
+
+
 def ler_ofx(conteudo: bytes) -> dict:
-    """{'conta', 'formato', 'saldo', 'saldo_data', 'movimentos': [{'data', 'valor' (com sinal), 'descricao', 'chave'}]}."""
+    """{'conta', 'formato', 'saldo', 'saldo_data', 'movimentos': [{'data', 'valor' (com sinal), 'descricao', 'contraparte', 'chave'}]}."""
     t = _texto(conteudo)
     if "<OFX>" not in t.upper():
         raise ArquivoInvalido("não é um arquivo OFX")
@@ -97,11 +115,12 @@ def ler_ofx(conteudo: bytes) -> dict:
             data = _data(_tag(bloco, "DTPOSTED") or "")
         except ValueError:
             raise ArquivoInvalido("um movimento do OFX tem data ou valor que não entendi") from None
-        fitid = _tag(bloco, "FITID")
-        if not fitid:
-            raise ArquivoInvalido("um movimento do OFX veio sem código (FITID)")
-        desc = " ".join(x for x in (_tag(bloco, "NAME"), _tag(bloco, "MEMO")) if x) or (_tag(bloco, "TRNTYPE") or "")
-        movs.append({"data": data, "valor": valor, "descricao": " ".join(desc.split()), "chave": fitid})
+        memo = " ".join((_tag(bloco, "MEMO") or "").split())
+        nome = _nome_ofx(_tag(bloco, "NAME"))
+        movs.append({"data": data, "valor": valor, "descricao": memo or nome or (_tag(bloco, "TRNTYPE") or ""), "contraparte": nome})
+        if len(movs) > MAX_LINHAS:
+            raise ArquivoInvalido(f"o arquivo tem mais de {MAX_LINHAS} movimentos: exporte um período menor")
+    _chaves(movs)
     saldo = saldo_data = None
     if m := re.search(r"<LEDGERBAL>(.*?)(</LEDGERBAL>|<AVAILBAL>|</STMTRS>)", t, re.S | re.I):
         try:
@@ -112,9 +131,11 @@ def ler_ofx(conteudo: bytes) -> dict:
 
 
 def _coluna(cab: list[str], *nomes) -> int | None:
-    for i, c in enumerate(cab):
-        if any(n in c for n in nomes):
-            return i
+    """A primeira coluna que contém o primeiro nome; senão o segundo, e assim por diante."""
+    for n in nomes:
+        for i, c in enumerate(cab):
+            if n in c:
+                return i
     return None
 
 
@@ -137,17 +158,22 @@ def ler_csv(conteudo: bytes) -> dict:
         raise ArquivoInvalido("não achei as colunas de data e valor no CSV")
     cab = [" ".join(financeiro._palavras(c)) for c in linhas[ini]]
     c_data = _coluna(cab, "data")
-    c_desc = _coluna(cab, "descricao", "historico", "lancamento", "detalhe")
+    c_desc = _coluna(cab, "descricao", "historico", "detalhe")
+    c_oper = _coluna(cab, "lancamento", "tipo")   # Contabilizei: "PIX", "Devolução PIX"
     c_valor = _coluna(cab, "valor")
-    c_cred, c_deb = _coluna(cab, "credito", "entrada"), _coluna(cab, "debito", "saida")
+    c_cred, c_deb = _coluna(cab, "entrada", "credito"), _coluna(cab, "saida", "debito")
     c_saldo = _coluna(cab, "saldo")
     if c_valor is not None and c_valor == c_saldo:
         c_valor = None
-    movs, saldos = [], []
+    movs, saldos = [], {}
     for l in linhas[ini + 1:]:
         if not any(x.strip() for x in l):
             continue
-        cel = lambda i: l[i].strip() if i is not None and i < len(l) else ""   # noqa: E731
+
+        def cel(i):
+            v = l[i].strip() if i is not None and i < len(l) else ""
+            return "" if v in ("-", "—") else v   # "-" = campo vazio
+
         try:
             data = _data(cel(c_data))
         except ValueError:
@@ -160,29 +186,21 @@ def ler_csv(conteudo: bytes) -> dict:
         except ValueError:
             raise ArquivoInvalido(f"o valor da linha de {data[8:]}/{data[5:7]} não é um número") from None
         if cel(c_saldo):
-            try:
-                saldos.append((data, round(_valor_br(cel(c_saldo)), 2), len(movs)))
+            try:   # "Saldo do dia": o mesmo em todas as linhas do dia, e as linhas não vêm em ordem
+                saldos[data] = round(_valor_br(cel(c_saldo)), 2)
             except ValueError:
                 pass
         if round(valor, 2) == 0:
             continue
-        movs.append({"data": data, "valor": valor, "descricao": " ".join(cel(c_desc).split()), "chave": None})
+        nome = " ".join(cel(c_desc).split())
+        oper = " ".join(cel(c_oper).split())
+        movs.append({"data": data, "valor": valor, "descricao": f"{oper}: {nome}" if oper and nome else (oper or nome),
+                     "contraparte": contraparte(nome) if c_oper is not None else None})
         if len(movs) > MAX_LINHAS:
             raise ArquivoInvalido(f"o arquivo tem mais de {MAX_LINHAS} movimentos: exporte um período menor")
-    # chave estável: data + valor + descrição, numerando as repetições idênticas do mesmo dia
-    vistos: dict[tuple, int] = {}
-    for m in movs:
-        base = (m["data"], round(m["valor"] * 100), " ".join(financeiro._palavras(m["descricao"])))
-        vistos[base] = vistos.get(base, 0) + 1
-        resumo = hashlib.sha1(base[2].encode()).hexdigest()[:10]
-        m["chave"] = f"{base[0]}:{base[1]}:{resumo}:{vistos[base]}"
-    saldo = saldo_data = None
-    if saldos:   # o saldo do dia mais recente; no mesmo dia, o da última linha (a ordem do arquivo pode ser crescente ou decrescente)
-        ult = max(s[0] for s in saldos)
-        do_dia = [s for s in saldos if s[0] == ult]
-        crescente = len(saldos) < 2 or saldos[0][0] <= saldos[-1][0]
-        saldo_data, saldo = ult, (do_dia[-1] if crescente else do_dia[0])[1]
-    return {"conta": CONTA_CSV, "formato": "CSV", "saldo": saldo, "saldo_data": saldo_data, "movimentos": movs}
+    _chaves(movs)
+    saldo_data = max(saldos) if saldos else None
+    return {"conta": CONTA_CSV, "formato": "CSV", "saldo": saldos.get(saldo_data), "saldo_data": saldo_data, "movimentos": movs}
 
 
 def ler_arquivo(nome: str, conteudo: bytes) -> dict:
@@ -203,6 +221,11 @@ def ler_arquivo(nome: str, conteudo: bytes) -> dict:
 
 
 # ---------- interpretação ----------
+def parece_emprestimo(texto: str) -> bool:
+    """Entrada que pode ser empréstimo: as palavras de financeiro.parece_emprestimo ou "crédito" ("X Soluções de Crédito",
+    "Crédito liberado"). Só pede confirmação na revisão; o cadastro do empréstimo é a Etapa 3."""
+    return financeiro.parece_emprestimo(texto) or "credito" in financeiro._palavras(texto)
+
 def _forma(palavras: list[str]) -> str | None:
     p = set(palavras)
     for chaves, forma in FORMAS:
@@ -233,27 +256,31 @@ def regras(con: sqlite3.Connection) -> list[tuple[str, str, list[str], str]]:
     return sorted(out, key=lambda r: -len(r[2]))
 
 
-def categoria(escopo: str, tipo: str, palavras: list[str], cliente_id, regras_salvas, listas: dict) -> str:
-    """Regra que você ensinou > palavra-chave > aluno > 'Outros'. Sempre uma categoria da lista do escopo."""
+def categoria(escopo: str, tipo: str, palavras: list[str], cliente_id, regras_salvas, listas: dict) -> tuple[str, bool]:
+    """(categoria, veio de regra sua). Regra que você ensinou > palavra-chave > aluno > 'Outros'. Sempre uma da lista do escopo."""
     validas = listas["PJ" if escopo == "PJ" else "PF"]
     p = set(palavras)
     for e, t, chaves, cat in regras_salvas:
         if e == escopo and t == tipo and set(chaves) <= p and cat in validas:
-            return cat
+            return cat, True
     texto = " ".join(palavras)
     sugestoes = []
-    if financeiro.parece_emprestimo(texto):
-        sugestoes.append(financeiro.EMPRESTIMO if tipo == "entrada" else "Dívidas")
+    if tipo == "entrada" and parece_emprestimo(texto):
+        sugestoes.append(financeiro.EMPRESTIMO)
     if p & {"tarifa", "iof", "das"} or "simples nacional" in texto or "juros" in p:
         sugestoes.append("Impostos/Taxas" if escopo == "PJ" else "Outros")
     if p & {"fatura", "cartao"} and tipo == "saida":
         sugestoes.append("Fatura")
+    if p & {"uber", "transporte", "bilhete", "metro", "onibus", "combustivel", "estacionamento"} and tipo == "saida":
+        sugestoes.append("Transporte")
+    if p & {"food", "ifood", "restaurante", "mercado", "market", "supermercado", "padaria", "lanchonete"} and tipo == "saida":
+        sugestoes.append("Alimentação")
     if cliente_id and escopo == "PJ" and tipo == "entrada":
         sugestoes.append("Mensalidade (Aulas Presenciais)")
     for s in sugestoes:
         if s in validas:
-            return s
-    return "Outros" if "Outros" in validas else validas[-1]
+            return s, False
+    return ("Outros" if "Outros" in validas else validas[-1]), False
 
 
 def interpretar(con: sqlite3.Connection, arq: dict) -> list[dict]:
@@ -268,14 +295,14 @@ def interpretar(con: sqlite3.Connection, arq: dict) -> list[dict]:
     out = []
     for m in arq["movimentos"]:
         tipo = "entrada" if m["valor"] > 0 else "saida"
-        palavras = financeiro._palavras(m["descricao"])
-        contra = contraparte(m["descricao"])
+        contra = contraparte(m.get("contraparte") or "") or contraparte(m["descricao"])
+        palavras = financeiro._palavras(f"{m['descricao']} {contra or ''}")
         cliente_id = financeiro.sugerir_aluno(m["descricao"], alunos) if escopo == "PJ" and tipo == "entrada" else None
-        cat = categoria(escopo, tipo, palavras, cliente_id, regras_salvas, listas)
+        cat, por_regra = categoria(escopo, tipo, palavras, cliente_id, regras_salvas, listas)
         out.append({"origem": prefixo + m["chave"], "conta": conta, "escopo": escopo, "tipo": tipo, "data": m["data"],
                     "valor": round(abs(m["valor"]), 2), "descricao": m["descricao"][:200], "contraparte": contra,
                     "forma": _forma(palavras), "cliente_id": cliente_id, "categoria": cat, "categoria_sugerida": cat,
-                    "emprestimo": financeiro.parece_emprestimo(m["descricao"])})
+                    "emprestimo": tipo == "entrada" and not por_regra and parece_emprestimo(" ".join(palavras))})
     return out
 
 
@@ -406,6 +433,7 @@ def salvar(con: sqlite3.Connection, linhas: list[dict], saldos: list[dict]) -> d
     Linha cuja chave já está no CRM (envio repetido) é pulada. Devolve a contagem por resultado."""
     cont = {"novos": 0, "pagos": 0, "existentes": 0, "ignorados": 0, "pulados": 0, "regras": 0, "saldos": 0}
     por_conta: dict[str, int] = {}
+    aprendidas: set[str] = set()
     with con:
         for l in linhas:
             acao = l["acao"]
@@ -454,12 +482,14 @@ def salvar(con: sqlite3.Connection, linhas: list[dict], saldos: list[dict]) -> d
                 if l["cliente_id"]:
                     con.execute("UPDATE lancamentos SET cliente_id=COALESCE(cliente_id, ?) WHERE id=?", (l["cliente_id"], lid))
                 financeiro.usar_credito(con, lid)
-            if acao == "novo" and l["categoria"] != l.get("categoria_sugerida") and (texto := _texto_regra(l["contraparte"], l["descricao"])):
-                # você corrigiu a categoria: vale para as próximas importações com o mesmo nome
+            if acao == "novo" and (l["categoria"] != l.get("categoria_sugerida") or l.get("emprestimo")) \
+                    and (texto := _texto_regra(l["contraparte"], l["descricao"])):
+                # você corrigiu a categoria (ou confirmou a de uma entrada que parecia empréstimo): vale para as próximas com o mesmo nome
                 con.execute("""INSERT INTO parametros (grupo, chave, valor_texto, ordem) VALUES (?, ?, ?, 0)
                                ON CONFLICT (grupo, chave) DO UPDATE SET valor_texto=excluded.valor_texto""",
                             (GRUPO_REGRA, f"{l['escopo']}|{l['tipo']}|{texto}", l["categoria"]))
-                cont["regras"] += 1
+                aprendidas.add(f"{l['escopo']}|{l['tipo']}|{texto}")
+        cont["regras"] = len(aprendidas)
         for s in saldos:
             if not con.execute("SELECT 1 FROM saldos WHERE conta=? AND data=? AND ROUND(saldo, 2)=ROUND(?, 2) AND excluido_em IS NULL",
                                (s["conta"], s["data"], s["saldo"])).fetchone():
