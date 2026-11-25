@@ -306,3 +306,22 @@ def test_pagamento_de_um_aluno_nao_quita_a_mensalidade_de_outro(con):
     sem_nome = CSV.replace("ALUNO TESTE".encode(), "FULANO X".encode())
     l = extrato.previa(con, [("c.csv", sem_nome)], HOJE)["contas"][0]["linhas"][1]
     assert l["ref"] == f"l:{mens}" and not l["certo"]   # não sabe quem pagou: você decide
+
+
+def test_reconhecer_lancado_a_mao_grava_o_aluno_confirmado(con):
+    with con:
+        ana = con.execute("INSERT INTO clientes (nome) VALUES ('Ana Lima')").lastrowid
+        manual = con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria)
+                                VALUES ('PJ','entrada','2026-11-03','2026-11-03',400,'Outros')""").lastrowid
+    prev = extrato.previa(con, [("a.csv", CSV.replace("ALUNO TESTE".encode(), "ANA LIMA".encode()))], HOJE)
+    assert prev["contas"][0]["linhas"][1]["ref"] == f"e:{manual}"
+    extrato.salvar(con, *_confirmar(prev))
+    assert con.execute("SELECT cliente_id FROM lancamentos WHERE id=?", (manual,)).fetchone()[0] == ana
+
+
+def test_recorrente_de_outra_conta_nao_vem_como_certa(con):
+    with con:
+        rid = con.execute("""INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, inicio, conta)
+                             VALUES ('PF','Aluguel','Moradia',1200,5,'2026-01','Itaú')""").lastrowid
+    l = extrato.previa(con, [("i.ofx", OFX)], HOJE)["contas"][0]["linhas"][2]
+    assert l["ref"] == f"r:{rid}:2026-11" and not l["certo"]

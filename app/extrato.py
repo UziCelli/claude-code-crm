@@ -355,14 +355,17 @@ def casar(con: sqlite3.Connection, linhas: list[dict], hoje: str, reservas: dict
             abertos.sort(key=lambda c: _dias(c["data"], l["data"]))
         recs = []
         if l["tipo"] == "saida":
+            conta_rec = {r["id"]: r["conta"] for r in con.execute("SELECT id, conta FROM recorrencias WHERE excluido_em IS NULL")}
             for comp in (l["data"][:7], financeiro.somar_meses(l["data"][:7], -1)):
                 for r in financeiro._recorrencias_abertas(con, comp, hoje):
                     chave = f"r:{r['id']}:{comp}"
                     if r["escopo"] == l["escopo"] and chave not in recs_vistas and _dias(r["data"], l["data"]) <= DIAS_PAGAR:
                         igual = round(r["valor"] * 100) == cents
                         parecido = set(financeiro._palavras(r["descricao"])) & set(financeiro._palavras(l["descricao"]))
+                        # conta recorrente de outra conta: só como opção, nunca como certeza
+                        mesma_conta = conta_rec.get(r["id"]) in (None, "", l["conta"])
                         if igual or (parecido and abs(r["valor"] - l["valor"]) <= 0.15 * r["valor"]):
-                            recs.append((chave, r, igual))
+                            recs.append((chave, r, igual and mesma_conta))
         for c in existe:
             l["opcoes"].append((f"e:{c['id']}", f"Já lançado: {c['descricao'] or c['categoria']} (pago {c['pago_em'][8:]}/{c['pago_em'][5:7]})"))
         for c in abertos:
@@ -468,8 +471,11 @@ def salvar(con: sqlite3.Connection, linhas: list[dict], saldos: list[dict]) -> d
                 alvos.add(alvo)
             if acao.startswith("e:") or acao == "existe":
                 if alvo:   # marca o lançamento feito à mão com a chave: a próxima importação o reconhece direto
-                    con.execute("""UPDATE lancamentos SET origem=?, conta=COALESCE(conta, ?) WHERE id=? AND origem IS NULL
+                    con.execute("""UPDATE lancamentos SET origem=COALESCE(origem, ?), conta=COALESCE(conta, ?) WHERE id=?
                                    AND excluido_em IS NULL""", (l["origem"], l["conta"], alvo))
+                    if l["cliente_id"] and l["escopo"] == "PJ" and l["tipo"] == "entrada":   # o aluno confirmado na revisão
+                        con.execute("UPDATE lancamentos SET cliente_id=? WHERE id=? AND cliente_id IS NULL AND escopo='PJ' AND tipo='entrada'",
+                                    (l["cliente_id"], alvo))
                 cont["existentes"] += 1
                 continue
             if acao.startswith("l:"):
