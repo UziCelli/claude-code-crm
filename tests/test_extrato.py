@@ -290,7 +290,11 @@ def test_dois_arquivos_da_mesma_conta_nao_casam_com_o_mesmo_lancamento(con):
     extrato.salvar(con, *_confirmar(prev))
     assert con.execute("SELECT COUNT(*) FROM lancamentos WHERE valor=400").fetchone()[0] == 2
     linha = _confirmar(extrato.previa(con, [("b.csv", outro.replace(b"03/11", b"02/11"))], HOJE))[0][1]
-    dois = [{**linha, "acao": "e:1"}, {**linha, "origem": linha["origem"] + "x", "acao": "e:1"}]   # o mesmo lançamento para dois movimentos
+    with con:
+        livre = con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, conta)
+                               VALUES ('PJ','entrada','2026-11-02','2026-11-02',400,'Outros','Contabilizei Bank')""").lastrowid
+    alvo = f"e:{livre}"
+    dois = [{**linha, "acao": alvo}, {**linha, "origem": linha["origem"] + "x", "acao": alvo}]   # o mesmo lançamento para dois movimentos
     assert extrato.salvar(con, dois, [])["novos"] == 1   # o segundo é um movimento a mais
 
 
@@ -325,3 +329,17 @@ def test_recorrente_de_outra_conta_nao_vem_como_certa(con):
                              VALUES ('PF','Aluguel','Moradia',1200,5,'2026-01','Itaú')""").lastrowid
     l = extrato.previa(con, [("i.ofx", OFX)], HOJE)["contas"][0]["linhas"][2]
     assert l["ref"] == f"r:{rid}:2026-11" and not l["certo"]
+
+
+def test_lancamento_da_planilha_conciliado_nao_casa_de_novo(con):
+    with con:
+        con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, conta, origem)
+                       VALUES ('PJ','entrada','2026-11-03','2026-11-03',400,'Outros','Contabilizei Bank','PJ:17')""")
+    prev = extrato.previa(con, [("a.csv", CSV)], HOJE)
+    assert prev["contas"][0]["linhas"][1]["ref"] == "e:1"
+    extrato.salvar(con, *_confirmar(prev))
+    assert con.execute("SELECT origem FROM lancamentos WHERE id=1").fetchone()[0] == "PJ:17"   # a origem da planilha fica
+    again = extrato.previa(con, [("a.csv", CSV)], HOJE)["contas"][0]["linhas"][1]
+    assert again["acao"] == "existe" and again["ref"] == "1"   # reconhece pela ligação guardada
+    outro = extrato.previa(con, [("b.csv", CSV.replace("ALUNO TESTE".encode(), "OUTRA PESSOA".encode()))], HOJE)["contas"][0]["linhas"][1]
+    assert outro["acao"] == "novo"   # o lançamento já conciliado não serve para outro movimento

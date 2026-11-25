@@ -21,6 +21,7 @@ DIAS_PAGAR = 10                      # conta em aberto até 10 dias do movimento
 DIAS_SEM_IMPORTAR = 7                # aviso no painel
 GRUPO_REGRA = "extrato_regra"        # parametros: chave 'escopo|tipo|palavras' -> categoria (o que você corrigiu)
 GRUPO_IGNORADO = "extrato_ignorado"  # parametros: origem que você mandou ignorar (não aparece de novo como novo)
+GRUPO_LIGADO = "extrato_ligado"      # parametros: chave do extrato -> id do lançamento que já tinha outra origem (planilha 'PJ:17', 'SAL:…')
 MAX_BYTES = 5 * 1024 * 1024
 MAX_LINHAS = 2000
 
@@ -307,6 +308,28 @@ def interpretar(con: sqlite3.Connection, arq: dict) -> list[dict]:
 
 
 # ---------- casamento com o que já existe ----------
+def _ligados(con: sqlite3.Connection) -> dict[str, int]:
+    """{chave do extrato: id do lançamento} de todo lançamento já conciliado com um movimento do banco: o que guarda a chave na
+    origem e o que já tinha outra origem (guardado em parametros, grupo GRUPO_LIGADO). Um lançamento conciliado não casa de novo."""
+    out = {r["origem"]: r["id"] for r in con.execute(
+        "SELECT id, origem FROM lancamentos WHERE origem LIKE 'OFX:%' OR origem LIKE 'CSV:%'")}
+    for chave, lid in db.parametros(con, GRUPO_LIGADO).items():
+        try:
+            out[chave] = int(lid)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _ligar(con: sqlite3.Connection, lid: int, origem: str) -> None:
+    """Registra que o lançamento é o movimento `origem` do extrato. Sem origem, ela vira a chave; com outra (planilha, salário), a ligação
+    fica em parametros sem apagar a origem antiga."""
+    con.execute("UPDATE lancamentos SET origem=? WHERE id=? AND origem IS NULL", (origem, lid))
+    if con.execute("SELECT origem FROM lancamentos WHERE id=?", (lid,)).fetchone()[0] != origem:
+        con.execute("""INSERT INTO parametros (grupo, chave, valor, ordem) VALUES (?, ?, ?, 0)
+                       ON CONFLICT (grupo, chave) DO UPDATE SET valor=excluded.valor""", (GRUPO_LIGADO, origem, lid))
+
+
 def _dias(a: str, b: str) -> int:
     return abs((dt.date.fromisoformat(a) - dt.date.fromisoformat(b)).days)
 
@@ -322,10 +345,9 @@ def casar(con: sqlite3.Connection, linhas: list[dict], hoje: str, reservas: dict
     reservas = reservas if reservas is not None else {}
     usados: set[int] = reservas.setdefault("usados", set())
     ignorados = set(db.parametros(con, GRUPO_IGNORADO))
-    origens = {r["origem"]: r["id"] for r in con.execute(
-        "SELECT id, origem FROM lancamentos WHERE origem IN ({})".format(",".join("?" * len(linhas))), [l["origem"] for l in linhas])} \
-        if linhas else {}
-    usados |= set(origens.values())
+    ligados = _ligados(con)
+    origens = {l["origem"]: ligados[l["origem"]] for l in linhas if l["origem"] in ligados}
+    usados |= set(ligados.values())   # lançamento já conciliado com outro movimento não casa de novo
     recs_vistas: set[str] = reservas.setdefault("recorrencias", set())
     for l in linhas:
         l["opcoes"], l["ref"], l["certo"], l["motivo"] = [], "", True, ""
@@ -344,7 +366,7 @@ def casar(con: sqlite3.Connection, linhas: list[dict], hoje: str, reservas: dict
                AND COALESCE(pago_em, data) BETWEEN date(?, ?) AND date(?, ?) ORDER BY id""",
             (l["escopo"], l["tipo"], cents, l["conta"], l["data"], f"-{DIAS_PAGAR} days", l["data"], f"+{DIAS_PAGAR} days")).fetchall()
         existe = [c for c in cand if c["pago_em"] and c["id"] not in usados and _dias(c["pago_em"], l["data"]) <= DIAS_EXISTE
-                  and not str(c["origem"] or "").startswith(("OFX:", "CSV:"))]
+                  ]
         abertos = [c for c in cand if not c["pago_em"] and c["id"] not in usados]
         if l["cliente_id"]:   # pagamento de um aluno não casa com lançamento de outro aluno
             existe = [c for c in existe if c["cliente_id"] in (None, l["cliente_id"])]
@@ -451,11 +473,14 @@ def salvar(con: sqlite3.Connection, linhas: list[dict], saldos: list[dict]) -> d
     aprendidas: set[str] = set()
     alvos: set[int] = set()
     with con:
+        ligados = _ligados(con)
+        ja_conciliados = set(ligados.values())
         for l in linhas:
             acao = l["acao"]
-            if con.execute("SELECT 1 FROM lancamentos WHERE origem=?", (l["origem"],)).fetchone():
+            if l["origem"] in ligados:
                 cont["existentes" if acao == "existe" else "pulados"] += 1   # já importado; senão, o mesmo envio chegando de novo
                 continue
+            ligados[l["origem"]] = 0   # a mesma linha duas vezes no envio: a segunda é pulada
             por_conta[l["conta"]] = por_conta.get(l["conta"], 0) + 1
             if acao == "ignorar":
                 con.execute("INSERT OR IGNORE INTO parametros (grupo, chave, valor_texto, ordem) VALUES (?, ?, ?, 0)",
@@ -465,14 +490,14 @@ def salvar(con: sqlite3.Connection, linhas: list[dict], saldos: list[dict]) -> d
             con.execute("DELETE FROM parametros WHERE grupo=? AND chave=?", (GRUPO_IGNORADO, l["origem"]))
             lid = None
             alvo = int(acao[2:]) if acao[:2] in ("e:", "l:") else None
-            if alvo in alvos:
-                acao = "novo"   # o mesmo lançamento escolhido para dois movimentos: o segundo é um movimento a mais
+            if alvo in alvos or alvo in ja_conciliados:
+                acao = "novo"   # o mesmo lançamento para dois movimentos (agora ou numa importação anterior): o segundo é um movimento a mais
             elif alvo:
                 alvos.add(alvo)
             if acao.startswith("e:") or acao == "existe":
                 if alvo:   # marca o lançamento feito à mão com a chave: a próxima importação o reconhece direto
-                    con.execute("""UPDATE lancamentos SET origem=COALESCE(origem, ?), conta=COALESCE(conta, ?) WHERE id=?
-                                   AND excluido_em IS NULL""", (l["origem"], l["conta"], alvo))
+                    con.execute("UPDATE lancamentos SET conta=COALESCE(conta, ?) WHERE id=? AND excluido_em IS NULL", (l["conta"], alvo))
+                    _ligar(con, alvo, l["origem"])
                     if l["cliente_id"] and l["escopo"] == "PJ" and l["tipo"] == "entrada":   # o aluno confirmado na revisão
                         con.execute("UPDATE lancamentos SET cliente_id=? WHERE id=? AND cliente_id IS NULL AND escopo='PJ' AND tipo='entrada'",
                                     (l["cliente_id"], alvo))
@@ -480,11 +505,12 @@ def salvar(con: sqlite3.Connection, linhas: list[dict], saldos: list[dict]) -> d
                 continue
             if acao.startswith("l:"):
                 alvo = int(acao[2:])
-                n = con.execute("""UPDATE lancamentos SET pago_em=?, conta=?, forma=COALESCE(forma, ?), contraparte=COALESCE(contraparte, ?),
-                                   origem=COALESCE(origem, ?) WHERE id=? AND pago_em IS NULL AND excluido_em IS NULL""",
-                                (l["data"], l["conta"], l["forma"], l["contraparte"], l["origem"], alvo)).rowcount
+                n = con.execute("""UPDATE lancamentos SET pago_em=?, conta=?, forma=COALESCE(forma, ?), contraparte=COALESCE(contraparte, ?)
+                                   WHERE id=? AND pago_em IS NULL AND excluido_em IS NULL""",
+                                (l["data"], l["conta"], l["forma"], l["contraparte"], alvo)).rowcount
                 if n:
                     lid = alvo
+                    _ligar(con, alvo, l["origem"])
                     cont["pagos"] += 1
                 else:
                     acao = "novo"   # já foi paga por outro caminho: o movimento entra como novo

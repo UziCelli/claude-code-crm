@@ -147,7 +147,7 @@ Campanhas (fases, checklists, gastos por canal, checkpoints que você inclui e e
 ## Importar extrato (Financeiro › Importar extrato)
 - **Toda segunda**: exporte os últimos 30 dias do **Inter (OFX)** e do **Contabilizei (CSV)** e solte os dois arquivos na tela. O CRM descobre a conta pelo arquivo.
 - **Revisão antes de salvar**: cada movimento vem como *novo*, *já existe* ou *pago agora* (dá baixa na conta em aberto ou recorrente de mesmo valor). O que tem certeza vem escolhido; só o duvidoso pede decisão. Nada entra sozinho; um backup `antes-extrato-*.db` é feito ao salvar.
-- **Sem duplicar**: cada movimento guarda uma chave em `lancamentos.origem` (data + valor + descrição + repetição no dia; o FITID do Inter é só a sequência do dia e pode mudar). Repetir o período não cria nada.
+- **Sem duplicar**: cada movimento guarda uma chave em `lancamentos.origem` (data + valor + descrição + repetição no dia; o FITID do Inter é só a sequência do dia e pode mudar). Repetir o período não cria nada. Lançamento que já tinha outra origem (planilha, salário) guarda a ligação em `parametros` (`extrato_ligado`); conciliado uma vez, não casa com outro movimento.
 - **Empréstimo**: entrada com "crédito" ou "empréstimo" no texto pede confirmação; confirmada uma vez, as próximas do mesmo nome vêm sem pedir.
 - **Categoria**: trocar a sugerida guarda uma regra (`parametros`, grupo `extrato_regra`) usada nas próximas importações. "Ignorar" também é lembrado (`extrato_ignorado`).
 - **Saldo**: o saldo que o banco informa vira uma foto em `saldos` (só acrescenta; a digitada fica) e entra no Conferir.
