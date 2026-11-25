@@ -123,13 +123,20 @@ def ler_inter(texto: str) -> dict:
         m = valor_fim.search(linha_valor)
         desc = re.sub(r"\s*-?\s*$", "", f"{p['texto']} {linha_valor[:m.start()]}").strip()   # sem o "-" de beneficiário vazio
         desc, num, total = _parcela(desc, r"\(Parcela (\d+) de (\d+)\)")
+        extra = list(p["extra"])
+        if num is None:   # a parcela numa linha do meio: "(Parcela 04 de 10)" entre a descrição e o valor
+            for i, e in enumerate(extra):
+                resto, num, total = _parcela(e, r"\(?Parcela (\d+) de (\d+)\)?")
+                if num is not None:
+                    extra[i:i + 1] = [resto] if resto else []
+                    break
         valor = _valor(m.group(2)) * (-1 if m.group(1) else 1)
         desc = " ".join(desc.split())
         if valor < 0 and "pagamento" in financeiro._palavras(desc):
             pagamentos.append({"data": p["data"], "valor": round(-valor, 2), "descricao": desc})
             return
         compras.append({"cartao": cartao, "data": p["data"], "descricao": desc, "valor": round(valor, 2), "parcela_num": num,
-                        "parcela_total": total, "ramo": None, "nota": " · ".join(p["extra"])[:200] or None})
+                        "parcela_total": total, "ramo": None, "nota": " · ".join(extra)[:200] or None})
 
     for bruta in texto.splitlines():
         linha = " ".join(bruta.split())

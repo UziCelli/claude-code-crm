@@ -194,6 +194,14 @@ def test_ano_da_compra_parcelada_que_atravessa_o_ano():
     assert next(c for c in f["compras"] if c["descricao"] == "LOJA ANTIGA")["data"] == "2024-02-29"
 
 
+def test_parcela_do_inter_numa_linha_do_meio():
+    f = faturas.ler_texto(INTER.replace("20 de jul. 2026 LOJA ROUPA X (Parcela 04 de 10) - R$ 50,00",
+                                        "20 de jul. 2026 LOJA ROUPA X\n(Parcela 04 de 10)\n- R$ 50,00"))
+    c = next(x for x in f["compras"] if x["descricao"] == "LOJA ROUPA X")
+    assert (c["parcela_num"], c["parcela_total"], c["nota"]) == (4, 10, None)
+    assert faturas.conferir_limite(f)["usado_crm"] == 630.0
+
+
 def test_categoria_sugerida_por_palavra():
     validas = db.LISTAS_INICIAIS[faturas.LISTA]
     cat = {d: faturas.categoria(d, r, [], validas)[0] for d, r in [
