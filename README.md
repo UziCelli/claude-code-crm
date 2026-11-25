@@ -122,6 +122,15 @@ Agenda (1 card por horário com até 2 alunos, escolhidos num seletor com o loca
 Propostas (vários dias, horas e locais na mesma proposta, com preço médio; margem, lucro/hora, preço mínimo, desconto máximo; botão que sobe o preço até a margem mínima ou dá o desconto máximo; PDF com "de R$ X por R$ Y") · Explorador (todas as combinações) ·
 Campanhas (fases, checklists, gastos por canal, checkpoints que você inclui e exclui) · Rotina (checklist semanal editável e lista de espera) · Configurações · Dados.
 
+## Importar extrato (Financeiro › Importar extrato)
+- **Toda segunda**: exporte os últimos 30 dias do **Inter (OFX)** e do **Contabilizei (CSV)** e solte os dois arquivos na tela. O CRM descobre a conta pelo arquivo.
+- **Revisão antes de salvar**: cada movimento vem como *novo*, *já existe* ou *pago agora* (dá baixa na conta em aberto ou recorrente de mesmo valor). O que tem certeza vem escolhido; só o duvidoso pede decisão. Nada entra sozinho; um backup `antes-extrato-*.db` é feito ao salvar.
+- **Sem duplicar**: cada movimento guarda uma chave em `lancamentos.origem` (data + valor + descrição + repetição no dia; o FITID do Inter é só a sequência do dia e pode mudar). Repetir o período não cria nada. Lançamento que já tinha outra origem (planilha, salário) guarda a ligação em `parametros` (`extrato_ligado`); conciliado uma vez, não casa com outro movimento.
+- **Empréstimo**: entrada com "crédito" ou "empréstimo" no texto pede confirmação; confirmada uma vez, as próximas do mesmo nome vêm sem pedir.
+- **Categoria**: trocar a sugerida guarda uma regra (`parametros`, grupo `extrato_regra`) usada nas próximas importações. "Ignorar" também é lembrado (`extrato_ignorado`).
+- **Saldo**: o saldo que o banco informa vira uma foto em `saldos` (só acrescenta; a digitada fica) e entra no Conferir.
+- **Aviso**: depois da primeira importação, o painel avisa quando uma das duas contas passa de 7 dias sem extrato.
+
 ## Assistente (chat com o Claude)
 A tela **Assistente** conversa com o Claude: ele lê o financeiro, as contas e as tarefas do CRM e também lança, dá baixa, edita e marca tarefas (pede confirmação antes de excluir ou mudar valor).
 - **Ligar**: crie uma chave em console.anthropic.com › API Keys e cole em **Configurações › Assistente** (o jeito fácil: vale na hora e vai junto para o Render pelo Turso). Também dá para acrescentar ao `.env` do PC a linha `ANTHROPIC_API_KEY=` seguida da chave e reiniciar o CRM (ou usar as variáveis do Render); a chave do `.env` vence a salva em Configurações.
