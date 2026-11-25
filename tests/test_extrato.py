@@ -277,3 +277,32 @@ def test_entrada_que_parece_emprestimo_pede_decisao_e_depois_aprende(con):
     assert extrato.salvar(con, linhas, [])["regras"] == 1   # você confirmou "Outros": a próxima vem sem pedir
     l = extrato.previa(con, [("i.ofx", zippi.replace(b"20261103", b"20261108"))], HOJE)["contas"][0]["linhas"][0]
     assert l["acao"] == "novo" and l["certo"] and not l["emprestimo"]
+
+
+def test_dois_arquivos_da_mesma_conta_nao_casam_com_o_mesmo_lancamento(con):
+    with con:
+        con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, conta)
+                       VALUES ('PJ','entrada','2026-11-03','2026-11-03',400,'Outros','Contabilizei Bank')""")
+    outro = CSV.replace("ALUNO TESTE".encode(), "OUTRA PESSOA".encode())
+    prev = extrato.previa(con, [("a.csv", CSV), ("b.csv", outro)], HOJE)
+    acoes = [l["ref"] or l["acao"] for c in prev["contas"] for l in c["linhas"] if l["valor"] == 400]
+    assert acoes.count("e:1") == 1 and "novo" in acoes
+    extrato.salvar(con, *_confirmar(prev))
+    assert con.execute("SELECT COUNT(*) FROM lancamentos WHERE valor=400").fetchone()[0] == 2
+    linha = _confirmar(extrato.previa(con, [("b.csv", outro.replace(b"03/11", b"02/11"))], HOJE))[0][1]
+    dois = [{**linha, "acao": "e:1"}, {**linha, "origem": linha["origem"] + "x", "acao": "e:1"}]   # o mesmo lançamento para dois movimentos
+    assert extrato.salvar(con, dois, [])["novos"] == 1   # o segundo é um movimento a mais
+
+
+def test_pagamento_de_um_aluno_nao_quita_a_mensalidade_de_outro(con):
+    with con:
+        ana = con.execute("INSERT INTO clientes (nome) VALUES ('Ana Lima')").lastrowid
+        bruna = con.execute("INSERT INTO clientes (nome) VALUES ('Bruna Costa')").lastrowid
+        mens = con.execute("""INSERT INTO lancamentos (escopo, tipo, data, valor, categoria, cliente_id)
+                              VALUES ('PJ','entrada','2026-11-03',400,'Mensalidade (Aulas Presenciais)',?)""", (ana,)).lastrowid
+    csv_bruna = CSV.replace("ALUNO TESTE".encode(), "BRUNA COSTA".encode())
+    l = extrato.previa(con, [("b.csv", csv_bruna)], HOJE)["contas"][0]["linhas"][1]
+    assert l["cliente_id"] == bruna and l["acao"] == "novo" and f"l:{mens}" not in [o[0] for o in l["opcoes"]]
+    sem_nome = CSV.replace("ALUNO TESTE".encode(), "FULANO X".encode())
+    l = extrato.previa(con, [("c.csv", sem_nome)], HOJE)["contas"][0]["linhas"][1]
+    assert l["ref"] == f"l:{mens}" and not l["certo"]   # não sabe quem pagou: você decide

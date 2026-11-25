@@ -311,19 +311,22 @@ def _dias(a: str, b: str) -> int:
     return abs((dt.date.fromisoformat(a) - dt.date.fromisoformat(b)).days)
 
 
-def casar(con: sqlite3.Connection, linhas: list[dict], hoje: str) -> list[dict]:
+def casar(con: sqlite3.Connection, linhas: list[dict], hoje: str, reservas: dict | None = None) -> list[dict]:
     """Para cada linha decide a ação sugerida e se é certeza:
     - 'existe' (já importado pela chave, ou lançado à mão: pago, mesmo valor, até DIAS_EXISTE dias);
     - 'pagar' (lançamento em aberto ou conta recorrente do mês com o mesmo valor: o movimento é o pagamento dela);
     - 'ignorar' (você já mandou ignorar esta linha); senão 'novo'.
-    Cada linha ganha 'acao', 'ref', 'certo', 'motivo' e 'opcoes' [(valor, rótulo)]. Um lançamento só casa com um movimento."""
-    usados: set[int] = set()
+    Cada linha ganha 'acao', 'ref', 'certo', 'motivo' e 'opcoes' [(valor, rótulo)]. Um lançamento só casa com um movimento, também
+    entre os arquivos da mesma revisão (`reservas`, compartilhado por previa). Lançamento de outro aluno nunca é candidato; o de um aluno,
+    quando o extrato não diz quem pagou, pede decisão."""
+    reservas = reservas if reservas is not None else {}
+    usados: set[int] = reservas.setdefault("usados", set())
     ignorados = set(db.parametros(con, GRUPO_IGNORADO))
     origens = {r["origem"]: r["id"] for r in con.execute(
         "SELECT id, origem FROM lancamentos WHERE origem IN ({})".format(",".join("?" * len(linhas))), [l["origem"] for l in linhas])} \
         if linhas else {}
     usados |= set(origens.values())
-    recs_vistas: set[str] = set()
+    recs_vistas: set[str] = reservas.setdefault("recorrencias", set())
     for l in linhas:
         l["opcoes"], l["ref"], l["certo"], l["motivo"] = [], "", True, ""
         if l["origem"] in origens:
@@ -343,6 +346,9 @@ def casar(con: sqlite3.Connection, linhas: list[dict], hoje: str) -> list[dict]:
         existe = [c for c in cand if c["pago_em"] and c["id"] not in usados and _dias(c["pago_em"], l["data"]) <= DIAS_EXISTE
                   and not str(c["origem"] or "").startswith(("OFX:", "CSV:"))]
         abertos = [c for c in cand if not c["pago_em"] and c["id"] not in usados]
+        if l["cliente_id"]:   # pagamento de um aluno não casa com lançamento de outro aluno
+            existe = [c for c in existe if c["cliente_id"] in (None, l["cliente_id"])]
+            abertos = [c for c in abertos if c["cliente_id"] in (None, l["cliente_id"])]
         if l["cliente_id"]:   # mensalidade do aluno sugerido primeiro
             abertos.sort(key=lambda c: (c["cliente_id"] != l["cliente_id"], _dias(c["data"], l["data"])))
         else:
@@ -367,13 +373,14 @@ def casar(con: sqlite3.Connection, linhas: list[dict], hoje: str) -> list[dict]:
         if existe:
             c = existe[0]
             l["acao"], l["ref"] = "existe", f"e:{c['id']}"
-            l["certo"] = len(existe) == 1 and c["pago_em"] == l["data"]
+            l["certo"] = len(existe) == 1 and c["pago_em"] == l["data"] and (not c["cliente_id"] or c["cliente_id"] == l["cliente_id"])
             l["motivo"] = "parece o lançamento que você já fez"
             usados.add(c["id"])
         elif abertos:
             c = abertos[0]
             l["acao"], l["ref"] = "pagar", f"l:{c['id']}"
-            l["certo"] = len(abertos) == 1 and (_dias(c["data"], l["data"]) <= DIAS_EXISTE or (l["cliente_id"] and c["cliente_id"] == l["cliente_id"]))
+            mesmo_aluno = bool(l["cliente_id"]) and c["cliente_id"] == l["cliente_id"]
+            l["certo"] = len(abertos) == 1 and (mesmo_aluno or (not c["cliente_id"] and _dias(c["data"], l["data"]) <= DIAS_EXISTE))
             l["motivo"] = "paga uma conta em aberto"
             usados.add(c["id"])
         elif recs:
@@ -390,7 +397,7 @@ def casar(con: sqlite3.Connection, linhas: list[dict], hoje: str) -> list[dict]:
 
 def previa(con: sqlite3.Connection, arquivos: list[tuple[str, bytes]], hoje: str) -> dict:
     """Lê e casa todos os arquivos. {'contas': [{conta, escopo, arquivo, de, ate, saldo, saldo_data, saldo_digitado, linhas}], 'erros': [..]}."""
-    contas, erros = [], []
+    contas, erros, vistas, reservas = [], [], set(), {}
     for nome, conteudo in arquivos:
         try:
             arq = ler_arquivo(nome, conteudo)
@@ -400,7 +407,12 @@ def previa(con: sqlite3.Connection, arquivos: list[tuple[str, bytes]], hoje: str
         if arq["conta"] not in db.lista(con, "lista_contas"):
             erros.append(f"{nome}: a conta {arq['conta']} não está na lista de contas (Configurações).")
             continue
-        linhas = casar(con, interpretar(con, arq), hoje)
+        linhas = [l for l in interpretar(con, arq) if l["origem"] not in vistas]   # o mesmo movimento em dois arquivos: uma vez só
+        if not linhas:
+            erros.append(f"{nome}: todos os movimentos já estão em outro arquivo desta importação.")
+            continue
+        vistas.update(l["origem"] for l in linhas)
+        linhas = casar(con, linhas, hoje, reservas)
         datas = [l["data"] for l in linhas]
         digitado = None
         if arq["saldo_data"]:
@@ -434,6 +446,7 @@ def salvar(con: sqlite3.Connection, linhas: list[dict], saldos: list[dict]) -> d
     cont = {"novos": 0, "pagos": 0, "existentes": 0, "ignorados": 0, "pulados": 0, "regras": 0, "saldos": 0}
     por_conta: dict[str, int] = {}
     aprendidas: set[str] = set()
+    alvos: set[int] = set()
     with con:
         for l in linhas:
             acao = l["acao"]
@@ -448,8 +461,12 @@ def salvar(con: sqlite3.Connection, linhas: list[dict], saldos: list[dict]) -> d
                 continue
             con.execute("DELETE FROM parametros WHERE grupo=? AND chave=?", (GRUPO_IGNORADO, l["origem"]))
             lid = None
+            alvo = int(acao[2:]) if acao[:2] in ("e:", "l:") else None
+            if alvo in alvos:
+                acao = "novo"   # o mesmo lançamento escolhido para dois movimentos: o segundo é um movimento a mais
+            elif alvo:
+                alvos.add(alvo)
             if acao.startswith("e:") or acao == "existe":
-                alvo = int(acao[2:]) if acao.startswith("e:") else None
                 if alvo:   # marca o lançamento feito à mão com a chave: a próxima importação o reconhece direto
                     con.execute("""UPDATE lancamentos SET origem=?, conta=COALESCE(conta, ?) WHERE id=? AND origem IS NULL
                                    AND excluido_em IS NULL""", (l["origem"], l["conta"], alvo))
