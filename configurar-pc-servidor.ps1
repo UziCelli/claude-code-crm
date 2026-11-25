@@ -138,9 +138,9 @@ $turso = @('TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN') | Where-Object {
     -not $valores[$_] -or $valores[$_] -like '*NOME-DO-BANCO*' -or $valores[$_] -like '*cole-o-token-aqui*'
 }
 if ($turso) {
-    Aviso 'Turso nao configurado no .env: a reserva (Render) nao vai ver os mesmos dados do PC.'
+    Aviso 'Turso nao configurado no .env: o Render nao vai ver os mesmos dados do PC.'
 } else {
-    Ok 'Turso configurado (PC, celular e reserva usam o mesmo banco).'
+    Ok 'Turso configurado (PC e Render usam o mesmo banco).'
 }
 
 Titulo '4. Tunel do Cloudflare (cloudflared)'
@@ -204,6 +204,5 @@ Linha '2. No celular, fora do Wi-Fi: abra https://crm.vfitcoachapp.com e entre c
 Linha '3. Deixe o PC ligado, na tomada e com a sua conta do Windows aberta.'
 Linha '   Pode bloquear a tela (Windows+L). So nao saia da conta.'
 Linha '4. Nao clique em Encerrar se for usar o celular. Se clicar, abra o CRM de novo pelo atalho.'
-Linha '5. Celular deu erro do Cloudflare (1033 ou 502)? Use a reserva: https://crm-reserva.vfitcoachapp.com'
 Linha "Para desfazer: $comando -Desfazer"
 Fim 0

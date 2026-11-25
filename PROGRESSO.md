@@ -89,7 +89,7 @@ A auditoria financeira de 16/10 tinha 5 PRs: os 5 estão na `main` (#26 a #30). 
 - [ ] Atualizar os saldos das contas (Atualizar saldos, 1x por semana) e dar a frente (PF, PJ, Reserva, Fora) às contas novas.
 - [ ] Conferir se o DAS e o DARF têm o nome certo ("DAS" na descrição ou categoria própria), senão o DAS estimado dobra (PR 2).
 - [ ] Completar telefone e data de renovação dos alunos (o painel mostra "cadastro incompleto").
-- [ ] Celular: reserva no Render (`crm-reserva`) e sessão de 1 mês no Access (passo a passo no README, "CRM no celular").
+- [ ] Celular: sessão de 1 mês no Access (README, "CRM no celular").
 - [ ] **Renomear o repo no GitHub** para `vfitcoach-crm` (Settings › Repository name). Depois, rodar `configurar-pc-servidor.ps1` uma vez no PC (ele troca o `origin` sozinho). O serviço do Render não muda de nome.
 - [ ] **Bancos no CRM (Open Finance), adiado:** a conta no Pluggy já foi criada; falta conectar os bancos. O banco PJ é a **Dock**: ela tem área de Open Finance no app, mas não aparece nas sugestões de conexão do Pluggy. Ao retomar: (1) procurar "Dock" pelo CNPJ ou nome, no sandbox e em produção; (2) se não aparecer, perguntar ao suporte do Pluggy se a Dock é suportada; (3) sem suporte, usar o extrato OFX/CSV da Dock com o importador do CRM. O código (saldos em `saldos`, transações em `lancamentos` com `origem` única) só começa depois disso. Chaves do Pluggy só no `.env`, nunca no repo.
 
@@ -387,7 +387,11 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - **Aviso de conta fixa** (`locais.contas_fixas_do_local`): conta fixa da PJ que cita o local (ex.: "Mensalidade SmartFit") sai do rateio quando o local tem custos; a prévia avisa para pôr o valor em Taxa mensal.
 - Testes: `tests/test_locais_editar.py`.
 
-## Reserva no Google Cloud Run (04/11/2026)
+## Reserva removida; o celular usa o Render (25/11/2026)
+- O Victor confirmou que `crm.vfitcoachapp.com` aponta para o Render (`claude-code-crm.onrender.com`) e é o que funciona. A reserva no Cloud Run nunca ficou em uso.
+- Saíram `Dockerfile`, `.dockerignore`, `cloudflare/worker-reserva.js` e `CRM_ENDERECOS` (`acesso._origem_estranha` volta a aceitar só o Host que chegou). README descreve o serviço do Render; o túnel no PC fica como alternativa fora de uso.
+
+## Reserva no Google Cloud Run (04/11/2026, removida em 25/11/2026)
 - O Render grátis dormia e levava ~1 min para acordar. O Victor desligou o serviço. A reserva (`crm-reserva`) passa para o Google Cloud Run, que acorda em poucos segundos.
 - `Dockerfile` (fixa `TZ`, `CRM_NUVEM=1` e `CRM_ENDERECOS`), `.dockerignore` e `cloudflare/worker-reserva.js` (Worker que repassa `crm-reserva` para o `*.run.app`). O `render.yaml` saiu.
 - `acesso._origem_estranha`: atrás do Worker o Host chega como `*.run.app`. O Origin/Referer de um POST também vale se estiver em `CRM_ENDERECOS`; sem isso, todo formulário seria recusado.

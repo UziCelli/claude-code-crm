@@ -1,7 +1,7 @@
 # Plano de remediação
 
 ## P0 — proprietário e revisor antes de publicar
-1. Revisar o diff e checagens desta branch; não integrar mudanças não aprovadas. O merge na main pode atualizar Cloud Run e o PC automaticamente.
+1. Revisar o diff e checagens desta branch; não integrar mudanças não aprovadas. O merge na main pode atualizar o Render e o PC automaticamente.
 2. GitHub → Settings → Rules/Rulesets: proteger main, exigir PR, aprovação e checks; impedir force-push e exclusão. Validar com PR de teste. Settings → Environments: limitar credenciais de publicação à branch principal e exigir aprovador; conferir escopo de cada token. Filtro no YAML sozinho não protege de YAML adulterado.
 3. Ativar MFA/passkeys em GitHub, Google, Cloudflare e registrador; revisar colaboradores, sessões e tokens. Não foram consultados nem alterados neste trabalho.
 4. Se quiser restringir cópia futura: Settings → General → Danger Zone → Change visibility → Private. Confirmar compatibilidade do plano/hospedagem antes; histórico público e cópias já feitas permanecem.

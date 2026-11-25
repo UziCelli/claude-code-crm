@@ -142,7 +142,7 @@ def test_versao_nova_que_abre_fica(repos, monkeypatch):
 
 @pytest.mark.parametrize("windows, env, ligado", [
     (False, {}, False),                            # aqui (Linux) e nos testes
-    (True, {"CRM_NUVEM": "1"}, False),             # nuvem (Cloud Run)
+    (True, {"CRM_NUVEM": "1"}, False),             # nuvem (Render)
     (True, {"CRM_AUTOATUALIZAR": "0"}, False),     # desligado no .env
     (True, {}, True),
 ])

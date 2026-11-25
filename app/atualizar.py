@@ -77,7 +77,7 @@ def git(*args, pasta=None):
 
 def motivo_desligado():
     if os.environ.get("CRM_NUVEM") == "1":
-        return "na nuvem quem atualiza é o próprio Cloud Run"
+        return "na nuvem quem atualiza é o próprio Render"
     if not WINDOWS:
         return "só no PC com Windows"
     if os.environ.get("CRM_AUTOATUALIZAR", "").strip() == "0":

@@ -3,7 +3,7 @@
 Data: 14/11/2026. Base inspecionada: `d1e7d40dad1d77095418e19cd74e0b9307b6d838`. Referência: OWASP ASVS 5.0.0; não representa certificação.
 
 ## Inventário e fronteiras
-FastAPI/Jinja2, SQLite/réplica Turso, Cloudflare Access + Tunnel/Worker e Cloud Run; uso local Windows sem login em loopback.
+FastAPI/Jinja2, SQLite/réplica Turso, Cloudflare Access + Render (Tunnel no PC como alternativa); uso local Windows sem login em loopback.
 
 Ativos: código, histórico Git, domínios, contas GitHub/Cloudflare, credenciais de publicação, marca, imagens/fontes e dependências. Também: cadastros, finanças, conversas do assistente, chave de IA, banco e backups locais/Turso.
 

@@ -35,11 +35,6 @@ def test_app_roda_no_fuso_do_brasil():
     assert time.strftime("%z") in ("-0300", "-0200")
 
 
-def test_dockerfile_da_nuvem_tem_o_fuso():
-    texto = open(os.path.join(os.path.dirname(__file__), "..", "Dockerfile"), encoding="utf-8").read()
-    assert "TZ=America/Sao_Paulo" in texto and "CRM_NUVEM=1" in texto
-
-
 def test_status_grava_a_data_de_hoje_do_python(http):
     a = aluno("Ana")
     http.post(f"/clientes/{a}/status", data={"status": "inativo"}, follow_redirects=False)

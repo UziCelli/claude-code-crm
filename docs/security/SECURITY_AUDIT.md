@@ -21,7 +21,7 @@ Comum: `.github/workflows/secret-scanning.yml` adiciona Gitleaks com action por 
 | T05 | Não se aplica ao fluxo atual | CRM administrativo sem assinatura premium/gateway neste repositório. |
 | T06 | Parcialmente verificado | JWT assinado com RS256, issuer, audience e exp; revogação e duração do Access não verificadas. |
 | T07 | Scanner executado | Gitleaks 8.24.3: zero detecções no histórico; não prova inexistência de segredos. CI acrescentado. |
-| T08 | Parcialmente corrigido | Branch principal para publicação é main; autoatualização do PC e Cloud Run dependem da integridade dela. Proteção externa não verificada. |
+| T08 | Parcialmente corrigido | Branch principal para publicação é main; autoatualização do PC e do Render dependem da integridade dela. Proteção externa não verificada. |
 | T09 | Parcialmente verificado | pip-audit sem vulnerabilidades conhecidas na resolução local; requirements usa limites abertos, sem lock completo. |
 | T10 | Sem SW encontrado | Não há PWA/offline no CRM; respostas privadas agora usam no-store. |
 | T11 | Sem SW encontrado | Não há PWA/offline no CRM; respostas privadas agora usam no-store. |
