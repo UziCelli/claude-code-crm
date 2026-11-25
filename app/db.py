@@ -210,9 +210,9 @@ ROTINA_INICIAL = [   # (chave, texto, dia: 1=segunda ... 7=domingo; None = sem d
 ]
 
 
-def conectar(caminho: Path = None) -> sqlite3.Connection:
+def conectar(caminho: Path = None, espera: float = 60) -> sqlite3.Connection:
     if nuvem.ativo():
-        return nuvem.conectar(caminho or DB_PATH)
+        return nuvem.conectar(caminho or DB_PATH, espera)
     con = sqlite3.connect(caminho or DB_PATH, check_same_thread=False)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")

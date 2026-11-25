@@ -235,12 +235,17 @@ def _na_lista(con, nome) -> None:
 
 def _copiar_grade(con, nome, referencia) -> int:
     """Copia os horários da referência para o local, todos livres; devolve quantos entraram. Chamar dentro de `with con`."""
-    slots = con.execute("SELECT tipo_calculo, dia, hora, multiplicador FROM grade_slots WHERE local=?", (referencia,)).fetchall()
-    if not slots:
-        slots = [(t, d, h, 1.0) for t in ("Pacotes", "Mensalidades") for d in range(1, 7) for h in range(5, 24)]
+    # Uma instrução só: no banco na nuvem cada INSERT é uma ida e volta pela internet com o banco travado,
+    # e ~230 horários um a um seguravam o CRM por dezenas de segundos (erro 503 ao criar local).
     antes = con.execute("SELECT COUNT(*) FROM grade_slots WHERE local=?", (nome,)).fetchone()[0]
-    con.executemany("INSERT OR IGNORE INTO grade_slots (tipo_calculo, dia, local, hora, status, multiplicador) VALUES (?,?,?,?,'livre',?)",
-                    [(s[0], s[1], nome, s[2], s[3] or 1) for s in slots])
+    if con.execute("SELECT 1 FROM grade_slots WHERE local=? LIMIT 1", (referencia,)).fetchone():
+        con.execute("INSERT OR IGNORE INTO grade_slots (tipo_calculo, dia, local, hora, status, multiplicador) "
+                    "SELECT tipo_calculo, dia, ?, hora, 'livre', COALESCE(NULLIF(multiplicador, 0), 1) FROM grade_slots WHERE local=?",
+                    (nome, referencia))
+    else:
+        slots = [(t, d, nome, h) for t in ("Pacotes", "Mensalidades") for d in range(1, 7) for h in range(5, 24)]
+        con.execute("INSERT OR IGNORE INTO grade_slots (tipo_calculo, dia, local, hora, status, multiplicador) VALUES "
+                    + ",".join(["(?,?,?,?,'livre',1)"] * len(slots)), [v for s in slots for v in s])
     return con.execute("SELECT COUNT(*) FROM grade_slots WHERE local=?", (nome,)).fetchone()[0] - antes
 
 

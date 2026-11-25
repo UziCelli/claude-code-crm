@@ -65,7 +65,7 @@ document.addEventListener("click", function (e) {
       if (box.dataset.cia) dados.set("cia", "1");
       fetch("/locais/previa", { method: "POST", body: dados, credentials: "same-origin" })
         .then(function (r) { if (!r.ok) throw r; return r.text(); })
-        .then(function (html) { if (meu !== pedido) return; box.innerHTML = html; box.hidden = false; })
+        .then(function (html) { if (meu !== pedido) return; box.innerHTML = html; box.hidden = !html.trim(); })
         .catch(function () { if (meu === pedido) box.hidden = true; });
     }, ms === undefined ? 350 : ms);
   };

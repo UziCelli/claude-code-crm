@@ -10,6 +10,7 @@ import re
 import sqlite3
 import sys
 import threading
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -227,7 +228,8 @@ def _bruta(caminho: Path):
         return _brutas[chave], _travas[chave]
 
 
-def conectar(caminho: Path) -> Conexao:
+def conectar(caminho: Path, espera: float = 60) -> Conexao:
+    """espera: segundos na fila do banco (a réplica atende um pedido por vez). Longa espera fica no log (LENTO)."""
     if SO_ADAPTADOR:   # sem réplica não há o que proteger: uma conexão por chamada, como no sqlite3
         import libsql
         caminho.parent.mkdir(parents=True, exist_ok=True)
@@ -235,8 +237,14 @@ def conectar(caminho: Path) -> Conexao:
     else:
         # uma réplica do Turso por arquivo e por processo: as requisições usam a mesma conexão, uma de cada vez
         bruta, trava = _bruta(caminho)
-        if not trava.acquire(timeout=60):
-            raise sqlite3.OperationalError("banco ocupado há mais de 60 s; feche e abra o CRM")
+        inicio = time.monotonic()
+        if not trava.acquire(timeout=espera):
+            if espera >= 60:
+                print(f"LENTO: banco ocupado há mais de {espera:.0f} s", flush=True)
+            raise sqlite3.OperationalError(f"banco ocupado há mais de {espera:.0f} s; feche e abra o CRM")
+        fila = time.monotonic() - inicio
+        if fila > 2:
+            print(f"LENTO: {fila:.1f} s na fila do banco", flush=True)
         con = Conexao(bruta, trava)
     try:
         con.execute("PRAGMA foreign_keys = ON")

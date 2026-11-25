@@ -336,3 +336,28 @@ def test_renomear_mantem_reconhecida_a_conta_ja_paga_a_mao(con):  # noqa: F811
     locais.renomear_local(con, "Predio", "Torre", atualizar_textos=True)
     assert con.execute("SELECT descricao FROM lancamentos WHERE id=?", (lid,)).fetchone()[0] == "Aulas Torre outubro"
     assert not [x for x in contas_auto.gerar_contas_automaticas(con, "2026-11-02") if x.startswith("local:")]
+
+
+def test_previa_nao_entra_na_fila_do_banco_ocupado(http, monkeypatch):
+    """Banco ocupado (alguém salvando no modo nuvem): a prévia desiste em 2 s e volta vazia, em vez de segurar o servidor."""
+    esperas = []
+
+    def ocupado(caminho=None, espera=60):
+        esperas.append(espera)
+        raise db.sqlite3.OperationalError("banco ocupado")
+    monkeypatch.setattr(db, "conectar", ocupado)
+    r = http.post("/locais/previa", data={"nome": "SmartFit", "taxa_aula": "20"})
+    assert r.status_code == 200 and r.text == "" and esperas == [2]
+    r = http.get("/campanhas/ofertas/previa", params={"titulo": "Oferta"})
+    assert r.status_code == 200 and r.text == ""
+
+
+def test_criar_local_copia_a_grade_numa_instrucao_so(con):  # noqa: F811
+    """No banco na nuvem cada INSERT é uma ida e volta pela internet: a cópia da grade não pode ser um por horário."""
+    gravacoes = []
+    con.set_trace_callback(lambda sql: gravacoes.append(sql) if "INSERT" in sql and "grade_slots" in sql else None)
+    try:
+        r = locais.criar_local(con, "Prédio", "CIA", taxa_aula=30)
+    finally:
+        con.set_trace_callback(None)
+    assert r["horarios"] == 2 and len(gravacoes) == 1

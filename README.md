@@ -103,7 +103,7 @@ O Cloudflare Tunnel leva `crm.vfitcoachapp.com` até o CRM do PC em vez do Rende
 - **"A portaria do Cloudflare Access ainda não foi configurada"**: faltam as linhas `CF_ACCESS_*` no `.env`.
   Preencha e rode `configurar-pc-servidor.ps1` de novo.
 - **"Acesso restrito"** depois de entrar com o código: confira as variáveis `CF_ACCESS_*` no Render (serviço › **Environment**).
-- **Demorando ou erro 5xx no Render**: Render › serviço › **Logs** e **Events**. Confira se o banco sincroniza (procure "AVISO").
+- **Demorando ou erro 5xx no Render**: Render › serviço › **Logs** e **Events**. Procure "LENTO" (qual tela demorou e quanto tempo esperou o banco) e "AVISO" (sincronização do banco).
 
 ## Repositório público: o que nunca vai para o GitHub
 
