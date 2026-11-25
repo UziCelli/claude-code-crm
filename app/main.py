@@ -27,6 +27,7 @@ from . import cartao, pix   # código Pix copia-e-cola, QR e o cartão-imagem da
 from . import acesso, assistente, atualizar, contas_auto, db, exportar, financeiro, importar, precos, sugestoes, vigia
 from . import locais as loc   # "+ Novo local": custos do local, preços e grade ('locais' é nome de variável nas telas)
 from . import extrato   # extrato das contas (Inter OFX, Contabilizei CSV): prévia, revisão e gravação
+from . import faturas   # faturas de cartão em PDF (Inter, Itaú): compras por categoria e conferência do limite
 from . import indicacoes   # quem indicou quem e o presente da indicação (brinde, nunca desconto)
 from . import vantagens   # o leque de vantagens da indicação que cabe no local de quem indicou
 from . import ofertas   # ofertas de upsell: proposta transparente, resposta do aluno e fim do valor da oferta
@@ -453,6 +454,8 @@ def alertas(con):
     for conta, dias in extrato.contas_atrasadas(con, h):
         add("amarelo", f"Extrato do {conta} sem importar {'há ' + str(dias) + ' dias' if dias is not None else 'ainda'}: importe os últimos 30 dias",
             "/financeiro/extrato", acoes=[{"rotulo": "Importar extrato", "href": "/financeiro/extrato"}])
+    for texto in faturas.avisos(con):
+        add("amarelo", texto, "/financeiro/cartoes")
     saldos = financeiro.saldos_resumo(con, h)
     if saldos["desatualizado"]:
         add("amarelo", f"Saldos das contas sem atualizar há {saldos['dias_velho']} dias: atualize para saber quanto tem", "/financeiro?abrir=saldos")
@@ -3944,6 +3947,134 @@ async def financeiro_extrato_salvar(request: Request, con=Depends(get_db)):
         partes.append(f"{r['regras']} categoria{'s' if r['regras'] != 1 else ''} aprendida{'s' if r['regras'] != 1 else ''}")
     aviso = " Algumas linhas já tinham sido gravadas e foram puladas." if r["pulados"] else ""
     return voltar("/financeiro/extrato", msg="Extrato importado: " + ", ".join(partes) + "." + aviso)
+
+
+@app.get("/financeiro/cartoes", response_class=HTMLResponse)
+def financeiro_cartoes(request: Request, mes: str = "", con=Depends(get_db)):
+    """Cartões: limite de cada um (com a conferência) e os gastos das faturas por categoria nos últimos meses."""
+    meses = faturas.meses(con)
+    mes = mes if mes in meses else (meses[-1] if meses else "")
+    return render(request, "financeiro_cartoes.html", con, cartoes=faturas.cartoes(con), meses=meses, mes=mes,
+                  tabela=faturas.por_categoria(con, meses), compras=faturas.compras_do_mes(con, mes) if mes else [])
+
+
+@app.post("/financeiro/cartoes", response_class=HTMLResponse)
+async def financeiro_cartoes_previa(request: Request, con=Depends(get_db)):
+    """Lê as faturas em PDF e mostra a revisão (compras, categoria, total e limite). Nada é gravado aqui."""
+    f = await request.form(max_files=10)
+    arquivos = []
+    for a in f.getlist("arquivos"):
+        if hasattr(a, "read") and a.filename:
+            arquivos.append((a.filename, await a.read(faturas.MAX_BYTES + 1)))
+    if not arquivos:
+        return voltar("/financeiro/cartoes", erro="Escolha pelo menos uma fatura em PDF (Inter ou Itaú).")
+    p = faturas.previa(con, arquivos)
+    if not p["faturas"]:
+        return voltar("/financeiro/cartoes", erro=" ".join(p["erros"]))
+    dados = [{**{k: f_[k] for k in _FATURA_CAMPOS}, "pagamentos": [{"data": x["data"], "valor": x["valor"]} for x in f_["pagamentos"]],
+              "compras": [{k: c[k] for k in _COMPRA_CAMPOS} for c in f_["compras"]]} for f_ in p["faturas"]]
+    return render(request, "financeiro_cartoes_revisao.html", con, previa=p, dados=json.dumps(dados, ensure_ascii=False))
+
+
+_FATURA_CAMPOS = ("conta", "vencimento", "fechamento", "total", "limite_total", "limite_usado", "limite_disponivel", "arquivo")
+_COMPRA_CAMPOS = ("chave", "cartao", "data", "descricao", "valor", "parcela_num", "parcela_total", "ramo", "nota", "categoria_sugerida")
+
+
+def _numero(v, vazio=False):
+    """Número finito (ou None, se `vazio` e veio None). ValueError senão."""
+    if v is None and vazio:
+        return None
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+        raise ValueError
+    return round(float(v), 2)
+
+
+def _texto_ou_none(v, n=200):
+    if v is None:
+        return None
+    if not isinstance(v, str):
+        raise ValueError
+    return v[:n] or None
+
+
+def _faturas_dados(f, con) -> tuple[list[dict], set[int]]:
+    """Valida o que voltou da revisão (o JSON da prévia + a categoria escolhida em cada compra e os pagamentos marcados)."""
+    try:
+        dados = json.loads(f.get("dados") or "[]")
+    except ValueError:
+        raise ValueError("A revisão veio incompleta: importe a fatura de novo.") from None
+    contas = set(db.lista(con, "lista_contas")) & {faturas.CONTA_INTER, faturas.CONTA_ITAU}
+    validas = set(db.lista(con, faturas.LISTA))
+    out, marcar, vistas = [], set(), set()
+    for k, fa in enumerate(dados if isinstance(dados, list) else []):
+        try:
+            fa = {c: fa.get(c) for c in (*_FATURA_CAMPOS, "pagamentos", "compras")}
+            dt.date.fromisoformat(fa["vencimento"])
+            if fa["fechamento"] is not None:
+                dt.date.fromisoformat(fa["fechamento"])
+            if fa["conta"] not in contas or (fa["conta"], fa["vencimento"]) in vistas:
+                raise ValueError
+            vistas.add((fa["conta"], fa["vencimento"]))
+            fa["total"] = _numero(fa["total"])
+            for c in ("limite_total", "limite_usado", "limite_disponivel"):
+                fa[c] = _numero(fa[c], vazio=True)
+            fa["arquivo"] = _texto_ou_none(fa["arquivo"], 120)
+            pagamentos = [{"data": str(p["data"]), "valor": _numero(p["valor"])} for p in fa["pagamentos"]]
+            compras = []
+            for i, c in enumerate(fa["compras"]):
+                c = {x: c.get(x) for x in _COMPRA_CAMPOS}
+                num, tot = c["parcela_num"], c["parcela_total"]
+                if (num is None) != (tot is None) or (num is not None and not (isinstance(num, int) and isinstance(tot, int) and 0 < num <= tot <= 99)):
+                    raise ValueError
+                if not (isinstance(c["chave"], str) and c["chave"].startswith(f"{fa['conta']}:{fa['vencimento']}:") and len(c["chave"]) <= 200
+                        and _ja_aconteceu(str(c["data"])) and isinstance(c["descricao"], str) and c["descricao"].strip()
+                        and (c["cartao"] is None or re.fullmatch(r"\d{4}", str(c["cartao"])))):
+                    raise ValueError
+                cat = f.get(f"categoria_{k}_{i}") or c["categoria_sugerida"]
+                if cat not in validas:
+                    raise LookupError(cat)
+                valor = _numero(c["valor"])
+                if not valor:
+                    raise ValueError
+                compras.append({**c, "valor": valor, "descricao": c["descricao"][:200], "categoria": cat,
+                                "ramo": _texto_ou_none(c["ramo"], 60), "nota": _texto_ou_none(c["nota"])})
+        except LookupError as e:
+            raise ValueError(f"A categoria \"{e.args[0]}\" não existe na lista de categorias do cartão.") from None
+        except (TypeError, ValueError, AttributeError, KeyError):
+            raise ValueError("Uma fatura da revisão veio diferente do arquivo: importe de novo.") from None
+        for j, p in enumerate(pagamentos):
+            if f.get(f"marcar_{k}_{j}") == "1":   # o pagamento achado de novo aqui, para não marcar outro lançamento
+                try:
+                    r = faturas.pagamento_no_extrato(con, p["data"], p["valor"])
+                except (TypeError, ValueError):
+                    r = None
+                if r:
+                    marcar.add(r["id"])
+        out.append({**fa, "compras": compras})
+    if not out:
+        raise ValueError("A revisão veio vazia: importe a fatura de novo.")
+    return out, marcar
+
+
+@app.post("/financeiro/cartoes/salvar")
+async def financeiro_cartoes_salvar(request: Request, con=Depends(get_db)):
+    """Grava o que você confirmou na revisão (uma transação; repetir o envio não duplica: a chave de cada compra barra)."""
+    f = await request.form(max_fields=20000)
+    try:
+        fats, marcar = _faturas_dados(f, con)
+    except ValueError as e:
+        return voltar("/financeiro/cartoes", erro=str(e))
+    db.fazer_backup("antes-fatura")
+    r = faturas.salvar(con, fats, marcar)
+    partes = [f"{r['compras']} compra{'s' if r['compras'] != 1 else ''} nova{'s' if r['compras'] != 1 else ''}"]
+    if r["existentes"]:
+        partes.append(f"{r['existentes']} já estava{'m' if r['existentes'] != 1 else ''} no CRM")
+    if r["pagamentos"]:
+        partes.append(f"{r['pagamentos']} pagamento{'s' if r['pagamentos'] != 1 else ''} do extrato marcado{'s' if r['pagamentos'] != 1 else ''} como Fatura")
+    if r["regras"]:
+        partes.append(f"{r['regras']} categoria{'s' if r['regras'] != 1 else ''} aprendida{'s' if r['regras'] != 1 else ''}")
+    mes = max(x["vencimento"] for x in fats)[:7]
+    return voltar(f"/financeiro/cartoes?mes={mes}", msg="Fatura importada: " + ", ".join(partes) + ".")
 
 
 @app.get("/financeiro/linha-do-tempo", response_class=HTMLResponse)

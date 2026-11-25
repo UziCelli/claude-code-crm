@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block titulo %}Cartões · Financeiro · VFITCOACH CRM{% endblock %}
+{% block conteudo %}
+<a class="voltar" href="/financeiro">← Financeiro</a>
+<h1>Cartões</h1>
+<p class="muted">Quando a fatura fecha, baixe o PDF no app do banco e solte aqui. As compras entram por categoria no mês da fatura; o pagamento da fatura no extrato continua como "Fatura", então nada conta duas vezes.</p>
+
+<div class="card mt">
+  <form method="post" action="/financeiro/cartoes" enctype="multipart/form-data">
+    <label class="soltar-arquivos" for="arquivos-fatura">
+      <strong>Arraste as faturas em PDF aqui</strong> (Inter ou Itaú) ou clique para escolher
+      <input id="arquivos-fatura" type="file" name="arquivos" accept=".pdf,application/pdf" multiple required>
+    </label>
+    <div class="linha mt"><button>Ler e revisar</button><span class="muted">Nada é salvo antes da revisão.</span></div>
+  </form>
+</div>
+
+{% if cartoes %}
+<h2 class="mt">Limites</h2>
+<div class="card mt rolavel">
+  <table>
+    <tr><th>Cartão</th><th>Fatura</th><th class="num">Limite</th><th class="num">Usado (banco)</th><th class="num">Usado (CRM)</th><th class="num">Disponível</th><th>Conferência</th></tr>
+    {% for c in cartoes %}
+    <tr>
+      <td>{{ c.conta }}</td>
+      <td>vence {{ c.vencimento|data }}</td>
+      <td class="num">{{ c.limite_total|moeda if c.limite_total is not none else '—' }}</td>
+      <td class="num">{{ c.usado_banco|moeda if c.usado_banco is not none else '—' }}</td>
+      <td class="num">{{ c.usado_crm|moeda }}</td>
+      <td class="num">{{ c.limite_disponivel|moeda if c.limite_disponivel is not none else '—' }}</td>
+      <td>
+        {% if c.estourado %}<span class="tag vermelho">estourado</span>{% endif %}
+        {% if c.usado_banco is none %}<span class="muted">a fatura não mostra o usado</span>
+        {% elif c.bate %}<span class="tag verde">confere</span>
+        {% else %}<span class="tag amarelo">diferença de {{ c.diferenca|abs|moeda }}</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="muted mt">Usado (CRM) = total da fatura + parcelas que ainda vão vir. Diferença de até R$ 1,00 é arredondamento.</p>
+</div>
+{% endif %}
+
+{% if meses %}
+<h2 class="mt">Gastos por categoria</h2>
+<div class="card mt rolavel">
+  <table>
+    <tr><th>Categoria</th>{% for m in meses %}<th class="num"><a href="/financeiro/cartoes?mes={{ m }}">{{ m[5:7] }}/{{ m[:4] }}</a></th>{% endfor %}</tr>
+    {% for l in tabela.linhas %}
+    <tr><td>{{ l.categoria }}</td>{% for m in meses %}<td class="num">{{ l.valores[m]|moeda if m in l.valores else '—' }}</td>{% endfor %}</tr>
+    {% endfor %}
+    <tr><td><strong>Total</strong></td>{% for m in meses %}<td class="num"><strong>{{ tabela.totais[m]|moeda }}</strong></td>{% endfor %}</tr>
+  </table>
+  <p class="muted mt">Cada coluna é o mês do vencimento da fatura. Clique no mês para ver as compras.</p>
+</div>
+
+<h2 class="mt">Compras das faturas de {{ mes[5:7] }}/{{ mes[:4] }}</h2>
+<div class="card mt rolavel">
+  <table>
+    <tr><th>Categoria</th><th>Data</th><th>Compra</th><th>Cartão</th><th class="num">Valor</th></tr>
+    {% for c in compras %}
+    <tr>
+      <td>{{ c.categoria }}</td>
+      <td>{{ c.data|data }}</td>
+      <td>{{ c.descricao }}{% if c.parcela_total %} <span class="muted">({{ c.parcela_num }}/{{ c.parcela_total }})</span>{% endif %}{% if c.nota %}<div class="muted">{{ c.nota }}</div>{% endif %}</td>
+      <td>{{ c.conta }}{% if c.cartao %} <span class="muted">final {{ c.cartao }}</span>{% endif %}</td>
+      <td class="num">{{ c.valor|moeda }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% else %}
+<p class="muted mt">Nenhuma fatura importada ainda.</p>
+{% endif %}
+{% endblock %}

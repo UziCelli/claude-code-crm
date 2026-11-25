@@ -11,7 +11,7 @@ import json
 import re
 import sqlite3
 
-from . import db, financeiro
+from . import db, faturas, financeiro
 
 CONTA_OFX = "Inter"                 # o único banco que exportamos em OFX
 CONTA_CSV = "Contabilizei Bank"     # o único que exportamos em CSV
@@ -300,6 +300,9 @@ def interpretar(con: sqlite3.Connection, arq: dict) -> list[dict]:
         palavras = financeiro._palavras(f"{m['descricao']} {contra or ''}")
         cliente_id = financeiro.sugerir_aluno(m["descricao"], alunos) if escopo == "PJ" and tipo == "entrada" else None
         cat, por_regra = categoria(escopo, tipo, palavras, cliente_id, regras_salvas, listas)
+        if (tipo == "saida" and escopo == "PF" and not por_regra and faturas.CATEGORIA_PAGAMENTO in listas["PF"]
+                and faturas.paga_fatura(con, m["data"], abs(m["valor"]))):
+            cat = faturas.CATEGORIA_PAGAMENTO   # o valor de uma fatura importada, perto do vencimento: é o pagamento do cartão
         out.append({"origem": prefixo + m["chave"], "conta": conta, "escopo": escopo, "tipo": tipo, "data": m["data"],
                     "valor": round(abs(m["valor"]), 2), "descricao": m["descricao"][:200], "contraparte": contra,
                     "forma": _forma(palavras), "cliente_id": cliente_id, "categoria": cat, "categoria_sugerida": cat,

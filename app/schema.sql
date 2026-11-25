@@ -412,3 +412,36 @@ CREATE TABLE IF NOT EXISTS oferta_respostas (
     encerrado_em TEXT,               -- aceitou: dia em que o desconto acabou e a mensalidade voltou (some do alerta)
     UNIQUE (oferta_id, cliente_id)
 );
+
+-- Faturas de cartão importadas do PDF (app/faturas.py). As compras ficam aqui, fora de lancamentos: o dinheiro sai da conta quando a
+-- fatura é paga (o lançamento 'Fatura' do extrato); contar as compras também como saída duplicaria o gasto.
+CREATE TABLE IF NOT EXISTS cartao_faturas (
+    id INTEGER PRIMARY KEY,
+    conta TEXT NOT NULL,                              -- 'Cartão Inter' | 'Cartão Itaú' (lista_contas)
+    vencimento TEXT NOT NULL,                         -- AAAA-MM-DD; o mês da fatura (e de cada parcela nela) é o do vencimento
+    fechamento TEXT,
+    total REAL NOT NULL,
+    limite_total REAL,                                -- limites no fechamento, como o banco mostra
+    limite_usado REAL,
+    limite_disponivel REAL,
+    arquivo TEXT,
+    importado_em TEXT DEFAULT (datetime('now','localtime')),
+    excluido_em TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS cartao_faturas_conta_venc ON cartao_faturas (conta, vencimento) WHERE excluido_em IS NULL;
+
+CREATE TABLE IF NOT EXISTS cartao_compras (
+    id INTEGER PRIMARY KEY,
+    fatura_id INTEGER NOT NULL REFERENCES cartao_faturas(id),
+    chave TEXT NOT NULL UNIQUE,                       -- conta:vencimento:cartão:data:centavos:descrição:n (importar de novo não duplica)
+    cartao TEXT,                                      -- 4 últimos números
+    data TEXT NOT NULL,                               -- data da compra
+    descricao TEXT NOT NULL,
+    valor REAL NOT NULL,                              -- < 0 = estorno
+    parcela_num INTEGER,
+    parcela_total INTEGER,
+    categoria TEXT NOT NULL,                          -- lista_categorias_cartao
+    ramo TEXT,                                        -- ramo da loja que o Itaú informa
+    nota TEXT                                         -- compra em dólar: valor e cotação
+);
+CREATE INDEX IF NOT EXISTS cartao_compras_fatura ON cartao_compras (fatura_id);
