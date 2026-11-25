@@ -372,3 +372,14 @@ def test_saldo_do_banco_diferente_do_digitado_no_mesmo_dia_nao_some_do_conferir(
     antes = [c["conta"] for c in extrato.financeiro.conferencia_contas(con)]
     extrato.salvar(con, [], [{"conta": "Inter", "saldo": 1000.5, "data": "2026-11-10"}])
     assert [c["conta"] for c in extrato.financeiro.conferencia_contas(con)] == antes == ["Inter"]
+
+
+def test_baixa_da_recorrente_preserva_a_que_esta_na_lixeira(con):
+    with con:
+        rid = con.execute("""INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, inicio)
+                             VALUES ('PF','Aluguel','Moradia',1200,5,'2026-01')""").lastrowid
+        velha = con.execute("""INSERT INTO lancamentos (escopo, tipo, data, valor, categoria, descricao, recorrencia_id, competencia, excluido_em)
+                               VALUES ('PF','saida','2026-11-05',1200,'Moradia','Aluguel antigo',?, '2026-11', '2026-11-04')""", (rid,)).lastrowid
+    extrato.salvar(con, *_confirmar(extrato.previa(con, [("i.ofx", OFX)], HOJE)))
+    assert con.execute("SELECT descricao, recorrencia_id FROM lancamentos WHERE id=?", (velha,)).fetchone()[:] == ("Aluguel antigo", None)
+    assert con.execute("SELECT pago_em FROM lancamentos WHERE recorrencia_id=? AND competencia='2026-11'", (rid,)).fetchone()[0] == "2026-11-06"

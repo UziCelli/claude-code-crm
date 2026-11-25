@@ -455,10 +455,9 @@ def previa(con: sqlite3.Connection, arquivos: list[tuple[str, bytes]], hoje: str
 def _baixar_recorrencia(con, rid: int, comp: str, l: dict) -> int:
     """Lançamento pago da conta recorrente na competência (sem abrir transação: quem chama já está em `with con`)."""
     r = con.execute("SELECT * FROM recorrencias WHERE id=? AND excluido_em IS NULL", (rid,)).fetchone()
-    if r is None or con.execute("SELECT 1 FROM lancamentos WHERE recorrencia_id=? AND competencia=? AND excluido_em IS NULL",
-                                (rid, comp)).fetchone():
-        raise ValueError("já baixada")
-    con.execute("DELETE FROM lancamentos WHERE recorrencia_id=? AND competencia=? AND excluido_em IS NOT NULL", (rid, comp))   # a da lixeira ocupa o UNIQUE
+    if r is None:
+        raise ValueError("conta recorrente não encontrada")
+    financeiro.liberar_vaga(con, rid, comp, None)   # ValueError se o mês já tem baixa; a da lixeira só é solta (continua restaurável)
     return con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao, contraparte, conta, forma,
                           recorrencia_id, competencia, origem) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                        (r["escopo"], "saida", financeiro.vencimento(r["dia_vencimento"], comp), l["data"], l["valor"], r["categoria"],
