@@ -211,30 +211,16 @@ def test_no_pc_post_da_propria_tela_ou_de_script_passa(no_pc, host):
     assert no_pc.post("/backup", follow_redirects=False).status_code == 303   # script do próprio PC: sem Origin
 
 
-# ---------- nuvem atrás do Worker do Cloudflare: o Host chega como *.run.app ----------
-WORKER = {"host": "vfitcoach-crm-abc123.us-east1.run.app", "cf-ray": "8f1e2d3c4b5a6978-GRU"}
+# ---------- nuvem (Render): o Cloudflare repassa com o Host do próprio endereço ----------
+RENDER = {"host": "crm.vfitcoachapp.com", "cf-ray": "8f1e2d3c4b5a6978-GRU"}
 
 
-def test_post_pelo_worker_passa_com_o_endereco_publico(na_internet, monkeypatch):
-    monkeypatch.setattr(acesso, "ENDERECOS", {"crm-reserva.vfitcoachapp.com"})
-    cab = Headers({**WORKER, "Cf-Access-Jwt-Assertion": token(), "origin": "https://crm-reserva.vfitcoachapp.com"})
+def test_post_na_nuvem_da_propria_tela_passa(na_internet):
+    cab = Headers({**RENDER, "Cf-Access-Jwt-Assertion": token(), "origin": "https://crm.vfitcoachapp.com"})
     assert acesso.motivo_bloqueio("POST", "/backup", cab, {}) is None
 
 
-def test_post_pelo_worker_sem_o_endereco_configurado_e_recusado(na_internet, monkeypatch):
-    monkeypatch.setattr(acesso, "ENDERECOS", set())
-    cab = Headers({**WORKER, "Cf-Access-Jwt-Assertion": token(), "origin": "https://crm-reserva.vfitcoachapp.com"})
-    assert acesso.motivo_bloqueio("POST", "/backup", cab, {}) == "origem"
-
-
-def test_post_de_outro_site_continua_recusado_na_nuvem(na_internet, monkeypatch):
-    monkeypatch.setattr(acesso, "ENDERECOS", {"crm-reserva.vfitcoachapp.com"})
-    for origem in ("https://site-malicioso.com", "https://crm-reserva.vfitcoachapp.com.malicioso.com", "null"):
-        cab = Headers({**WORKER, "Cf-Access-Jwt-Assertion": token(), "origin": origem})
+def test_post_de_outro_site_e_recusado_na_nuvem(na_internet):
+    for origem in ("https://site-malicioso.com", "https://crm.vfitcoachapp.com.malicioso.com", "null"):
+        cab = Headers({**RENDER, "Cf-Access-Jwt-Assertion": token(), "origin": origem})
         assert acesso.motivo_bloqueio("POST", "/backup", cab, {}) == "origem", origem
-
-
-def test_dockerfile_libera_o_endereco_da_reserva():
-    import pathlib
-    texto = (pathlib.Path(__file__).parent.parent / "Dockerfile").read_text(encoding="utf-8")
-    assert "CRM_ENDERECOS=crm-reserva.vfitcoachapp.com" in texto

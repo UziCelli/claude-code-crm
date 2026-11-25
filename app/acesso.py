@@ -1,8 +1,7 @@
 """Portaria do CRM: quem chega pela internet só passa se entrou pelo Cloudflare Access.
 
 Dois jeitos de chegar pela internet, os dois atrás do Cloudflare Access (crm.vfitcoachapp.com):
-- Nuvem (Google Cloud Run, CRM_NUVEM=1, definido no Dockerfile): toda requisição passa pela portaria.
-  Lá o CRM fica atrás de um Worker do Cloudflare (cloudflare/worker-reserva.js), então o Host que chega é o *.run.app.
+- Nuvem (Render, CRM_NUVEM=1 nas variáveis do serviço): toda requisição passa pela portaria.
 - PC + Cloudflare Tunnel (cloudflared -> localhost:8765): só a requisição *remota* passa pela portaria;
   quem abre o CRM no próprio PC (http://localhost:8765) entra direto, como sempre.
 O Cloudflare Access pede o e-mail e manda um código; depois disso ele envia em cada requisição um token
@@ -27,15 +26,12 @@ METODOS_SEGUROS = {"GET", "HEAD", "OPTIONS"}
 LIVRES = {"/saude", "/health", "/healthz"}   # checagem de saúde da nuvem (qualquer nome): não mostra dado nenhum
 LOCAIS = {"localhost", "127.0.0.1", "::1"}   # nomes do próprio PC (o uvicorn só escuta em 127.0.0.1)
 # o Cloudflare (e o túnel) sempre acrescenta cf-ray e cf-connecting-ip; os outros denunciam qualquer proxy no caminho
-# endereços públicos que valem como "o próprio CRM" no Origin/Referer de um POST, além do Host que chegou.
-# Na nuvem o Worker repassa para o *.run.app, então o Host não bate com o endereço do navegador (crm-reserva...).
-ENDERECOS = {e.strip().lower() for e in os.environ.get("CRM_ENDERECOS", "").split(",") if e.strip()}
 CABECALHOS_PROXY = ("cf-ray", "cf-connecting-ip", "cf-visitor", "cdn-loop", "x-forwarded-for", "forwarded")
 _jwks = None
 
 MENSAGENS = {
     "config": "A portaria do Cloudflare Access ainda não foi configurada (CF_ACCESS_TEAM_DOMAIN e CF_ACCESS_AUD, "
-              "no .env do PC ou nas variáveis do Cloud Run). Por segurança, nada é mostrado pela internet.",
+              "no .env do PC ou nas variáveis do Render). Por segurança, nada é mostrado pela internet.",
     "sem": "Entre pelo endereço do CRM (crm.vfitcoachapp.com) para fazer o login com o seu e-mail.",
     "invalido": "Login expirado ou inválido. Abra crm.vfitcoachapp.com de novo para entrar.",
     "origem": "Pedido recusado: ele não veio de uma tela do próprio CRM.",
@@ -85,7 +81,7 @@ def _origem_estranha(cabecalhos) -> bool:
     if origem is None:
         return False
     de_onde = urlparse(origem).netloc.lower()
-    return de_onde != (cabecalhos.get("host") or "").lower() and de_onde not in ENDERECOS
+    return de_onde != (cabecalhos.get("host") or "").lower()
 
 
 def motivo_bloqueio(metodo: str, caminho: str, cabecalhos, cookies) -> str | None:
