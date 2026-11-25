@@ -378,7 +378,8 @@ def casar(con: sqlite3.Connection, linhas: list[dict], hoje: str, reservas: dict
         recs = []
         if l["tipo"] == "saida":
             conta_rec = {r["id"]: r["conta"] for r in con.execute("SELECT id, conta FROM recorrencias WHERE excluido_em IS NULL")}
-            for comp in (l["data"][:7], financeiro.somar_meses(l["data"][:7], -1)):
+            mes = l["data"][:7]   # paga adiantado no fim do mês: a competência seguinte também (o filtro de dias limita)
+            for comp in (mes, financeiro.somar_meses(mes, -1), financeiro.somar_meses(mes, 1)):
                 for r in financeiro._recorrencias_abertas(con, comp, hoje):
                     chave = f"r:{r['id']}:{comp}"
                     if r["escopo"] == l["escopo"] and chave not in recs_vistas and _dias(r["data"], l["data"]) <= DIAS_PAGAR:
@@ -499,8 +500,9 @@ def salvar(con: sqlite3.Connection, linhas: list[dict], saldos: list[dict]) -> d
                     con.execute("UPDATE lancamentos SET conta=COALESCE(conta, ?) WHERE id=? AND excluido_em IS NULL", (l["conta"], alvo))
                     _ligar(con, alvo, l["origem"])
                     if l["cliente_id"] and l["escopo"] == "PJ" and l["tipo"] == "entrada":   # o aluno confirmado na revisão
-                        con.execute("UPDATE lancamentos SET cliente_id=? WHERE id=? AND cliente_id IS NULL AND escopo='PJ' AND tipo='entrada'",
-                                    (l["cliente_id"], alvo))
+                        if con.execute("UPDATE lancamentos SET cliente_id=? WHERE id=? AND cliente_id IS NULL AND escopo='PJ' AND tipo='entrada'",
+                                       (l["cliente_id"], alvo)).rowcount:
+                            financeiro.usar_credito(con, alvo)   # agora é pagamento do aluno: desconta o crédito dele, como numa entrada nova
                 cont["existentes"] += 1
                 continue
             if acao.startswith("l:"):
@@ -540,8 +542,9 @@ def salvar(con: sqlite3.Connection, linhas: list[dict], saldos: list[dict]) -> d
                 aprendidas.add(f"{l['escopo']}|{l['tipo']}|{texto}")
         cont["regras"] = len(aprendidas)
         for s in saldos:
-            if not con.execute("SELECT 1 FROM saldos WHERE conta=? AND data=? AND ROUND(saldo, 2)=ROUND(?, 2) AND excluido_em IS NULL",
-                               (s["conta"], s["data"], s["saldo"])).fetchone():
+            # já tem foto nesse dia (digitada ou do banco): não acrescenta. Duas fotos no mesmo dia esconderiam a conta do Conferir;
+            # se o valor é outro, a revisão mostra o conflito e a foto digitada fica
+            if not con.execute("SELECT 1 FROM saldos WHERE conta=? AND data=? AND excluido_em IS NULL", (s["conta"], s["data"])).fetchone():
                 con.execute("INSERT INTO saldos (conta, saldo, data) VALUES (?,?,?)", (s["conta"], round(s["saldo"], 2), s["data"]))
                 cont["saldos"] += 1
         for conta in {*por_conta, *(s["conta"] for s in saldos)}:

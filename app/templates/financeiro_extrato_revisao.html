@@ -14,10 +14,15 @@
   {% for c in previa.contas %}{% set k = loop.index0 %}
   {% set duvidas = c.linhas|rejectattr('certo')|list %}
   <h2 class="mt">{{ c.conta }} <span class="muted" style="font-size:.8em">({{ c.escopo }} · {{ c.de|data }} a {{ c.ate|data }} · {{ c.linhas|length }} movimentos{% if duvidas %} · {{ duvidas|length }} para decidir{% endif %})</span></h2>
-  {% if c.saldo is not none %}
+  {% if c.saldo is not none and c.saldo_digitado is not none %}
+  <div class="card mt {{ '' if c.saldo_digitado|round(2) == c.saldo|round(2) else 'atencao' }}">
+    {% if c.saldo_digitado|round(2) == c.saldo|round(2) %}Saldo do banco em {{ c.saldo_data|data }}: <strong>{{ c.saldo|moeda }}</strong>, igual ao que você digitou.
+    {% else %}<span class="tag amarelo">confira</span> O banco diz <strong>{{ c.saldo|moeda }}</strong> em {{ c.saldo_data|data }}, mas você digitou <strong>{{ c.saldo_digitado|moeda }}</strong> nesse dia. A foto digitada fica; se ela estiver errada, corrija em Saldos das contas.{% endif %}
+  </div>
+  {% elif c.saldo is not none %}
   <div class="card mt">
     <label class="linha"><input type="checkbox" name="saldo_{{ k }}" value="1" checked>
-      <span>Guardar o saldo do banco: <strong>{{ c.saldo|moeda }}</strong> em {{ c.saldo_data|data }}{% if c.saldo_digitado is not none %} <span class="muted">(você digitou {{ c.saldo_digitado|moeda }} nesse dia; a foto digitada fica)</span>{% endif %}</span></label>
+      <span>Guardar o saldo do banco: <strong>{{ c.saldo|moeda }}</strong> em {{ c.saldo_data|data }}</span></label>
   </div>
   {% else %}
   <p class="muted">Este arquivo não traz o saldo: digite em Saldos das contas, se quiser conferir.</p>

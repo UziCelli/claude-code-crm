@@ -146,7 +146,7 @@ def test_reimportar_o_mesmo_periodo_nao_duplica_e_saldo_vira_foto(con):
     with con:
         con.execute("INSERT INTO saldos (conta, saldo, data) VALUES ('Inter', 999, '2026-11-10')")   # digitada: fica
     r = extrato.salvar(con, *_confirmar(extrato.previa(con, [("i.ofx", OFX), ("e.csv", CSV)], HOJE)))
-    assert r["novos"] == 6 and r["saldos"] == 2
+    assert r["novos"] == 6 and r["saldos"] == 1
     n = con.execute("SELECT COUNT(*) FROM lancamentos").fetchone()[0]
     prev = extrato.previa(con, [("i.ofx", OFX), ("e.csv", CSV)], HOJE)
     assert all(l["acao"] == "existe" and l["certo"] for c in prev["contas"] for l in c["linhas"])
@@ -154,7 +154,7 @@ def test_reimportar_o_mesmo_periodo_nao_duplica_e_saldo_vira_foto(con):
     assert r["novos"] == 0 and r["saldos"] == 0
     assert con.execute("SELECT COUNT(*) FROM lancamentos").fetchone()[0] == n
     fotos = [tuple(x) for x in con.execute("SELECT saldo, data FROM saldos WHERE conta='Inter' AND excluido_em IS NULL ORDER BY id")]
-    assert fotos == [(999.0, "2026-11-10"), (1000.5, "2026-11-10")]
+    assert fotos == [(999.0, "2026-11-10")]   # já tinha foto digitada no dia: ela fica, e o banco não cria outra no mesmo dia
     assert con.execute("SELECT pago_em FROM lancamentos WHERE origem LIKE 'OFX:Inter:2026-11-03:35000:%'").fetchone()[0] == "2026-11-03"
 
 
@@ -343,3 +343,32 @@ def test_lancamento_da_planilha_conciliado_nao_casa_de_novo(con):
     assert again["acao"] == "existe" and again["ref"] == "1"   # reconhece pela ligação guardada
     outro = extrato.previa(con, [("b.csv", CSV.replace("ALUNO TESTE".encode(), "OUTRA PESSOA".encode()))], HOJE)["contas"][0]["linhas"][1]
     assert outro["acao"] == "novo"   # o lançamento já conciliado não serve para outro movimento
+
+
+def test_recorrente_paga_adiantada_no_fim_do_mes(con):
+    with con:
+        rid = con.execute("""INSERT INTO recorrencias (escopo, descricao, categoria, valor, dia_vencimento, inicio)
+                             VALUES ('PF','Aluguel','Moradia',1200,5,'2026-01')""").lastrowid
+        con.execute("INSERT INTO recorrencia_pulos (recorrencia_id, competencia) VALUES (?, '2026-11')", (rid,))
+    l = extrato.previa(con, [("i.ofx", OFX.replace(b"20261106", b"20261128"))], "2026-11-30")["contas"][0]["linhas"][2]
+    assert l["ref"] == f"r:{rid}:2026-12"
+
+
+def test_aluno_ligado_a_pagamento_existente_gasta_o_credito(con, monkeypatch):
+    usados = []
+    monkeypatch.setattr(extrato.financeiro, "usar_credito", lambda c, lid, *a, **k: usados.append(lid) or 0.0)
+    with con:
+        con.execute("INSERT INTO clientes (nome) VALUES ('Ana Lima')")
+        manual = con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria)
+                                VALUES ('PJ','entrada','2026-11-03','2026-11-03',400,'Outros')""").lastrowid
+    extrato.salvar(con, *_confirmar(extrato.previa(con, [("a.csv", CSV.replace("ALUNO TESTE".encode(), "ANA LIMA".encode()))], HOJE)))
+    assert manual in usados
+
+
+def test_saldo_do_banco_diferente_do_digitado_no_mesmo_dia_nao_some_do_conferir(con):
+    with con:
+        con.execute("INSERT INTO saldos (conta, saldo, data) VALUES ('Inter', 500, '2026-11-01')")
+        con.execute("INSERT INTO saldos (conta, saldo, data) VALUES ('Inter', 999, '2026-11-10')")
+    antes = [c["conta"] for c in extrato.financeiro.conferencia_contas(con)]
+    extrato.salvar(con, [], [{"conta": "Inter", "saldo": 1000.5, "data": "2026-11-10"}])
+    assert [c["conta"] for c in extrato.financeiro.conferencia_contas(con)] == antes == ["Inter"]
