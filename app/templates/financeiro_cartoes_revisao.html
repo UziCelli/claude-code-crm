@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block titulo %}Revisar fatura · Financeiro · VFITCOACH CRM{% endblock %}
+{% block conteudo %}
+<a class="voltar" href="/financeiro/cartoes">← Cartões</a>
+<h1>Revisar fatura</h1>
+<p class="muted">Confira a categoria de cada compra. Trocar uma categoria ensina o CRM para as próximas faturas. Nada é salvo antes de você confirmar.</p>
+{% for e in previa.erros %}<div class="card mt atencao">{{ e }}</div>{% endfor %}
+
+<form method="post" action="/financeiro/cartoes/salvar" class="mt">
+  <input type="hidden" name="dados" value="{{ dados }}">
+  {% for f in previa.faturas %}{% set k = loop.index0 %}
+  <h2 class="mt">{{ f.conta }} <span class="muted" style="font-size:.8em">(vence {{ f.vencimento|data }} · {{ f.compras|length }} compras{% if f.importada_em %} · já importada antes: {{ f.novas }} nova{{ 's' if f.novas != 1 }}{% endif %})</span></h2>
+
+  <div class="card mt {{ '' if f.confere else 'atencao' }}">
+    {% if f.confere %}<span class="tag verde">confere</span> As compras somam <strong>{{ f.soma|moeda }}</strong>, igual à fatura.
+    {% else %}<span class="tag amarelo">confira</span> As compras somam <strong>{{ f.soma|moeda }}</strong>, mas a fatura diz <strong>{{ f.esperado|moeda if f.esperado is not none else '?' }}</strong>. Alguma linha pode não ter sido lida: compare com o PDF antes de salvar.{% endif %}
+    {% if f.financiado %}<div class="muted">Saldo financiado de faturas anteriores: {{ f.financiado|moeda }} (não é compra nova).</div>{% endif %}
+  </div>
+
+  <div class="card mt {{ 'atencao' if f.limite.estourado or (f.limite.usado_banco is not none and not f.limite.bate) }}">
+    <strong>Limite</strong>: {{ f.limite_total|moeda if f.limite_total is not none else '—' }} ·
+    usado {{ f.limite_usado|moeda if f.limite_usado is not none else '—' }} ·
+    disponível {{ f.limite_disponivel|moeda if f.limite_disponivel is not none else '—' }}
+    {% if f.limite.estourado %}<span class="tag vermelho">estourado</span>{% endif %}
+    <div class="muted">
+      {% if f.limite.usado_banco is none %}A fatura não mostra o limite usado.
+      {% elif f.limite.bate %}A conta do CRM (fatura + parcelas que vão vir = {{ f.limite.usado_crm|moeda }}) bate com o banco.
+      {% else %}A conta do CRM dá {{ f.limite.usado_crm|moeda }}: diferença de {{ f.limite.diferenca|abs|moeda }} com o banco.{% endif %}
+    </div>
+  </div>
+
+  {% for p in f.pagamentos %}
+  <div class="card mt">
+    Pagamento da fatura anterior: <strong>{{ p.valor|moeda }}</strong> em {{ p.data|data }}.
+    {% if p.lancamento %}
+      {% if p.lancamento.categoria == 'Fatura' %}<span class="tag verde">já está como Fatura</span> no CRM ({{ p.lancamento.conta or 'sem conta' }}, {{ p.lancamento.quando|data }}).
+      {% elif p.lancamento.escopo == 'PF' %}
+      <label class="linha"><input type="checkbox" name="marcar_{{ k }}_{{ loop.index0 }}" value="1" checked>
+        <span>Achei no CRM como "{{ p.lancamento.categoria }}" ({{ p.lancamento.conta or 'sem conta' }}, {{ p.lancamento.quando|data }}): passar para "Fatura", para não contar como outro gasto</span></label>
+      {% else %}<span class="muted">Achei no CRM, mas na PJ ({{ p.lancamento.categoria }}): fica como está.</span>{% endif %}
+    {% else %}<span class="muted">Não achei no CRM: importe o extrato do banco que pagou.</span>{% endif %}
+  </div>
+  {% endfor %}
+
+  <div class="card mt rolavel">
+    <table>
+      <tr><th>Data</th><th>Compra</th><th class="num">Valor</th><th>Categoria</th></tr>
+      {% for c in f.compras %}
+      <tr>
+        <td>{{ c.data|data }}</td>
+        <td>{{ c.descricao }}{% if c.parcela_total %} <span class="muted">({{ c.parcela_num }}/{{ c.parcela_total }})</span>{% endif %}
+          {% if c.cartao %}<span class="muted">· final {{ c.cartao }}</span>{% endif %}{% if c.ramo %} <span class="muted">· {{ c.ramo }}</span>{% endif %}
+          {% if c.nota %}<div class="muted">{{ c.nota }}</div>{% endif %}</td>
+        <td class="num">{{ c.valor|moeda }}</td>
+        <td>{% if c.existe %}<span class="tag neutro">já está no CRM</span>
+          {% else %}<select name="categoria_{{ k }}_{{ loop.index0 }}" aria-label="Categoria de {{ c.descricao }}">{% for cat in listas.lista_categorias_cartao %}<option {{ 'selected' if cat == c.categoria }}>{{ cat }}</option>{% endfor %}</select>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endfor %}
+  <div class="linha mt"><button class="verde">Confirmar e salvar</button><a class="btn claro" href="/financeiro/cartoes">Cancelar</a></div>
+</form>
+{% endblock %}

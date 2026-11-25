@@ -131,6 +131,14 @@ Campanhas (fases, checklists, gastos por canal, checkpoints que você inclui e e
 - **Saldo**: o saldo que o banco informa vira uma foto em `saldos` (só acrescenta; a digitada fica) e entra no Conferir.
 - **Aviso**: depois da primeira importação, o painel avisa quando uma das duas contas passa de 7 dias sem extrato.
 
+## Faturas de cartão (Financeiro › Cartões)
+- **Quando a fatura fecha**: baixe o PDF no app do **Inter** ou do **Itaú** e solte na tela (dá para soltar as duas juntas). O CRM descobre o banco pelo texto do PDF.
+- **Revisão antes de salvar**: cada compra vem com data, parcela, final do cartão e categoria sugerida. A tela confere se as compras somam o total da fatura e avisa se alguma linha não foi lida. Backup `antes-fatura-*.db` ao salvar.
+- **Sem contar duas vezes**: as compras ficam em `cartao_compras`, fora de `lancamentos`. O gasto de dinheiro continua sendo o pagamento da fatura no extrato (categoria PF "Fatura"); a tela Cartões só abre esse valor por categoria. O pagamento que a fatura mostra é procurado no CRM (mesmo valor, até 5 dias) e pode passar para "Fatura"; o extrato seguinte já sugere "Fatura" para a saída com o valor de uma fatura importada.
+- **Mês**: cada parcela conta no mês do vencimento da fatura em que aparece. Importar a mesma fatura de novo não duplica (chave por compra) e só atualiza o limite.
+- **Categoria**: lista própria (`lista_categorias_cartao`, editável em Configurações). Trocar a sugerida guarda uma regra (`parametros`, grupo `cartao_regra`).
+- **Limite**: guarda limite, usado e disponível de cada fatura. O CRM calcula o usado (total + parcelas que ainda vão vir) e avisa no painel se a diferença com o banco passar de R$ 1,00 ou se o limite estiver estourado.
+
 ## Assistente (chat com o Claude)
 A tela **Assistente** conversa com o Claude: ele lê o financeiro, as contas e as tarefas do CRM e também lança, dá baixa, edita e marca tarefas (pede confirmação antes de excluir ou mudar valor).
 - **Ligar**: crie uma chave em console.anthropic.com › API Keys e cole em **Configurações › Assistente** (o jeito fácil: vale na hora e vai junto para o Render pelo Turso). Também dá para acrescentar ao `.env` do PC a linha `ANTHROPIC_API_KEY=` seguida da chave e reiniciar o CRM (ou usar as variáveis do Render); a chave do `.env` vence a salva em Configurações.

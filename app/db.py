@@ -189,6 +189,10 @@ LISTAS_INICIAIS = {
     "lista_formas_lancamento": ["PIX", "Transferência", "Boleto", "Dinheiro", "Cartão Crédito", "Cartão Débito",
                                 "Débito Auto"],
     "lista_contas": ["Contabilizei Bank", "Inter", "Itaú", "Caixa", "Mercado Pago", "Cartão Inter", "Cartão Itaú"],
+    # gastos das faturas de cartão (app/faturas.py): só a tela Cartões usa; o pagamento da fatura segue como 'Fatura' na PF
+    "lista_categorias_cartao": ["Alimentação", "Delivery", "Mercado", "Transporte", "Compras", "Vestuário", "Assinaturas",
+                                "Ferramentas de trabalho", "Saúde", "Educação", "Lazer", "Pix no crédito",
+                                "Juros e tarifas do cartão", "Parcelamento de fatura", "Outros"],
 }
 FASES_INICIAIS = [
     ("Fase 0 — Ajustar a planilha", "2026-09-17", "2026-09-20", "fase"),
