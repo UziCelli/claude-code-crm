@@ -76,7 +76,7 @@ def test_renovacao_traz_valor_e_pix(http, con_temp):
 
 def test_renovacao_com_credito_mostra_a_conta(http, con_temp):
     definir(con_temp, "pix", PIX)
-    cid = cliente(con_temp, "Alexei", dia(5), valor=400)
+    cid = cliente(con_temp, "Alexei", dia(5), valor=400, inicio=dia(-1))   # aluno novo: sem "pulou o mês" no fim do mês
     mes = financeiro.somar_meses(dia(0)[:7], -1)
     msg, erro = alunos.dar_credito(con_temp, cid, 120, mes)
     assert not erro, erro

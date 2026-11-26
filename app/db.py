@@ -230,10 +230,8 @@ def iniciar_banco(caminho: Path = None) -> None:
     con = conectar(caminho)
     with con:
         con.executescript(SCHEMA.read_text(encoding="utf-8"))
-        con.executemany(
-            "INSERT OR IGNORE INTO parametros (grupo, chave, valor, valor_texto, ordem) VALUES (?,?,?,?,?)",
-            PARAMETROS_INICIAIS,
-        )
+        # em lote (inserir_varios), não executemany: no modo nuvem esta função roda a cada partida do servidor
+        inserir_varios(con, "INSERT OR IGNORE INTO parametros (grupo, chave, valor, valor_texto, ordem)", PARAMETROS_INICIAIS)
         # minutos medidos pelo Victor (04/11/2026): o banco criado com o 0 inicial recebe o valor; 0 digitado depois volta a valer
         for chave, novo in (("min_consultoria_mes", 150), ("min_avaliacao", 17.5)):
             con.execute("""UPDATE parametros SET valor=? WHERE grupo='mao_obra' AND chave=? AND valor=0
@@ -246,17 +244,14 @@ def iniciar_banco(caminho: Path = None) -> None:
                                     ("cobranca", COBRANCA_ANTIGA, COBRANCA_NOVA)):
             con.execute("UPDATE parametros SET valor_texto=? WHERE grupo='msg_whatsapp' AND chave=? AND valor_texto=?", (novo, chave, antigo))
         removidos = {r[0] for r in con.execute("SELECT chave FROM parametros WHERE grupo='removido_lista'")}
-        for grupo, itens in LISTAS_INICIAIS.items():   # o que você tirou da lista (Excluir local, x em Configurações) não volta
-            con.executemany(
-                "INSERT OR IGNORE INTO parametros (grupo, chave, valor_texto, ordem) VALUES (?,?,?,?)",
-                [(grupo, nome, nome, i) for i, nome in enumerate(itens, 1) if f"{grupo}|{nome}" not in removidos],
-            )
+        # o que você tirou da lista (Excluir local, x em Configurações) não volta
+        inserir_varios(con, "INSERT OR IGNORE INTO parametros (grupo, chave, valor_texto, ordem)",
+                       [(grupo, nome, nome, i) for grupo, itens in LISTAS_INICIAIS.items() for i, nome in enumerate(itens, 1)
+                        if f"{grupo}|{nome}" not in removidos])
         _semear_vantagens(con, removidos)
         if con.execute("SELECT COUNT(*) FROM campanha_fases").fetchone()[0] == 0:
-            con.executemany(
-                "INSERT INTO campanha_fases (nome, inicio, fim, tipo, ordem) VALUES (?,?,?,?,?)",
-                [(n, i, f, t, k) for k, (n, i, f, t) in enumerate(FASES_INICIAIS, 1)],
-            )
+            inserir_varios(con, "INSERT INTO campanha_fases (nome, inicio, fim, tipo, ordem)",
+                           [(n, i, f, t, k) for k, (n, i, f, t) in enumerate(FASES_INICIAIS, 1)])
         _garantir_coluna(con, "campanha_checkpoints", "excluido_em", "TEXT")   # banco de antes de dar para excluir
         _garantir_coluna(con, "lancamentos", "sem_recorrencia", "INTEGER")     # banco de antes de ligar saída à recorrência
         _garantir_coluna(con, "lancamentos", "meses", "INTEGER")               # banco de antes do pagamento adiantado (cobre N meses)
@@ -281,15 +276,11 @@ def iniciar_banco(caminho: Path = None) -> None:
         # PC e nuvem rodam ao mesmo tempo no Turso: o INSERT OR IGNORE em cima deste índice evita o duplicado.
         con.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_lancamentos_auto ON lancamentos (auto)")
         if con.execute("SELECT COUNT(*) FROM campanha_checkpoints").fetchone()[0] == 0:
-            con.executemany(
-                "INSERT INTO campanha_checkpoints (pergunta, canal, prazo) VALUES (?,?,?)", CHECKPOINTS_INICIAIS
-            )
+            inserir_varios(con, "INSERT INTO campanha_checkpoints (pergunta, canal, prazo)", CHECKPOINTS_INICIAIS)
         # excluídos continuam na tabela (lixeira): a contagem só é 0 na primeira vez
         if con.execute("SELECT COUNT(*) FROM rotina_tarefas").fetchone()[0] == 0:
-            con.executemany(   # OR IGNORE: PC e nuvem podem criar ao mesmo tempo no Turso
-                "INSERT OR IGNORE INTO rotina_tarefas (chave, texto, dia, ordem) VALUES (?,?,?,?)",
-                [(c, txt, d, k) for k, (c, txt, d) in enumerate(ROTINA_INICIAL, 1)],
-            )
+            inserir_varios(con, "INSERT OR IGNORE INTO rotina_tarefas (chave, texto, dia, ordem)",   # OR IGNORE: PC e nuvem ao mesmo tempo
+                           [(c, txt, d, k) for k, (c, txt, d) in enumerate(ROTINA_INICIAL, 1)])
         # tarefa de atualizar saldos: entra também em banco antigo (excluída fica na lixeira e não volta)
         con.execute("""INSERT OR IGNORE INTO rotina_tarefas (chave, texto, dia, ordem)
                        VALUES ('saldos', 'atualizar os saldos das contas', 1,
@@ -305,8 +296,8 @@ def _semear_vantagens(con, removidos: set) -> None:
     de 'Dados das mensagens > Vantagem da indicação' se você o tinha mudado, marcado como 'gasta uma aula' (o lado seguro)."""
     from . import vantagens
     g = vantagens.GRUPO
-    con.executemany("INSERT OR IGNORE INTO parametros (grupo, chave, valor, valor_texto, ordem) VALUES (?,?,?,?,?)",
-                    [(g, t, aula, t, i) for i, (t, aula) in enumerate(vantagens.INICIAIS, 1) if f"{g}|{t}" not in removidos])
+    inserir_varios(con, "INSERT OR IGNORE INTO parametros (grupo, chave, valor, valor_texto, ordem)",
+                   [(g, t, aula, t, i) for i, (t, aula) in enumerate(vantagens.INICIAIS, 1) if f"{g}|{t}" not in removidos])
     if con.execute("SELECT 1 FROM parametros WHERE grupo='migracao' AND chave='vantagem_lista'").fetchone():
         return
     antiga = con.execute("SELECT valor_texto FROM parametros WHERE grupo='msg_dados' AND chave='vantagem'").fetchone()
@@ -328,6 +319,39 @@ def _garantir_coluna(con, tabela: str, coluna: str, tipo: str) -> None:
 
 
 # ---------- parâmetros ----------
+# ---------- gravação em lote (regra do AGENTS.md: no banco na nuvem cada instrução é uma ida e volta pela internet) ----------
+MAX_PARAMS = 900   # por instrução; abaixo do limite de 999 parâmetros do SQLite antigo
+
+
+def inserir_varios(con, inicio: str, linhas: list, fim: str = "") -> int:
+    """Grava muitas linhas com poucas instruções: `inicio VALUES (...),(...),... fim`, em blocos de até MAX_PARAMS valores.
+    inicio: 'INSERT [OR IGNORE] INTO tabela (a, b)'; fim: 'ON CONFLICT ... DO UPDATE ...' (opcional).
+    Não use executemany nem um execute por linha: no modo nuvem (Turso) cada um vira uma ida ao servidor com o banco travado.
+    Devolve o rowcount somado (no INSERT OR IGNORE, quantas entraram de fato)."""
+    linhas = [tuple(l) for l in linhas]
+    if not linhas:
+        return 0
+    marca = "(" + ",".join("?" * len(linhas[0])) + ")"
+    por_vez = max(1, MAX_PARAMS // len(linhas[0]))
+    total = 0
+    for i in range(0, len(linhas), por_vez):
+        parte = linhas[i:i + por_vez]
+        total += con.execute(f"{inicio} VALUES {','.join([marca] * len(parte))} {fim}", [v for l in parte for v in l]).rowcount
+    return total
+
+
+def em_blocos(ids, tamanho: int = MAX_PARAMS):
+    """Fatias de uma lista de ids para `WHERE id IN (...)` sem passar do limite de parâmetros."""
+    ids = list(ids)
+    for i in range(0, len(ids), tamanho):
+        yield ids[i:i + tamanho]
+
+
+def marcas(n: int) -> str:
+    """'?,?,?' para um IN com n valores."""
+    return ",".join("?" * n)
+
+
 def parametros(con: sqlite3.Connection, grupo: str) -> dict:
     """{chave: valor} (ou valor_texto quando valor é NULL), na ordem cadastrada."""
     rows = con.execute(

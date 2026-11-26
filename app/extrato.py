@@ -455,6 +455,9 @@ def previa(con: sqlite3.Connection, arquivos: list[tuple[str, bytes]], hoje: str
 
 
 # ---------- gravação ----------
+_COLS_NOVO = "escopo, tipo, data, pago_em, valor, categoria, descricao, contraparte, cliente_id, conta, forma, origem"
+
+
 def _baixar_recorrencia(con, rid: int, comp: str, l: dict) -> int:
     """Lançamento pago da conta recorrente na competência (sem abrir transação: quem chama já está em `with con`)."""
     r = con.execute("SELECT * FROM recorrencias WHERE id=? AND excluido_em IS NULL", (rid,)).fetchone()
@@ -467,17 +470,44 @@ def _baixar_recorrencia(con, rid: int, comp: str, l: dict) -> int:
                         r["descricao"], l["contraparte"], l["conta"], l["forma"], rid, comp, l["origem"])).lastrowid
 
 
+def _ligar_varios(con: sqlite3.Connection, pares: list[tuple[int, str]], origem_atual: dict) -> None:
+    """Registra de uma vez que cada lançamento é o movimento `origem` do extrato (o que _ligar fazia um a um). Sem origem, ela vira a
+    chave (um UPDATE com CASE); com outra (planilha, salário), a ligação fica em parametros sem apagar a origem antiga.
+    origem_atual: {id: origem} lida antes da transação."""
+    sem = [(lid, o) for lid, o in pares if origem_atual.get(lid) is None]
+    for i in range(0, len(sem), db.MAX_PARAMS // 3):
+        parte = sem[i:i + db.MAX_PARAMS // 3]
+        con.execute(f"UPDATE lancamentos SET origem=CASE id {' '.join(['WHEN ? THEN ?'] * len(parte))} END "
+                    f"WHERE id IN ({db.marcas(len(parte))}) AND origem IS NULL",
+                    [v for par in parte for v in par] + [lid for lid, _ in parte])
+    db.inserir_varios(con, "INSERT INTO parametros (grupo, chave, valor, ordem)",
+                      [(GRUPO_LIGADO, o, lid, 0) for lid, o in pares if origem_atual.get(lid) not in (None, o)],
+                      "ON CONFLICT (grupo, chave) DO UPDATE SET valor=excluded.valor")
+
+
 def salvar(con: sqlite3.Connection, linhas: list[dict], saldos: list[dict]) -> dict:
     """Grava numa transação só o que veio confirmado. linhas: as da prévia, já validadas, com 'acao' = novo | ignorar | existe |
     e:<id> | l:<id> | r:<rid>:<AAAA-MM>. saldos: [{conta, saldo, data}] para acrescentar como foto (nunca apaga foto digitada).
-    Linha cuja chave já está no CRM (envio repetido) é pulada. Devolve a contagem por resultado."""
+    Linha cuja chave já está no CRM (envio repetido) é pulada. Devolve a contagem por resultado.
+    Em lote (AGENTS.md): o que já existe é lido antes; lançamentos novos sem crédito de aluno, ignorados, ligações, regras, saldos e
+    importações vão em poucas instruções de várias linhas. Só a baixa de conta em aberto/recorrente e a entrada de aluno (crédito)
+    continuam uma a uma, porque dependem do resultado da anterior."""
     cont = {"novos": 0, "pagos": 0, "existentes": 0, "ignorados": 0, "pulados": 0, "regras": 0, "saldos": 0}
     por_conta: dict[str, int] = {}
-    aprendidas: set[str] = set()
     alvos: set[int] = set()
+    # leituras primeiro, antes de abrir a transação de escrita
+    ligados = _ligados(con)
+    ja_conciliados = set(ligados.values())
+    ja_ignorados = set(db.parametros(con, GRUPO_IGNORADO))
+    refs = sorted({int(l["acao"][2:]) for l in linhas if l["acao"][:2] in ("e:", "l:")})
+    origem_atual = {}
+    for ids in db.em_blocos(refs):
+        origem_atual |= {r[0]: r[1] for r in con.execute(f"SELECT id, origem FROM lancamentos WHERE id IN ({db.marcas(len(ids))})", ids)}
+    fotos = {(s["conta"], s["data"]) for s in saldos
+             if con.execute("SELECT 1 FROM saldos WHERE conta=? AND data=? AND excluido_em IS NULL", (s["conta"], s["data"])).fetchone()}
+    ignorar, desfazer_ignorado, novos, ligar, regras_novas = [], [], [], [], {}
+    conta_existe: dict[str, list[int]] = {}
     with con:
-        ligados = _ligados(con)
-        ja_conciliados = set(ligados.values())
         for l in linhas:
             acao = l["acao"]
             if l["origem"] in ligados:
@@ -486,11 +516,11 @@ def salvar(con: sqlite3.Connection, linhas: list[dict], saldos: list[dict]) -> d
             ligados[l["origem"]] = 0   # a mesma linha duas vezes no envio: a segunda é pulada
             por_conta[l["conta"]] = por_conta.get(l["conta"], 0) + 1
             if acao == "ignorar":
-                con.execute("INSERT OR IGNORE INTO parametros (grupo, chave, valor_texto, ordem) VALUES (?, ?, ?, 0)",
-                            (GRUPO_IGNORADO, l["origem"], l["descricao"]))
+                ignorar.append((GRUPO_IGNORADO, l["origem"], l["descricao"], 0))
                 cont["ignorados"] += 1
                 continue
-            con.execute("DELETE FROM parametros WHERE grupo=? AND chave=?", (GRUPO_IGNORADO, l["origem"]))
+            if l["origem"] in ja_ignorados:
+                desfazer_ignorado.append(l["origem"])
             lid = None
             alvo = int(acao[2:]) if acao[:2] in ("e:", "l:") else None
             if alvo in alvos or alvo in ja_conciliados:
@@ -499,8 +529,8 @@ def salvar(con: sqlite3.Connection, linhas: list[dict], saldos: list[dict]) -> d
                 alvos.add(alvo)
             if acao.startswith("e:") or acao == "existe":
                 if alvo:   # marca o lançamento feito à mão com a chave: a próxima importação o reconhece direto
-                    con.execute("UPDATE lancamentos SET conta=COALESCE(conta, ?) WHERE id=? AND excluido_em IS NULL", (l["conta"], alvo))
-                    _ligar(con, alvo, l["origem"])
+                    conta_existe.setdefault(l["conta"], []).append(alvo)
+                    ligar.append((alvo, l["origem"]))
                     if l["cliente_id"] and l["escopo"] == "PJ" and l["tipo"] == "entrada":   # o aluno confirmado na revisão
                         if con.execute("UPDATE lancamentos SET cliente_id=? WHERE id=? AND cliente_id IS NULL AND escopo='PJ' AND tipo='entrada'",
                                        (l["cliente_id"], alvo)).rowcount:
@@ -514,7 +544,7 @@ def salvar(con: sqlite3.Connection, linhas: list[dict], saldos: list[dict]) -> d
                                 (l["data"], l["conta"], l["forma"], l["contraparte"], alvo)).rowcount
                 if n:
                     lid = alvo
-                    _ligar(con, alvo, l["origem"])
+                    ligar.append((alvo, l["origem"]))
                     cont["pagos"] += 1
                 else:
                     acao = "novo"   # já foi paga por outro caminho: o movimento entra como novo
@@ -525,33 +555,48 @@ def salvar(con: sqlite3.Connection, linhas: list[dict], saldos: list[dict]) -> d
                     cont["pagos"] += 1
                 except ValueError:
                     acao = "novo"
+            pj_entrada = l["escopo"] == "PJ" and l["tipo"] == "entrada"
+            credito = pj_entrada and l["cliente_id"]
             if acao == "novo":
-                lid = con.execute("""INSERT INTO lancamentos (escopo, tipo, data, pago_em, valor, categoria, descricao, contraparte, cliente_id,
-                                     conta, forma, origem) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-                                  (l["escopo"], l["tipo"], l["data"], l["data"], l["valor"], l["categoria"], l["descricao"] or None,
-                                   l["contraparte"], l["cliente_id"], l["conta"], l["forma"], l["origem"])).lastrowid
+                valores = (l["escopo"], l["tipo"], l["data"], l["data"], l["valor"], l["categoria"], l["descricao"] or None,
+                           l["contraparte"], l["cliente_id"], l["conta"], l["forma"], l["origem"])
+                if credito:   # entrada de aluno: precisa do id agora para descontar o crédito
+                    lid = con.execute(f"INSERT INTO lancamentos ({_COLS_NOVO}) VALUES ({db.marcas(len(valores))})", valores).lastrowid
+                else:
+                    novos.append(valores)   # sem crédito para descontar: vai no lote do fim
                 cont["novos"] += 1
-            if lid and l["escopo"] == "PJ" and l["tipo"] == "entrada":
-                if l["cliente_id"]:
+            if lid and pj_entrada:   # o lançamento em aberto pode já ser de um aluno, mesmo sem o extrato dizer quem pagou
+                if l["cliente_id"] and acao != "novo":
                     con.execute("UPDATE lancamentos SET cliente_id=COALESCE(cliente_id, ?) WHERE id=?", (l["cliente_id"], lid))
                 financeiro.usar_credito(con, lid)
             if acao == "novo" and (l["categoria"] != l.get("categoria_sugerida") or l.get("emprestimo")) \
                     and (texto := _texto_regra(l["contraparte"], l["descricao"])):
                 # você corrigiu a categoria (ou confirmou a de uma entrada que parecia empréstimo): vale para as próximas com o mesmo nome
-                con.execute("""INSERT INTO parametros (grupo, chave, valor_texto, ordem) VALUES (?, ?, ?, 0)
-                               ON CONFLICT (grupo, chave) DO UPDATE SET valor_texto=excluded.valor_texto""",
-                            (GRUPO_REGRA, f"{l['escopo']}|{l['tipo']}|{texto}", l["categoria"]))
-                aprendidas.add(f"{l['escopo']}|{l['tipo']}|{texto}")
-        cont["regras"] = len(aprendidas)
+                regras_novas[f"{l['escopo']}|{l['tipo']}|{texto}"] = l["categoria"]
+        # o resto vai junto, em poucas instruções
+        db.inserir_varios(con, f"INSERT INTO lancamentos ({_COLS_NOVO})", novos)
+        db.inserir_varios(con, "INSERT OR IGNORE INTO parametros (grupo, chave, valor_texto, ordem)", ignorar)
+        for origens in db.em_blocos(desfazer_ignorado):
+            con.execute(f"DELETE FROM parametros WHERE grupo=? AND chave IN ({db.marcas(len(origens))})", (GRUPO_IGNORADO, *origens))
+        for conta, ids in conta_existe.items():
+            for parte in db.em_blocos(ids):
+                con.execute(f"UPDATE lancamentos SET conta=? WHERE id IN ({db.marcas(len(parte))}) AND conta IS NULL AND excluido_em IS NULL",
+                            (conta, *parte))
+        _ligar_varios(con, ligar, origem_atual)
+        db.inserir_varios(con, "INSERT INTO parametros (grupo, chave, valor_texto, ordem)",
+                          [(GRUPO_REGRA, chave, cat, 0) for chave, cat in regras_novas.items()],
+                          "ON CONFLICT (grupo, chave) DO UPDATE SET valor_texto=excluded.valor_texto")
+        cont["regras"] = len(regras_novas)
+        # já tem foto nesse dia (digitada ou do banco): não acrescenta. Duas fotos no mesmo dia esconderiam a conta do Conferir;
+        # se o valor é outro, a revisão mostra o conflito e a foto digitada fica
+        novas_fotos = {}
         for s in saldos:
-            # já tem foto nesse dia (digitada ou do banco): não acrescenta. Duas fotos no mesmo dia esconderiam a conta do Conferir;
-            # se o valor é outro, a revisão mostra o conflito e a foto digitada fica
-            if not con.execute("SELECT 1 FROM saldos WHERE conta=? AND data=? AND excluido_em IS NULL", (s["conta"], s["data"])).fetchone():
-                con.execute("INSERT INTO saldos (conta, saldo, data) VALUES (?,?,?)", (s["conta"], round(s["saldo"], 2), s["data"]))
-                cont["saldos"] += 1
-        for conta in {*por_conta, *(s["conta"] for s in saldos)}:
-            con.execute("INSERT INTO importacoes (arquivo, resumo) VALUES (?, ?)",
-                        (f"extrato:{conta}", json.dumps({"linhas": por_conta.get(conta, 0), **cont}, ensure_ascii=False)))
+            if (s["conta"], s["data"]) not in fotos and (s["conta"], s["data"]) not in novas_fotos:
+                novas_fotos[(s["conta"], s["data"])] = (s["conta"], round(s["saldo"], 2), s["data"])
+        cont["saldos"] = db.inserir_varios(con, "INSERT INTO saldos (conta, saldo, data)", list(novas_fotos.values()))
+        db.inserir_varios(con, "INSERT INTO importacoes (arquivo, resumo)",
+                          [(f"extrato:{conta}", json.dumps({"linhas": por_conta.get(conta, 0), **cont}, ensure_ascii=False))
+                           for conta in {*por_conta, *(s["conta"] for s in saldos)}])
     return cont
 
 

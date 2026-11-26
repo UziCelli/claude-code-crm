@@ -392,6 +392,11 @@ Revisão com 4 agentes; plano dos 10 bugs graves em 3 PRs (este, agenda, custos 
 - Correção: `locais._copiar_grade` grava a grade numa instrução só (Salvar caiu para 0,9 s na mesma simulação). As prévias (`/locais/previa`, `/campanhas/ofertas/previa`) usam `get_db_previa`: não sincronizam e desistem depois de 2 s na fila (a caixa some e volta na próxima tecla).
 - Log: pedido com mais de 3 s ou mais de 2 s na fila do banco escreve `LENTO:` no log (Render › Logs).
 
+## Importar fatura/extrato dava 502; regra de gravação sem fila (26/11/2026)
+- Causa: as rotas de importar (e Configurações, cliente, lançamento, recorrência, locais) eram `async def` e usavam o banco no laço do servidor: enquanto gravavam, nenhuma outra página nem o `/saude` do Render respondia (502, depois 503). E a fatura gravava uma compra por instrução (centenas de idas ao Turso); o banco ficava reservado enquanto o arquivo ainda subia do celular.
+- Correção: rotas viraram `def` com o formulário lido antes do banco (`formulario`/`FORM`, anti-duplo-envio com `UM_POR_VEZ`); `faturas.salvar` e `extrato.salvar` leem antes e gravam em lote (`db.inserir_varios`): 300 compras em ≤ 8 instruções. `iniciar_banco` (roda a cada partida no Render) e outros `executemany` também em lote.
+- Regra para agentes em AGENTS.md ("Gravar no banco sem fila").
+
 ## Reserva removida; o celular usa o Render (25/11/2026)
 - O Victor confirmou que `crm.vfitcoachapp.com` aponta para o Render (`claude-code-crm.onrender.com`) e é o que funciona. A reserva no Cloud Run nunca ficou em uso.
 - Saíram `Dockerfile`, `.dockerignore`, `cloudflare/worker-reserva.js` e `CRM_ENDERECOS` (`acesso._origem_estranha` volta a aceitar só o Host que chegou). README descreve o serviço do Render; o túnel no PC fica como alternativa fora de uso.
