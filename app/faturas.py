@@ -412,18 +412,29 @@ def previa(con: sqlite3.Connection, arquivos: list[tuple[str, bytes]]) -> dict:
 
 
 # ---------- gravação ----------
+_COLS_COMPRA = "fatura_id, chave, cartao, data, descricao, valor, parcela_num, parcela_total, categoria, ramo, nota"
+
+
 def salvar(con: sqlite3.Connection, faturas: list[dict], marcar: set[int]) -> dict:
     """Grava numa transação: a fatura (ou atualiza o limite e o total, se já existe), as compras novas (a chave barra a repetida) e
-    as regras de categoria que você corrigiu. `marcar`: lançamentos do extrato que pagam a fatura e passam para a categoria 'Fatura'."""
+    as regras de categoria que você corrigiu. `marcar`: lançamentos do extrato que pagam a fatura e passam para a categoria 'Fatura'.
+    Em lote (AGENTS.md): lê o que já existe antes, e as compras, regras e importações vão em poucas instruções de várias linhas,
+    não uma por compra (no banco na nuvem cada instrução é uma ida ao servidor; uma fatura grande dava 502)."""
     cont = {"faturas": 0, "atualizadas": 0, "compras": 0, "existentes": 0, "regras": 0, "pagamentos": 0}
-    aprendidas: set[str] = set()
+    # leituras primeiro, antes de abrir a transação de escrita
+    atuais, ja = {}, set()
+    for f in faturas:
+        r = con.execute("SELECT id FROM cartao_faturas WHERE conta=? AND vencimento=? AND excluido_em IS NULL",
+                        (f["conta"], f["vencimento"])).fetchone()
+        atuais[(f["conta"], f["vencimento"])] = r[0] if r else None
+        ja |= {r[0] for r in con.execute("SELECT chave FROM cartao_compras WHERE chave LIKE ?", (f"{f['conta']}:{f['vencimento']}:%",))}
+    regras_novas: dict[str, str] = {}
+    importacoes = []
     with con:
         for f in faturas:
-            r = con.execute("SELECT id FROM cartao_faturas WHERE conta=? AND vencimento=? AND excluido_em IS NULL",
-                            (f["conta"], f["vencimento"])).fetchone()
+            fid = atuais[(f["conta"], f["vencimento"])]
             campos = (f["fechamento"], f["total"], f["limite_total"], f["limite_usado"], f["limite_disponivel"], f["arquivo"])
-            if r:
-                fid = r[0]
+            if fid:
                 con.execute("""UPDATE cartao_faturas SET fechamento=?, total=?, limite_total=?, limite_usado=?, limite_disponivel=?,
                                arquivo=?, importado_em=datetime('now','localtime') WHERE id=?""", (*campos, fid))
                 cont["atualizadas"] += 1
@@ -431,27 +442,31 @@ def salvar(con: sqlite3.Connection, faturas: list[dict], marcar: set[int]) -> di
                 fid = con.execute("""INSERT INTO cartao_faturas (conta, vencimento, fechamento, total, limite_total, limite_usado,
                                      limite_disponivel, arquivo) VALUES (?,?,?,?,?,?,?,?)""", (f["conta"], f["vencimento"], *campos)).lastrowid
                 cont["faturas"] += 1
+            novas = []
             for c in f["compras"]:
-                n = con.execute("""INSERT OR IGNORE INTO cartao_compras (fatura_id, chave, cartao, data, descricao, valor, parcela_num,
-                                   parcela_total, categoria, ramo, nota) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-                                (fid, c["chave"], c["cartao"], c["data"], c["descricao"], c["valor"], c["parcela_num"],
-                                 c["parcela_total"], c["categoria"], c["ramo"], c["nota"])).rowcount
-                if not n:
+                if c["chave"] in ja:   # já no CRM (ou repetida neste envio)
                     cont["existentes"] += 1
                     continue
-                cont["compras"] += 1
+                ja.add(c["chave"])
+                novas.append(c)
                 if c["categoria"] != c["categoria_sugerida"] and (texto := _texto_regra(c["descricao"])):
-                    con.execute("""INSERT INTO parametros (grupo, chave, valor_texto, ordem) VALUES (?, ?, ?, 0)
-                                   ON CONFLICT (grupo, chave) DO UPDATE SET valor_texto=excluded.valor_texto""",
-                                (GRUPO_REGRA, texto, c["categoria"]))
-                    aprendidas.add(texto)
-            con.execute("INSERT INTO importacoes (arquivo, resumo) VALUES (?, ?)",
-                        (f"fatura:{f['conta']}", json.dumps({"vencimento": f["vencimento"], "compras": len(f["compras"])}, ensure_ascii=False)))
-        for lid in sorted(marcar):
+                    regras_novas[texto] = c["categoria"]
+            entraram = db.inserir_varios(con, f"INSERT OR IGNORE INTO cartao_compras ({_COLS_COMPRA})",
+                                         [(fid, c["chave"], c["cartao"], c["data"], c["descricao"], c["valor"], c["parcela_num"],
+                                           c["parcela_total"], c["categoria"], c["ramo"], c["nota"]) for c in novas])
+            cont["compras"] += entraram
+            cont["existentes"] += len(novas) - entraram   # gravada por outro envio entre a leitura e agora
+            importacoes.append((f"fatura:{f['conta']}", json.dumps({"vencimento": f["vencimento"], "compras": len(f["compras"])},
+                                                                   ensure_ascii=False)))
+        db.inserir_varios(con, "INSERT INTO parametros (grupo, chave, valor_texto, ordem)",
+                          [(GRUPO_REGRA, texto, cat, 0) for texto, cat in regras_novas.items()],
+                          "ON CONFLICT (grupo, chave) DO UPDATE SET valor_texto=excluded.valor_texto")
+        db.inserir_varios(con, "INSERT INTO importacoes (arquivo, resumo)", importacoes)
+        for ids in db.em_blocos(sorted(marcar)):
             cont["pagamentos"] += con.execute(
-                """UPDATE lancamentos SET categoria=? WHERE id=? AND tipo='saida' AND escopo='PF' AND categoria<>? AND excluido_em IS NULL""",
-                (CATEGORIA_PAGAMENTO, lid, CATEGORIA_PAGAMENTO)).rowcount
-        cont["regras"] = len(aprendidas)
+                f"""UPDATE lancamentos SET categoria=? WHERE id IN ({db.marcas(len(ids))}) AND tipo='saida' AND escopo='PF' AND categoria<>?
+                    AND excluido_em IS NULL""", (CATEGORIA_PAGAMENTO, *ids, CATEGORIA_PAGAMENTO)).rowcount
+        cont["regras"] = len(regras_novas)
     return cont
 
 

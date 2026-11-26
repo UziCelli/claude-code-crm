@@ -9,6 +9,18 @@ Instruções comuns: Codex lê CODEX.md; Claude Code lê CLAUDE.md; cada agente 
 - Busque só arquivos e trechos pertinentes. Graphify existente pode localizar relações: `graphify query "tema específico" --budget 1000 --depth 1`. Confirme no código; use `rg` se indisponível ou desatualizado. Não leia o grafo inteiro nem regenere por rotina de revisão; depois de mudar código, atualize o grafo conforme a configuração existente.
 - Para segurança, implementação e estrutura, consulte respectivamente [SECURITY.md](SECURITY.md), [CODE_STYLE.md](CODE_STYLE.md) e [ARCHITETURE.md](ARCHITETURE.md).
 
+## Gravar no banco sem fila (vale para todo código que grava)
+
+O Render roda um servidor só e, no modo nuvem (Turso), uma conexão só com trava: cada instrução de gravação é uma ida pela internet com o banco travado. Gravação em fila trava o CRM inteiro e vira 502/503 (criar local, Configurações, importar fatura e extrato, nov/2026). Ao criar ou mudar qualquer função que grava (financeiro, agenda, grade, configurações, importações, motor de cálculo, preços), confira antes de entregar:
+
+- **Rota que usa o banco é `def`, nunca `async def`.** Formulário: `Depends(formulario(...))` (ou `FORM`) antes de `con=Depends(get_db)`; o arquivo sobe antes de pegar o banco. Criar com anti-duplo-envio: `Depends(UM_POR_VEZ)`. O teste `test_nenhuma_rota_com_banco_e_async` barra o erro.
+- **Lote, não laço:** muitas linhas = `db.inserir_varios` (INSERT de várias linhas), `INSERT … SELECT`, `UPDATE … WHERE id IN (...)` (`db.em_blocos`, `db.marcas`) ou `CASE`. Nunca `execute` por linha num `for`, nem `executemany` (no Turso também vai um por um).
+- **Leia antes, grave depois:** leituras (o que já existe, chaves, ids) antes do `with con`; depois, só gravações, numa transação.
+- **Sem recálculo repetido:** calcule uma vez por pedido (cache local, `_Rodada`) e não recalcule o motor dentro de laço de gravação.
+- **Prévia/tela ao digitar:** `get_db_previa` (desiste em 2 s), sem gravar nada.
+- **Ainda passa de ~10 s com dados reais?** Leve para segundo plano (thread que grava em lotes e marca o andamento); a página responde na hora e os números se atualizam depois. Nunca deixe a página esperar a gravação toda.
+- Teste com contagem de gravações (`con.set_trace_callback`), como em `tests/test_gravacao_em_lote.py`. Log `LENTO:` no Render mostra o que escapou.
+
 ## Entrega e revisão
 
 - Explique ao dono em português simples e curto, com resultado e limitações.

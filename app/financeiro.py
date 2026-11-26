@@ -1250,8 +1250,9 @@ def usar_credito(con: sqlite3.Connection, lancamento_id: int | None, cliente_id:
     total, ids = credito_aplicavel(creditos(con, cliente_id).get(cliente_id, []), mensal)
     if not ids or (lancamento_id and pago < CHEIO * (mensal - total)) or (not lancamento_id and total < mensal - 0.005):
         return 0.0
-    con.executemany("UPDATE cliente_eventos SET usado_em=?, usado_lancamento_id=? WHERE id=? AND usado_em IS NULL",
-                    [(hoje, lancamento_id, i) for i in ids])
+    for parte in db.em_blocos(ids):   # um UPDATE só (no banco na nuvem cada instrução é uma ida ao servidor)
+        con.execute(f"UPDATE cliente_eventos SET usado_em=?, usado_lancamento_id=? WHERE id IN ({db.marcas(len(parte))}) AND usado_em IS NULL",
+                    (hoje, lancamento_id, *parte))
     return total
 
 

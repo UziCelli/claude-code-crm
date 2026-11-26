@@ -5,6 +5,8 @@ from pathlib import Path
 
 import openpyxl
 
+from . import db
+
 # ---- normalização de nomes da planilha -> nomes do CRM ----
 CANAIS = {
     "CLT": "Outro",
@@ -205,7 +207,7 @@ def importar_config(con: sqlite3.Connection, wb) -> dict:
             novos.append(("mao_obra_aula", f"{tipo(r['Tipo de Serviço'])}|{int(_num(r.get('Qtd Aulas')))}",
                           _num(r.get("Mão-de-Obra")), None, 9))
     antes = con.execute("SELECT COUNT(*) FROM parametros").fetchone()[0]
-    con.executemany("INSERT OR IGNORE INTO parametros (grupo, chave, valor, valor_texto, ordem) VALUES (?,?,?,?,?)", novos)
+    db.inserir_varios(con, "INSERT OR IGNORE INTO parametros (grupo, chave, valor, valor_texto, ordem)", novos)
     depois = con.execute("SELECT COUNT(*) FROM parametros").fetchone()[0]
     return {"inseridos": depois - antes, "atualizados": 0}
 

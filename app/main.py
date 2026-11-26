@@ -225,6 +225,24 @@ def get_db_previa():
         con.close()
 
 
+def formulario(**limites):
+    """Dependência que lê o formulário ANTES de pegar o banco (ponha antes de `con=Depends(get_db)`). Assim:
+    - o banco (no modo nuvem, uma conexão só, com fila) não fica reservado enquanto o celular ainda envia o arquivo;
+    - a rota pode ser `def` comum, que o FastAPI roda numa thread à parte. Rota `async def` que usa o banco trava o servidor
+      inteiro (nem o /saude do Render responde): era o 502/503 ao importar fatura e salvar Configurações. Regra no AGENTS.md."""
+    async def ler(request: Request):
+        return await request.form(**limites)
+    return ler
+
+
+FORM = formulario()
+
+
+def _arquivos(f, limite: int) -> list[tuple[str, bytes]]:
+    """[(nome, conteúdo)] dos arquivos enviados no campo 'arquivos' (lê até limite + 1 bytes: quem passa do limite é recusado depois)."""
+    return [(a.filename, a.file.read(limite + 1)) for a in f.getlist("arquivos") if hasattr(a, "file") and a.filename]
+
+
 def render(request, nome, con, **ctx):
     ctx.update(request=request, msg=request.query_params.get("msg"), erro=request.query_params.get("erro"),
                listas={k: db.lista(con, k) for k in db.LISTAS_INICIAIS}, alertas=alertas(con),
@@ -246,8 +264,18 @@ def mes_atual():
 
 
 # ---------- envio repetido (clique duplo com rede lenta) e restaurar o que já foi recriado ----------
-# A trava do botão (app.js) destrava em 8 s; aqui é o servidor que recusa o segundo envio igual. As rotas que criam são
-# "async def" sem await entre conferir e gravar: dois envios nunca conferem ao mesmo tempo.
+# A trava do botão (app.js) destrava em 8 s; aqui é o servidor que recusa o segundo envio igual. As rotas que criam pedem
+# Depends(UM_POR_VEZ) antes do banco: dois envios nunca conferem ao mesmo tempo (antes isso vinha de serem "async def", que
+# travava o servidor inteiro enquanto gravava).
+_ENVIO_UNICO = threading.Lock()
+
+
+def _um_por_vez():
+    with _ENVIO_UNICO:
+        yield
+
+
+UM_POR_VEZ = _um_por_vez
 JANELA_REPETIDO = 60   # segundos: registro igualzinho criado há menos que isso é o mesmo envio chegando de novo
 _AGORA_HA_POUCO = f"criado_em >= datetime('now','localtime','-{JANELA_REPETIDO} seconds')"
 
@@ -900,8 +928,8 @@ def cliente_novo(request: Request, con=Depends(get_db)):
 
 
 @app.post("/clientes")
-async def cliente_criar(request: Request, con=Depends(get_db)):
-    d = _form_cliente(await request.form())
+def cliente_criar(request: Request, form=Depends(FORM), _=Depends(UM_POR_VEZ), con=Depends(get_db)):
+    d = _form_cliente(form)
     if not d["nome"]:
         return voltar("/clientes/novo", erro="Informe o nome.")
     if erro := _indicado_por(con, d):
@@ -1134,8 +1162,8 @@ def cliente_ficha(request: Request, cid: int, con=Depends(get_db)):
 
 
 @app.post("/clientes/{cid}")
-async def cliente_salvar(request: Request, cid: int, con=Depends(get_db)):
-    d = _form_cliente(await request.form())
+def cliente_salvar(request: Request, cid: int, form=Depends(FORM), con=Depends(get_db)):
+    d = _form_cliente(form)
     d["id"] = cid
     if erro := _indicado_por(con, d, cid):
         return voltar(f"/clientes/{cid}", erro=erro)
@@ -1597,9 +1625,9 @@ def grade(request: Request, tipo: str = "Pacotes", local: str = "CIA", vale: int
 
 
 @app.post("/grade/multiplicadores")
-async def grade_multiplicadores(request: Request, tipo: str = "Pacotes", local: str = "CIA", ref: int = 0, con=Depends(get_db)):
+def grade_multiplicadores(request: Request, tipo: str = "Pacotes", local: str = "CIA", ref: int = 0, form=Depends(FORM),
+                         con=Depends(get_db)):
     """Grava o multiplicador de cada horário (campos m_05 … m_23). Vale para todos os locais, dias e tipos."""
-    form = await request.form()
     url = f"/grade?tipo={quote(tipo)}&local={quote(local)}&ref={ref}"
     novos = {}
     for h in precos.HORAS_GRADE:
@@ -1616,8 +1644,8 @@ async def grade_multiplicadores(request: Request, tipo: str = "Pacotes", local: 
     if not novos:
         return voltar(url, erro="Nenhum multiplicador para salvar.")
     with con:
-        con.executemany("INSERT INTO parametros (grupo, chave, valor, ordem) VALUES ('mult_horario', ?, ?, ?) "
-                        "ON CONFLICT(grupo, chave) DO UPDATE SET valor=excluded.valor", [(f"{h:02d}", v, h) for h, v in novos.items()])
+        db.inserir_varios(con, "INSERT INTO parametros (grupo, chave, valor, ordem)", [("mult_horario", f"{h:02d}", v, h) for h, v in novos.items()],
+                          "ON CONFLICT(grupo, chave) DO UPDATE SET valor=excluded.valor")
     return voltar(url, msg="Multiplicadores salvos: valem para todos os locais e dias.")
 
 
@@ -3172,8 +3200,8 @@ def proposta_salvar(plano: str = Form(...), local: str = Form("CIA"), forma: str
                            r["preco_pessoa"], r["custo_total"], r["lucro"], r["margem"], r["lucro_hora"], r["preco_minimo"],
                            r["desconto_maximo"], int(r["abaixo_margem"]), observacoes or None, r["preco_cheio"],
                            r["consultoria"] or None, relogio.hoje().isoformat()))
-        con.executemany("INSERT INTO proposta_horarios (proposta_id, dia, hora, local, multiplicador) VALUES (?,?,?,?,?)",
-                        [(cur.lastrowid, d["dia"] or None, d["hora"] or None, d["local"], d["mult"]) for d in r["horarios"]])
+        db.inserir_varios(con, "INSERT INTO proposta_horarios (proposta_id, dia, hora, local, multiplicador)",
+                          [(cur.lastrowid, d["dia"] or None, d["hora"] or None, d["local"], d["mult"]) for d in r["horarios"]])
     return voltar(f"/propostas/{cur.lastrowid}", msg=f"Proposta #{cur.lastrowid} salva." + aviso_deslocamento(con, [(x["dia"], x["hora"], x["local"]) for x in horarios], int(cliente_id or 0)))
 
 
@@ -3423,7 +3451,7 @@ def rotina(request: Request, con=Depends(get_db)):
     tarefas = tarefas_rotina(con)
     if tarefas:
         with con:
-            con.executemany("INSERT OR IGNORE INTO rotina_itens (semana, item) VALUES (?, ?)", [(sem, t["chave"]) for t in tarefas])
+            db.inserir_varios(con, "INSERT OR IGNORE INTO rotina_itens (semana, item)", [(sem, t["chave"]) for t in tarefas])
     feitos = {r["item"]: r for r in con.execute("SELECT * FROM rotina_itens WHERE semana=?", (sem,))}
     itens = [{"id": t["id"], "chave": t["chave"], "texto": rotina_texto(t), "feito": feitos[t["chave"]]["feito"],
               "data": feitos[t["chave"]]["data_feito"]} for t in tarefas]
@@ -3587,9 +3615,8 @@ def financeiro_salario(mes: str = Form(...), pago_em: str = Form(...), volta: st
 
 
 @app.post("/financeiro/saldos")
-async def financeiro_saldos(request: Request, con=Depends(get_db)):
+def financeiro_saldos(request: Request, f=Depends(FORM), con=Depends(get_db)):
     """Foto semanal dos saldos: uma linha por conta (conta_i, saldo_i, frente_i). Saldo vazio = não mexe naquela conta."""
-    f = await request.form()
     volta = f.get("volta", "")
     data = f.get("data") or relogio.hoje().isoformat()
     valores, frentes = {}, {}
@@ -3645,8 +3672,8 @@ def _mm_aaaa(mes: str) -> str:
 
 
 @app.post("/financeiro/lancamento")
-async def financeiro_lancamento(request: Request, con=Depends(get_db)):
-    f = dict((await request.form()).items())
+def financeiro_lancamento(request: Request, form=Depends(FORM), _=Depends(UM_POR_VEZ), con=Depends(get_db)):
+    f = dict(form.items())
     volta = _caminho_seguro(f.get("voltar")) or f.get("volta", "")   # "voltar" (ex.: ficha do aluno) manda; inseguro cai no "volta"
     try:
         valor = _fin_valor(f)
@@ -3849,13 +3876,9 @@ def financeiro_extrato(request: Request, con=Depends(get_db)):
 
 
 @app.post("/financeiro/extrato", response_class=HTMLResponse)
-async def financeiro_extrato_previa(request: Request, con=Depends(get_db)):
+def financeiro_extrato_previa(request: Request, f=Depends(formulario(max_files=10)), con=Depends(get_db)):
     """Lê os arquivos e mostra a revisão (novo / já existe / pago agora). Nada é gravado aqui."""
-    f = await request.form(max_files=10)
-    arquivos = []
-    for a in f.getlist("arquivos"):
-        if hasattr(a, "read") and a.filename:
-            arquivos.append((a.filename, await a.read(extrato.MAX_BYTES + 1)))
+    arquivos = _arquivos(f, extrato.MAX_BYTES)
     if not arquivos:
         return voltar("/financeiro/extrato", erro="Escolha pelo menos um arquivo (OFX do Inter ou CSV do Contabilizei).")
     p = extrato.previa(con, arquivos, relogio.hoje().isoformat())
@@ -3928,9 +3951,8 @@ def _extrato_linhas(f, con) -> tuple[list[dict], list[dict]]:
 
 
 @app.post("/financeiro/extrato/salvar")
-async def financeiro_extrato_salvar(request: Request, con=Depends(get_db)):
+def financeiro_extrato_salvar(request: Request, f=Depends(formulario(max_fields=20000)), _=Depends(UM_POR_VEZ), con=Depends(get_db)):
     """Grava o que você confirmou na revisão (uma transação; repetir o envio não duplica: a chave de cada movimento barra)."""
-    f = await request.form(max_fields=20000)
     try:
         linhas, fotos = _extrato_linhas(f, con)
     except ValueError as e:
@@ -3959,13 +3981,9 @@ def financeiro_cartoes(request: Request, mes: str = "", con=Depends(get_db)):
 
 
 @app.post("/financeiro/cartoes", response_class=HTMLResponse)
-async def financeiro_cartoes_previa(request: Request, con=Depends(get_db)):
+def financeiro_cartoes_previa(request: Request, f=Depends(formulario(max_files=10)), con=Depends(get_db)):
     """Lê as faturas em PDF e mostra a revisão (compras, categoria, total e limite). Nada é gravado aqui."""
-    f = await request.form(max_files=10)
-    arquivos = []
-    for a in f.getlist("arquivos"):
-        if hasattr(a, "read") and a.filename:
-            arquivos.append((a.filename, await a.read(faturas.MAX_BYTES + 1)))
+    arquivos = _arquivos(f, faturas.MAX_BYTES)
     if not arquivos:
         return voltar("/financeiro/cartoes", erro="Escolha pelo menos uma fatura em PDF (Inter ou Itaú).")
     p = faturas.previa(con, arquivos)
@@ -4057,9 +4075,8 @@ def _faturas_dados(f, con) -> tuple[list[dict], set[int]]:
 
 
 @app.post("/financeiro/cartoes/salvar")
-async def financeiro_cartoes_salvar(request: Request, con=Depends(get_db)):
+def financeiro_cartoes_salvar(request: Request, f=Depends(formulario(max_fields=20000)), _=Depends(UM_POR_VEZ), con=Depends(get_db)):
     """Grava o que você confirmou na revisão (uma transação; repetir o envio não duplica: a chave de cada compra barra)."""
-    f = await request.form(max_fields=20000)
     try:
         fats, marcar = _faturas_dados(f, con)
     except ValueError as e:
@@ -4102,7 +4119,7 @@ def financeiro_duplicados_nao_repetido(ids: list[int] = Form(...), volta: str = 
     """'Não é repetido': guarda os pares do grupo e a tela Conferir não avisa deles de novo."""
     ids = sorted(set(ids))
     with con:
-        con.executemany("INSERT OR IGNORE INTO duplicados_ok (a, b) VALUES (?, ?)", [(a, b) for k, a in enumerate(ids) for b in ids[k + 1:]])
+        db.inserir_varios(con, "INSERT OR IGNORE INTO duplicados_ok (a, b)", [(a, b) for k, a in enumerate(ids) for b in ids[k + 1:]])
     return _fin_voltar(volta, msg="Combinado: esses lançamentos não são repetidos.")
 
 
@@ -4132,8 +4149,8 @@ def financeiro_lancamento_excluir(lid: int, volta: str = Form(""), con=Depends(g
 
 
 @app.post("/financeiro/recorrencia")
-async def financeiro_recorrencia(request: Request, con=Depends(get_db)):
-    f = dict((await request.form()).items())
+def financeiro_recorrencia(request: Request, form=Depends(FORM), _=Depends(UM_POR_VEZ), con=Depends(get_db)):
+    f = dict(form.items())
     volta = f.get("volta", "")
     fim = f.get("fim") or None
     try:
@@ -4449,8 +4466,7 @@ def _gravar_mudancas_parametros(con, numeros: dict, textos: dict) -> None:
 
 
 @app.post("/configuracoes")
-async def configuracoes_salvar(request: Request, con=Depends(get_db)):
-    form = await request.form()
+def configuracoes_salvar(request: Request, form=Depends(FORM), con=Depends(get_db)):
     destino = "/calculos" if form.get("voltar") == "/calculos" else "/configuracoes"   # lista fechada: nada de redirecionar para fora
     try:
         atuais = {r["id"]: r for r in con.execute("SELECT id, grupo, chave, valor, valor_texto, ordem FROM parametros")}
@@ -4579,11 +4595,10 @@ def locais_novo(nome: str = Form(...), referencia: str = Form("CIA"), taxa_aula:
 
 
 @app.post("/locais/editar")
-async def locais_editar(request: Request, con=Depends(get_db)):
+def locais_editar(request: Request, form=Depends(FORM), con=Depends(get_db)):
     """Botão "Editar local" da Grade, igual para todo local (CIA inclusive): o pop-up do "+ Novo local".
     Nome diferente do original (nome_original) = renomear o local em tudo antes de gravar os custos (loc.renomear_local; a CIA não muda de nome).
     Na CIA, a pessoa a mais vira o preço da aula com 2 e 3 pessoas (taxa_2, taxa_3). Os preços acompanham os custos."""
-    form = await request.form()
     nome = " ".join(str(form.get("nome") or "").split())
     original = str(form.get("nome_original") or "").strip() or nome
     url = "/grade?local=" + quote(original)
@@ -4591,14 +4606,14 @@ async def locais_editar(request: Request, con=Depends(get_db)):
     try:
         if nome != original:
             try:   # cópia local do banco antes de trocar o nome em todas as tabelas (sem cópia, renomeia igual: é tudo ou nada)
-                await run_in_threadpool(db.fazer_backup, "antes-renomear")
+                db.fazer_backup("antes-renomear")
             except Exception:
                 traceback.print_exc()
-            r = await run_in_threadpool(loc.renomear_local, con, original, nome, bool(form.get("atualizar_textos")))
+            r = loc.renomear_local(con, original, nome, bool(form.get("atualizar_textos")))
             url = "/grade?local=" + quote(nome)
             renomeado = f" Nome trocado de {original} para {nome} em {r['linhas']} registro(s)" + \
                 (f" e em {r['textos']} conta(s) que citavam o local." if r["textos"] else ".")
-        r = await run_in_threadpool(loc.editar_local, con, nome, _taxas_cia_form(form), **_custos_form(form))
+        r = loc.editar_local(con, nome, _taxas_cia_form(form), **_custos_form(form))
     except ValueError as e:
         return voltar(url, erro=_erro_numero(e))
     grade = f" {r['horarios']} horários livres na grade (copiados da CIA)." if r["horarios"] else ""
@@ -4621,16 +4636,14 @@ def _taxas_cia_form(form) -> dict:
 
 
 @app.post("/locais/previa", response_class=HTMLResponse)
-async def locais_previa(request: Request, con=Depends(get_db_previa)):
+def locais_previa(request: Request, form=Depends(FORM), con=Depends(get_db_previa)):
     """Prévia do pop-up do local (CIA inclusive): as partes do preço de 1 aula com os números digitados, sem gravar nada."""
     if con is None:   # banco ocupado (alguém salvando): a caixa da prévia some e volta na próxima tecla
         return HTMLResponse("")
-    form = await request.form()
     tipo = "Mensalidades" if form.get("tipo") == "Mensalidades" else "Pacotes"
     try:
         ref = max(0, int(_num_br(form.get("ref"))))
-        r = await run_in_threadpool(loc.previa, con, str(form.get("nome") or ""), _custos_form(form),
-                                    _taxas_cia_form(form), bool(form.get("cia")), tipo, ref)
+        r = loc.previa(con, str(form.get("nome") or ""), _custos_form(form), _taxas_cia_form(form), bool(form.get("cia")), tipo, ref)
     except ValueError as e:
         return templates.TemplateResponse(request, "_previa_local.html", {"r": None, "erro": _erro_numero(e)})
     return templates.TemplateResponse(request, "_previa_local.html", {"r": r, "erro": None})
